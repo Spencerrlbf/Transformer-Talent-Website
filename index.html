@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformer Talent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #050505;
+            --bg-lifted: #0a0a0a;
+            --cream: #FAF9F6;
+            --cream-dim: rgba(250, 249, 246, 0.6);
+            --cream-faint: rgba(250, 249, 246, 0.2);
+            --cream-ghost: rgba(250, 249, 246, 0.08);
+            --amber: #D4A853;
+            --amber-glow: rgba(212, 168, 83, 0.3);
+            --font-display: 'Syne', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font-mono);
+            background: var(--bg-deep);
+            color: var(--cream);
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Radial gradient base */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at 50% 30%, var(--bg-lifted) 0%, var(--bg-deep) 70%);
+            z-index: -3;
+        }
+
+        /* Dot grid pattern */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(var(--cream-ghost) 1px, transparent 1px);
+            background-size: 32px 32px;
+            z-index: -2;
+            animation: gridPulse 8s ease-in-out infinite;
+        }
+
+        /* Noise texture */
+        .noise {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.025;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        @keyframes gridPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 6rem 2rem;
+            text-align: center;
+        }
+
+        .logo {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 7vw, 4.5rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards;
+        }
+
+        .clever-tagline {
+            font-size: clamp(0.9rem, 2vw, 1.1rem);
+            font-style: italic;
+            color: var(--amber);
+            margin-bottom: 3rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.1s forwards;
+        }
+
+        .headline {
+            font-family: var(--font-display);
+            font-size: clamp(1.5rem, 4vw, 2.25rem);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.2s forwards;
+        }
+
+        .subheadline {
+            font-size: clamp(0.85rem, 1.5vw, 1rem);
+            color: var(--cream-dim);
+            max-width: 600px;
+            margin-bottom: 2.5rem;
+            line-height: 1.7;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.3s forwards;
+        }
+
+        .vc-line {
+            font-size: clamp(0.7rem, 1.2vw, 0.85rem);
+            color: var(--cream-faint);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 3rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.4s forwards;
+        }
+
+        .cta-group {
+            display: flex;
+            gap: 1.25rem;
+            margin-bottom: 4rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.5s forwards;
+        }
+
+        /* Rotating Roles Section */
+        .roles-section {
+            width: 100%;
+            max-width: 1100px;
+            margin-bottom: 5rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.55s forwards;
+        }
+
+        .roles-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--amber);
+            margin-bottom: 1.5rem;
+        }
+
+        .roles-container {
+            position: relative;
+            height: 120px;
+        }
+
+        .roles-set {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+
+        .roles-set.active {
+            opacity: 1;
+        }
+
+        .role-card {
+            padding: 1.25rem 1.5rem;
+            border: 1px solid var(--cream-ghost);
+            text-align: left;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+
+        .role-card:hover {
+            border-color: var(--amber);
+            background: rgba(212, 168, 83, 0.05);
+        }
+
+        .role-title {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--cream);
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }
+
+        .role-meta {
+            font-size: 0.75rem;
+            color: var(--cream-dim);
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .role-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .role-salary {
+            color: var(--amber);
+        }
+
+        .cta {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--cream);
+            text-decoration: none;
+            padding: 1rem 1.75rem;
+            border: 1px solid var(--cream-faint);
+            background: transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .cta:hover {
+            border-color: var(--amber);
+            color: var(--amber);
+            box-shadow: 0 0 20px var(--amber-glow);
+        }
+
+        .cta-primary {
+            background: var(--cream);
+            color: var(--bg-deep);
+            border-color: var(--cream);
+        }
+
+        .cta-primary:hover {
+            background: var(--amber);
+            border-color: var(--amber);
+            color: var(--bg-deep);
+            box-shadow: 0 0 30px var(--amber-glow);
+        }
+
+        .testimonials-wrapper {
+            width: 100%;
+            overflow: hidden;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.65s forwards;
+            mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+        }
+
+        .testimonials {
+            display: flex;
+            gap: 4rem;
+            animation: scroll 50s linear infinite;
+            width: max-content;
+        }
+
+        .testimonials:hover {
+            animation-play-state: paused;
+        }
+
+        .testimonial {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .testimonial q {
+            font-size: 0.9rem;
+            color: var(--cream-dim);
+            font-style: italic;
+        }
+
+        .testimonial q::before,
+        .testimonial q::after {
+            color: var(--amber);
+        }
+
+        .testimonial .attribution {
+            color: var(--cream-faint);
+            font-size: 0.75rem;
+            letter-spacing: 0.02em;
+        }
+
+        .testimonial-divider {
+            color: var(--amber);
+            opacity: 0.5;
+        }
+
+        @keyframes scroll {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(-50%);
+            }
+        }
+
+        footer {
+            padding: 3rem;
+            text-align: center;
+            opacity: 0;
+            animation: fadeUp 0.8s ease 0.8s forwards;
+        }
+
+        footer a {
+            font-size: 0.85rem;
+            color: var(--cream-faint);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            letter-spacing: 0.02em;
+        }
+
+        footer a:hover {
+            color: var(--amber);
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main {
+                padding: 4rem 1.5rem;
+            }
+
+            .cta-group {
+                flex-direction: column;
+                gap: 1rem;
+                width: 100%;
+                max-width: 320px;
+            }
+
+            .cta {
+                width: 100%;
+                text-align: center;
+            }
+
+            .roles-container {
+                height: auto;
+            }
+
+            .roles-set {
+                position: relative;
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .roles-set:not(.active) {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="noise"></div>
+    
+    <main class="main">
+        <h1 class="logo">Transformer Talent</h1>
+        <p class="clever-tagline">Talent is all you need</p>
+        
+        <h2 class="headline">Building teams for the future</h2>
+        <p class="subheadline">We recruit AI/ML and software engineers for the most exciting startups backed by top VCs in the USA</p>
+        
+        <p class="vc-line">Y Combinator · Sequoia · a16z · General Catalyst · 8VC</p>
+
+        <div class="cta-group">
+            <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" rel="noopener" class="cta">View all roles →</a>
+            <a href="mailto:spencer@transformertalent.com" class="cta cta-primary">Get in touch →</a>
+        </div>
+
+        <div class="roles-section">
+            <div class="roles-label">Currently Hiring</div>
+            <div class="roles-container">
+                <div class="roles-set active" id="set1">
+                    <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" class="role-card">
+                        <div class="role-title">Backend/Infra Engineer</div>
+                        <div class="role-meta">
+                            <span>San Mateo</span>
+                            <span class="role-salary">$150k–$300k</span>
+                        </div>
+                    </a>
+                    <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" class="role-card">
+                        <div class="role-title">Full-Stack Engineer</div>
+                        <div class="role-meta">
+                            <span>San Francisco</span>
+                            <span class="role-salary">$180k–$260k</span>
+                        </div>
+                    </a>
+                    <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" class="role-card">
+                        <div class="role-title">GTM Engineer</div>
+                        <div class="role-meta">
+                            <span>New York</span>
+                            <span class="role-salary">$200k–$400k</span>
+                        </div>
+                    </a>
+                </div>
+                <div class="roles-set" id="set2">
+                    <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" class="role-card">
+                        <div class="role-title">Forward Deployed Engineer</div>
+                        <div class="role-meta">
+                            <span>San Francisco</span>
+                            <span class="role-salary">$140k–$180k</span>
+                        </div>
+                    </a>
+                    <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" class="role-card">
+                        <div class="role-title">Senior FDE</div>
+                        <div class="role-meta">
+                            <span>New York</span>
+                            <span class="role-salary">$225k–$300k</span>
+                        </div>
+                    </a>
+                    <a href="https://pyrite-farmhouse-947.notion.site/2b55dfe3e657804bafa3d2ae46dfd587?v=2b55dfe3e6578187baf4000c46595218" target="_blank" class="role-card">
+                        <div class="role-title">Frontend Engineer</div>
+                        <div class="role-meta">
+                            <span>San Francisco</span>
+                            <span class="role-salary">$150k–$250k</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="testimonials-wrapper">
+            <div class="testimonials">
+                <div class="testimonial">
+                    <q>Spencer is really amazing. He's sent us incredible high-intent candidates that are excellent fits with our business needs.</q>
+                    <span class="attribution">— Founder · Series A · Sequoia</span>
+                </div>
+                <span class="testimonial-divider">✦</span>
+                <div class="testimonial">
+                    <q>5 key hires over the last two years — we now only work with Spencer.</q>
+                    <span class="attribution">— CTO · Fintech Startup</span>
+                </div>
+                <span class="testimonial-divider">✦</span>
+                <div class="testimonial">
+                    <q>Goated.</q>
+                    <span class="attribution">— VP of AI & Data Science · Series C</span>
+                </div>
+                <span class="testimonial-divider">✦</span>
+                <!-- Duplicate for seamless loop -->
+                <div class="testimonial">
+                    <q>Spencer is really amazing. He's sent us incredible high-intent candidates that are excellent fits with our business needs.</q>
+                    <span class="attribution">— Founder · Series A · Sequoia</span>
+                </div>
+                <span class="testimonial-divider">✦</span>
+                <div class="testimonial">
+                    <q>5 key hires over the last two years — we now only work with Spencer.</q>
+                    <span class="attribution">— CTO · Fintech Startup</span>
+                </div>
+                <span class="testimonial-divider">✦</span>
+                <div class="testimonial">
+                    <q>Goated.</q>
+                    <span class="attribution">— VP of AI & Data Science · Series C</span>
+                </div>
+                <span class="testimonial-divider">✦</span>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <a href="mailto:spencer@transformertalent.com">spencer@transformertalent.com</a>
+    </footer>
+
+    <script>
+        // Rotate role sets every 5 seconds
+        const sets = document.querySelectorAll('.roles-set');
+        let currentSet = 0;
+
+        setInterval(() => {
+            sets[currentSet].classList.remove('active');
+            currentSet = (currentSet + 1) % sets.length;
+            sets[currentSet].classList.add('active');
+        }, 5000);
+    </script>
+</body>
+</html>
