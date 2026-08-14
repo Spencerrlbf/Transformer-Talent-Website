@@ -29,7 +29,7 @@
     "visa": "None",
     "yoe": "1 - 6 years",
     "company": {
-      "blurb": "Simplifying Success Through Smart Analytics.",
+      "blurb": "Education-technology company helping schools, universities, and nonprofits run smarter \u2014 practical AI systems and tools for real operational challenges across education.",
       "stage": "seed-stage",
       "funding": "seed funding"
     }
@@ -52,7 +52,7 @@
     "visa": "None, Visa transfers",
     "yoe": "8 - 15 years",
     "company": {
-      "blurb": "Accelerating Vehicle Software Innovation.",
+      "blurb": "Vehicle-AI platform company building cloud-to-edge software that powers the next generation of software-defined vehicles for major global automakers.",
       "stage": "scale-up",
       "funding": "$110M+ raised",
       "teamSize": "250+ people",
@@ -78,7 +78,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5 - 8 years",
     "company": {
-      "blurb": "Consumer AI startup reinventing how people meet, led by a founder with a landmark consumer-dating exit.",
+      "blurb": "Consumer startup building modern AI-powered matchmaking, led by a founder with a landmark consumer-dating exit.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "founding team of <10",
@@ -103,7 +103,7 @@
     "visa": "None",
     "yoe": "3 - 7 years",
     "company": {
-      "blurb": "AI that automates operations for commodity companies.",
+      "blurb": "Agentic-AI platform for commodity companies \u2014 automating execution across commercial, logistics, and finance operations.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -128,7 +128,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "AI that automates operations for commodity companies.",
+      "blurb": "Agentic-AI platform for commodity companies \u2014 automating execution across commercial, logistics, and finance operations.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -153,7 +153,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3+ years",
     "company": {
-      "blurb": "They are building the clinical AI execution platform for risk-bearing care organizations.",
+      "blurb": "Clinical-AI execution platform that analyzes patient data at scale and supports clinicians in real time for risk-bearing care organizations.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2025",
@@ -178,7 +178,7 @@
     "visa": "None, Visa transfers",
     "yoe": "4+ years",
     "company": {
-      "blurb": "VC-backed startup building computer-use AI agents to automate healthcare back-office operations.",
+      "blurb": "Healthcare-AI company deploying agents that automate repetitive back-office work so clinical teams multiply capacity without adding headcount.",
       "stage": "Series A-stage",
       "funding": "$7M raised",
       "teamSize": "founding team of <10",
@@ -204,7 +204,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 4 years",
     "company": {
-      "blurb": "AI-powered QA platform that uses autonomous browser agents to test websites like real users \u2014 replacing brittle scripts and manual testing for top e-commerce brands.",
+      "blurb": "Agentic QA platform for e-commerce \u2014 autonomous browser agents test sites end-to-end like real users, cutting regression-testing time ~95% for major consumer brands.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "~10 people",
@@ -230,7 +230,7 @@
     "visa": "None",
     "yoe": "3+ years",
     "company": {
-      "blurb": "Human risk management that works like magic.",
+      "blurb": "AI-powered human-risk-management platform \u2014 assessing risk, shaping secure behavior, and automating security-compliance reporting.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "~60 people",
@@ -255,7 +255,7 @@
     "visa": "None",
     "yoe": "3 - 6 years",
     "company": {
-      "blurb": "We're building an agent-to-agent hiring ecosystem where personal agents capture your work context and engage on your behalf to eliminate discovery friction.",
+      "blurb": "Early-stage startup building an agent-to-agent professional network where personal AI agents capture your work context and engage on your behalf.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10"
@@ -280,7 +280,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3+ years",
     "company": {
-      "blurb": "Web data API for AI.",
+      "blurb": "Developer-infrastructure company behind a widely used web-data API that lets AI agents search, scrape, and turn any website into clean structured data at scale.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~40 people",
@@ -306,7 +306,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5 - 8 years",
     "company": {
-      "blurb": "Trusted Intelligence for Insurance.",
+      "blurb": "AI operating system for insurance \u2014 helping fast-growing insurers launch products and reach new markets at startup speed.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~15 people",
@@ -331,7 +331,7 @@
     "visa": "None",
     "yoe": "1 - 4 years",
     "company": {
-      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "blurb": "Knowledge-infrastructure startup that unifies company knowledge across every tool and audits it for conflicts so enterprise AI answers correctly.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -356,7 +356,7 @@
     "visa": "None",
     "yoe": "3 - 8 years",
     "company": {
-      "blurb": "Stewardship reports for your entire book and new business.",
+      "blurb": "Insurance-data company automating loss-run retrieval, summaries, and trend analysis across 1,000+ carriers, wholesalers, and MGAs.",
       "stage": "early-stage",
       "investors": "VC-backed"
     }
@@ -379,7 +379,7 @@
     "visa": "None",
     "yoe": "1 - 4 years",
     "company": {
-      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "blurb": "Knowledge-infrastructure startup that unifies company knowledge across every tool and audits it for conflicts so enterprise AI answers correctly.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -404,7 +404,7 @@
     "visa": "None",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "Forefront of AI-driven software development for state and local governments.",
+      "blurb": "Public-sector software company building purpose-built digital infrastructure for state and local government.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "~15 people",
@@ -429,7 +429,7 @@
     "visa": "None",
     "yoe": "5+ years",
     "company": {
-      "blurb": "Enterprise AI Data Agents.",
+      "blurb": "Enterprise-AI company deploying data agents that automate engineering, ops, and analysis workflows on customers' existing cloud stacks.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "~25 people",
@@ -456,7 +456,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 5 years",
     "company": {
-      "blurb": "Growth-stage AI company deploying engineers directly with enterprise customers across finance and education.",
+      "blurb": "Data-intelligence company whose engine tracks tens of millions of companies and professional profiles in real time for founders, investors, and recruiters.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "founding team of <10",
@@ -482,7 +482,7 @@
     "visa": "None",
     "yoe": "0 - 5 years",
     "company": {
-      "blurb": "Building AGI for banking.",
+      "blurb": "AI-native lending platform automating ~90% of the manual effort in business-loan origination for FDIC-insured banks and non-bank lenders.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "~40 people",
@@ -509,7 +509,7 @@
     "visa": "None",
     "yoe": "2 - 8 years",
     "company": {
-      "blurb": "A company that helps America and its allies buy and field technology at the speed of Amazon Prime.",
+      "blurb": "AI platform helping Fortune 500s and fast-growing startups win government contracts across 60+ allied nations.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "~10 people",
@@ -535,7 +535,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 6 years",
     "company": {
-      "blurb": "Building the ingestion layer to connect human data with machines.",
+      "blurb": "Agentic document platform used by leading AI teams to parse and process complex documents with enterprise performance at scale.",
       "stage": "scale-up",
       "funding": "$100M+ raised",
       "teamSize": "~80 people",
@@ -561,7 +561,7 @@
     "visa": "None",
     "yoe": "4 - 6 years",
     "company": {
-      "blurb": "A company that builds autonomous AI agents that automate the end-to-end healthcare recruiting process \u2014 from job posting to job offer.",
+      "blurb": "Healthcare-AI company building autonomous agents that automate recruiting end to end, from job posting to job offer.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~20 people",
@@ -587,7 +587,7 @@
     "visa": "None",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "Forefront of AI-driven software development for state and local governments.",
+      "blurb": "Public-sector software company building purpose-built digital infrastructure for state and local government.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "~15 people",
@@ -614,7 +614,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 6 years",
     "company": {
-      "blurb": "We acquire, own, and operate world-class vertical software and tech-enabled businesses.",
+      "blurb": "Permanent-capital holding company that acquires and operates essential vertical-software businesses on a centralized platform.",
       "stage": "scale-up",
       "funding": "$250M+ raised",
       "teamSize": "~80 people",
@@ -639,7 +639,7 @@
     "visa": "None",
     "yoe": "2 - 8 years",
     "company": {
-      "blurb": "Automate architecture.",
+      "blurb": "AI plan-review product for the built world \u2014 marking up residential plans, citing building codes, and drafting response letters ~40% faster.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -664,7 +664,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2+ years",
     "company": {
-      "blurb": "Enterprise agents built for procurement.",
+      "blurb": "Enterprise agentic-automation company scaling intelligent automation across procurement and operations functions.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10"
@@ -688,7 +688,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5+ years",
     "company": {
-      "blurb": "A company that turns top-tier W-2 freight agents into independent agency owners. We partner with the best and provide the playbook, tools, and support to build a successful agency in 12 months.",
+      "blurb": "Modern freight-brokerage platform turning top W-2 freight agents into independent agency owners with industry-leading splits and tooling.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "founding team of <10",
@@ -714,7 +714,7 @@
     "visa": "None",
     "yoe": "1.5+ years",
     "company": {
-      "blurb": "Connect Agents to the External World, Confidently.",
+      "blurb": "Platform for connecting AI agents safely to the external world, serving industries from agriculture and construction to manufacturing.",
       "stage": "Series A-stage",
       "funding": "$6M raised",
       "teamSize": "founding team of <10",
@@ -765,7 +765,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2+ years",
     "company": {
-      "blurb": "Headcount management for scaling teams.",
+      "blurb": "Headcount-management platform connecting HRIS, ATS, and planning systems with AI-powered insights for hiring leaders.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -790,7 +790,7 @@
     "visa": "None, Visa transfers",
     "yoe": "4 - 8 years",
     "company": {
-      "blurb": "Optimize sales rep pricing performance and recover lost revenue.",
+      "blurb": "CPQ software for complex pricing \u2014 credits, usage, outcomes, and ramps \u2014 with guided selling and real-time pricing intelligence.",
       "stage": "Series A-stage",
       "funding": "$7M raised",
       "teamSize": "~10 people",
@@ -816,7 +816,7 @@
     "visa": "None",
     "yoe": "0 - 5 years",
     "company": {
-      "blurb": "Email Inboxes for AI Agents.",
+      "blurb": "Developer-infrastructure startup giving AI agents real email inboxes via API \u2014 create, send, receive, and search programmatically.",
       "stage": "Series A-stage",
       "funding": "$6M raised"
     }
@@ -839,7 +839,7 @@
     "visa": "None",
     "yoe": "3 - 5 years",
     "company": {
-      "blurb": "Military AI that runs your admin work.",
+      "blurb": "Defense-technology company powering the highest-stakes national-security missions.",
       "stage": "early-stage",
       "founded": "2024"
     }
@@ -862,7 +862,7 @@
     "visa": "None",
     "yoe": "2 - 6 years",
     "company": {
-      "blurb": "They are the agent platform for data reliability, fixing the messy data inside the systems of record that every company runs on.",
+      "blurb": "Agentic data-reliability platform building AI systems for security-conscious enterprises, headquartered in New York.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -888,7 +888,7 @@
     "visa": "None",
     "yoe": "3+ years",
     "company": {
-      "blurb": "Equip the offline economy with foundational intelligence.",
+      "blurb": "AI-native operating system for the offline economy \u2014 bringing modern software automation to real-world businesses.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -913,7 +913,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "A company that drives more leads from AI models by helping you discover and change AI's opinion of your brand.",
+      "blurb": "Marketing-tech startup helping companies get discovered and recommended by AI models as buying decisions shift to agents.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -939,7 +939,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 12 years",
     "company": {
-      "blurb": "Agentic integration platform automating mission-critical system connections for the physical economy.",
+      "blurb": "AI supply-chain-integration company generating enterprise-grade ERP, TMS, WMS, and EDI connections 10x faster.",
       "stage": "Series A-stage",
       "funding": "$8M raised",
       "teamSize": "founding team of <10",
@@ -965,7 +965,7 @@
     "visa": "None",
     "yoe": "3 - 5 years",
     "company": {
-      "blurb": "A company that partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+      "blurb": "Software holding company acquiring and growing mission-critical vertical SaaS businesses with patient capital and careful stewardship.",
       "stage": "growth-stage",
       "funding": "$50M+ raised",
       "teamSize": "founding team of <10",
@@ -991,7 +991,7 @@
     "visa": "None",
     "yoe": "2 - 7 years",
     "company": {
-      "blurb": "We\u2019re building the first customer lifecycle automation platform powered by AI agents, purpose-built for B2B companies.",
+      "blurb": "Customer-lifecycle AI company whose agents do the manual work of serving and growing customers so teams can focus on relationships.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -1017,7 +1017,7 @@
     "visa": "None",
     "yoe": "3 - 5 years",
     "company": {
-      "blurb": "A company that partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+      "blurb": "Software holding company acquiring and growing mission-critical vertical SaaS businesses with patient capital and careful stewardship.",
       "stage": "growth-stage",
       "funding": "$50M+ raised",
       "teamSize": "founding team of <10",
@@ -1043,7 +1043,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 7 years",
     "company": {
-      "blurb": "AI Solutions and Services for Patents.",
+      "blurb": "AI company for patent search, analysis, and intellectual-property workflows.",
       "stage": "Series A-stage",
       "funding": "$6M raised"
     }
@@ -1066,7 +1066,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 5 years",
     "company": {
-      "blurb": "A company that builds wearable AI co-pilots on smart glasses for industrial field workers, deploying agentic vision-language models to data centers, energy grids, and aerospace.",
+      "blurb": "Wearable-AI company building real-time audiovisual co-pilots on smart glasses for complex industrial assembly operations.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -1091,7 +1091,7 @@
     "visa": "None",
     "yoe": "0 - 2 years",
     "company": {
-      "blurb": "A company that builds AI agents for life sciences that take drug development from 10 years to 5.",
+      "blurb": "Agentic platform for life sciences connecting scientific and regulatory records \u2014 built to cut drug-development timelines in half.",
       "stage": "Series A-stage",
       "funding": "$9M raised",
       "teamSize": "founding team of <10",
@@ -1118,7 +1118,7 @@
     "visa": "None",
     "yoe": "3 - 7 years",
     "company": {
-      "blurb": "AI-native startup rebuilding how businesses price and manage risk in the insurance industry, replacing manual processes that drive multi-million-dollar decisions.",
+      "blurb": "Risk-management platform and insurance brokerage for the owners, operators, and builders of the physical world.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -1144,7 +1144,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 7 years",
     "company": {
-      "blurb": "Embedded accounting software for SMB platforms.",
+      "blurb": "Embedded-accounting API letting SMB software platforms offer accounting natively to their customers.",
       "stage": "Series A-stage",
       "funding": "$9M raised",
       "teamSize": "~20 people",
@@ -1170,7 +1170,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 4 years",
     "company": {
-      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "blurb": "Knowledge-infrastructure startup that unifies company knowledge across every tool and audits it for conflicts so enterprise AI answers correctly.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -1195,7 +1195,7 @@
     "visa": "None",
     "yoe": "2 - 6 years",
     "company": {
-      "blurb": "Consumer AI startup building a personal AI stylist for fashion and e-commerce.",
+      "blurb": "Consumer-AI startup building a personal AI stylist that generates outfits from your closet, lifestyle, budget, and the weather.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2023",
@@ -1221,7 +1221,7 @@
     "visa": "None",
     "yoe": "2 - 8 years",
     "company": {
-      "blurb": "A company that helps America and its allies buy and field technology at the speed of Amazon Prime.",
+      "blurb": "AI platform helping Fortune 500s and fast-growing startups win government contracts across 60+ allied nations.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "~10 people",
@@ -1247,7 +1247,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 4 years",
     "company": {
-      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "blurb": "Knowledge-infrastructure startup that unifies company knowledge across every tool and audits it for conflicts so enterprise AI answers correctly.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -1272,7 +1272,7 @@
     "visa": "None",
     "yoe": "3+ years",
     "company": {
-      "blurb": "The first AI-native OS for deployment teams.",
+      "blurb": "AI platform for system integrators \u2014 turning institutional knowledge into repeatable, aligned software implementations from discovery to go-live.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "founding team of <10",
@@ -1297,7 +1297,7 @@
     "visa": "None",
     "yoe": "2+ years",
     "company": {
-      "blurb": "A company that empowers clinics that offers interventional psychiatry services to see more patients.",
+      "blurb": "Tech-enabled interventional-psychiatry network offering insurance-covered TMS and esketamine care through in-person clinics.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~10 people",
@@ -1333,7 +1333,7 @@
     "visa": "None, Visa transfers",
     "yoe": "7 - 15 years",
     "company": {
-      "blurb": "The Fraud Experts.",
+      "blurb": "Fraud-intelligence company helping major financial institutions stop identity fraud at the application stage.",
       "stage": "growth-stage",
       "funding": "$80M+ raised",
       "teamSize": "150+ people",
@@ -1361,7 +1361,7 @@
     "visa": "None, Visa transfers",
     "yoe": "4 - 7 years",
     "company": {
-      "blurb": "Your app, Enterprise Ready.",
+      "blurb": "Developer platform providing the APIs that make apps enterprise-ready \u2014 single sign-on, directory sync, audit logs \u2014 used by thousands of companies.",
       "stage": "scale-up",
       "funding": "$190M+ raised",
       "teamSize": "100+ people",
@@ -1388,7 +1388,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 10 years",
     "company": {
-      "blurb": "You built your firm's edge. Compound it with AI.",
+      "blurb": "AI platform helping professional-services firms compound their edge with AI.",
       "stage": "growth-stage",
       "funding": "$50M+ raised",
       "teamSize": "~15 people",
@@ -1414,7 +1414,7 @@
     "visa": "None, Visa transfers",
     "yoe": "0 - 2 years",
     "company": {
-      "blurb": "Simplifying Success Through Smart Analytics.",
+      "blurb": "Education-technology company helping schools, universities, and nonprofits run smarter \u2014 practical AI systems and tools for real operational challenges across education.",
       "stage": "seed-stage",
       "funding": "seed funding"
     }
@@ -1438,7 +1438,7 @@
     "visa": "None, Visa transfers",
     "yoe": "8+ years",
     "company": {
-      "blurb": "Contracting intelligence from the first turn through obligation management.",
+      "blurb": "Legal-AI product generating lawyer-rated contract redlines directly in Word, recently acquired by a global contract-intelligence leader.",
       "teamSize": "1,000+ people",
       "founded": "2009",
       "investors": "backed by Y Combinator"
@@ -1463,7 +1463,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5+ years",
     "company": {
-      "blurb": "Early-stage consumer-AI startup building ML-powered products.",
+      "blurb": "Consumer-software studio building products that feel personal and magical, starting with email.",
       "stage": "Series A-stage",
       "funding": "$9M raised",
       "teamSize": "founding team of <10",
@@ -1490,7 +1490,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5+ years",
     "company": {
-      "blurb": "The Workflow Intelligence Layer.",
+      "blurb": "Enterprise workflow-intelligence layer for observing, optimizing, and governing multi-agent AI applications.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -1527,7 +1527,7 @@
     "visa": "None",
     "yoe": "5 - 8 years",
     "company": {
-      "blurb": "They are the leading agentic risk platform to fight financial crime.",
+      "blurb": "Agentic financial-crime platform used by leading banks and merchants worldwide to stop fraud in real time and automate fraud and AML operations.",
       "stage": "scale-up",
       "funding": "$170M+ raised",
       "teamSize": "200+ people",
@@ -1553,7 +1553,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3+ years",
     "company": {
-      "blurb": "High-fidelity trajectories and environments for frontier AI research.",
+      "blurb": "Frontier data laboratory building deterministic RL environments and pixel-perfect trajectory datasets for training computer-use agents.",
       "stage": "early-stage",
       "teamSize": "founding team of <10",
       "founded": "2025"
@@ -1577,7 +1577,7 @@
     "visa": "None, Visa transfers",
     "yoe": "6 - 14 years",
     "company": {
-      "blurb": "AI Agents for KYC & AML.",
+      "blurb": "AI compliance agent clearing KYB and AML cases in minutes \u2014 87% fewer false positives, SOC 2 Type II certified.",
       "stage": "Series A-stage",
       "funding": "$7M raised",
       "teamSize": "~10 people",
@@ -1603,7 +1603,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 8 years",
     "company": {
-      "blurb": "AI that autonomously operates factories \u2014 connecting legacy systems into a unified layer and deploying agents that optimize production for profit.",
+      "blurb": "Industrial-AI startup putting factories on autopilot \u2014 connecting legacy systems and deploying agents that drive indirect labor toward zero.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -1628,7 +1628,7 @@
     "visa": "None",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "They are your personal AI in iMessage \u2014 a proactive teammate that plugs into your apps and gets work done on your behalf.",
+      "blurb": "Consumer-AI startup building a personal assistant that lives in your messages, watches your apps, and gets work done proactively.",
       "stage": "early-stage",
       "teamSize": "founding team of <10",
       "founded": "2025"
@@ -1652,7 +1652,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "A company that builds AI agents that work as autonomous performance engineers, optimizing GPU kernels for AI inference.",
+      "blurb": "AI-infrastructure company building the fastest inference for open models in the enterprise.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
@@ -1677,7 +1677,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 8 years",
     "company": {
-      "blurb": "They are an autonomous researcher that talks to thousands of people, revealing exactly what they want and why.",
+      "blurb": "AI research platform that conducts, analyzes, and summarizes customer research at scale for leading brands.",
       "teamSize": "~80 people",
       "founded": "2023",
       "investors": "backed by Sequoia"
@@ -1701,7 +1701,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 8 years",
     "company": {
-      "blurb": "AI Platform for Accounting firms giving accountants a team of AI assistants.",
+      "blurb": "Accounting-AI company whose agents do real accounting work end-to-end \u2014 used by top firms across client accounting, tax, and audit.",
       "stage": "scale-up",
       "funding": "$140M+ raised",
       "teamSize": "100+ people",
@@ -1727,7 +1727,7 @@
     "visa": "None, Visa transfers",
     "yoe": "4+ years",
     "company": {
-      "blurb": "Removing the friction that keeps tax and accounting professionals from doing their best work, by using cutting-edge AI to automate tax document processing.",
+      "blurb": "Tax-AI company giving accountants superpowers in asset and wealth management \u2014 from K-1 PDF to Excel in minutes.",
       "stage": "early-stage",
       "teamSize": "~20 people",
       "founded": "2023"
@@ -1751,7 +1751,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2+ years",
     "company": {
-      "blurb": "Face-to-face AI interaction that feels human.",
+      "blurb": "Applied-AI lab building visual conversational AI \u2014 real-time, face-to-face interaction that feels human.",
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
@@ -1776,7 +1776,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2+ years",
     "company": {
-      "blurb": "Face-to-face AI interaction that feels human.",
+      "blurb": "Applied-AI lab building visual conversational AI \u2014 real-time, face-to-face interaction that feels human.",
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
@@ -1801,7 +1801,7 @@
     "visa": "None, Visa transfers",
     "yoe": "0 - 2 years",
     "company": {
-      "blurb": "Face-to-face AI interaction that feels human.",
+      "blurb": "Applied-AI lab building visual conversational AI \u2014 real-time, face-to-face interaction that feels human.",
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
@@ -1826,7 +1826,7 @@
     "visa": "None, Visa transfers",
     "yoe": "0 - 2 years",
     "company": {
-      "blurb": "Face-to-face AI interaction that feels human.",
+      "blurb": "Applied-AI lab building visual conversational AI \u2014 real-time, face-to-face interaction that feels human.",
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
@@ -1851,7 +1851,7 @@
     "visa": "None, Visa transfers",
     "yoe": "4 - 10 years",
     "company": {
-      "blurb": "Wealth management firm rebuilt from the ground up with AI.",
+      "blurb": "AI-native financial-services firm rebuilding wealth management \u2014 agents carry the operational burden so human moments feel extraordinary.",
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~15 people",
@@ -1877,7 +1877,7 @@
     "visa": "None",
     "yoe": "5+ years",
     "company": {
-      "blurb": "Wealth management firm rebuilt from the ground up with AI.",
+      "blurb": "AI-native financial-services firm rebuilding wealth management \u2014 agents carry the operational burden so human moments feel extraordinary.",
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~15 people",
@@ -1904,7 +1904,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 3 years",
     "company": {
-      "blurb": "AI-Platform for End-to-End product development.",
+      "blurb": "AI platform unifying R&D, quality, and product-lifecycle data for faster decisions in materials science and manufacturing.",
       "stage": "growth-stage",
       "funding": "$20M+ raised",
       "teamSize": "100+ people",
@@ -1930,7 +1930,7 @@
     "visa": "None, Visa transfers, New visa sponsorships",
     "yoe": "6+ years",
     "company": {
-      "blurb": "Unleashing engineering for the built environment.",
+      "blurb": "Next-generation engineering firm building American infrastructure resilience.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -1955,7 +1955,7 @@
     "visa": "None, Visa transfers",
     "yoe": "0+ years",
     "company": {
-      "blurb": "AI startup building product experiences for education and B2B customers.",
+      "blurb": "AI company building revenue agents for high-growth companies.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -1981,7 +1981,7 @@
     "visa": "None",
     "yoe": "1 - 6 years",
     "company": {
-      "blurb": "The only end-to-end AI system built for GovCon. Unite your workflow across capture, proposals, delivery and operations.",
+      "blurb": "AI infrastructure for government contractors \u2014 capture, proposals, pricing, and contracts across the full lifecycle in one platform.",
       "stage": "growth-stage",
       "funding": "$40M+ raised",
       "teamSize": "~50 people",
@@ -2008,7 +2008,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 8 years",
     "company": {
-      "blurb": "Web data API for AI.",
+      "blurb": "Developer-infrastructure company behind a widely used web-data API that lets AI agents search, scrape, and turn any website into clean structured data at scale.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~40 people",
@@ -2035,7 +2035,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2+ years",
     "company": {
-      "blurb": "A company that simplifies immigration for technologists, founders, researchers, and others at the top of their fields with our highly experienced immigration lawyers and a user-friendly platform.",
+      "blurb": "Modern tech-enabled immigration law firm with a 98%+ approval rate across US work visas and green cards.",
       "stage": "Series A-stage",
       "funding": "$20M+ raised",
       "teamSize": "~70 people",
@@ -2060,7 +2060,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 5 years",
     "company": {
-      "blurb": "AI-powered trade advisory platform that helps companies navigate tariffs, recover duty refunds, and reduce costs across global trade.",
+      "blurb": "AI-native trade-compliance platform that audits customs history and recovers duty overpayments \u2014 $500M+ in claims filed.",
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
@@ -2086,7 +2086,7 @@
     "visa": "None, Visa transfers",
     "yoe": "2+ years",
     "company": {
-      "blurb": "Building a world where preventable disease is actually prevented.",
+      "blurb": "Concierge-medicine startup pairing 140+ biomarker and whole-genome testing with doctor-plus-AI personalized care plans.",
       "stage": "Series A-stage",
       "funding": "$7M raised",
       "teamSize": "founding team of <10",
@@ -2111,7 +2111,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 10 years",
     "company": {
-      "blurb": "Human risk management that works like magic.",
+      "blurb": "AI-powered human-risk-management platform \u2014 assessing risk, shaping secure behavior, and automating security-compliance reporting.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "~60 people",
@@ -2136,7 +2136,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 5 years",
     "company": {
-      "blurb": "The autonomous future of industrial labor.",
+      "blurb": "AI operating layer for the industrial supply chain \u2014 providing both the labor that powers warehouses and the intelligence that optimizes them.",
       "stage": "growth-stage",
       "funding": "$40M+ raised",
       "teamSize": "~80 people",
@@ -2162,7 +2162,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3+ years",
     "company": {
-      "blurb": "Web data API for AI.",
+      "blurb": "Developer-infrastructure company behind a widely used web-data API that lets AI agents search, scrape, and turn any website into clean structured data at scale.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~40 people",
@@ -2189,7 +2189,7 @@
     "visa": "None, Visa transfers",
     "yoe": "0 - 1 years",
     "company": {
-      "blurb": "AI-Platform for End-to-End product development.",
+      "blurb": "AI platform unifying R&D, quality, and product-lifecycle data for faster decisions in materials science and manufacturing.",
       "stage": "growth-stage",
       "funding": "$20M+ raised",
       "teamSize": "100+ people",
@@ -2215,7 +2215,7 @@
     "visa": "None, Visa transfers",
     "yoe": "6+ years",
     "company": {
-      "blurb": "Leading AI solution for the community association management industry.",
+      "blurb": "AI company for community-association management \u2014 agents that execute complex property-management tasks autonomously, 24/7.",
       "stage": "scale-up",
       "funding": "$350M+ raised",
       "teamSize": "~40 people",
@@ -2242,7 +2242,7 @@
     "visa": "None, Visa transfers",
     "yoe": "6+ years",
     "company": {
-      "blurb": "Leading AI solution for the community association management industry.",
+      "blurb": "Leading software platform for community-association management, from financials to homeowner experience.",
       "stage": "scale-up",
       "funding": "$300M+ raised",
       "teamSize": "350+ people",
@@ -2269,7 +2269,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5+ years",
     "company": {
-      "blurb": "For everything that happens after you deploy.",
+      "blurb": "Autonomous production-infrastructure system that continuously understands, operates, and improves cloud environments.",
       "stage": "Series A-stage",
       "funding": "$20M+ raised",
       "teamSize": "~20 people",
@@ -2294,7 +2294,7 @@
     "visa": "None, Visa transfers",
     "yoe": "1 - 10 years",
     "company": {
-      "blurb": "Connecting you with dedicated health advocates who put you first and take charge of your healthcare journey.",
+      "blurb": "Healthcare-advocacy service covered by Medicare \u2014 dedicated experts guiding patients through appointments, insurance, and medical bills.",
       "stage": "Series A-stage",
       "funding": "$6M raised",
       "teamSize": "founding team of <10",
@@ -2319,7 +2319,7 @@
     "visa": "None",
     "yoe": "3+ years",
     "company": {
-      "blurb": "AI-enabled personal training, covered by insurance.",
+      "blurb": "Consumer-health company delivering insurance-covered personal training and nutrition coaching through an app with expert coaches.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2018",
@@ -2344,7 +2344,7 @@
     "visa": "None, Visa transfers",
     "yoe": "3 - 8 years",
     "company": {
-      "blurb": "AI agents for document OCR + workflows.",
+      "blurb": "Widely adopted AI-infrastructure company behind leading open-source frameworks for document parsing and AI agent workflows.",
       "stage": "growth-stage",
       "funding": "$20M+ raised",
       "teamSize": "~40 people",
@@ -2370,7 +2370,7 @@
     "visa": "None",
     "yoe": "3+ years",
     "company": {
-      "blurb": "Self-guided tours that actually work.",
+      "blurb": "Proptech-AI startup automating apartment showings and leasing for property managers \u2014 no middleman required.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "~20 people",
@@ -2395,7 +2395,7 @@
     "visa": "None",
     "yoe": "2 - 5 years",
     "company": {
-      "blurb": "Self-guided tours that actually work.",
+      "blurb": "Proptech-AI startup automating apartment showings and leasing for property managers \u2014 no middleman required.",
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "~20 people",
@@ -2422,7 +2422,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5+ years",
     "company": {
-      "blurb": "Consumer AI startup building an interactive-content platform with recommendation at its core.",
+      "blurb": "Consumer platform to play, create, and remix interactive mini-apps \u2014 an infinite feed of AI-generated games and experiences.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "~30 people",
@@ -2448,7 +2448,7 @@
     "visa": "None, Visa transfers",
     "yoe": "5 - 15 years",
     "company": {
-      "blurb": "The data layer for audio AI.",
+      "blurb": "Audio-data research company trusted by top AI labs to build the proprietary speech datasets that power their models.",
       "stage": "growth-stage",
       "funding": "$80M+ raised",
       "teamSize": "~50 people",
@@ -2474,7 +2474,7 @@
     "visa": "None, Visa transfers",
     "yoe": "6 - 10 years",
     "company": {
-      "blurb": "They are a frontier data provider for foundational AI labs.",
+      "blurb": "Frontier-data company capturing how experts reason and turning real professional work into training data for foundation models.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "~40 people",
@@ -2499,7 +2499,7 @@
     "visa": "None",
     "yoe": "3+ years",
     "company": {
-      "blurb": "AI-enabled personal training, covered by insurance.",
+      "blurb": "Consumer-health company delivering insurance-covered personal training and nutrition coaching through an app with expert coaches.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2018",
@@ -2524,7 +2524,7 @@
     "visa": "None",
     "yoe": "5+ years",
     "company": {
-      "blurb": "The fastest way to run your GitHub Actions \u2014 trusted by 600+ engineering teams.",
+      "blurb": "CI-infrastructure company making GitHub Actions dramatically faster \u2014 2\u201340x speedups for 600+ engineering teams.",
       "stage": "growth-stage",
       "funding": "$50M+ raised",
       "teamSize": "~40 people",
@@ -2549,7 +2549,7 @@
     "visa": "None",
     "yoe": "4 - 8 years",
     "company": {
-      "blurb": "AI platform that gives every employee full company context across 40+ enterprise apps \u2014 at 80% lower cost than generic AI tools.",
+      "blurb": "Enterprise AI-agent platform with full company context and 50+ connectors \u2014 frontier-quality AI at a fraction of the cost.",
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~25 people",

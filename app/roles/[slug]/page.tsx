@@ -130,16 +130,9 @@ export default async function RolePage({
                   {c.founded && <FactRow k="FOUNDED" v={c.founded} />}
                   {c.investors && <FactRow k="BACKING" v={c.investors} />}
                 </dl>
-                <p style={{ fontSize: "0.72rem", color: "var(--fog-30)", marginTop: "1.2rem" }}>
-                  Company identity shared after we connect — we represent them
-                  directly.
-                </p>
               </>
             ) : (
-              <p>
-                A VC-backed startup we represent directly — full details when
-                we connect.
-              </p>
+              <p>A VC-backed startup — full details during the process.</p>
             )}
           </div>
         </div>
