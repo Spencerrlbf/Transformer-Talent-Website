@@ -633,3 +633,50 @@ footer a { color: var(--signal); text-decoration: none; }
     .topbar { flex-wrap: wrap; }
     .status { display: none; }
 }
+
+/* ---------- Placement marquee ---------- */
+
+.marquee-wrap {
+    overflow: hidden;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+.marquee {
+    display: flex;
+    gap: 3.5rem;
+    width: max-content;
+    padding: 1.3rem 0;
+    animation: marquee 40s linear infinite;
+}
+
+.marquee:hover { animation-play-state: paused; }
+
+.marquee-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    text-decoration: none;
+}
+
+.marquee-item .co {
+    font-family: var(--font-grot), sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--fog);
+}
+
+.marquee-item .role { color: var(--fog-60); }
+.marquee-item .st { color: var(--ok); font-size: 0.64rem; }
+.marquee-item .st::before { content: '✓ '; }
+.marquee-sep { color: var(--signal); opacity: 0.5; align-self: center; }
+
+@keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}

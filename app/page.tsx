@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PLACEMENTS } from "@/data/placements";
+import SalaryChart from "@/components/SalaryChart";
 
 const heroGrid: React.CSSProperties = {
   display: "grid",
@@ -69,34 +70,36 @@ export default function Home() {
         </section>
 
         <div className="sec-label">
-          <b>001</b> — placement_log --recent
+          <b>001</b> — placements --sample
         </div>
-        <div className="logs">
-          {PLACEMENTS.map((p, i) => (
-            <Link key={p.company} href="/placements" className="log">
-              <span className="t">LOG_{String(i + 1).padStart(2, "0")}</span>
-              <span className="co">{p.company}</span>
-              <span className="role">{p.role}</span>
-              <span className="st">CLOSED</span>
-            </Link>
-          ))}
-        </div>
+        <Link href="/placements" className="marquee-wrap" style={{ display: "block", textDecoration: "none" }}>
+          <div className="marquee">
+            {[...PLACEMENTS, ...PLACEMENTS, ...PLACEMENTS].map((p, i) => (
+              <span key={i} style={{ display: "contents" }}>
+                <span className="marquee-item">
+                  <span className="co">{p.company}</span>
+                  <span className="role">{p.role}</span>
+                  <span className="st">CLOSED</span>
+                </span>
+                <span className="marquee-sep">✦</span>
+              </span>
+            ))}
+          </div>
+        </Link>
 
         <div className="sec-label">
           <b>002</b> — team --info
         </div>
         <div className="grid2">
           <div className="cell">
-            <div className="op-photo">
-              <span className="placeholder">[ IMG — TEAM ]</span>
-            </div>
-            <dl className="kv">
+            <SalaryChart compact />
+            <dl className="kv" style={{ marginTop: "1.4rem" }}>
               <dt>FIRM</dt>
               <dd>Transformer Talent</dd>
               <dt>MODEL</dt>
               <dd>Senior recruiters, end to end</dd>
               <dt>BASE</dt>
-              <dd>San Francisco / New York</dd>
+              <dd>SF · NYC · Seattle · DC</dd>
               <dt>FOCUS</dt>
               <dd>AI/ML &amp; software engineering</dd>
             </dl>

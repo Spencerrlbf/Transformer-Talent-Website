@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import marketData from "@/data/market-index.json";
 import { FAMILY_PAGES } from "@/lib/market";
+import SalaryChart from "@/components/SalaryChart";
 
 export const metadata: Metadata = {
   title: "Market Index",
@@ -35,6 +36,13 @@ export default function MarketIndexPage() {
           self-reports. Figures are median band floor/ceiling per role family;
           “top of market” is the highest ceiling we&apos;ve carried.
         </p>
+
+        <div className="sec-label">
+          <b>VIZ</b> — median bands at a glance
+        </div>
+        <div className="b3" style={{ border: "1px solid var(--line)", padding: "1.6rem", marginBottom: "1rem" }}>
+          <SalaryChart />
+        </div>
 
         <div className="sec-label">
           <b>IDX</b> — base salary, $k/year · SF &amp; NYC

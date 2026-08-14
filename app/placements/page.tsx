@@ -16,7 +16,7 @@ export default function PlacementsPage() {
           Placement <span>log</span>
         </h1>
         <p className="page-intro b2">
-          Selected searches, closed. Placements at companies backed by{" "}
+          A sample of recent searches, closed. Placements at companies backed by{" "}
           <b>Sequoia, 8VC, Felicis, Y Combinator, and a16z</b> — from first
           engineering hire to executive science leadership.
         </p>
@@ -76,7 +76,7 @@ export default function PlacementsPage() {
         </div>
         <div className="bigcta">
           <h2>
-            Your role could be <span>LOG_05</span>.
+            Your search could <span>close next</span>.
           </h2>
           <p>
             Upload the JD and see potential matches now, or start with a

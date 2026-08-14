@@ -90,8 +90,8 @@ export default function ProcessPage() {
             <p className="a">
               AI/ML engineering and research, infrastructure/backend,
               product/full-stack, and forward-deployed engineering — IC through
-              executive (our log includes a Chief Science Officer search). US
-              focus, SF and NYC strongest.
+              executive (our log includes a Chief Science Officer search).
+              Strongest in SF and NYC, active in Seattle and the DMV.
             </p>
           </details>
           <details>
