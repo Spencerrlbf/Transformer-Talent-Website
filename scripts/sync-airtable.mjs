@@ -173,14 +173,32 @@ async function main() {
     }
 
     if (!mapped.linkedin_username) { skipped++; continue; }
-    const res = await sb("candidates", {
-      method: "POST",
-      body: JSON.stringify({ ...mapped, airtable_sync_hash: hash }),
-      headers: { Prefer: "return=representation" },
-    });
-    const [row] = await res.json();
-    inserted++;
-    needEmbedding.push({ id: row.id, mapped });
+    try {
+      const res = await sb("candidates", {
+        method: "POST",
+        body: JSON.stringify({ ...mapped, airtable_sync_hash: hash }),
+        headers: { Prefer: "return=representation" },
+      });
+      const [row] = await res.json();
+      inserted++;
+      byUsername.set(mapped.linkedin_username.toLowerCase(), { id: row.id, airtable_id: rec.id, matching_embedding: null });
+      needEmbedding.push({ id: row.id, mapped });
+    } catch (err) {
+      if (!String(err).includes("23505")) throw err;
+      // Duplicate username (dupe in Airtable, or row created since our lookup):
+      // claim the existing row instead of inserting.
+      const res = await sb(`candidates?linkedin_username=eq.${encodeURIComponent(mapped.linkedin_username)}&select=id,airtable_id,matching_embedding`);
+      const [row] = await res.json();
+      if (!row || (row.airtable_id && row.airtable_id !== rec.id)) { skipped++; continue; }
+      await sb(`candidates?id=eq.${row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ airtable_id: rec.id, source: "airtable_sync", status: mapped.status, email: mapped.email, airtable_sync_hash: hash }),
+        headers: { Prefer: "return=minimal" },
+      });
+      linked++;
+      byUsername.set(mapped.linkedin_username.toLowerCase(), row);
+      if (!row.matching_embedding) needEmbedding.push({ id: row.id, mapped });
+    }
   }
 
   console.log(`updated=${updated} linked=${linked} inserted=${inserted} unchanged=${unchanged} skipped_no_linkedin=${skipped}`);
