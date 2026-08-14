@@ -15,14 +15,20 @@ export default async function ApplyPage({
   const { role } = await searchParams;
 
   return (
-    <main className="page-main">
-      <h1 className="page-title">Apply</h1>
-      <p className="page-intro">
-        One profile, every role. Tell us who you are and we&apos;ll match you
-        against everything we&apos;re working on — most of our placements come
-        from roles that are never posted publicly.
-      </p>
-      <ApplyForm defaultRole={role} />
+    <main className="page">
+      <div className="wrap">
+        <h1 className="h-page b1">
+          <span>Apply</span> once
+        </h1>
+        <p className="page-intro b2">
+          One profile, every role. Tell us who you are and we match you against
+          everything we&apos;re working on — most of our placements come from
+          roles that are <b>never posted publicly</b>.
+        </p>
+        <div className="b3">
+          <ApplyForm defaultRole={role} />
+        </div>
+      </div>
     </main>
   );
 }

@@ -94,6 +94,26 @@ async function embedBatch(texts) {
   return (await res.json()).data.map((d) => d.embedding);
 }
 
+
+async function patchRow(id, payload) {
+  try {
+    await sb(`candidates?id=eq.${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      headers: { Prefer: "return=minimal" },
+    });
+  } catch (err) {
+    if (String(err).includes("23505") && String(err).includes("(email)")) {
+      const { email, ...rest } = payload;
+      await sb(`candidates?id=eq.${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(rest),
+        headers: { Prefer: "return=minimal" },
+      });
+    } else throw err;
+  }
+}
+
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
 async function main() {
@@ -141,11 +161,7 @@ async function main() {
 
     if (prev) {
       if (prev.airtable_sync_hash === hash) { unchanged++; continue; }
-      await sb(`candidates?id=eq.${prev.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ ...mapped, airtable_sync_hash: hash }),
-        headers: { Prefer: "return=minimal" },
-      });
+      await patchRow(prev.id, { ...mapped, airtable_sync_hash: hash });
       updated++;
       if (!prev.matching_embedding) needEmbedding.push({ id: prev.id, mapped });
       continue;
@@ -156,16 +172,12 @@ async function main() {
     if (existing) {
       // Enrich the existing profile: claim it as engaged, fill identity fields,
       // keep its (richer) LinkedIn-derived embedding and enrichment data.
-      await sb(`candidates?id=eq.${existing.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          airtable_id: rec.id,
-          source: "airtable_sync",
-          status: mapped.status,
-          email: mapped.email,
-          airtable_sync_hash: hash,
-        }),
-        headers: { Prefer: "return=minimal" },
+      await patchRow(existing.id, {
+        airtable_id: rec.id,
+        source: "airtable_sync",
+        status: mapped.status,
+        email: mapped.email,
+        airtable_sync_hash: hash,
       });
       linked++;
       if (!existing.matching_embedding) needEmbedding.push({ id: existing.id, mapped });
@@ -185,16 +197,25 @@ async function main() {
       needEmbedding.push({ id: row.id, mapped });
     } catch (err) {
       if (!String(err).includes("23505")) throw err;
+      if (String(err).includes("(email)")) {
+        const { email, ...rest } = mapped;
+        const res = await sb("candidates", {
+          method: "POST",
+          body: JSON.stringify({ ...rest, airtable_sync_hash: hash }),
+          headers: { Prefer: "return=representation" },
+        });
+        const [row] = await res.json();
+        inserted++;
+        byUsername.set(mapped.linkedin_username.toLowerCase(), { id: row.id, airtable_id: rec.id, matching_embedding: null });
+        needEmbedding.push({ id: row.id, mapped });
+        continue;
+      }
       // Duplicate username (dupe in Airtable, or row created since our lookup):
       // claim the existing row instead of inserting.
       const res = await sb(`candidates?linkedin_username=eq.${encodeURIComponent(mapped.linkedin_username)}&select=id,airtable_id,matching_embedding`);
       const [row] = await res.json();
       if (!row || (row.airtable_id && row.airtable_id !== rec.id)) { skipped++; continue; }
-      await sb(`candidates?id=eq.${row.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ airtable_id: rec.id, source: "airtable_sync", status: mapped.status, email: mapped.email, airtable_sync_hash: hash }),
-        headers: { Prefer: "return=minimal" },
-      });
+      await patchRow(row.id, { airtable_id: rec.id, source: "airtable_sync", status: mapped.status, email: mapped.email, airtable_sync_hash: hash });
       linked++;
       byUsername.set(mapped.linkedin_username.toLowerCase(), row);
       if (!row.matching_embedding) needEmbedding.push({ id: row.id, mapped });

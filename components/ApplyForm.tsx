@@ -93,10 +93,10 @@ export default function ApplyForm({ defaultRole }: { defaultRole?: string }) {
       />
       <button
         type="submit"
-        className="cta cta-primary"
+        className="btn hot"
         disabled={status.kind === "sending"}
       >
-        {status.kind === "sending" ? "Sending…" : "Submit →"}
+        {status.kind === "sending" ? "SENDING…" : "SUBMIT →"}
       </button>
       {(status.kind === "ok" || status.kind === "error") && (
         <p className={`form-status ${status.kind}`}>{status.message}</p>

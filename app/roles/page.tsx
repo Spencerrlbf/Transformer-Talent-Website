@@ -46,46 +46,55 @@ export default async function RolesPage() {
   }));
 
   return (
-    <main className="page-main">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingLd) }}
-      />
-      <h1 className="page-title">Open Roles</h1>
-      <p className="page-intro">
-        Every role below is with a VC-backed startup we work with directly.
-        Apply once — we&apos;ll match you against everything we&apos;re
-        working on, including roles we can&apos;t list publicly.
-      </p>
-      <div className="roles-grid">
-        {roles.map((role) => (
-          <Link
-            key={role.slug}
-            href={`/apply?role=${encodeURIComponent(role.title)}`}
-            className="role-card"
-          >
-            <div className="role-title">{role.title}</div>
-            <div className="role-meta">
-              <span>{role.location}</span>
-              <span className="role-salary">{role.salary}</span>
-            </div>
-            <div className="role-tags">
-              {role.tags.map((tag) => (
-                <span key={tag} className="role-tag">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </Link>
-        ))}
+    <main className="page">
+      <div className="wrap">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingLd) }}
+        />
+        <h1 className="h-page b1">
+          Open <span>roles</span>
+        </h1>
+        <p className="page-intro b2">
+          Every role is with a VC-backed startup we work with directly. Apply
+          once — we match you against <b>everything</b> we&apos;re working on,
+          including roles that never get posted.
+        </p>
+        <div className="match-grid b3">
+          {roles.map((role, i) => (
+            <Link
+              key={role.slug}
+              href={`/apply?role=${encodeURIComponent(role.title)}`}
+              className="match-card"
+              style={{ textDecoration: "none" }}
+            >
+              <div className="ref-row">
+                <span className="ref">ROLE_{String(i + 1).padStart(2, "0")}</span>
+                <span className="score">OPEN</span>
+              </div>
+              <h4>{role.title}</h4>
+              <div className="meta">
+                {role.location} · <span style={{ color: "var(--signal)" }}>{role.salary}</span>
+              </div>
+              <p className="prev">{role.description}</p>
+              <div className="tags">
+                {role.tags.map((tag) => (
+                  <span key={tag} className="tag">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </Link>
+          ))}
+        </div>
+        <p className="page-intro" style={{ marginTop: "2.6rem" }}>
+          No fit above?{" "}
+          <Link href="/apply" style={{ color: "var(--signal)" }}>
+            Send your profile anyway
+          </Link>{" "}
+          — most of our placements come from roles that never get posted.
+        </p>
       </div>
-      <p className="page-intro" style={{ marginTop: "3rem" }}>
-        Don&apos;t see your fit?{" "}
-        <Link href="/apply" style={{ color: "var(--amber)" }}>
-          Send us your profile anyway
-        </Link>{" "}
-        — most of our placements come from roles that never get posted.
-      </p>
     </main>
   );
 }
