@@ -1,0 +1,68 @@
+[
+  {
+    "slug": "backend-infra-engineer-san-mateo",
+    "title": "Backend/Infra Engineer",
+    "location": "San Mateo",
+    "salary": "$150k–$300k",
+    "salaryMin": 150000,
+    "salaryMax": 300000,
+    "tags": ["Backend", "Infrastructure"],
+    "description": "Own core backend systems and infrastructure at a fast-growing VC-backed startup.",
+    "active": true
+  },
+  {
+    "slug": "full-stack-engineer-san-francisco",
+    "title": "Full-Stack Engineer",
+    "location": "San Francisco",
+    "salary": "$180k–$260k",
+    "salaryMin": 180000,
+    "salaryMax": 260000,
+    "tags": ["Full-Stack"],
+    "description": "Ship product end-to-end across a modern TypeScript stack.",
+    "active": true
+  },
+  {
+    "slug": "gtm-engineer-new-york",
+    "title": "GTM Engineer",
+    "location": "New York",
+    "salary": "$200k–$400k",
+    "salaryMin": 200000,
+    "salaryMax": 400000,
+    "tags": ["GTM", "Full-Stack"],
+    "description": "Sit at the intersection of product and revenue, building the systems that power go-to-market.",
+    "active": true
+  },
+  {
+    "slug": "forward-deployed-engineer-san-francisco",
+    "title": "Forward Deployed Engineer",
+    "location": "San Francisco",
+    "salary": "$140k–$180k",
+    "salaryMin": 140000,
+    "salaryMax": 180000,
+    "tags": ["FDE", "Customer-Facing"],
+    "description": "Embed with customers and ship real solutions on top of a cutting-edge AI platform.",
+    "active": true
+  },
+  {
+    "slug": "senior-fde-new-york",
+    "title": "Senior FDE",
+    "location": "New York",
+    "salary": "$225k–$300k",
+    "salaryMin": 225000,
+    "salaryMax": 300000,
+    "tags": ["FDE", "Senior"],
+    "description": "Lead forward-deployed engagements for a high-growth AI company's largest customers.",
+    "active": true
+  },
+  {
+    "slug": "frontend-engineer-san-francisco",
+    "title": "Frontend Engineer",
+    "location": "San Francisco",
+    "salary": "$150k–$250k",
+    "salaryMin": 150000,
+    "salaryMax": 250000,
+    "tags": ["Frontend"],
+    "description": "Craft polished, fast interfaces for an AI product used by thousands of teams.",
+    "active": true
+  }
+]
