@@ -1412,12 +1412,7 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 2 years",
-    "company": {
-      "blurb": "Education-technology company helping schools, universities, and nonprofits run smarter \u2014 practical AI systems and tools for real operational challenges across education.",
-      "stage": "seed-stage",
-      "funding": "seed funding"
-    }
+    "yoe": "0 - 2 years"
   },
   {
     "jobId": "68",

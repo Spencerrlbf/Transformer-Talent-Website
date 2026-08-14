@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getRoles, parseSalary, roleSlug } from "@/lib/roles";
+import { getRoles, parseSalary } from "@/lib/roles";
+import RolesTable from "@/components/RolesTable";
 
 export const metadata: Metadata = {
   title: "Open Roles",
@@ -65,36 +66,8 @@ export default async function RolesPage() {
           directly. Apply once — we&apos;ll consider you for everything
           we&apos;re working on, including roles that never get posted.
         </p>
-        <div className="logs b3">
-          {roles.map((role) => (
-            <Link
-              key={`${role.jobId}-${role.title}`}
-              href={`/roles/${roleSlug(role)}`}
-              className="log"
-              style={{ gridTemplateColumns: "70px 2fr 2fr 1fr" }}
-            >
-              <span className="t">#{role.jobId}</span>
-              <span>
-                <span className="co" style={{ display: "block" }}>
-                  {role.title}
-                </span>
-                <span className="role" style={{ fontSize: "0.7rem" }}>
-                  {role.company ? `${role.company.stage ? role.company.stage + " · " : ""}${role.company.blurb}` : role.description}
-                </span>
-              </span>
-              <span className="role" style={{ fontSize: "0.72rem" }}>
-                {role.locations.join(" · ") || "USA"}
-                {role.workplace ? ` — ${role.workplace}` : ""}
-                {role.yoe ? ` · ${role.yoe}` : ""}
-              </span>
-              <span
-                className="t"
-                style={{ color: "var(--signal)", textAlign: "right", fontSize: "0.74rem" }}
-              >
-                {role.salary || "Comp on request"}
-              </span>
-            </Link>
-          ))}
+        <div className="b3">
+          <RolesTable roles={roles} />
         </div>
         <p className="page-intro" style={{ marginTop: "2.4rem" }}>
           No fit above?{" "}
