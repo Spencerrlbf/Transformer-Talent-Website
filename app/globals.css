@@ -517,6 +517,11 @@ footer a:hover {
         padding: 3rem 1.5rem 4rem;
     }
 
+    /* "TRANSFORMER" as a single word must fit 375px viewports */
+    .logo {
+        font-size: clamp(1.2rem, 6.4vw, 3rem);
+    }
+
     .cta-group {
         flex-direction: column;
         gap: 1rem;
