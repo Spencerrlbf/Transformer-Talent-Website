@@ -57,36 +57,41 @@ export default function TalentMatcher() {
     const { roleTitle, matches, lowConfidence } = status.result;
     return (
       <div style={{ width: "100%" }}>
-        <div className="section-label">
-          Matches for: {roleTitle}
+        <div className="sec-label" style={{ paddingTop: 0 }}>
+          <b>OUT</b> — matches for: {roleTitle}
         </div>
         {matches.length > 0 && (
-          <div className="roles-grid" style={{ marginBottom: "2rem" }}>
+          <div className="match-grid" style={{ marginBottom: "1.8rem" }}>
             {matches.map((m) => (
-              <div key={m.ref} className="role-card" style={{ cursor: "default" }}>
-                <div className="role-meta" style={{ marginBottom: "0.5rem", justifyContent: "space-between" }}>
-                  <span className="role-salary">{m.ref}</span>
-                  {m.engaged && <span className="role-salary">● in conversation with us</span>}
+              <div key={m.ref} className="match-card">
+                <div className="ref-row">
+                  <span className="ref">{m.ref}</span>
+                  <span className="score">{m.score.toFixed(2)}</span>
                 </div>
-                <div className="role-title">{m.title}</div>
-                <div className="role-meta" style={{ marginBottom: "0.5rem" }}>
-                  {m.yearsExperience ? <span>{m.yearsExperience} yrs</span> : null}
-                  {m.location && <span>{m.location}</span>}
+                <h4>{m.title}</h4>
+                <div className="meta">
+                  {[
+                    m.yearsExperience ? `${m.yearsExperience}y` : null,
+                    m.location,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
+                {m.engaged && <span className="badge">● in conversation with us</span>}
                 {m.previousCompanies.length > 0 && (
-                  <p style={{ fontSize: "0.75rem", color: "var(--cream-dim)" }}>
-                    Previously: {m.previousCompanies.join(", ")}
+                  <p className="prev">
+                    prev: <b>{m.previousCompanies.join(", ")}</b>
                   </p>
                 )}
                 {m.education.length > 0 && (
-                  <p style={{ fontSize: "0.75rem", color: "var(--cream-dim)" }}>
-                    {m.education.join(" · ")}
-                  </p>
+                  <p className="prev">{m.education.join(" · ")}</p>
                 )}
                 {m.skills.length > 0 && (
-                  <div className="role-tags">
+                  <div className="tags">
                     {m.skills.map((s) => (
-                      <span key={s} className="role-tag">{s}</span>
+                      <span key={s} className="tag">
+                        {s}
+                      </span>
                     ))}
                   </div>
                 )}
@@ -94,35 +99,33 @@ export default function TalentMatcher() {
             ))}
           </div>
         )}
-        <p className="page-intro" style={{ marginBottom: "1.5rem" }}>
+        <p className="page-intro" style={{ marginBottom: "1.6rem" }}>
           {lowConfidence
-            ? "These are our closest automated matches — your JD is now with Spencer, who will hand-pick a stronger shortlist from the full network and reply within 24 hours."
-            : "Profiles are anonymized. Want introductions, full profiles, and comp expectations? That takes one conversation."}
+            ? "These are the closest automated matches — your JD is with Spencer, who will hand-pick a stronger shortlist from the full network and reply within 24 hours."
+            : "Profiles are anonymized. Introductions, full profiles, and comp expectations take one conversation."}
         </p>
-        <div className="cta-group">
-          <a
-            href="mailto:spencer@transformertalent.com?subject=Intro%20request%20—%20matched%20candidates"
-            className="cta cta-primary"
-          >
-            Get introductions →
-          </a>
-        </div>
+        <a
+          href="mailto:spencer@transformertalent.com?subject=Intro%20request%20—%20matched%20candidates"
+          className="btn hot"
+        >
+          GET INTRODUCTIONS →
+        </a>
       </div>
     );
   }
 
   return (
-    <form className="form" onSubmit={onSubmit} style={{ width: "100%", maxWidth: 640 }}>
+    <form className="form" onSubmit={onSubmit} style={{ maxWidth: 680 }}>
       <label>
-        Work email
+        work_email
         <input name="email" type="email" required maxLength={254} autoComplete="email" />
       </label>
       <label>
-        Company
+        company
         <input name="company" required maxLength={200} autoComplete="organization" />
       </label>
       <label>
-        Job description
+        job_description
         <textarea
           name="jdText"
           rows={12}
@@ -139,10 +142,14 @@ export default function TalentMatcher() {
         style={{ position: "absolute", left: "-9999px" }}
         aria-hidden="true"
       />
-      <button type="submit" className="cta cta-primary" disabled={status.kind === "sending"}>
-        {status.kind === "sending" ? "Matching against 400,000+ engineers…" : "Find matching talent →"}
+      <button type="submit" className="btn hot" disabled={status.kind === "sending"}>
+        {status.kind === "sending"
+          ? "SCANNING 419,595 PROFILES…"
+          : "RUN MATCH →"}
       </button>
-      {status.kind === "error" && <p className="form-status error">{status.message}</p>}
+      {status.kind === "error" && (
+        <p className="form-status error">{status.message}</p>
+      )}
     </form>
   );
 }
