@@ -41,8 +41,8 @@ export default function RootLayout({
           <div className="nav-links">
             <Link href="/roles">Open roles</Link>
             <Link href="/companies">For companies</Link>
-            <Link href="/apply" className="nav-cta">
-              Work with us →
+            <Link href="/talent" className="nav-cta">
+              Instant talent match →
             </Link>
           </div>
         </nav>
