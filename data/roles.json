@@ -1,56 +1,5 @@
 [
   {
-    "jobId": "1",
-    "title": "AI Engineer",
-    "description": "Simplifying Success Through Smart Analytics",
-    "salary": "$180K - $250K",
-    "locations": [
-      "New York",
-      "San Francisco",
-      "South Bay Area",
-      "Los Angeles",
-      "Boston",
-      "Seattle",
-      "Texas",
-      "Chicago",
-      "Washington DC",
-      "Denver",
-      "Florida",
-      "Minnesota",
-      "Sacramento"
-    ],
-    "techStack": "Python, OpenAI, Vector Database",
-    "industry": "AI, Data, Education, Edtech",
-    "workplace": "Remote",
-    "roleType": "Machine Learning Engineer",
-    "equity": "Competitive equity",
-    "funding": "2000000",
-    "teamSize": "-",
-    "visa": "None",
-    "yoe": "1 - 6 years",
-    "company": {
-      "blurb": "Education-technology company helping schools, universities, and nonprofits run smarter \u2014 practical AI systems and tools for real operational challenges across education.",
-      "stage": "seed-stage",
-      "funding": "seed funding"
-    },
-    "jd": {
-      "about": "A hands-on AI engineering role at an education-technology startup: you'd build the LLM-powered layer of a modern K-12 student-data platform \u2014 embedded assistants that help teachers make sense of assessment results, automated intervention flagging, and natural-language interfaces over sensitive student data. Fast feedback loops with real school partners, and your work directly shapes the roadmap.",
-      "doing": [
-        "Ship AI features end to end: assistants, automated reporting, natural-language query, and recommendation/flagging systems",
-        "Prototype net-new products adjacent to the core platform \u2014 predictive early-warning systems, new analytics modules, new data products",
-        "Apply statistical modeling and predictive analytics to K-12 data (assessments, attendance, behavior) to find product opportunities",
-        "Own prompt design, retrieval architecture, and evaluation pipelines for LLM features",
-        "Build the production reliability layer: evals, guardrails, monitoring, cost/latency trade-offs",
-        "Hold a high bar for student-data privacy and responsible AI (FERPA territory)"
-      ],
-      "needs": [
-        "Applied LLM engineering experience shipping production features",
-        "Data-science fundamentals: statistical modeling, cohort and trend analysis",
-        "Comfort working with structured, regulated data and explainable outputs"
-      ]
-    }
-  },
-  {
     "jobId": "17",
     "title": "AI Engineer",
     "description": "Accelerating Vehicle Software Innovation",
@@ -1376,32 +1325,6 @@
     }
   },
   {
-    "jobId": "48",
-    "title": "Founding Engineer",
-    "description": "They are the agent platform for data reliability, fixing the messy data inside the systems of record that every company runs on",
-    "salary": "$150K - $250K",
-    "locations": [
-      "New York"
-    ],
-    "techStack": "Python, React, Next.js, Langchain",
-    "industry": "AI, Data, Enterprise, Education",
-    "workplace": "On-site",
-    "roleType": "Founding Engineer",
-    "equity": "0.3-1.7%",
-    "funding": "4.5M",
-    "teamSize": "2",
-    "visa": "None",
-    "yoe": "2 - 6 years",
-    "company": {
-      "blurb": "Agentic data-reliability platform building AI systems for security-conscious enterprises, headquartered in New York.",
-      "stage": "seed-stage",
-      "funding": "seed funding",
-      "teamSize": "founding team of <10",
-      "founded": "2026",
-      "investors": "VC-backed"
-    }
-  },
-  {
     "jobId": "49",
     "title": "Founding Engineer",
     "description": "Equip the offline economy with foundational intelligence",
@@ -1769,33 +1692,6 @@
         "High-leverage prioritization instincts",
         "Founding-team appetite"
       ]
-    }
-  },
-  {
-    "jobId": "58",
-    "title": "Founding Product Engineer",
-    "description": "AI-native startup rebuilding how businesses price and manage risk in the insurance industry, replacing manual processes that drive multi-million-dollar decisions",
-    "salary": "$160K - $250K",
-    "locations": [
-      "San Francisco",
-      "South Bay Area"
-    ],
-    "techStack": "Python, FastAPI, TypeScript, React, AWS, PostgreSQL",
-    "industry": "Insurance, AI, Fintech, B2B",
-    "workplace": "Hybrid",
-    "roleType": "Founding Engineer, Product Engineer",
-    "equity": "0.25-0.6%",
-    "funding": "$5M",
-    "teamSize": "5",
-    "visa": "None",
-    "yoe": "3 - 7 years",
-    "company": {
-      "blurb": "Risk-management platform and insurance brokerage for the owners, operators, and builders of the physical world.",
-      "stage": "Series A-stage",
-      "funding": "$5M raised",
-      "teamSize": "founding team of <10",
-      "founded": "2026",
-      "investors": "VC-backed"
     }
   },
   {
@@ -2230,22 +2126,34 @@
     }
   },
   {
-    "jobId": "3",
+    "jobId": "108",
     "title": "Lead AI Engineer",
     "description": "Face-to-face AI interaction that feels human",
-    "salary": "$200K - $300K",
+    "salary": "$180K - $250K",
     "locations": [
-      "Seattle"
+      "New York",
+      "San Francisco",
+      "South Bay Area",
+      "Los Angeles",
+      "Boston",
+      "Seattle",
+      "Texas",
+      "Chicago",
+      "Washington DC",
+      "Denver",
+      "Florida",
+      "Minnesota",
+      "Sacramento"
     ],
     "techStack": "Kubernetes, Terraform, Python, Rust, Go, Airflow, PyTorch",
     "industry": "Software Development, AI",
-    "workplace": "On-site",
+    "workplace": "Remote",
     "roleType": "Machine Learning Engineer",
     "equity": "Competitive Equity",
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 2 years",
+    "yoe": "5+ years",
     "jd": {
       "about": "A senior version of the AI engineering role at an education-technology startup: lead the build-out of LLM-native features on a K-12 student-data platform \u2014 teacher-facing assistants, automated intervention flagging, natural-language analytics \u2014 with broad ownership of architecture and product direction.",
       "doing": [

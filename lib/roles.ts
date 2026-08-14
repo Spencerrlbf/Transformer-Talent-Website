@@ -53,6 +53,9 @@ export async function getRoleBySlug(slug: string): Promise<Role | undefined> {
 
 const NOTION_VERSION = "2022-06-28";
 
+// Roles Spencer has delisted — excluded regardless of data source.
+const DELISTED = new Set(["1", "48", "58"]);
+
 // Roles come live from the Notion jobs table when NOTION_TOKEN and
 // NOTION_DATABASE_ID are configured (revalidated hourly); otherwise from the
 // committed snapshot in data/roles.json (refreshed at import time).
@@ -66,12 +69,14 @@ export async function getRoles(): Promise<Role[]> {
       const extras = new Map(
         (rolesSnapshot as Role[]).map((r) => [r.jobId, { company: r.company, jd: r.jd }])
       );
-      return live.map((r) => ({ ...r, ...(extras.get(r.jobId) || {}) }));
+      return live
+        .filter((r) => !DELISTED.has(r.jobId))
+        .map((r) => ({ ...r, ...(extras.get(r.jobId) || {}) }));
     } catch (err) {
       console.error("notion roles fetch failed; using snapshot", err);
     }
   }
-  return rolesSnapshot as Role[];
+  return (rolesSnapshot as Role[]).filter((r) => !DELISTED.has(r.jobId));
 }
 
 interface NotionPage {
