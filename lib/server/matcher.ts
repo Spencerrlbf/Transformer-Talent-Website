@@ -168,6 +168,7 @@ function skillOverlap(jdSkills: string[], candidateSkills: string[] | null): num
 
 export interface AnonymizedMatch {
   ref: string;
+  applied?: boolean;
   title: string;
   yearsExperience: number | null;
   location: string | null;
@@ -215,7 +216,8 @@ export function rankAndAnonymize(
       previousCompanies: prev,
       education,
       skills: (row.top_skills || []).slice(0, 6),
-      engaged: row.source === "airtable_sync",
+      engaged: row.source === "airtable_sync" || row.source === "website_applicant",
+      applied: row.source === "website_applicant",
       score: Math.round(score * 100) / 100,
     };
   });

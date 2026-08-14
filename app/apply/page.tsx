@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import ApplyForm from "@/components/ApplyForm";
+import { getRoles } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Apply",
   description:
-    "Send us your profile once and get matched against every AI/ML and software engineering role we're working on — including ones that never get posted.",
+    "Apply once to one or many roles — we match your profile against everything we're working on, including roles that never get posted.",
 };
+
+export const revalidate = 3600;
 
 export default async function ApplyPage({
   searchParams,
@@ -13,6 +16,7 @@ export default async function ApplyPage({
   searchParams: Promise<{ role?: string }>;
 }) {
   const { role } = await searchParams;
+  const roles = await getRoles();
 
   return (
     <main className="page">
@@ -21,12 +25,21 @@ export default async function ApplyPage({
           <span>Apply</span> once
         </h1>
         <p className="page-intro b2">
-          One profile, every role. Tell us who you are and we match you against
-          everything we&apos;re working on — most of our placements come from
-          roles that are <b>never posted publicly</b>.
+          Pick one role or several — either way we match your profile against{" "}
+          <b>everything</b> we&apos;re working on and show you other fits
+          instantly. Most of our placements come from roles that are never
+          posted publicly.
         </p>
         <div className="b3">
-          <ApplyForm defaultRole={role} />
+          <ApplyForm
+            roles={roles.map((r) => ({
+              jobId: r.jobId,
+              title: r.title,
+              salary: r.salary,
+              locations: r.locations,
+            }))}
+            preselected={role}
+          />
         </div>
       </div>
     </main>

@@ -200,7 +200,7 @@ export default async function RolePage({
         <div className="cta-row" style={{ marginTop: "2.4rem" }}>
           <Link
             className="btn hot"
-            href={`/apply?role=${encodeURIComponent(`${role.title} (#${role.jobId})`)}`}
+            href={`/apply?role=${role.jobId}`}
           >
             APPLY FOR THIS ROLE →
           </Link>

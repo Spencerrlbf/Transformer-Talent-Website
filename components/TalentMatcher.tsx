@@ -11,6 +11,7 @@ interface Match {
   education: string[];
   skills: string[];
   engaged: boolean;
+  applied?: boolean;
   score: number;
 }
 
@@ -76,7 +77,11 @@ export default function TalentMatcher() {
                     .filter(Boolean)
                     .join(" · ")}
                 </div>
-                {m.engaged && <span className="badge">● in conversation with us</span>}
+                {m.applied ? (
+                  <span className="badge">● applied to us directly</span>
+                ) : m.engaged ? (
+                  <span className="badge">● in conversation with us</span>
+                ) : null}
                 {m.previousCompanies.length > 0 && (
                   <p className="prev">
                     prev: <b>{m.previousCompanies.join(", ")}</b>
