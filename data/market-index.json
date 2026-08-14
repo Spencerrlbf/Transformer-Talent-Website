@@ -1,0 +1,98 @@
+[
+  {
+    "family": "Forward Deployed Engineering",
+    "city": "New York",
+    "roles": 9,
+    "medianMin": 150,
+    "medianMax": 220,
+    "topOfMarket": 400
+  },
+  {
+    "family": "Forward Deployed Engineering",
+    "city": "Other / Remote",
+    "roles": 3,
+    "medianMin": 150,
+    "medianMax": 220,
+    "topOfMarket": 230
+  },
+  {
+    "family": "Forward Deployed Engineering",
+    "city": "San Francisco",
+    "roles": 11,
+    "medianMin": 140,
+    "medianMax": 180,
+    "topOfMarket": 300
+  },
+  {
+    "family": "Infrastructure / Backend",
+    "city": "New York",
+    "roles": 4,
+    "medianMin": 160,
+    "medianMax": 240,
+    "topOfMarket": 250
+  },
+  {
+    "family": "Infrastructure / Backend",
+    "city": "Other / Remote",
+    "roles": 4,
+    "medianMin": 177,
+    "medianMax": 242,
+    "topOfMarket": 275
+  },
+  {
+    "family": "Infrastructure / Backend",
+    "city": "San Francisco",
+    "roles": 8,
+    "medianMin": 192,
+    "medianMax": 252,
+    "topOfMarket": 600
+  },
+  {
+    "family": "ML / AI Engineering & Research",
+    "city": "New York",
+    "roles": 9,
+    "medianMin": 150,
+    "medianMax": 250,
+    "topOfMarket": 300
+  },
+  {
+    "family": "ML / AI Engineering & Research",
+    "city": "Other / Remote",
+    "roles": 6,
+    "medianMin": 150,
+    "medianMax": 217,
+    "topOfMarket": 270
+  },
+  {
+    "family": "ML / AI Engineering & Research",
+    "city": "San Francisco",
+    "roles": 7,
+    "medianMin": 160,
+    "medianMax": 300,
+    "topOfMarket": 450
+  },
+  {
+    "family": "Product / Full-Stack",
+    "city": "New York",
+    "roles": 15,
+    "medianMin": 150,
+    "medianMax": 225,
+    "topOfMarket": 400
+  },
+  {
+    "family": "Product / Full-Stack",
+    "city": "Other / Remote",
+    "roles": 13,
+    "medianMin": 175,
+    "medianMax": 224,
+    "topOfMarket": 323
+  },
+  {
+    "family": "Product / Full-Stack",
+    "city": "San Francisco",
+    "roles": 34,
+    "medianMin": 170,
+    "medianMax": 255,
+    "topOfMarket": 500
+  }
+]

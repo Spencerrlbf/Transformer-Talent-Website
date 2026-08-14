@@ -1,56 +1,65 @@
 import type { Metadata } from "next";
-import { Syne, Space_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Archivo } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
-const syne = Syne({
+const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
-  variable: "--font-display",
-});
-
-const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["400", "500", "600"],
   style: ["normal", "italic"],
   variable: "--font-mono",
+});
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["500", "700", "800", "900"],
+  variable: "--font-grot",
 });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://transformertalent.com"),
   title: {
-    default: "Transformer Talent — AI/ML & Software Engineering Recruitment",
+    default: "Transformer Talent — Recruiting at Machine Speed",
     template: "%s — Transformer Talent",
   },
   description:
-    "We recruit AI/ML and software engineers for the most exciting startups backed by top VCs in the USA. Y Combinator, Sequoia, a16z, General Catalyst, 8VC.",
+    "AI/ML and software engineering search, powered by a 419,000-profile matching engine and closed by a human. Placements at startups backed by Sequoia, 8VC, and Felicis.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${syne.variable} ${spaceMono.variable}`}>
+    <html lang="en" className={`${plexMono.variable} ${archivo.variable}`}>
       <body>
-        <div className="noise" />
-        <nav className="nav">
-          <Link href="/" className="nav-logo">
-            Transformer Talent
-          </Link>
-          <div className="nav-links">
-            <Link href="/roles">Open roles</Link>
-            <Link href="/companies">For companies</Link>
-            <Link href="/talent" className="nav-cta">
-              Instant talent match →
-            </Link>
+        <div className="topbar-outer">
+          <div className="wrap">
+            <div className="topbar">
+              <Link href="/" className="brand">
+                Transformer<b>_</b>Talent
+              </Link>
+              <nav>
+                <Link href="/placements">/placements</Link>
+                <Link href="/process">/process</Link>
+                <Link href="/market-index">/market-index</Link>
+                <Link href="/roles">/roles</Link>
+                <Link href="/talent" className="run">
+                  RUN MATCH →
+                </Link>
+              </nav>
+              <span className="status">SYSTEM LIVE</span>
+            </div>
           </div>
-        </nav>
+        </div>
         {children}
         <footer>
-          <a href="mailto:spencer@transformertalent.com">
-            spencer@transformertalent.com
-          </a>
+          <div className="wrap">
+            <span>© 2026 TRANSFORMER TALENT — “TALENT IS ALL YOU NEED”</span>
+            <a href="mailto:spencer@transformertalent.com">
+              spencer@transformertalent.com
+            </a>
+          </div>
         </footer>
         <Analytics />
       </body>
