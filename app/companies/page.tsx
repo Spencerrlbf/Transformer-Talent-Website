@@ -46,9 +46,12 @@ export default function CompaniesPage() {
       </div>
 
       <div className="cta-group" style={{ justifyContent: "flex-start" }}>
+        <a href="/talent" className="cta cta-primary">
+          Try an instant match →
+        </a>
         <a
           href="mailto:spencer@transformertalent.com?subject=Hiring%20inquiry"
-          className="cta cta-primary"
+          className="cta"
         >
           Start a search →
         </a>
