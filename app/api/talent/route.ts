@@ -28,7 +28,11 @@ export async function POST(req: NextRequest) {
 
   const email = (body.email || "").trim().toLowerCase().slice(0, 254);
   const company = (body.company || "").trim().slice(0, 200);
-  const jdText = (body.jdText || "").trim().slice(0, 40000);
+  // PDF copy-paste often carries NUL/control chars Postgres text rejects.
+  const jdText = (body.jdText || "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+    .trim()
+    .slice(0, 40000);
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please use a valid work email." }, { status: 400 });

@@ -133,13 +133,26 @@ export async function matchCandidates(
   jd: ExtractedJD,
   count = 30
 ): Promise<MatchRow[]> {
-  return sbRpc<MatchRow[]>("match_candidates_website", {
+  const minYears = jd.min_years && jd.min_years > 2 ? jd.min_years - 2 : null;
+  const locations = jd.remote_ok ? null : expandLocations(jd.locations);
+  const rows = await sbRpc<MatchRow[]>("match_candidates_website", {
     query_embedding: embedding,
     match_count: count,
-    min_years: jd.min_years && jd.min_years > 2 ? jd.min_years - 2 : null,
+    min_years: minYears,
     max_years: null,
-    location_patterns: jd.remote_ok ? null : expandLocations(jd.locations),
+    location_patterns: locations,
   });
+  if (rows.length >= 5 || !locations) return rows;
+  // Location filter left too few — widen to nationwide and merge.
+  const widened = await sbRpc<MatchRow[]>("match_candidates_website", {
+    query_embedding: embedding,
+    match_count: count,
+    min_years: minYears,
+    max_years: null,
+    location_patterns: null,
+  });
+  const seen = new Set(rows.map((r) => r.id));
+  return [...rows, ...widened.filter((r) => !seen.has(r.id))];
 }
 
 function skillOverlap(jdSkills: string[], candidateSkills: string[] | null): number {
