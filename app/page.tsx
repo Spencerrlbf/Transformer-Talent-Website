@@ -1,5 +1,4 @@
 import Link from "next/link";
-import TerminalHero from "@/components/TerminalHero";
 import { PLACEMENTS } from "@/data/placements";
 
 const heroGrid: React.CSSProperties = {
@@ -17,54 +16,57 @@ export default function Home() {
         <section style={heroGrid}>
           <div>
             <h1 className="h-display b1">
-              Recruiting at
+              We find the
               <br />
-              machine speed.
+              engineers who
               <br />
-              <span>Closed by a human.</span>
+              <span>build the future.</span>
             </h1>
             <p className="sub b2" style={{ marginTop: "1.8rem" }}>
-              Transformer Talent pairs a <b>419,000-profile matching engine</b>{" "}
-              with a principal who runs every search personally. AI/ML and
-              software engineers, placed at startups backed by{" "}
-              <b>Sequoia, 8VC, and Felicis</b>.
+              Transformer Talent places <b>AI/ML and software engineers</b>{" "}
+              with startups backed by <b>Sequoia, 8VC, and Felicis</b> — from
+              first engineering hire to Chief Science Officer.
             </p>
             <div className="cta-row b3" style={{ marginTop: "2.4rem" }}>
               <Link className="btn hot" href="/talent">
-                Run a match on your JD
+                Hiring? Upload your JD
               </Link>
-              <Link className="btn cold" href="/process">
-                Begin a search
+              <Link className="btn cold" href="/roles">
+                Looking? See open roles
               </Link>
             </div>
           </div>
-          <TerminalHero />
+          <div className="term b3">
+            <div className="term-head">
+              <span className="dot r" />
+              <span className="dot y" />
+              <span className="dot g" />
+            </div>
+            <div className="term-body" style={{ minHeight: 0, padding: "2rem 1.6rem" }}>
+              <div className="c"># hiring managers</div>
+              <div style={{ margin: "0.4rem 0 1.2rem" }}>
+                Upload your job description and we&apos;ll share a few
+                potential matches from our network — anonymized, no call
+                required.
+              </div>
+              <div className="c"># engineers</div>
+              <div style={{ margin: "0.4rem 0 1.4rem" }}>
+                One profile, every role we work on — most are never posted
+                publicly.
+              </div>
+              <div>
+                <span className="p">→</span>{" "}
+                <Link href="/talent" style={{ color: "var(--signal)" }}>
+                  see potential matches
+                </Link>{" "}
+                <span className="c">·</span>{" "}
+                <Link href="/roles" style={{ color: "var(--signal)" }}>
+                  browse roles
+                </Link>
+              </div>
+            </div>
+          </div>
         </section>
-
-        <div className="ticker b4">
-          <div className="tick">
-            <div className="n">419,595</div>
-            <div className="l">Profiles indexed</div>
-          </div>
-          <div className="tick">
-            <div className="n">
-              0.6<i>s</i>
-            </div>
-            <div className="l">Vector search</div>
-          </div>
-          <div className="tick">
-            <div className="n">
-              22.6<i>k</i>
-            </div>
-            <div className="l">In active conversation</div>
-          </div>
-          <div className="tick">
-            <div className="n">
-              48<i>h</i>
-            </div>
-            <div className="l">To first shortlist</div>
-          </div>
-        </div>
 
         <div className="sec-label">
           <b>001</b> — placement_log --recent
@@ -81,18 +83,18 @@ export default function Home() {
         </div>
 
         <div className="sec-label">
-          <b>002</b> — operator --info
+          <b>002</b> — team --info
         </div>
         <div className="grid2">
           <div className="cell">
             <div className="op-photo">
-              <span className="placeholder">[ IMG — SPENCER ]</span>
+              <span className="placeholder">[ IMG — TEAM ]</span>
             </div>
             <dl className="kv">
-              <dt>OPERATOR</dt>
-              <dd>Spencer</dd>
-              <dt>ROLE</dt>
-              <dd>Principal — runs every search</dd>
+              <dt>FIRM</dt>
+              <dd>Transformer Talent</dd>
+              <dt>LED BY</dt>
+              <dd>Spencer, Principal</dd>
               <dt>BASE</dt>
               <dd>San Francisco / New York</dd>
               <dt>FOCUS</dt>
@@ -101,19 +103,18 @@ export default function Home() {
           </div>
           <div className="cell">
             <h3>
-              The machine finds them.
+              A search firm that
               <br />
-              <span>I close them.</span>
+              <span>works like a team.</span>
             </h3>
             <p>
-              Software reads 419,000 profiles in under a second — but no
-              engineer ever accepted an offer from a database. Every search
-              here is run personally: I take the brief, I make the calls, I
-              manage the close.
+              Every search gets a senior recruiter who takes the brief, makes
+              the calls, and manages the close — backed by a team and tooling
+              that keep the pipeline moving while you sleep.
             </p>
             <p>
-              Clients get one point of contact with full context. Candidates
-              get a recruiter who can actually explain the tech stack. Searches
+              Clients get one accountable point of contact. Candidates get
+              recruiters who can actually explain the tech stack. Searches
               close in weeks, not quarters.
             </p>
             <Link className="btn cold" href="/process" style={{ marginTop: "0.4rem" }}>
@@ -123,45 +124,18 @@ export default function Home() {
         </div>
 
         <div className="sec-label">
-          <b>003</b> — process --pipeline
-        </div>
-        <div className="pipeline">
-          <div className="stage">
-            <div className="no">STAGE_01</div>
-            <h4>Brief</h4>
-            <p>30 minutes. Role, bar, comp band, deal-breakers.</p>
-          </div>
-          <div className="stage">
-            <div className="no">STAGE_02</div>
-            <h4>Match</h4>
-            <p>The engine surfaces candidates; every one qualified by hand.</p>
-          </div>
-          <div className="stage">
-            <div className="no">STAGE_03</div>
-            <h4>Shortlist</h4>
-            <p>Interested, comp-aligned engineers within 48 hours.</p>
-          </div>
-          <div className="stage">
-            <div className="no">STAGE_04</div>
-            <h4>Close</h4>
-            <p>References, competing offers, signature — through day one.</p>
-          </div>
-        </div>
-
-        <div className="sec-label">
-          <b>004</b> — match --public
+          <b>003</b> — match --try
         </div>
         <div className="bigcta">
           <h2>
-            Paste a JD. Get <span>5 matches</span> in 10 seconds.
+            Upload your JD. <span>We&apos;ll share potential matches.</span>
           </h2>
           <p>
-            The same engine that powers our searches, open to you. Anonymized
-            profiles from 419,000 engineers — see the quality before you ever
-            take a call.
+            Paste a job description and see anonymized profiles of engineers
+            we&apos;d put in front of you — before you ever take a call.
           </p>
           <Link className="btn hot" href="/talent">
-            RUN MATCH →
+            SEE POTENTIAL MATCHES →
           </Link>
         </div>
       </div>

@@ -125,11 +125,11 @@ export default function MarketIndexPage() {
             Wondering what <span>your role</span> should pay?
           </h2>
           <p>
-            Paste the JD — the match results show you real candidates at real
-            experience levels, and we&apos;ll tell you if the band is off.
+            Upload the JD — the matches show you real candidates at real
+            experience levels, and we&apos;ll tell you if the band is off — no call required.
           </p>
           <Link className="btn hot" href="/talent">
-            RUN MATCH →
+            SEE POTENTIAL MATCHES →
           </Link>
         </div>
       </div>

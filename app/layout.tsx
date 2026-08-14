@@ -20,11 +20,11 @@ const archivo = Archivo({
 export const metadata: Metadata = {
   metadataBase: new URL("https://transformertalent.com"),
   title: {
-    default: "Transformer Talent — Recruiting at Machine Speed",
+    default: "Transformer Talent — AI/ML & Software Engineering Search",
     template: "%s — Transformer Talent",
   },
   description:
-    "AI/ML and software engineering search, powered by a 419,000-profile matching engine and closed by a human. Placements at startups backed by Sequoia, 8VC, and Felicis.",
+    "We place AI/ML and software engineers with startups backed by Sequoia, 8VC, and Felicis. Upload your JD and see potential matches in seconds.",
 };
 
 export default function RootLayout({
@@ -45,7 +45,7 @@ export default function RootLayout({
                 <Link href="/market-index">/market-index</Link>
                 <Link href="/roles">/roles</Link>
                 <Link href="/talent" className="run">
-                  RUN MATCH →
+                  UPLOAD JD →
                 </Link>
               </nav>
               <span className="status">SYSTEM LIVE</span>

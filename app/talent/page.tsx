@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import TalentMatcher from "@/components/TalentMatcher";
 
 export const metadata: Metadata = {
-  title: "Run Match",
+  title: "See Potential Matches",
   description:
-    "Paste a job description and instantly see anonymized profiles of matching AI/ML and software engineers from a network of 419,000+.",
+    "Upload a job description and we'll share anonymized profiles of AI/ML and software engineers from our network who could fit your role.",
 };
 
 export default function TalentPage() {
@@ -12,12 +12,13 @@ export default function TalentPage() {
     <main className="page">
       <div className="wrap">
         <h1 className="h-page b1">
-          Run <span>match</span>
+          See potential <span>matches</span>
         </h1>
         <p className="page-intro b2">
-          Paste your job description. The engine scans <b>419,595 profiles</b>{" "}
-          and returns the top matches — anonymized, in about ten seconds. Like
-          what you see? One call gets you the introductions.
+          Upload your job description and we&apos;ll share a few potential
+          matches from our network — <b>anonymized, in seconds, no call
+          required</b>. Like what you see? One conversation gets you the
+          introductions.
         </p>
         <div className="b3">
           <TalentMatcher />

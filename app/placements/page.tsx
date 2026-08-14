@@ -79,12 +79,12 @@ export default function PlacementsPage() {
             Your role could be <span>LOG_05</span>.
           </h2>
           <p>
-            Paste the JD and see matching candidates now, or start with a
+            Upload the JD and see potential matches now, or start with a
             30-minute brief.
           </p>
           <div className="cta-row" style={{ justifyContent: "center" }}>
             <Link className="btn hot" href="/talent">
-              RUN MATCH →
+              SEE MATCHES →
             </Link>
             <a
               className="btn cold"

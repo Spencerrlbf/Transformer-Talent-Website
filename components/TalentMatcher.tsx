@@ -66,7 +66,6 @@ export default function TalentMatcher() {
               <div key={m.ref} className="match-card">
                 <div className="ref-row">
                   <span className="ref">{m.ref}</span>
-                  <span className="score">{m.score.toFixed(2)}</span>
                 </div>
                 <h4>{m.title}</h4>
                 <div className="meta">
@@ -101,7 +100,7 @@ export default function TalentMatcher() {
         )}
         <p className="page-intro" style={{ marginBottom: "1.6rem" }}>
           {lowConfidence
-            ? "These are the closest automated matches — your JD is with Spencer, who will hand-pick a stronger shortlist from the full network and reply within 24 hours."
+            ? "These are our closest instant matches — your JD is with the team, and we'll hand-pick a stronger shortlist from the full network and reply within 24 hours."
             : "Profiles are anonymized. Introductions, full profiles, and comp expectations take one conversation."}
         </p>
         <a
@@ -144,8 +143,8 @@ export default function TalentMatcher() {
       />
       <button type="submit" className="btn hot" disabled={status.kind === "sending"}>
         {status.kind === "sending"
-          ? "SCANNING 419,595 PROFILES…"
-          : "RUN MATCH →"}
+          ? "FINDING POTENTIAL MATCHES…"
+          : "SEE POTENTIAL MATCHES →"}
       </button>
       {status.kind === "error" && (
         <p className="form-status error">{status.message}</p>

@@ -1,68 +1,1862 @@
 [
   {
-    "slug": "backend-infra-engineer-san-mateo",
-    "title": "Backend/Infra Engineer",
-    "location": "San Mateo",
-    "salary": "$150k–$300k",
-    "salaryMin": 150000,
-    "salaryMax": 300000,
-    "tags": ["Backend", "Infrastructure"],
-    "description": "Own core backend systems and infrastructure at a fast-growing VC-backed startup.",
-    "active": true
+    "jobId": "1",
+    "title": "AI Engineer",
+    "description": "Simplifying Success Through Smart Analytics",
+    "salary": "$180K - $250K",
+    "locations": [
+      "New York",
+      "San Francisco",
+      "South Bay Area",
+      "Los Angeles",
+      "Boston",
+      "Seattle",
+      "Texas",
+      "Chicago",
+      "Washington DC",
+      "Denver",
+      "Florida",
+      "Minnesota",
+      "Sacramento"
+    ],
+    "techStack": "Python, OpenAI, Vector Database",
+    "industry": "AI, Data, Education, Edtech",
+    "workplace": "Remote",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Competitive equity",
+    "funding": "2000000",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "1 - 6 years"
   },
   {
-    "slug": "full-stack-engineer-san-francisco",
-    "title": "Full-Stack Engineer",
-    "location": "San Francisco",
-    "salary": "$180k–$260k",
-    "salaryMin": 180000,
-    "salaryMax": 260000,
-    "tags": ["Full-Stack"],
-    "description": "Ship product end-to-end across a modern TypeScript stack.",
-    "active": true
+    "jobId": "17",
+    "title": "AI Engineer",
+    "description": "Accelerating Vehicle Software Innovation",
+    "salary": "$225K - $300K",
+    "locations": [
+      "South Bay Area"
+    ],
+    "techStack": "Python, TensorFlow, PyTorch",
+    "industry": "Software Development, AI, Autonomous Vehicles",
+    "workplace": "Hybrid",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Competitive",
+    "funding": "$110m",
+    "teamSize": "275",
+    "visa": "None, Visa transfers",
+    "yoe": "8 - 15 years"
   },
   {
-    "slug": "gtm-engineer-new-york",
-    "title": "GTM Engineer",
-    "location": "New York",
-    "salary": "$200k–$400k",
-    "salaryMin": 200000,
-    "salaryMax": 400000,
-    "tags": ["GTM", "Full-Stack"],
-    "description": "Sit at the intersection of product and revenue, building the systems that power go-to-market.",
-    "active": true
+    "jobId": "18",
+    "title": "AI Engineer",
+    "description": "A new kind of dating service, from the creator of Hinge.",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, FastAPI, PostgreSQL",
+    "industry": "Consumer, AI",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Competitive",
+    "funding": "$18M",
+    "teamSize": "5",
+    "visa": "None, Visa transfers",
+    "yoe": "5 - 8 years"
   },
   {
-    "slug": "forward-deployed-engineer-san-francisco",
+    "jobId": "19",
+    "title": "AI Forward Deployed Engineer",
+    "description": "AI that automates operations for commodity companies.",
+    "salary": "$150K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, TypeScript",
+    "industry": "Software Development, AI, Logistics, Finance",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "0.25-0.75%",
+    "funding": "$2.5M+",
+    "teamSize": "6",
+    "visa": "None",
+    "yoe": "3 - 7 years"
+  },
+  {
+    "jobId": "20",
+    "title": "AI Forward Deployed Strategist",
+    "description": "AI that automates operations for commodity companies.",
+    "salary": "$165K - $240K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, TypeScript",
+    "industry": "Software Development, AI, Logistics, Finance",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Operations & Strategy",
+    "equity": "0.1-0.3%",
+    "funding": "$2.5M+",
+    "teamSize": "6",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 5 years"
+  },
+  {
+    "jobId": "21",
+    "title": "AI Product Engineer, Clinical AI",
+    "description": "Altitude is building the clinical AI execution platform for risk-bearing care organizations.",
+    "salary": "$220K - $245K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, TypeScript",
+    "industry": "Healthcare, AI",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "Competitive equity",
+    "funding": "12.8M",
+    "teamSize": "-",
+    "visa": "None, Visa transfers",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "16",
+    "title": "Agent Platform Engineer",
+    "description": "VC-backed startup building computer-use AI agents to automate healthcare back-office operations",
+    "salary": "$150K - $230K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "TypeScript, PostgreSQL, GCP, Docker, NodeJS, Go, Java, Kotlin, Rust",
+    "industry": "AI, Healthcare",
+    "workplace": "On-site",
+    "roleType": "Backend Engineer",
+    "equity": "Competitive equity",
+    "funding": "$7M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers",
+    "yoe": "4+ years"
+  },
+  {
+    "jobId": "22",
+    "title": "Applied AI Product Engineer",
+    "description": "AI-powered QA platform that uses autonomous browser agents to test websites like real users \u2014 replacing brittle scripts and manual testing for top e-commerce brands.",
+    "salary": "$185K - $260K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "TypeScript, Next.js, React",
+    "industry": "AI, Devtools, B2B",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "0.03-0.1%",
+    "funding": "$5M",
+    "teamSize": "11",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 4 years"
+  },
+  {
+    "jobId": "23",
+    "title": "Backend Engineer",
+    "description": "Human risk management that works like magic",
+    "salary": "$135K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Kafka, Spark, Airflow, AWS, Terraform, Django, Python, Kubernetes, PostgreSQL",
+    "industry": "Cybersecurity, Security, Enterprise, AI, B2B",
+    "workplace": "Hybrid",
+    "roleType": "Backend Engineer",
+    "equity": "This role includes Restricted Stock Units (RSUs) as part of the total compensation package.",
+    "funding": "$31M",
+    "teamSize": "55",
+    "visa": "None",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "24",
+    "title": "Backend Engineer (Infra)",
+    "description": "We're building an agent-to-agent hiring ecosystem where personal agents capture your work context and engage on your behalf  to eliminate discovery friction",
+    "salary": "$150K - $220K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "AWS, Terraform, Kubernetes, Docker, Python, TypeScript, Langchain, GCP",
+    "industry": "AI, Consumer, Marketplace",
+    "workplace": "On-site",
+    "roleType": "Backend Engineer, Infrastructure/DevOps/SRE",
+    "equity": "Competitive equity",
+    "funding": "$4M",
+    "teamSize": "4",
+    "visa": "None",
+    "yoe": "3 - 6 years"
+  },
+  {
+    "jobId": "25",
+    "title": "Backend Infrastructure Engineer",
+    "description": "Web data API for AI",
+    "salary": "$200K - $250K",
+    "locations": [
+      "San Francisco",
+      "South Bay Area"
+    ],
+    "techStack": "Go, Python, TypeScript, NodeJS, REST API, Redis, PostgreSQL, Kafka, Kubernetes, K8s, Docker, AWS, Prometheus, Terraform, Grafana, CI/CD",
+    "industry": "AI, Devtools, API SDK, Marketing, Data",
+    "workplace": "Hybrid",
+    "roleType": "Backend Engineer, Infrastructure/DevOps/SRE",
+    "equity": "Competitive equity \u2014 details shared during the process.",
+    "funding": "$16.2M",
+    "teamSize": "39",
+    "visa": "None, Visa transfers",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "26",
+    "title": "Data Product Engineer",
+    "description": "Trusted Intelligence for Insurance",
+    "salary": "$230K - $280K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, Git",
+    "industry": "AI, B2B, Data, Enterprise, Insurance, Security, Software Development",
+    "workplace": "On-site",
+    "roleType": "Data Engineer, Founding Engineer",
+    "equity": "Competitive equity",
+    "funding": "$10M",
+    "teamSize": "17",
+    "visa": "None, Visa transfers",
+    "yoe": "5 - 8 years"
+  },
+  {
+    "jobId": "27",
+    "title": "Deployment Strategist",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "salary": "$140K - $180K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Salesforce, Zendesk",
+    "industry": "Software Development, Enterprise, AI",
+    "workplace": "On-site",
+    "roleType": "Account Executives / Sales, Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "0.25-1%",
+    "funding": "$2.5M",
+    "teamSize": "6",
+    "visa": "None",
+    "yoe": "1 - 4 years"
+  },
+  {
+    "jobId": "28",
+    "title": "Deployment Strategist",
+    "description": "Stewardship reports for your entire book and new business.",
+    "salary": "$105K - $200K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "AWS, GCP, Azure",
+    "industry": "Insurance, Software Development, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Account Management / Customer Success",
+    "equity": "Competitive equity",
+    "funding": "-",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "3 - 8 years"
+  },
+  {
+    "jobId": "29",
+    "title": "Deployment Strategist",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "salary": "$140K - $180K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Salesforce, Zendesk",
+    "industry": "Software Development, Enterprise, AI",
+    "workplace": "On-site",
+    "roleType": "Account Executives / Sales, Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "0.25-1%",
+    "funding": "$2.5M",
+    "teamSize": "6",
+    "visa": "None",
+    "yoe": "1 - 4 years"
+  },
+  {
+    "jobId": "30",
     "title": "Forward Deployed Engineer",
-    "location": "San Francisco",
-    "salary": "$140k–$180k",
-    "salaryMin": 140000,
-    "salaryMax": 180000,
-    "tags": ["FDE", "Customer-Facing"],
-    "description": "Embed with customers and ship real solutions on top of a cutting-edge AI platform.",
-    "active": true
+    "description": "Forefront of AI-driven software development for state and local governments",
+    "salary": "$170K - $220K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "AWS",
+    "industry": "Government, AI",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Full Stack Engineer",
+    "equity": "Competitive equity",
+    "funding": "$4.1M",
+    "teamSize": "15",
+    "visa": "None",
+    "yoe": "1 - 5 years"
   },
   {
-    "slug": "senior-fde-new-york",
-    "title": "Senior FDE",
-    "location": "New York",
-    "salary": "$225k–$300k",
-    "salaryMin": 225000,
-    "salaryMax": 300000,
-    "tags": ["FDE", "Senior"],
-    "description": "Lead forward-deployed engagements for a high-growth AI company's largest customers.",
-    "active": true
+    "jobId": "31",
+    "title": "Forward Deployed Engineer",
+    "description": "Enterprise AI Data Agents",
+    "salary": "$160K - $230K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Snowflake, AWS, Python, Docker, Airflow, CI/CD",
+    "industry": "Software Development, Data, Enterprise, AI",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "Competitive; Standard 4 year vest with 1 year cliff",
+    "funding": "$5M",
+    "teamSize": "25",
+    "visa": "None",
+    "yoe": "5+ years"
   },
   {
-    "slug": "frontend-engineer-san-francisco",
+    "jobId": "32",
+    "title": "Forward Deployed Engineer",
+    "description": "We are a community to assist Founders, Recruiters & Job Seekers to connect for Startup focused Initiatives.",
+    "salary": "$150K - $200K",
+    "locations": [
+      "San Francisco",
+      "New York"
+    ],
+    "techStack": "Python, TypeScript, C/C++, Java",
+    "industry": "Education, AI, Finance, Enterprise",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "Competitive equity",
+    "funding": "$30M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 5 years"
+  },
+  {
+    "jobId": "33",
+    "title": "Forward Deployed Engineer",
+    "description": "Building AGI for banking.",
+    "salary": "$160K - $265K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, React, Next.js, PostgreSQL, Python, AWS, Langchain, Azure",
+    "industry": "AI, Fintech, Financial Services, Education",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "75th percentile equity",
+    "funding": "$33M",
+    "teamSize": "35",
+    "visa": "None",
+    "yoe": "0 - 5 years"
+  },
+  {
+    "jobId": "34",
+    "title": "Forward Deployed Engineer",
+    "description": "Usul helps America and its allies buy and field technology at the speed of Amazon Prime.",
+    "salary": "$180K - $240K",
+    "locations": [
+      "San Francisco",
+      "Washington DC"
+    ],
+    "techStack": "React, Next.js, TypeScript, Python, NodeJS",
+    "industry": "Software Development, AI, Defense, Government",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Full Stack Engineer",
+    "equity": "$50K - 500K over 4 years.",
+    "funding": "$3.3M",
+    "teamSize": "11",
+    "visa": "None",
+    "yoe": "2 - 8 years"
+  },
+  {
+    "jobId": "35",
+    "title": "Forward Deployed Engineer",
+    "description": "Building the ingestion layer to connect human data with machines",
+    "salary": "$220K - $320K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, REST API",
+    "industry": "AI, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Full Stack Engineer",
+    "equity": "Extremely competitive equity",
+    "funding": "$108M",
+    "teamSize": "75",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 6 years"
+  },
+  {
+    "jobId": "36",
+    "title": "Forward Deployed Engineer",
+    "description": "Take2 AI builds autonomous AI agents that automate the end-to-end healthcare recruiting process \u2014 from job posting to job offer.",
+    "salary": "$150K - $200K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, JavaScript",
+    "industry": "AI, Healthcare, Software Development",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "Competitive",
+    "funding": "$14M",
+    "teamSize": "22",
+    "visa": "None",
+    "yoe": "4 - 6 years"
+  },
+  {
+    "jobId": "37",
+    "title": "Forward Deployed Engineer",
+    "description": "Forefront of AI-driven software development for state and local governments",
+    "salary": "$170K - $220K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "AWS",
+    "industry": "Government, AI",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Full Stack Engineer",
+    "equity": "Competitive equity",
+    "funding": "$4.1M",
+    "teamSize": "15",
+    "visa": "None",
+    "yoe": "1 - 5 years"
+  },
+  {
+    "jobId": "38",
+    "title": "Forward Deployed Engineer (New York)",
+    "description": "We acquire, own, and operate world-class vertical software and tech-enabled businesses.",
+    "salary": "$185K - $240K",
+    "locations": [
+      "New York",
+      "San Francisco",
+      "Canada"
+    ],
+    "techStack": "TypeScript, Python, React, Snowflake, Go",
+    "industry": "AI, Venture Capital, Enterprise, B2B, Software Development",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Full Stack Engineer",
+    "equity": "Competitive equity",
+    "funding": "$250M",
+    "teamSize": "85",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 6 years"
+  },
+  {
+    "jobId": "39",
+    "title": "Founding AI Engineer",
+    "description": "Automate architecture.",
+    "salary": "$165K - $210K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python",
+    "industry": "Software Development, AI, Real Estate, Construction",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Machine Learning Engineer",
+    "equity": "0.75-2%",
+    "funding": "4500000",
+    "teamSize": "3",
+    "visa": "None",
+    "yoe": "2 - 8 years"
+  },
+  {
+    "jobId": "40",
+    "title": "Founding Engineer",
+    "description": "Enterprise agents built for procurement",
+    "salary": "$160K - $230K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, TypeScript, React",
+    "industry": "AI, Logistics, Manufacturing, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "Competitive equity",
+    "funding": "$2.5M",
+    "teamSize": "1",
+    "visa": "None, Visa transfers",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "41",
+    "title": "Founding Engineer",
+    "description": "GoodLane turns top-tier W-2 freight agents into independent agency owners. We partner with the best and provide the playbook, tools, and support to build a successful agency in 12 months.",
+    "salary": "$180K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "CI/CD",
+    "industry": "Logistics, AI, Transportation, Education",
+    "workplace": "Hybrid",
+    "roleType": "Founding Engineer",
+    "equity": "0.4% - 0.8%",
+    "funding": "$10M",
+    "teamSize": "4",
+    "visa": "None, Visa transfers",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "42",
+    "title": "Founding Engineer",
+    "description": "Connect Agents to the External World, Confidently",
+    "salary": "$190K - $240K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, PostgreSQL, React, JavaScript, AWS, Kubernetes",
+    "industry": "AI, Software Development, B2B, API SDK",
+    "workplace": "Hybrid",
+    "roleType": "Founding Engineer",
+    "equity": "1-1.5%",
+    "funding": "6M",
+    "teamSize": "5",
+    "visa": "None",
+    "yoe": "1.5+ years"
+  },
+  {
+    "jobId": "43",
+    "title": "Founding Engineer",
+    "description": "Transforming how the U.S.'s largest healthcare providers get paid.",
+    "salary": "$170K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, TypeScript, AWS, GCP, Azure, Go",
+    "industry": "Healthcare, AI, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "0.5-1.5%",
+    "funding": "$5M",
+    "teamSize": "3",
+    "visa": "None",
+    "yoe": "0 - 8 years"
+  },
+  {
+    "jobId": "44",
+    "title": "Founding Engineer",
+    "description": "Headcount management for scaling teams",
+    "salary": "$150K - $200K",
+    "locations": [
+      "South Bay Area"
+    ],
+    "techStack": "GCP, MongoDB, TypeScript, NodeJS",
+    "industry": "Enterprise, B2B, Finance",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "0.2% - 0.5%",
+    "funding": "$5M",
+    "teamSize": "6",
+    "visa": "None, Visa transfers",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "45",
+    "title": "Founding Engineer",
+    "description": "Optimize sales rep pricing performance and recover lost revenue.",
+    "salary": "$160K - $200K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, Python, React, PostgreSQL, Express, Tailwind",
+    "industry": "Software Development, AI, Fintech, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "Competitive equity",
+    "funding": "$7M",
+    "teamSize": "12",
+    "visa": "None, Visa transfers",
+    "yoe": "4 - 8 years"
+  },
+  {
+    "jobId": "46",
+    "title": "Founding Engineer",
+    "description": "Email Inboxes for AI Agents",
+    "salary": "$150K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, REST API",
+    "industry": "AI, API SDK, Devtools, B2B, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "0.5% - 1% equity",
+    "funding": "$6M",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "0 - 5 years"
+  },
+  {
+    "jobId": "47",
+    "title": "Founding Engineer",
+    "description": "Military AI that runs your admin work",
+    "salary": "$160K - $210K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, Python, Next.js, Express, PostgreSQL, AWS, Kubernetes, Grafana",
+    "industry": "Defense, AI, Software Development, Security",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Full Stack Engineer",
+    "equity": "0.5-1.5%",
+    "funding": "-",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "3 - 5 years"
+  },
+  {
+    "jobId": "48",
+    "title": "Founding Engineer",
+    "description": "Quill is the agent platform for data reliability, fixing the messy data inside the systems of record that every company runs on.",
+    "salary": "$150K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, React, Next.js, Langchain",
+    "industry": "AI, Data, Enterprise, Education",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "0.3-1.7%",
+    "funding": "4.5M",
+    "teamSize": "2",
+    "visa": "None",
+    "yoe": "2 - 6 years"
+  },
+  {
+    "jobId": "49",
+    "title": "Founding Engineer",
+    "description": "Equip the offline economy with foundational intelligence.",
+    "salary": "$150K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, TypeScript, Next.js, GCP, Terraform, Go, Java, Rust",
+    "industry": "AI, Consumer, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "0.5-2%",
+    "funding": "5000000",
+    "teamSize": "3",
+    "visa": "None",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "50",
+    "title": "Founding Engineer - Full Stack",
+    "description": "Unusual drives more leads from AI models by helping you discover and change AI's opinion of your brand.",
+    "salary": "$170K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, React, Terraform, AWS",
+    "industry": "AI, Marketing, Ad Tech",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Full Stack Engineer",
+    "equity": "0.3-1.5%",
+    "funding": "$3,600,000",
+    "teamSize": "5",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 5 years"
+  },
+  {
+    "jobId": "51",
+    "title": "Founding Engineer, Infrastructure & Platform",
+    "description": "Agentic integration platform automating mission-critical system connections for the physical economy",
+    "salary": "$175K - $275K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "AWS, Azure, GCP, Kubernetes, K8s, Docker, TypeScript",
+    "industry": "AI, Logistics, Manufacturing, Enterprise, B2B, Devtools",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Infrastructure/DevOps/SRE",
+    "equity": "0.4-0.8%",
+    "funding": "$8.3M",
+    "teamSize": "5",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 12 years"
+  },
+  {
+    "jobId": "52",
+    "title": "Founding Forward Deployed Engineer",
+    "description": "Recur partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York",
+      "Chicago"
+    ],
+    "techStack": "-",
+    "industry": "Software Development, AI, B2B, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Founding Engineer",
+    "equity": "Competitive equity",
+    "funding": "$50M+",
+    "teamSize": "1",
+    "visa": "None",
+    "yoe": "3 - 5 years"
+  },
+  {
+    "jobId": "53",
+    "title": "Founding Forward Deployed Engineer",
+    "description": "We\u2019re building the first customer lifecycle automation platform powered by AI agents, purpose-built for B2B companies.",
+    "salary": "$180K - $230K",
+    "locations": [
+      "San Francisco",
+      "Los Angeles"
+    ],
+    "techStack": "Python, FastAPI, React, PostgreSQL, CI/CD, Salesforce",
+    "industry": "AI, Enterprise, B2B",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Founding Engineer",
+    "equity": "Competitive",
+    "funding": "$4M",
+    "teamSize": "6",
+    "visa": "None",
+    "yoe": "2 - 7 years"
+  },
+  {
+    "jobId": "54",
+    "title": "Founding Forward Deployed Engineer",
+    "description": "Recur partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York",
+      "Chicago"
+    ],
+    "techStack": "-",
+    "industry": "Software Development, AI, B2B, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Founding Engineer",
+    "equity": "Competitive equity",
+    "funding": "$50M+",
+    "teamSize": "1",
+    "visa": "None",
+    "yoe": "3 - 5 years"
+  },
+  {
+    "jobId": "55",
+    "title": "Founding Full Stack Engineer",
+    "description": "AI Solutions and Services for Patents",
+    "salary": "$180K - $250K",
+    "locations": [
+      "South Bay Area",
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, React, Python, AWS, Django, FastAPI",
+    "industry": "AI, Law, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Full Stack Engineer",
+    "equity": "0.05-0.15%",
+    "funding": "$6M",
+    "teamSize": "-",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 7 years"
+  },
+  {
+    "jobId": "56",
+    "title": "Founding Full-Stack Engineer",
+    "description": "Alcor Labs builds wearable AI co-pilots on smart glasses for industrial field workers, deploying agentic vision-language models to data centers, energy grids, and aerospace.",
+    "salary": "$180K - $240K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, Python, React, NodeJS, AWS, GCP, PostgreSQL, Redis, Docker, REST API, CI/CD",
+    "industry": "AI, Hardware, Robotics, Enterprise, B2B, Defense",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Full Stack Engineer",
+    "equity": "0.25 - 0.75%",
+    "funding": "$5M",
+    "teamSize": "2",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 5 years"
+  },
+  {
+    "jobId": "57",
+    "title": "Founding Member of Technical Staff",
+    "description": "Arca builds AI agents for life sciences that take drug development from 10 years to 5.",
+    "salary": "$175K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "TypeScript, AWS",
+    "industry": "AI, Law, Life Sciences, Education, Healthcare, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer",
+    "equity": "0.25-1%",
+    "funding": "$9M",
+    "teamSize": "6",
+    "visa": "None",
+    "yoe": "0 - 2 years"
+  },
+  {
+    "jobId": "58",
+    "title": "Founding Product Engineer",
+    "description": "AI-native startup rebuilding how businesses price and manage risk in the insurance industry, replacing manual processes that drive multi-million-dollar decisions.",
+    "salary": "$160K - $250K",
+    "locations": [
+      "San Francisco",
+      "South Bay Area"
+    ],
+    "techStack": "Python, FastAPI, TypeScript, React, AWS, PostgreSQL",
+    "industry": "Insurance, AI, Fintech, B2B",
+    "workplace": "Hybrid",
+    "roleType": "Founding Engineer, Product Engineer",
+    "equity": "0.25-0.6%",
+    "funding": "$5M",
+    "teamSize": "5",
+    "visa": "None",
+    "yoe": "3 - 7 years"
+  },
+  {
+    "jobId": "59",
     "title": "Frontend Engineer",
-    "location": "San Francisco",
-    "salary": "$150k–$250k",
-    "salaryMin": 150000,
-    "salaryMax": 250000,
-    "tags": ["Frontend"],
-    "description": "Craft polished, fast interfaces for an AI product used by thousands of teams.",
-    "active": true
+    "description": "Embedded accounting software for SMB platforms.",
+    "salary": "$185K - $225K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "React, Sass, TypeScript, Kotlin, PostgreSQL, AWS",
+    "industry": "Fintech, Finance, Financial Services, AI, B2B, API SDK",
+    "workplace": "On-site",
+    "roleType": "Frontend Engineer",
+    "equity": "Competitive equity",
+    "funding": "$9M",
+    "teamSize": "18",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 7 years"
+  },
+  {
+    "jobId": "60",
+    "title": "Full Stack Engineer",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "salary": "$120K - $200K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, React, Python, Vector Database",
+    "industry": "Software Development, Enterprise, AI",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer",
+    "equity": "0.2-0.7%",
+    "funding": "$2.5M",
+    "teamSize": "6",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 4 years"
+  },
+  {
+    "jobId": "61",
+    "title": "Full Stack Engineer",
+    "description": "Your personal AI Stylist. . instagram.com/alta",
+    "salary": "$175K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "React, Next.js, TypeScript, Python, NodeJS, Swift",
+    "industry": "AI, Consumer, Ecommerce",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer",
+    "equity": "0.2-0.5%",
+    "funding": "11000000",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "2 - 6 years"
+  },
+  {
+    "jobId": "62",
+    "title": "Full Stack Engineer",
+    "description": "Usul helps America and its allies buy and field technology at the speed of Amazon Prime.",
+    "salary": "$180K - $240K",
+    "locations": [
+      "San Francisco",
+      "Washington DC"
+    ],
+    "techStack": "React, Next.js, TypeScript, Python, NodeJS",
+    "industry": "Software Development, AI, Defense, Government",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer, Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "$50K - 500K over 4 years.",
+    "funding": "$3.3M",
+    "teamSize": "11",
+    "visa": "None",
+    "yoe": "2 - 8 years"
+  },
+  {
+    "jobId": "63",
+    "title": "Full Stack Engineer",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "salary": "$120K - $200K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, React, Python, Vector Database",
+    "industry": "Software Development, Enterprise, AI",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer",
+    "equity": "0.2-0.7%",
+    "funding": "$2.5M",
+    "teamSize": "6",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 4 years"
+  },
+  {
+    "jobId": "64",
+    "title": "Full-Stack Engineer",
+    "description": "The first AI-native OS for deployment teams",
+    "salary": "$200K - $350K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, TypeScript, AWS",
+    "industry": "Software Development, AI, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer",
+    "equity": "0.4-0.7%",
+    "funding": "$11.2M",
+    "teamSize": "5",
+    "visa": "None",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "65",
+    "title": "Fullstack Product Engineer",
+    "description": "Big Leap Health empowers clinics that offers interventional psychiatry services to see more patients.",
+    "salary": "$160K - $220K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "React, Vue, TypeScript, NodeJS, PostgreSQL, Docker, AWS, GCP",
+    "industry": "Healthcare",
+    "workplace": "Hybrid",
+    "roleType": "Product Engineer, Full Stack Engineer",
+    "equity": "0.5 - 1.0%",
+    "funding": "$10M",
+    "teamSize": "10",
+    "visa": "None",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "3",
+    "title": "Head of Machine Learning - Application Fraud",
+    "description": "The Fraud Experts",
+    "salary": "$230K - $260K",
+    "locations": [
+      "New York",
+      "San Francisco",
+      "South Bay Area",
+      "Los Angeles",
+      "Boston",
+      "Seattle",
+      "Texas",
+      "Chicago",
+      "Washington DC",
+      "Denver",
+      "Florida"
+    ],
+    "techStack": "Python, PostgreSQL, AWS",
+    "industry": "Software Development, Fintech, Financial Services, Cybersecurity, Security, Data, AI",
+    "workplace": "Remote",
+    "roleType": "Engineering Leadership, Machine Learning Engineer",
+    "equity": "Competitive equity",
+    "funding": "$84M",
+    "teamSize": "160",
+    "visa": "None, Visa transfers",
+    "yoe": "7 - 15 years"
+  },
+  {
+    "jobId": "66",
+    "title": "Infrastructure Engineer",
+    "description": "Your app, Enterprise Ready.",
+    "salary": "$175K - $275K",
+    "locations": [
+      "Canada",
+      "San Francisco",
+      "New York"
+    ],
+    "techStack": "AWS, Kubernetes, Terraform, TypeScript, GCP, CI/CD",
+    "industry": "Software Development, Devtools, API SDK, Enterprise, B2B, Security",
+    "workplace": "Hybrid",
+    "roleType": "Infrastructure/DevOps/SRE",
+    "equity": "Competitive equity",
+    "funding": "$198M",
+    "teamSize": "110",
+    "visa": "None, Visa transfers",
+    "yoe": "4 - 7 years"
+  },
+  {
+    "jobId": "67",
+    "title": "Infrastructure Engineer",
+    "description": "You built your firm's edge. Compound it with AI.",
+    "salary": "$150K - $300K",
+    "locations": [
+      "San Francisco",
+      "New York"
+    ],
+    "techStack": "AWS, GCP, Azure, Kubernetes, CI/CD",
+    "industry": "Software Development, AI, Finance, Fintech, Financial Services",
+    "workplace": "On-site",
+    "roleType": "Infrastructure/DevOps/SRE, Data Engineer",
+    "equity": "Competitive equity",
+    "funding": "$50M",
+    "teamSize": "17",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 10 years"
+  },
+  {
+    "jobId": "3",
+    "title": "Lead AI Engineer",
+    "description": "Face-to-face AI interaction that feels human",
+    "salary": "$200K - $300K",
+    "locations": [
+      "Seattle"
+    ],
+    "techStack": "Kubernetes, Terraform, Python, Rust, Go, Airflow, PyTorch",
+    "industry": "Software Development, AI",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Competitive Equity",
+    "funding": "$60M",
+    "teamSize": "25",
+    "visa": "None, Visa transfers",
+    "yoe": "0 - 2 years"
+  },
+  {
+    "jobId": "68",
+    "title": "Lead AI Engineer (NYC)",
+    "description": "Contracting intelligence from the first turn through obligation management.",
+    "salary": "$175K - $300K",
+    "locations": [
+      "New York",
+      "San Francisco"
+    ],
+    "techStack": "AWS, Azure, CI/CD, Docker, GCP, Git, Java, JavaScript, Kubernetes, Langchain, OpenAI, PostgreSQL, Python",
+    "industry": "Software Development, AI, Law, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer, Full Stack Engineer",
+    "equity": "Competitive",
+    "funding": "-",
+    "teamSize": "1800",
+    "visa": "None, Visa transfers",
+    "yoe": "8+ years"
+  },
+  {
+    "jobId": "80",
+    "title": "ML / AI Engineer",
+    "description": "-",
+    "salary": "$200K - $300K",
+    "locations": [
+      "San Francisco",
+      "New York"
+    ],
+    "techStack": "Python, FastAPI, PostgreSQL, Vector Database",
+    "industry": "Consumer, AI",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer",
+    "equity": "0.85 - 1%",
+    "funding": "$9.5M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "81",
+    "title": "ML Engineer (Systems)",
+    "description": "The Workflow Intelligence Layer",
+    "salary": "$150K - $230K",
+    "locations": [
+      "San Francisco",
+      "South Bay Area"
+    ],
+    "techStack": "Langchain, Docker, Kubernetes, K8s, Python, Tableau, Grafana",
+    "industry": "Software Development, AI, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer, Full Stack Engineer",
+    "equity": "Up to 1% equity",
+    "funding": "$5M",
+    "teamSize": "3",
+    "visa": "None, Visa transfers",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "4",
+    "title": "Machine Learning Engineer",
+    "description": "Sardine is the leading agentic risk platform to fight financial crime.",
+    "salary": "$175K - $220K",
+    "locations": [
+      "New York",
+      "San Francisco",
+      "South Bay Area",
+      "Los Angeles",
+      "Boston",
+      "Seattle",
+      "Texas",
+      "Chicago",
+      "Washington DC",
+      "Denver",
+      "Florida",
+      "Minnesota",
+      "Sacramento"
+    ],
+    "techStack": "Go, Python, PyTorch, Scikit-learn, Docker, Kubernetes, CI/CD",
+    "industry": "Financial Services, Fintech, Cybersecurity, Security",
+    "workplace": "Remote",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Competitive equity",
+    "funding": "175200000",
+    "teamSize": "210",
+    "visa": "None",
+    "yoe": "5 - 8 years"
+  },
+  {
+    "jobId": "5",
+    "title": "Member of Technical Staff",
+    "description": "High-fidelity trajectories and environments for frontier AI research.",
+    "salary": "$200K - $280K",
+    "locations": [
+      "New York",
+      "Seattle"
+    ],
+    "techStack": "Kubernetes, Kafka",
+    "industry": "Data, AI",
+    "workplace": "Hybrid",
+    "roleType": "Machine Learning Engineer, Infrastructure/DevOps/SRE",
+    "equity": "Competitive Equity",
+    "funding": "-",
+    "teamSize": "6",
+    "visa": "None, Visa transfers",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "69",
+    "title": "Member of Technical Staff",
+    "description": "AI Agents for KYC & AML",
+    "salary": "$240K - $300K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, AWS",
+    "industry": "AI, Fintech, Crypto, Finance, Financial Services, B2B, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer",
+    "equity": "Competitive equity",
+    "funding": "$7.1M",
+    "teamSize": "10",
+    "visa": "None, Visa transfers",
+    "yoe": "6 - 14 years"
+  },
+  {
+    "jobId": "70",
+    "title": "Member of Technical Staff",
+    "description": "AI that autonomously operates factories \u2014 connecting legacy systems into a unified layer and deploying agents that optimize production for profit.",
+    "salary": "$150K - $300K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, C/C++, PostgreSQL, AWS, Rust",
+    "industry": "Software Development, AI, Manufacturing, Robotics",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer, Full Stack Engineer, Robotics Software Engineer",
+    "equity": "Competitive equity",
+    "funding": "$5 M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 8 years"
+  },
+  {
+    "jobId": "71",
+    "title": "Member of Technical Staff",
+    "description": "Caddy is your personal AI in iMessage \u2014 a proactive teammate that plugs into your apps and gets work done on your behalf.",
+    "salary": "$120K - $180K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "TypeScript, NodeJS, React, Stripe, Slack, Notion",
+    "industry": "AI, Consumer",
+    "workplace": "On-site",
+    "roleType": "Founding Engineer, Full Stack Engineer",
+    "equity": "Competitive equity",
+    "funding": "$500K",
+    "teamSize": "4",
+    "visa": "None",
+    "yoe": "1 - 5 years"
+  },
+  {
+    "jobId": "72",
+    "title": "Member of Technical Staff",
+    "description": "Wafer builds AI agents that work as autonomous performance engineers, optimizing GPU kernels for AI inference.",
+    "salary": "$200K - $200K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, AWS, C/C++",
+    "industry": "AI, Hardware",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer, Backend Engineer",
+    "equity": "0.5 - 1%",
+    "funding": "$4M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 5 years"
+  },
+  {
+    "jobId": "77",
+    "title": "Member of Technical Staff (Product)",
+    "description": "Listen is an autonomous researcher that talks to thousands of people, revealing exactly what they want and why.",
+    "salary": "$200K - $300K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "React, TypeScript",
+    "industry": "AI, B2B, Enterprise, Marketing",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "Competitive Equity",
+    "funding": "US$ 100M",
+    "teamSize": "80",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 8 years"
+  },
+  {
+    "jobId": "73",
+    "title": "Member of Technical Staff - Atlas",
+    "description": "AI Platform for Accounting firms giving accountants a team of AI assistants",
+    "salary": "$150K - $300K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, TypeScript",
+    "industry": "AI, Fintech, Finance, B2B, Enterprise, Financial Services",
+    "workplace": "On-site",
+    "roleType": "Backend Engineer, Full Stack Engineer",
+    "equity": "Highly Competitive Equity",
+    "funding": "$140M",
+    "teamSize": "120",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 8 years"
+  },
+  {
+    "jobId": "74",
+    "title": "Member of Technical Staff - Backend",
+    "description": "Removing the friction that keeps tax and accounting professionals from doing their best work, by using cutting-edge AI to automate tax document processing",
+    "salary": "$200K - $325K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, Django, GCP, Kubernetes, CI/CD",
+    "industry": "Software Development, AI, Finance, Financial Services, B2B, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Backend Engineer",
+    "equity": "Stock options also included",
+    "funding": "-",
+    "teamSize": "20",
+    "visa": "None, Visa transfers",
+    "yoe": "4+ years"
+  },
+  {
+    "jobId": "6",
+    "title": "Member of Technical Staff - Model Optimization and Inference (Experienced)",
+    "description": "Face-to-face AI interaction that feels human",
+    "salary": "$250K - $350K",
+    "locations": [
+      "Seattle"
+    ],
+    "techStack": "Kubernetes, K8s, Terraform, Python, Rust, Go, Airflow, PyTorch",
+    "industry": "Software Development, AI",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer",
+    "equity": "-",
+    "funding": "$60M",
+    "teamSize": "25",
+    "visa": "None, Visa transfers",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "75",
+    "title": "Member of Technical Staff - Model Optimization and Inference (Experienced)",
+    "description": "Face-to-face AI interaction that feels human",
+    "salary": "$250K - $350K",
+    "locations": [
+      "Seattle"
+    ],
+    "techStack": "Kubernetes, K8s, Terraform, Python, Rust, Go, Airflow, PyTorch",
+    "industry": "Software Development, AI",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer",
+    "equity": "-",
+    "funding": "$60M",
+    "teamSize": "25",
+    "visa": "None, Visa transfers",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "76",
+    "title": "Member of Technical Staff - Model Optimization and Inference (New Grad)",
+    "description": "Face-to-face AI interaction that feels human",
+    "salary": "$200K - $300K",
+    "locations": [
+      "Seattle"
+    ],
+    "techStack": "Kubernetes, Terraform, Python, Rust, Go, Airflow, PyTorch",
+    "industry": "Software Development, AI",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Competitive Equity",
+    "funding": "$60M",
+    "teamSize": "25",
+    "visa": "None, Visa transfers",
+    "yoe": "0 - 2 years"
+  },
+  {
+    "jobId": "7",
+    "title": "Member of Technical Staff \u2014 RL Research (New PhD Grad)",
+    "description": "Face-to-face AI interaction that feels human",
+    "salary": "$250K - $350K",
+    "locations": [
+      "Seattle"
+    ],
+    "techStack": "Python, PyTorch",
+    "industry": "Software Development, AI",
+    "workplace": "On-site",
+    "roleType": "AI / ML Researcher",
+    "equity": "Highly competitive equity",
+    "funding": "$60M",
+    "teamSize": "25",
+    "visa": "None, Visa transfers",
+    "yoe": "0 - 2 years"
+  },
+  {
+    "jobId": "78",
+    "title": "Member of Technical Staff, Agent Platform",
+    "description": "Wealth management firm rebuilt from the ground up with AI",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, React, TypeScript, Vector Database",
+    "industry": "AI, Fintech, Finance, Education",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer, Full Stack Engineer",
+    "equity": "Competitive equity",
+    "funding": "$64M",
+    "teamSize": "15",
+    "visa": "None, Visa transfers",
+    "yoe": "4 - 10 years"
+  },
+  {
+    "jobId": "79",
+    "title": "Member of Technical Staff, Platform Engineer",
+    "description": "Wealth management firm rebuilt from the ground up with AI",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, TypeScript, PostgreSQL, AWS, Docker, Kubernetes, Terraform, CI/CD, REST API",
+    "industry": "AI, Fintech, Finance, Education",
+    "workplace": "On-site",
+    "roleType": "Infrastructure/DevOps/SRE, Backend Engineer",
+    "equity": "Base equity",
+    "funding": "$64M",
+    "teamSize": "15",
+    "visa": "None",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "82",
+    "title": "Partner Implementation Manager",
+    "description": "AI-Platform for End-to-End product development",
+    "salary": "$90K - $120K",
+    "locations": [
+      "New York",
+      "UK"
+    ],
+    "techStack": "Python",
+    "industry": "Software Development, B2B, Enterprise, Manufacturing, Life Sciences",
+    "workplace": "Hybrid",
+    "roleType": "Partnerships, Research Scientist & Applied Research, Research Engineer, Operations & Strategy",
+    "equity": "Competitive equity",
+    "funding": "$27M",
+    "teamSize": "130",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 3 years"
+  },
+  {
+    "jobId": "83",
+    "title": "Platform Engineer",
+    "description": "Unleashing engineering for the built environment",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Next.js, Tailwind, Kotlin, Python, AWS, CI/CD",
+    "industry": "AI, Software Development",
+    "workplace": "On-site",
+    "roleType": "Infrastructure/DevOps/SRE",
+    "equity": "0.10% - 0.75% (profit interests with dilution protection through Series A)",
+    "funding": "$5M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers, New visa sponsorships",
+    "yoe": "6+ years"
+  },
+  {
+    "jobId": "84",
+    "title": "Product Engineer",
+    "description": "We are a community to assist Founders, Recruiters & Job Seekers to connect for Startup focused Initiatives.",
+    "salary": "$150K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, React, Next.js, Python, Slack",
+    "industry": "Education, AI, B2B, Marketing",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "1.00%",
+    "funding": "$5.2M",
+    "teamSize": "5",
+    "visa": "None, Visa transfers",
+    "yoe": "0+ years"
+  },
+  {
+    "jobId": "85",
+    "title": "Product Engineer",
+    "description": "The only end-to-end AI system built for GovCon. Unite your workflow across capture, proposals, delivery and operations.",
+    "salary": "$160K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "TypeScript, NodeJS, React, Next.js",
+    "industry": "Government, Defense, AI, Software Development, B2B",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "Competitive",
+    "funding": "$42M",
+    "teamSize": "50",
+    "visa": "None",
+    "yoe": "1 - 6 years"
+  },
+  {
+    "jobId": "86",
+    "title": "Product Engineer",
+    "description": "Web data API for AI",
+    "salary": "$210K - $260K",
+    "locations": [
+      "San Francisco",
+      "South Bay Area"
+    ],
+    "techStack": "TypeScript, NodeJS, REST API, Git, Redis",
+    "industry": "AI, Devtools, API SDK, Marketing, Data",
+    "workplace": "Hybrid",
+    "roleType": "Product Engineer",
+    "equity": "Competitive equity \u2014 details shared during the process.",
+    "funding": "$16.2M",
+    "teamSize": "39",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 8 years"
+  },
+  {
+    "jobId": "87",
+    "title": "Product Engineer",
+    "description": "Alma simplifies immigration for technologists, founders, researchers, and others at the top of their fields with our highly experienced immigration lawyers and a user-friendly platform.",
+    "salary": "$140K - $250K",
+    "locations": [
+      "San Francisco",
+      "South Bay Area"
+    ],
+    "techStack": "Python, FastAPI, PostgreSQL, TypeScript, React, AWS, Docker",
+    "industry": "AI, Law",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "Competitive equity",
+    "funding": "$20M",
+    "teamSize": "70",
+    "visa": "None, Visa transfers",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "88",
+    "title": "Product Engineer",
+    "description": "AI-powered trade advisory platform that helps companies navigate tariffs, recover duty refunds, and reduce costs across global trade.",
+    "salary": "$185K - $230K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, NodeJS, PostgreSQL, React, GraphQL, Redis",
+    "industry": "AI, Logistics, B2B",
+    "workplace": "Hybrid",
+    "roleType": "Product Engineer",
+    "equity": "Competitive equity",
+    "funding": "$5.4M",
+    "teamSize": "8",
+    "visa": "None, Visa transfers",
+    "yoe": "2 - 5 years"
+  },
+  {
+    "jobId": "89",
+    "title": "Product Engineer",
+    "description": "Building a world where preventable disease is actually prevented",
+    "salary": "$180K - $250K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, FastAPI, PostgreSQL, Next.js, React, JavaScript, Vector Database, Figma",
+    "industry": "Healthcare, Life Sciences, AI, Consumer",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "1%",
+    "funding": "7M",
+    "teamSize": "7",
+    "visa": "None, Visa transfers",
+    "yoe": "2+ years"
+  },
+  {
+    "jobId": "90",
+    "title": "Product Engineer (Frontend Focus)",
+    "description": "Human risk management that works like magic",
+    "salary": "$175K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "React, Next.js, GraphQL, Django, Python, TypeScript, REST API, Slack",
+    "industry": "Cybersecurity, Security, Enterprise, AI, B2B",
+    "workplace": "Hybrid",
+    "roleType": "Product Engineer",
+    "equity": "Competitive",
+    "funding": "$31M",
+    "teamSize": "55",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 10 years"
+  },
+  {
+    "jobId": "91",
+    "title": "Product Engineer (Junior/Mid)",
+    "description": "The autonomous future of industrial labor",
+    "salary": "$140K - $200K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "TypeScript, JavaScript, React, NodeJS, Python, PostgreSQL, REST API",
+    "industry": "AI, Logistics, Marketplace, Manufacturing, Enterprise",
+    "workplace": "On-site",
+    "roleType": "Product Engineer, Full Stack Engineer",
+    "equity": "Competitive",
+    "funding": "$45.6m",
+    "teamSize": "75",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 5 years"
+  },
+  {
+    "jobId": "92",
+    "title": "Research Engineer",
+    "description": "Web data API for AI",
+    "salary": "$210K - $275K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, PyTorch",
+    "industry": "AI, Devtools, API SDK, Marketing, Data",
+    "workplace": "Hybrid",
+    "roleType": "Research Engineer",
+    "equity": "Competitive equity \u2014 details shared during the process.",
+    "funding": "$16.2M",
+    "teamSize": "39",
+    "visa": "None, Visa transfers",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "93",
+    "title": "Role",
+    "description": "One liner",
+    "salary": "Salary",
+    "locations": [
+      "Locations"
+    ],
+    "techStack": "Tech Stack",
+    "industry": "Industry",
+    "workplace": "Workplace",
+    "roleType": "Role Type",
+    "equity": "Equity",
+    "funding": "Funding",
+    "teamSize": "Team Size",
+    "visa": "Visa",
+    "yoe": "YOE"
+  },
+  {
+    "jobId": "94",
+    "title": "Scientific Implementation Associate",
+    "description": "AI-Platform for End-to-End product development",
+    "salary": "$75K - $85K",
+    "locations": [
+      "New York",
+      "UK"
+    ],
+    "techStack": "Python, Microsoft Excel",
+    "industry": "Software Development, B2B, Enterprise, Manufacturing, Life Sciences",
+    "workplace": "Hybrid",
+    "roleType": "Research Scientist & Applied Research, Operations & Strategy, Research Engineer",
+    "equity": "Competitive equity",
+    "funding": "$27M",
+    "teamSize": "130",
+    "visa": "None, Visa transfers",
+    "yoe": "0 - 1 years"
+  },
+  {
+    "jobId": "95",
+    "title": "Senior / Staff Backend Engineer - AI Agents Platform",
+    "description": "Leading AI solution for the community association management industry",
+    "salary": "$210K - $250K",
+    "locations": [
+      "South Bay Area"
+    ],
+    "techStack": "TypeScript, Next.js",
+    "industry": "AI, Real Estate, Software Development",
+    "workplace": "Hybrid",
+    "roleType": "Backend Engineer",
+    "equity": "Competitive equity in parent, Vantaca. Expected to take total annual comp to ~$350K - $450K and potentially higher for Staff level.",
+    "funding": "$350M",
+    "teamSize": "35",
+    "visa": "None, Visa transfers",
+    "yoe": "6+ years"
+  },
+  {
+    "jobId": "96",
+    "title": "Senior / Staff Backend Engineer - Payments",
+    "description": "Leading AI solution for the community association management industry",
+    "salary": "$210K - $260K",
+    "locations": [
+      "San Francisco",
+      "South Bay Area"
+    ],
+    "techStack": "Kotlin, Spring Boot, PostgreSQL, AWS, Stripe",
+    "industry": "Fintech, AI, Software Development, Real Estate, B2B",
+    "workplace": "Hybrid",
+    "roleType": "Backend Engineer",
+    "equity": "Competitive equity",
+    "funding": "$300M",
+    "teamSize": "375",
+    "visa": "None, Visa transfers",
+    "yoe": "6+ years"
+  },
+  {
+    "jobId": "97",
+    "title": "Senior / Staff Product Engineer",
+    "description": "For everything that happens after you deploy.",
+    "salary": "$200K - $400K",
+    "locations": [
+      "New York",
+      "San Francisco"
+    ],
+    "techStack": "TypeScript, React, PostgreSQL, NodeJS",
+    "industry": "Software Development, Devtools",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "Competitive equity",
+    "funding": "$20M",
+    "teamSize": "20",
+    "visa": "None, Visa transfers",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "98",
+    "title": "Senior AI Engineer \u2014 Agentic Systems",
+    "description": "Connecting you with dedicated health advocates who put you first and take charge of your healthcare journey",
+    "salary": "$180K - $220K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, AWS, PostgreSQL, TypeScript, Vector Database",
+    "industry": "Healthcare, AI",
+    "workplace": "On-site or Remote",
+    "roleType": "Backend Engineer, Full Stack Engineer",
+    "equity": "Competative Equity",
+    "funding": "$6.5M",
+    "teamSize": "9",
+    "visa": "None, Visa transfers",
+    "yoe": "1 - 10 years"
+  },
+  {
+    "jobId": "99",
+    "title": "Senior AI Product Manager",
+    "description": "AI-enabled personal training, covered by insurance.",
+    "salary": "$200K - $230K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "React, JavaScript, TypeScript, NodeJS, AWS, MySQL",
+    "industry": "Healthcare, Consumer, AI",
+    "workplace": "On-site",
+    "roleType": "Product Management, Product Engineer",
+    "equity": "0.2-0.5%",
+    "funding": "11200000",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "100",
+    "title": "Senior Backend Engineer",
+    "description": "AI agents for document OCR + workflows",
+    "salary": "$180K - $250K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, Kubernetes, Terraform, PostgreSQL, NodeJS, K8s, TypeScript, Docker",
+    "industry": "AI, Data, Devtools, Enterprise",
+    "workplace": "Hybrid",
+    "roleType": "Backend Engineer",
+    "equity": "0.08-0.15%",
+    "funding": "$27.5M",
+    "teamSize": "40",
+    "visa": "None, Visa transfers",
+    "yoe": "3 - 8 years"
+  },
+  {
+    "jobId": "101",
+    "title": "Senior Engineer, Platform",
+    "description": "Self-guided tours that actually work.",
+    "salary": "$180K - $220K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, TypeScript, FastAPI, Next.js, PostgreSQL, NodeJS, GCP, CI/CD, React, Salesforce",
+    "industry": "Real Estate, AI",
+    "workplace": "Hybrid",
+    "roleType": "Backend Engineer",
+    "equity": "Competitive equity",
+    "funding": "$2M",
+    "teamSize": "22",
+    "visa": "None",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "102",
+    "title": "Senior Forward-Deployed Engineer",
+    "description": "Self-guided tours that actually work.",
+    "salary": "$180K - $220K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "Python, FastAPI, REST API",
+    "industry": "Real Estate, AI",
+    "workplace": "Hybrid",
+    "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
+    "equity": "Competitive",
+    "funding": "$2M",
+    "teamSize": "22",
+    "visa": "None",
+    "yoe": "2 - 5 years"
+  },
+  {
+    "jobId": "8",
+    "title": "Senior Machine Learning Engineer, Recommendation",
+    "description": "Sekai is building the next TikTok for interactive content.",
+    "salary": "$160K - $250K",
+    "locations": [
+      "South Bay Area",
+      "San Francisco",
+      "Seattle"
+    ],
+    "techStack": "Python, TensorFlow, PyTorch",
+    "industry": "Software Development, Consumer, AI, Creator Economy",
+    "workplace": "Remote",
+    "roleType": "Machine Learning Engineer",
+    "equity": "Highly competitive equity",
+    "funding": "$30M",
+    "teamSize": "30",
+    "visa": "None, Visa transfers",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "103",
+    "title": "Senior Machine Learning Research Engineer",
+    "description": "The data layer for audio AI",
+    "salary": "$250K - $320K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Python, PyTorch",
+    "industry": "AI, Data, B2B",
+    "workplace": "On-site",
+    "roleType": "Machine Learning Engineer, AI / ML Researcher",
+    "equity": "Competitive equity",
+    "funding": "$80M",
+    "teamSize": "50",
+    "visa": "None, Visa transfers",
+    "yoe": "5 - 15 years"
+  },
+  {
+    "jobId": "104",
+    "title": "Senior Platform Engineer, Applied AI",
+    "description": "AfterQuery is a frontier data provider for foundational AI labs.",
+    "salary": "$250K - $350K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "NodeJS, Python, Kubernetes, Kafka, Redis, ElasticSearch, AWS, GCP",
+    "industry": "AI, Data",
+    "workplace": "On-site",
+    "roleType": "Infrastructure/DevOps/SRE",
+    "equity": "Competitive equity",
+    "funding": "$34M",
+    "teamSize": "40",
+    "visa": "None, Visa transfers",
+    "yoe": "6 - 10 years"
+  },
+  {
+    "jobId": "105",
+    "title": "Senior Product Engineer",
+    "description": "AI-enabled personal training, covered by insurance.",
+    "salary": "$200K - $230K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "JavaScript, TypeScript, React, NodeJS, AWS, MySQL",
+    "industry": "Healthcare, Consumer, AI",
+    "workplace": "Hybrid",
+    "roleType": "Product Engineer",
+    "equity": "0.2-0.5%",
+    "funding": "11200000",
+    "teamSize": "-",
+    "visa": "None",
+    "yoe": "3+ years"
+  },
+  {
+    "jobId": "106",
+    "title": "Senior Product Engineer",
+    "description": "The fastest way to run your GitHub Actions. Trusted by Ashby, Pylon, VEED, and 600+ others.",
+    "salary": "$200K - $300K",
+    "locations": [
+      "New York"
+    ],
+    "techStack": "React, TypeScript, Go, CI/CD",
+    "industry": "Software Development, Devtools, AI",
+    "workplace": "On-site",
+    "roleType": "Product Engineer",
+    "equity": "Competitive equity",
+    "funding": "$58.5",
+    "teamSize": "37",
+    "visa": "None",
+    "yoe": "5+ years"
+  },
+  {
+    "jobId": "107",
+    "title": "Senior Software Engineer",
+    "description": "AI platform that gives every employee full company context across 40+ enterprise apps \u2014 at 80% lower cost than generic AI tools.",
+    "salary": "$180K - $200K",
+    "locations": [
+      "San Francisco"
+    ],
+    "techStack": "Go, TypeScript, Python, Kubernetes, K8s",
+    "industry": "AI, Enterprise, B2B",
+    "workplace": "On-site",
+    "roleType": "Full Stack Engineer",
+    "equity": "Competitive equity: benchmarked via Carta at 80th-90th percentile of startup equity for the role/city/experience level",
+    "funding": "10",
+    "teamSize": "25",
+    "visa": "None",
+    "yoe": "4 - 8 years"
   }
 ]

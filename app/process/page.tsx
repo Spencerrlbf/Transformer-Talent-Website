@@ -32,8 +32,8 @@ export default function ProcessPage() {
             <div className="no">STAGE_02 · DAYS 0–2</div>
             <h4>Match</h4>
             <p>
-              The engine reads your JD against 419,000 profiles. I qualify
-              every surfaced candidate by hand — motivation, comp, timeline.
+              We match your JD against our network and qualify every
+              candidate by hand — motivation, comp, timeline.
             </p>
           </div>
           <div className="stage">
@@ -80,8 +80,8 @@ export default function ProcessPage() {
             <summary>How fast is “fast”?</summary>
             <p className="a">
               First shortlist within 48 hours of the brief. Most searches close
-              in 3–6 weeks. The matching engine removes the two slowest parts
-              of recruiting — finding and filtering — so time goes into what
+              in 3–6 weeks. Our tooling removes the two slowest parts of
+              recruiting — finding and filtering — so our time goes into what
               matters: qualifying and closing.
             </p>
           </details>
@@ -97,17 +97,17 @@ export default function ProcessPage() {
           <details>
             <summary>Where do candidates come from?</summary>
             <p className="a">
-              A 419,000-profile enriched network built over years of AI/ML
-              search, including 22,000+ engineers in active conversation with
-              us right now. Not job boards, not the same LinkedIn search your
+              A deep, enriched network built over years of AI/ML search,
+              including thousands of engineers in active conversation with us
+              right now. Not job boards, not the same LinkedIn search your
               last agency ran.
             </p>
           </details>
           <details>
             <summary>Who actually works my search?</summary>
             <p className="a">
-              Spencer. Every search, personally. No handoff to a junior
-              sourcer after the kickoff call.
+              A senior recruiter, end to end — led by Spencer. No handoff to
+              a junior sourcer after the kickoff call.
             </p>
           </details>
         </div>
@@ -117,16 +117,15 @@ export default function ProcessPage() {
         </div>
         <div className="bigcta">
           <h2>
-            Start with the <span>machine</span> or start with{" "}
-            <span>the human</span>.
+            Upload your <span>JD</span> — or book a <span>brief</span>.
           </h2>
           <p>
-            Paste a JD for instant anonymized matches, or book the 30-minute
+            See anonymized potential matches in seconds, or book a 30-minute
             brief and get a shortlist in 48 hours.
           </p>
           <div className="cta-row" style={{ justifyContent: "center" }}>
             <Link className="btn hot" href="/talent">
-              RUN MATCH →
+              SEE POTENTIAL MATCHES →
             </Link>
             <a
               className="btn cold"

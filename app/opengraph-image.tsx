@@ -38,12 +38,12 @@ export default function OpengraphImage() {
             flexDirection: "column",
           }}
         >
-          <span>Recruiting at</span>
-          <span>machine speed.</span>
-          <span style={{ color: "#FF5A1F" }}>Closed by a human.</span>
+          <span>We find the</span>
+          <span>engineers who</span>
+          <span style={{ color: "#FF5A1F" }}>build the future.</span>
         </div>
         <div style={{ fontSize: 24, color: "rgba(199,211,219,0.6)", marginTop: 36 }}>
-          419,595 profiles indexed · placements at Sequoia, 8VC &amp; Felicis-backed startups
+          AI/ML &amp; software engineering search · Sequoia, 8VC &amp; Felicis-backed startups
         </div>
       </div>
     ),

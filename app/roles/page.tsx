@@ -1,49 +1,54 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getRoles } from "@/lib/roles";
+import { getRoles, parseSalary } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Open Roles",
   description:
-    "Open AI/ML and software engineering roles at VC-backed startups — backend, full-stack, frontend, and forward-deployed engineering positions in SF and NYC.",
+    "All open AI/ML and software engineering roles we are hiring for at VC-backed startups across the US.",
 };
+
+export const revalidate = 3600;
 
 const POSTED = "2026-08-14";
 
 export default async function RolesPage() {
   const roles = await getRoles();
 
-  const jobPostingLd = roles.map((role) => ({
-    "@context": "https://schema.org",
-    "@type": "JobPosting",
-    title: role.title,
-    description: role.description,
-    datePosted: POSTED,
-    employmentType: "FULL_TIME",
-    hiringOrganization: {
-      "@type": "Organization",
-      name: "Confidential — via Transformer Talent",
-      sameAs: "https://transformertalent.com",
-    },
-    jobLocation: {
-      "@type": "Place",
-      address: {
-        "@type": "PostalAddress",
-        addressLocality: role.location,
-        addressCountry: "US",
+  const jobPostingLd = roles.slice(0, 100).map((role) => {
+    const band = parseSalary(role.salary);
+    return {
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: role.title,
+      description: role.description || role.title,
+      datePosted: POSTED,
+      employmentType: "FULL_TIME",
+      hiringOrganization: {
+        "@type": "Organization",
+        name: "Confidential — via Transformer Talent",
+        sameAs: "https://transformertalent.com",
       },
-    },
-    baseSalary: {
-      "@type": "MonetaryAmount",
-      currency: "USD",
-      value: {
-        "@type": "QuantitativeValue",
-        minValue: role.salaryMin,
-        maxValue: role.salaryMax,
-        unitText: "YEAR",
-      },
-    },
-  }));
+      jobLocation: (role.locations.length ? role.locations : ["USA"]).map((loc) => ({
+        "@type": "Place",
+        address: { "@type": "PostalAddress", addressLocality: loc, addressCountry: "US" },
+      })),
+      ...(band
+        ? {
+            baseSalary: {
+              "@type": "MonetaryAmount",
+              currency: "USD",
+              value: {
+                "@type": "QuantitativeValue",
+                minValue: band.min,
+                maxValue: band.max,
+                unitText: "YEAR",
+              },
+            },
+          }
+        : {}),
+    };
+  });
 
   return (
     <main className="page">
@@ -56,43 +61,47 @@ export default async function RolesPage() {
           Open <span>roles</span>
         </h1>
         <p className="page-intro b2">
-          Every role is with a VC-backed startup we work with directly. Apply
-          once — we match you against <b>everything</b> we&apos;re working on,
-          including roles that never get posted.
+          <b>{roles.length} live roles</b> with VC-backed startups we work with
+          directly. Apply once — we&apos;ll consider you for everything
+          we&apos;re working on, including roles that never get posted.
         </p>
-        <div className="match-grid b3">
-          {roles.map((role, i) => (
+        <div className="logs b3">
+          {roles.map((role) => (
             <Link
-              key={role.slug}
-              href={`/apply?role=${encodeURIComponent(role.title)}`}
-              className="match-card"
-              style={{ textDecoration: "none" }}
+              key={`${role.jobId}-${role.title}`}
+              href={`/apply?role=${encodeURIComponent(`${role.title} (#${role.jobId})`)}`}
+              className="log"
+              style={{ gridTemplateColumns: "70px 2fr 2fr 1fr" }}
             >
-              <div className="ref-row">
-                <span className="ref">ROLE_{String(i + 1).padStart(2, "0")}</span>
-                <span className="score">OPEN</span>
-              </div>
-              <h4>{role.title}</h4>
-              <div className="meta">
-                {role.location} · <span style={{ color: "var(--signal)" }}>{role.salary}</span>
-              </div>
-              <p className="prev">{role.description}</p>
-              <div className="tags">
-                {role.tags.map((tag) => (
-                  <span key={tag} className="tag">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              <span className="t">#{role.jobId}</span>
+              <span>
+                <span className="co" style={{ display: "block" }}>
+                  {role.title}
+                </span>
+                <span className="role" style={{ fontSize: "0.7rem" }}>
+                  {role.description}
+                </span>
+              </span>
+              <span className="role" style={{ fontSize: "0.72rem" }}>
+                {role.locations.join(" · ") || "USA"}
+                {role.workplace ? ` — ${role.workplace}` : ""}
+                {role.yoe ? ` · ${role.yoe}` : ""}
+              </span>
+              <span
+                className="t"
+                style={{ color: "var(--signal)", textAlign: "right", fontSize: "0.74rem" }}
+              >
+                {role.salary || "Comp on request"}
+              </span>
             </Link>
           ))}
         </div>
-        <p className="page-intro" style={{ marginTop: "2.6rem" }}>
+        <p className="page-intro" style={{ marginTop: "2.4rem" }}>
           No fit above?{" "}
           <Link href="/apply" style={{ color: "var(--signal)" }}>
-            Send your profile anyway
+            Send us your profile anyway
           </Link>{" "}
-          — most of our placements come from roles that never get posted.
+          — many of our placements come from roles that never get posted.
         </p>
       </div>
     </main>
