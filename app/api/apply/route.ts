@@ -64,10 +64,7 @@ export async function POST(req: NextRequest) {
   const name = clean(form.get("name"), 120);
   const email = clean(form.get("email"), 254).toLowerCase();
   const linkedin = clean(form.get("linkedin"), 300);
-  const location = clean(form.get("location"), 150);
   const visa = clean(form.get("visa"), 150);
-  const comp = clean(form.get("comp"), 150);
-  const availability = clean(form.get("availability"), 150);
   const note = clean(form.get("note"), 2000);
   const roleIds = clean(form.get("roleIds"), 500)
     .split(",")
@@ -122,10 +119,7 @@ export async function POST(req: NextRequest) {
       email,
       linkedin_url: linkedin,
       linkedin_username: linkedinUsername(linkedin),
-      location: location || null,
       visa_status: visa || null,
-      comp_expectation: comp || null,
-      availability: availability || null,
       role_ids: applied.map((r) => r.jobId),
       role_titles: roleTitles,
       resume_path: resumePath,

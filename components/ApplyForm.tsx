@@ -44,7 +44,7 @@ export default function ApplyForm({
     // Selected roles always visible at the top.
     const sel = roles.filter((r) => selected.includes(r.jobId));
     const rest = list.filter((r) => !selected.includes(r.jobId));
-    return [...sel, ...rest].slice(0, 12);
+    return [...sel, ...rest];
   }, [roles, roleQuery, selected]);
 
   function toggle(jobId: string) {
@@ -175,24 +175,20 @@ export default function ApplyForm({
         resume (PDF, optional but recommended)
         <input name="resume" type="file" accept="application/pdf" />
       </label>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.2rem" }}>
-        <label>
-          current_location
-          <input name="location" maxLength={150} placeholder="e.g. San Francisco" />
-        </label>
-        <label>
-          visa_status
-          <input name="visa" maxLength={150} placeholder="e.g. US citizen / H-1B transfer" />
-        </label>
-        <label>
-          comp_expectation
-          <input name="comp" maxLength={150} placeholder="e.g. $220k base" />
-        </label>
-        <label>
-          availability
-          <input name="availability" maxLength={150} placeholder="e.g. 4 weeks notice" />
-        </label>
-      </div>
+      <label>
+        visa_status
+        <select name="visa" defaultValue="">
+          <option value="" disabled>
+            select…
+          </option>
+          <option value="None needed (US citizen / green card)">None needed (US citizen / green card)</option>
+          <option value="H-1B">H-1B</option>
+          <option value="STEM OPT">STEM OPT</option>
+          <option value="TN">TN</option>
+          <option value="O-1">O-1</option>
+          <option value="Other">Other</option>
+        </select>
+      </label>
       <label>
         anything_else
         <textarea name="note" rows={3} maxLength={2000} />
