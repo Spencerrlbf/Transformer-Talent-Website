@@ -13,6 +13,7 @@ interface Match {
   engaged: boolean;
   applied?: boolean;
   score: number;
+  fit?: { strengths: string; verify: string } | null;
 }
 
 interface Result {
@@ -89,6 +90,14 @@ export default function TalentMatcher() {
                 )}
                 {m.education.length > 0 && (
                   <p className="prev">{m.education.join(" · ")}</p>
+                )}
+                {m.fit && (
+                  <p className="prev" style={{ marginTop: "0.4rem" }}>
+                    <span style={{ color: "var(--ok)" }}>✓ {m.fit.strengths}</span>
+                    {m.fit.verify && (
+                      <span style={{ color: "var(--fog-30)" }}> · verify: {m.fit.verify}</span>
+                    )}
+                  </p>
                 )}
                 {m.skills.length > 0 && (
                   <div className="tags">

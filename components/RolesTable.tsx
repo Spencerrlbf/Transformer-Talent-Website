@@ -13,6 +13,26 @@ function slugOf(role: Role): string {
   return `${base}-${role.jobId}`;
 }
 
+// comma = OR groups; space-separated terms = AND; -term excludes; "quoted phrase"
+function matchesQuery(hay: string, q: string): boolean {
+  const groups = q.toLowerCase().split(",").map((g) => g.trim()).filter(Boolean);
+  if (!groups.length) return true;
+  return groups.some((g) => {
+    const terms = g.match(/-?"[^"]+"|\S+/g) || [];
+    return terms.every((t) => {
+      const neg = t.startsWith("-");
+      const term = t.replace(/^-/, "").replace(/"/g, "").trim();
+      if (!term) return true;
+      const has = hay.includes(term);
+      return neg ? !has : has;
+    });
+  });
+}
+
+function visaBucket(r: Role): string {
+  return /transfer|sponsor/i.test(r.visa || "") ? "Visa transfers OK" : "No sponsorship";
+}
+
 function salaryMin(r: Role): number {
   const m = r.salary.toLowerCase().match(/(\d+(?:\.\d+)?)k/);
   return m ? parseFloat(m[1]) : 0;
@@ -39,6 +59,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
   const [loc, setLoc] = useState("");
   const [office, setOffice] = useState("");
   const [type, setType] = useState("");
+  const [visaF, setVisaF] = useState("");
   const [sort, setSort] = useState<SortKey>("id");
   const [dir, setDir] = useState<1 | -1>(1);
 
@@ -62,12 +83,14 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
       if (loc && !r.locations.includes(loc)) return false;
       if (office && r.workplace !== office) return false;
       if (type && !r.roleType.toLowerCase().includes(type.toLowerCase())) return false;
+      if (visaF && visaBucket(r) !== visaF) return false;
       if (needle) {
         const hay = [
           r.jobId, r.title, r.description, r.techStack, r.industry,
           r.roleType, r.locations.join(" "), r.company?.blurb || "",
+          r.jd?.about || "", (r.jd?.needs || []).join(" "),
         ].join(" ").toLowerCase();
-        if (!hay.includes(needle)) return false;
+        if (!matchesQuery(hay, needle)) return false;
       }
       return true;
     });
@@ -80,7 +103,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
       salary: (a, b) => salaryMin(a) - salaryMin(b),
     };
     return out.sort((a, b) => cmp[sort](a, b) * dir);
-  }, [roles, q, loc, office, type, sort, dir]);
+  }, [roles, q, loc, office, type, visaF, sort, dir]);
 
   function clickSort(k: SortKey) {
     if (k === sort) setDir((d) => (d === 1 ? -1 : 1));
@@ -113,7 +136,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="search roles, stacks, industries…"
+          placeholder='search: python, go -java · "machine learning" · comma = OR, minus = exclude' 
           style={{ ...selStyle, flex: "1 1 220px" }}
           aria-label="Search roles"
         />
@@ -134,6 +157,11 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
           {types.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
+        </select>
+        <select value={visaF} onChange={(e) => setVisaF(e.target.value)} style={selStyle} aria-label="Filter by visa">
+          <option value="">any visa status</option>
+          <option value="Visa transfers OK">Visa transfers OK</option>
+          <option value="No sponsorship">No sponsorship</option>
         </select>
       </div>
 

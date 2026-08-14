@@ -1,0 +1,2219 @@
+{
+ "3": {
+  "must_haves": [
+   "7-15 years of experience in machine learning and data science",
+   "Proficiency in Python and PostgreSQL",
+   "Experience with AWS for deploying machine learning models",
+   "Demonstrated leadership experience managing a team of data scientists"
+  ],
+  "nice_to_haves": [
+   "Experience in fraud detection or identity verification",
+   "Familiarity with real-time data processing",
+   "Knowledge of advanced machine learning techniques",
+   "Experience in mentoring and coaching team members"
+  ],
+  "screening_questions": [
+   "Do you have 7-15 years of experience in machine learning and data science?",
+   "Are you proficient in Python and PostgreSQL?",
+   "Have you managed a team of data scientists before?",
+   "Do you have experience deploying machine learning models using AWS?"
+  ],
+  "min_years": 7,
+  "visa_transfer_ok": true,
+  "onsite_city": null
+ },
+ "4": {
+  "must_haves": [
+   "5+ years of software engineering experience with strong backend depth in Go or Python",
+   "Hands-on applied machine learning experience on large datasets using PyTorch or scikit-learn",
+   "Strong SQL skills across relational and non-relational databases",
+   "End-to-end machine learning system experience including feature pipelines, deployment, and monitoring"
+  ],
+  "nice_to_haves": [
+   "Experience in fraud, risk, or cybersecurity domains",
+   "Fluency in CI/CD, Docker, and Kubernetes",
+   "Familiarity with modern browser APIs and high-entropy data collection",
+   "Experience using frontier LLMs for automation"
+  ],
+  "screening_questions": [
+   "Do you have 5 or more years of software engineering experience with a focus on backend development in Go or Python?",
+   "Have you worked with large datasets using PyTorch or scikit-learn for applied machine learning?",
+   "Are you proficient in SQL across both relational and non-relational databases?",
+   "Do you have experience with end-to-end machine learning systems, including feature pipelines and deployment?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": false,
+  "onsite_city": null
+ },
+ "5": {
+  "must_haves": [
+   "3+ years of experience in distributed systems in production",
+   "Proficiency in Kubernetes for container orchestration",
+   "Experience with message-driven architectures like SQS and Kafka",
+   "Demonstrated experience running LLM workloads at scale"
+  ],
+  "nice_to_haves": [
+   "Familiarity with agent-based systems",
+   "Experience in designing evaluation tasks for AI agents",
+   "Knowledge of performance tuning in distributed environments",
+   "Background in DevOps practices"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in distributed systems in production?",
+   "Have you worked with Kubernetes for container orchestration?",
+   "Do you have experience with message-driven architectures such as SQS or Kafka?",
+   "Have you run LLM workloads at scale in your previous roles?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": null
+ },
+ "6": {
+  "must_haves": [
+   "2+ years of experience building production ML systems",
+   "Experience with scalable-infrastructure design from scratch",
+   "Proven track record optimizing for latency, throughput, and cost",
+   "Fluency in ML-infrastructure including inference and real-time streaming"
+  ],
+  "nice_to_haves": [
+   "Experience with video or audio models",
+   "CUDA kernel-level optimization",
+   "Familiarity with Kubernetes and Terraform",
+   "Experience with PyTorch and TensorRT-LLM"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience building production ML systems?",
+   "Have you designed scalable infrastructure from scratch?",
+   "Do you have a track record of optimizing for latency and throughput?",
+   "Are you fluent in ML-infrastructure concepts such as inference and real-time streaming?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "Seattle"
+ },
+ "7": {
+  "must_haves": [
+   "PhD in a relevant field (AI, ML, Computer Science)",
+   "Experience with reinforcement learning (RL) frameworks",
+   "Proficiency in Python and PyTorch",
+   "Familiarity with distributed training infrastructure"
+  ],
+  "nice_to_haves": [
+   "Experience with real-time interaction systems",
+   "Knowledge of evaluation metrics for RL",
+   "Familiarity with audio and video processing",
+   "Experience in building production-scale ML systems"
+  ],
+  "screening_questions": [
+   "Do you have a PhD in a relevant field?",
+   "Have you worked with reinforcement learning frameworks?",
+   "Are you proficient in Python and PyTorch?",
+   "Do you have experience with distributed training infrastructure?"
+  ],
+  "min_years": 0,
+  "visa_transfer_ok": true,
+  "onsite_city": "Seattle"
+ },
+ "8": {
+  "must_haves": [
+   "5+ years of experience in machine learning engineering",
+   "Deep experience with recommendation systems",
+   "Proficiency in Python",
+   "Experience with TensorFlow or PyTorch in production"
+  ],
+  "nice_to_haves": [
+   "Experience with large-scale user engagement systems",
+   "Familiarity with AI-generated content",
+   "Knowledge of ranking algorithms",
+   "Experience in a consumer-facing product environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of experience in machine learning engineering?",
+   "Have you worked specifically on recommendation systems?",
+   "Are you proficient in Python?",
+   "Do you have experience using TensorFlow or PyTorch in a production environment?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": null
+ },
+ "16": {
+  "must_haves": [
+   "4+ years of software engineering experience",
+   "Deep expertise in TypeScript for backend development",
+   "Experience with production-grade infrastructure",
+   "Familiarity with browser automation and state management"
+  ],
+  "nice_to_haves": [
+   "Experience with Temporal for workflow orchestration",
+   "Knowledge of healthcare systems and EMRs",
+   "Proficiency in additional languages like Go or Java",
+   "Experience in fast-moving environments"
+  ],
+  "screening_questions": [
+   "Do you have at least 4 years of software engineering experience?",
+   "Do you have deep expertise in TypeScript for backend development?",
+   "Have you worked with production-grade infrastructure in your previous roles?",
+   "Are you familiar with browser automation and state management?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "17": {
+  "must_haves": [
+   "8-15 years of experience in AI engineering or machine learning",
+   "Proficiency in Python and experience with TensorFlow or PyTorch in production",
+   "Experience with LLM application development including agents and RAG",
+   "Demonstrated ability to run the full model lifecycle from modeling to deployment"
+  ],
+  "nice_to_haves": [
+   "Experience in the automotive industry",
+   "Familiarity with intelligent diagnostics and automation",
+   "Knowledge of data engineering practices",
+   "Experience working with cross-functional teams"
+  ],
+  "screening_questions": [
+   "Do you have 8-15 years of experience in AI engineering or machine learning?",
+   "Have you worked with Python and used TensorFlow or PyTorch in a production environment?",
+   "Do you have experience with LLM application development, including agents and RAG?",
+   "Have you managed the full model lifecycle from modeling to deployment in your previous roles?"
+  ],
+  "min_years": 8,
+  "visa_transfer_ok": true,
+  "onsite_city": "South Bay Area"
+ },
+ "18": {
+  "must_haves": [
+   "5-8 years of experience in machine learning engineering",
+   "Hands-on experience with LLM systems",
+   "Proficiency in Python and FastAPI",
+   "Experience with PostgreSQL and vector databases"
+  ],
+  "nice_to_haves": [
+   "Experience with Langfuse and Promptfoo",
+   "Background in consumer-facing AI products",
+   "Familiarity with model fine-tuning techniques",
+   "Experience in early-stage startup environments"
+  ],
+  "screening_questions": [
+   "Do you have 5-8 years of experience in machine learning engineering?",
+   "Have you worked hands-on with LLM systems from prompt architecture to production serving?",
+   "Are you proficient in Python and FastAPI?",
+   "Do you have experience with PostgreSQL and vector databases?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "19": {
+  "must_haves": [
+   "3+ years in customer-facing engineering roles (FDE, solutions, implementation)",
+   "Proven experience in multi-deployment project management",
+   "Fluency in AI tools and automation",
+   "Proficiency in Python or TypeScript, APIs, and data flows"
+  ],
+  "nice_to_haves": [
+   "Experience in early-stage startups",
+   "Familiarity with the commodities industry",
+   "Strong communication and training skills",
+   "Ability to travel up to 30% for enterprise accounts"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in customer-facing engineering roles?",
+   "Have you managed multiple deployment projects simultaneously?",
+   "Are you fluent in using AI tools to automate your work?",
+   "Do you have proficiency in Python or TypeScript?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "20": {
+  "must_haves": [
+   "1-5 years of experience in strategy consulting, business operations, applied-AI deployment, or professional services",
+   "Genuine daily AI fluency for prototyping and automation",
+   "Comfort with structured data formats such as CSV/JSON, field mappings, and APIs",
+   "Willingness to work in San Francisco 4 days a week"
+  ],
+  "nice_to_haves": [
+   "Experience with Python and TypeScript",
+   "Familiarity with deployment processes and project management",
+   "Background in working with Fortune 500 companies",
+   "Experience in building internal tools or playbooks"
+  ],
+  "screening_questions": [
+   "Do you have 1-5 years of experience in strategy consulting, business operations, applied-AI deployment, or professional services?",
+   "Are you fluent in AI concepts and have experience with prototyping and automation?",
+   "Do you have experience working with structured data formats like CSV/JSON and APIs?",
+   "Are you willing to work in San Francisco 4 days a week?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "21": {
+  "must_haves": [
+   "3+ years of experience as a product-minded full-stack engineer",
+   "Proficiency in Python and TypeScript",
+   "Experience in building clinical or healthcare-related software",
+   "Understanding of AI applications in regulated domains"
+  ],
+  "nice_to_haves": [
+   "Experience with human-in-the-loop systems",
+   "Familiarity with context management and orchestration in software",
+   "Background in chronic disease management",
+   "Experience in prototyping and productionizing AI solutions"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience as a product-minded full-stack engineer?",
+   "Are you proficient in both Python and TypeScript?",
+   "Have you worked on clinical or healthcare-related software before?",
+   "Do you have experience with AI applications in regulated domains?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "22": {
+  "must_haves": [
+   "1-4 years of engineering experience",
+   "Proficiency in TypeScript",
+   "Experience with React",
+   "Experience with Next.js"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or machine learning",
+   "Familiarity with e-commerce platforms",
+   "Experience in a startup environment",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have 1-4 years of engineering experience?",
+   "Are you proficient in TypeScript?",
+   "Have you worked with React in your previous roles?",
+   "Do you have experience with Next.js?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "23": {
+  "must_haves": [
+   "3+ years of backend engineering experience",
+   "Experience with AWS and Terraform",
+   "Proficiency in Python and Django",
+   "Experience with Kafka or Spark"
+  ],
+  "nice_to_haves": [
+   "Experience with Kubernetes",
+   "Knowledge of PostgreSQL",
+   "Experience with ETL/data pipelines",
+   "Familiarity with distributed systems"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of backend engineering experience?",
+   "Have you worked with AWS and Terraform in a production environment?",
+   "Are you proficient in Python and Django?",
+   "Do you have experience with Kafka or Spark?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "24": {
+  "must_haves": [
+   "3-6 years of backend engineering experience",
+   "Experience with AWS infrastructure",
+   "Proficiency in Terraform and Kubernetes",
+   "Experience with multi-tenant architecture"
+  ],
+  "nice_to_haves": [
+   "Familiarity with Docker",
+   "Experience with Python or TypeScript",
+   "Knowledge of GCP",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-6 years of backend engineering experience?",
+   "Have you worked with AWS infrastructure in your previous roles?",
+   "Are you proficient in using Terraform and Kubernetes?",
+   "Do you have experience designing multi-tenant architectures?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "25": {
+  "must_haves": [
+   "3+ years of experience in backend engineering or infrastructure roles",
+   "Production-scale experience with proxy infrastructure or anti-bot evasion",
+   "Proficiency in at least one of the following programming languages: Go, Python, TypeScript, or NodeJS",
+   "Experience with cloud services such as AWS and container orchestration tools like Kubernetes"
+  ],
+  "nice_to_haves": [
+   "Familiarity with CI/CD practices",
+   "Experience with monitoring tools like Prometheus and Grafana",
+   "Knowledge of database systems, particularly PostgreSQL",
+   "Experience in working with high-volume data extraction projects"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in backend engineering or infrastructure roles?",
+   "Have you worked on production-scale proxy infrastructure or anti-bot evasion projects?",
+   "Are you proficient in at least one of the following programming languages: Go, Python, TypeScript, or NodeJS?",
+   "Do you have experience with AWS and Kubernetes?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "26": {
+  "must_haves": [
+   "5-8 years of experience in data engineering",
+   "Proficiency in Python",
+   "Experience with Git",
+   "Demonstrated ownership of end-to-end data pipelines"
+  ],
+  "nice_to_haves": [
+   "Experience in the insurance industry",
+   "Familiarity with AI and machine learning concepts",
+   "Customer-facing experience",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 5-8 years of experience in data engineering?",
+   "Are you proficient in Python?",
+   "Have you worked with Git in your previous roles?",
+   "Have you owned end-to-end data pipelines from raw source to production?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "27": {
+  "must_haves": [
+   "1-4 years of experience in sales or customer-facing roles",
+   "Experience with enterprise sales cycles and closing six-figure contracts",
+   "Ability to explain technical AI concepts to executives",
+   "Willingness to travel 4-5 days a month for conferences and meetings"
+  ],
+  "nice_to_haves": [
+   "Familiarity with Salesforce and Zendesk",
+   "Experience working in a startup environment",
+   "Background in AI or technology sales",
+   "Strong networking skills with Fortune 500 executives"
+  ],
+  "screening_questions": [
+   "Do you have 1-4 years of experience in sales or customer-facing roles?",
+   "Have you successfully closed six-figure contracts in your previous roles?",
+   "Are you comfortable explaining technical AI concepts to executives?",
+   "Are you willing to travel 4-5 days a month for work?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "28": {
+  "must_haves": [
+   "4-8 years in technical account management or program management",
+   "Strong technical depth in SQL and cloud platforms (AWS, GCP, Azure)",
+   "Experience building onboarding programs from scratch",
+   "Ability to manage relationships with senior stakeholders"
+  ],
+  "nice_to_haves": [
+   "Experience in the insurance or financial services industry",
+   "Familiarity with data integration processes",
+   "Project management certification (e.g., PMP)",
+   "Experience with change management strategies"
+  ],
+  "screening_questions": [
+   "Do you have 4-8 years of experience in technical account management or program management?",
+   "Have you built an onboarding program from scratch in your previous roles?",
+   "Do you have strong technical skills in SQL and experience with cloud platforms like AWS, GCP, or Azure?",
+   "Have you managed relationships with senior stakeholders in your past positions?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "29": {
+  "must_haves": [
+   "1-4 years of experience in customer-facing sales, deployment, or strategy roles",
+   "Proven ability to explain technical AI concepts to executives",
+   "Experience in sourcing and booking meetings with high-level executives",
+   "Comfortable with high travel requirements (4-5 days/month)"
+  ],
+  "nice_to_haves": [
+   "Experience with Salesforce and Zendesk",
+   "Background in AI or technology sales",
+   "Familiarity with enterprise-level contract negotiations",
+   "Experience attending industry conferences"
+  ],
+  "screening_questions": [
+   "Do you have 1-4 years of experience in customer-facing sales, deployment, or strategy roles?",
+   "Have you previously explained technical AI concepts to executives?",
+   "Are you comfortable with high travel requirements (4-5 days/month)?",
+   "Have you sourced and booked meetings with high-level executives in your past roles?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "30": {
+  "must_haves": [
+   "1-5 years of experience as a full-stack engineer",
+   "Proficiency in AWS technologies",
+   "Experience in client-facing roles",
+   "Ability to work on end-to-end project delivery"
+  ],
+  "nice_to_haves": [
+   "Experience with AI-native tooling",
+   "Familiarity with government projects",
+   "Strong communication skills",
+   "Willingness to travel occasionally"
+  ],
+  "screening_questions": [
+   "Do you have 1-5 years of experience as a full-stack engineer?",
+   "Are you proficient in AWS technologies?",
+   "Have you worked in a client-facing role before?",
+   "Do you have experience in delivering end-to-end projects?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "31": {
+  "must_haves": [
+   "5+ years of experience in data engineering or related field",
+   "Proficiency in Snowflake and AWS",
+   "Experience with Python and Docker",
+   "Familiarity with CI/CD processes and tools"
+  ],
+  "nice_to_haves": [
+   "Experience with Databricks",
+   "Strong customer-facing skills",
+   "Ability to design workflow blueprints",
+   "Experience in pre-sales technical support"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of experience in data engineering or a related field?",
+   "Are you proficient in using Snowflake and AWS?",
+   "Have you worked with Python and Docker in a professional setting?",
+   "Do you have experience with CI/CD processes and tools?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "32": {
+  "must_haves": [
+   "2+ years of experience in software development",
+   "Proficiency in Python and TypeScript",
+   "Experience with AI systems and data workflows",
+   "Ability to work in ambiguous environments without clear specifications"
+  ],
+  "nice_to_haves": [
+   "Experience with C/C++ or Java",
+   "Familiarity with operational tools",
+   "Previous experience in a forward-deployed engineering role",
+   "Strong communication skills with executives and frontline users"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience in software development?",
+   "Are you proficient in Python and TypeScript?",
+   "Have you worked with AI systems or data workflows in a production environment?",
+   "Are you comfortable working in ambiguous situations without a clear roadmap?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": null
+ },
+ "33": {
+  "must_haves": [
+   "Experience with TypeScript",
+   "Experience with React",
+   "Experience with PostgreSQL",
+   "Experience with Python",
+   "Experience with AWS"
+  ],
+  "nice_to_haves": [
+   "Familiarity with Next.js",
+   "Experience with Azure",
+   "Experience in financial services",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have experience with TypeScript?",
+   "Have you worked with React in a professional setting?",
+   "Do you have experience using PostgreSQL?",
+   "Have you developed applications using Python?",
+   "Are you familiar with AWS services?"
+  ],
+  "min_years": 0,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "34": {
+  "must_haves": [
+   "2-8 years of experience in full-stack development",
+   "Proficiency in React, Next.js, TypeScript, Python, and NodeJS",
+   "Experience working in customer-facing roles, particularly in technical environments",
+   "US work authorization suitable for government environments"
+  ],
+  "nice_to_haves": [
+   "Experience with AI technologies",
+   "Familiarity with military or defense environments",
+   "Strong problem-solving skills",
+   "Ability to travel frequently for work"
+  ],
+  "screening_questions": [
+   "Do you have 2-8 years of experience in full-stack development?",
+   "Are you proficient in React, Next.js, TypeScript, Python, and NodeJS?",
+   "Have you worked in a customer-facing technical role before?",
+   "Do you have US work authorization suitable for government environments?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": null
+ },
+ "35": {
+  "must_haves": [
+   "3-6 years of experience deploying production software",
+   "Proficiency in Python",
+   "Experience with REST APIs",
+   "Ability to work with Bash and infrastructure"
+  ],
+  "nice_to_haves": [
+   "Experience with enterprise or regulated customers",
+   "Background in technical sales or pre-sales evaluations",
+   "Familiarity with diagnostics and performance tracking",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-6 years of experience deploying production software?",
+   "Are you proficient in Python?",
+   "Have you worked with REST APIs in your previous roles?",
+   "Do you have experience with Bash and infrastructure?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "36": {
+  "must_haves": [
+   "4-6 years of experience in a customer-facing engineering role",
+   "Proficiency in Python and JavaScript",
+   "Experience with AI deployment and monitoring",
+   "Ability to manage the full lifecycle of software projects"
+  ],
+  "nice_to_haves": [
+   "Experience in healthcare technology",
+   "Familiarity with agentic pipelines",
+   "Background in recruiting automation",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have 4-6 years of experience in a customer-facing engineering role?",
+   "Are you proficient in both Python and JavaScript?",
+   "Have you worked on AI deployment and monitoring in a production environment?",
+   "Can you manage the full lifecycle of software projects from onboarding to production?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "37": {
+  "must_haves": [
+   "1-5 years of experience as a full-stack engineer",
+   "Proficiency in AWS",
+   "Experience in client-facing roles",
+   "Ability to work on end-to-end project delivery"
+  ],
+  "nice_to_haves": [
+   "Experience with AI-native tooling",
+   "Familiarity with government projects",
+   "Strong communication skills",
+   "Willingness to travel occasionally"
+  ],
+  "screening_questions": [
+   "Do you have 1-5 years of experience as a full-stack engineer?",
+   "Are you proficient in AWS?",
+   "Have you worked in a client-facing role before?",
+   "Do you have experience with end-to-end project delivery?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "38": {
+  "must_haves": [
+   "3-6 years of full-stack development experience",
+   "Proficiency in TypeScript or Python, React, and SQL",
+   "Experience shipping production LLM/agentic systems",
+   "Background in embedded or customer-facing engineering"
+  ],
+  "nice_to_haves": [
+   "Experience with Snowflake",
+   "Familiarity with Go programming language",
+   "Strong understanding of P&L and business translation",
+   "Experience in a hybrid work environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-6 years of full-stack development experience?",
+   "Have you worked with TypeScript or Python, React, and SQL in a production environment?",
+   "Have you shipped production LLM/agentic systems?",
+   "Do you have experience in an embedded or customer-facing engineering role?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "39": {
+  "must_haves": [
+   "2-8 years of experience in software engineering and machine learning",
+   "Proficiency in Python programming",
+   "Experience with multimodal machine learning and computer vision",
+   "Ability to work autonomously and generate own research experiments"
+  ],
+  "nice_to_haves": [
+   "Experience in the housing or construction industry",
+   "Familiarity with high-autonomy AI systems",
+   "Background in user research or user experience",
+   "Experience with building internal experimentation tools"
+  ],
+  "screening_questions": [
+   "Do you have 2-8 years of experience in software engineering and machine learning?",
+   "Are you proficient in Python programming?",
+   "Have you worked with multimodal machine learning and computer vision?",
+   "Do you have experience generating your own research experiments autonomously?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "40": {
+  "must_haves": [
+   "2+ years of experience in software engineering",
+   "Proficiency in Python",
+   "Proficiency in TypeScript",
+   "Proficiency in React",
+   "Experience working directly with customers in a technical capacity"
+  ],
+  "nice_to_haves": [
+   "Experience in supply chain or procurement domains",
+   "Familiarity with AI technologies",
+   "Experience in a startup environment",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience in software engineering?",
+   "Are you proficient in Python?",
+   "Do you have experience working directly with customers in a technical capacity?",
+   "Have you worked with TypeScript and React in your previous roles?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "41": {
+  "must_haves": [
+   "5+ years of full-stack development experience",
+   "Experience shipping products end-to-end at early-stage startups",
+   "Real-world experience with LLM products in production",
+   "Proficiency in CI/CD processes"
+  ],
+  "nice_to_haves": [
+   "Experience in the freight or logistics industry",
+   "Familiarity with agentic workflows",
+   "Strong understanding of fraud prevention systems",
+   "Experience working in a hybrid work environment"
+  ],
+  "screening_questions": [
+   "Do you have 5 or more years of full-stack development experience?",
+   "Have you shipped products end-to-end at an early-stage startup?",
+   "Do you have real-world experience with LLM products in production?",
+   "Are you proficient in CI/CD processes?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "42": {
+  "must_haves": [
+   "1.5-7 years of experience as an applied-AI engineer",
+   "Proficiency in Python and PostgreSQL",
+   "Experience with React and JavaScript",
+   "Familiarity with AWS and Kubernetes"
+  ],
+  "nice_to_haves": [
+   "Experience in building AI-driven applications",
+   "Knowledge of MCP design and generation",
+   "Background in working with vertical software partners",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 1.5 years of experience as an applied-AI engineer?",
+   "Are you proficient in Python and PostgreSQL?",
+   "Have you worked with React and JavaScript in your previous roles?",
+   "Do you have experience with AWS and Kubernetes?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "43": {
+  "must_haves": [
+   "3+ years of experience in full-stack development",
+   "Proficiency in Python and TypeScript",
+   "Experience with cloud platforms (AWS, GCP, Azure)",
+   "Comfortable working in operational healthcare settings"
+  ],
+  "nice_to_haves": [
+   "Experience with AI and machine learning",
+   "Familiarity with multi-modal AI systems",
+   "Background in healthcare technology",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in full-stack development?",
+   "Are you proficient in both Python and TypeScript?",
+   "Have you worked with cloud platforms such as AWS, GCP, or Azure?",
+   "Do you have experience working in operational healthcare settings?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "44": {
+  "must_haves": [
+   "2+ years of product engineering experience",
+   "Proficiency in TypeScript",
+   "Experience with Node.js",
+   "Ability to work in a fast-paced early-stage environment"
+  ],
+  "nice_to_haves": [
+   "Experience with GCP",
+   "Familiarity with MongoDB",
+   "Previous startup experience",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of product engineering experience?",
+   "Are you proficient in TypeScript?",
+   "Do you have experience working with Node.js?",
+   "Have you worked in a fast-paced early-stage environment before?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "South Bay Area"
+ },
+ "45": {
+  "must_haves": [
+   "5-10 years of experience as a full-stack engineer",
+   "Proficiency in TypeScript, Python, React, PostgreSQL",
+   "Experience in building backend features",
+   "Demonstrated ownership of projects from design to implementation"
+  ],
+  "nice_to_haves": [
+   "Experience with AI-powered applications",
+   "Familiarity with fintech industry",
+   "Background in B2B software solutions",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 5-10 years of experience as a full-stack engineer?",
+   "Are you proficient in TypeScript, Python, and React?",
+   "Have you built backend features for applications in your previous roles?",
+   "Have you taken ownership of projects from design through implementation?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "46": {
+  "must_haves": [
+   "3-5 years of experience in software development",
+   "Proficiency in TypeScript",
+   "Experience building REST APIs",
+   "Track record of 0-to-1 project development",
+   "Strong documentation habits"
+  ],
+  "nice_to_haves": [
+   "Experience in big tech companies",
+   "Founding or co-founding experience",
+   "Familiarity with IMAP integration",
+   "Experience with usage-based pricing models"
+  ],
+  "screening_questions": [
+   "Do you have 3-5 years of experience in software development?",
+   "Are you proficient in TypeScript?",
+   "Have you built REST APIs in your previous roles?",
+   "Do you have a track record of developing projects from 0-to-1?",
+   "Do you have strong documentation habits?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "47": {
+  "must_haves": [
+   "3-5 years of full-stack engineering experience",
+   "Proficiency in TypeScript and Python",
+   "Experience with Next.js and PostgreSQL",
+   "Familiarity with AWS and Kubernetes"
+  ],
+  "nice_to_haves": [
+   "Experience in defense or government contracting",
+   "Knowledge of Grafana",
+   "Previous startup experience",
+   "Strong communication skills"
+  ],
+  "screening_questions": [
+   "Do you have 3-5 years of full-stack engineering experience?",
+   "Are you proficient in TypeScript and Python?",
+   "Have you worked with Next.js and PostgreSQL in your previous roles?",
+   "Do you have experience with AWS and Kubernetes?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "49": {
+  "must_haves": [
+   "3+ years of experience in backend data infrastructure",
+   "Experience with Python and TypeScript",
+   "Familiarity with cloud platforms like GCP",
+   "Ability to work in ambiguous, fast-moving environments"
+  ],
+  "nice_to_haves": [
+   "Experience with Next.js",
+   "Knowledge of Terraform",
+   "Familiarity with Go or Rust",
+   "Previous startup experience"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in backend data infrastructure?",
+   "Have you worked with Python and TypeScript in a professional setting?",
+   "Are you comfortable working in fast-moving and ambiguous environments?",
+   "Do you have experience with cloud platforms like GCP?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "50": {
+  "must_haves": [
+   "1-5 years of full-stack engineering experience",
+   "Proficiency in Python and React",
+   "Experience with AWS and Terraform",
+   "Demonstrated ability to work in a small team environment"
+  ],
+  "nice_to_haves": [
+   "Experience with applied psychology or LLMs",
+   "Familiarity with black-box interpretability techniques",
+   "Previous startup experience",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have 1-5 years of full-stack engineering experience?",
+   "Are you proficient in both Python and React?",
+   "Have you worked with AWS and Terraform in your previous roles?",
+   "Do you have experience working in a small team environment?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "51": {
+  "must_haves": [
+   "3+ years of experience in infrastructure/platform roles at high-growth startups",
+   "Experience with AWS, Azure, or GCP",
+   "Proficiency in Kubernetes and Docker",
+   "Demonstrated ability to architect scalable infrastructure solutions"
+  ],
+  "nice_to_haves": [
+   "Experience with TypeScript",
+   "Previous experience in a founding engineer role",
+   "Knowledge of self-healing systems",
+   "Experience in team leadership or recruitment"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in infrastructure or platform roles?",
+   "Have you worked with AWS, Azure, or GCP in a production environment?",
+   "Are you proficient in using Kubernetes and Docker?",
+   "Have you architected scalable infrastructure solutions in your previous roles?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "52": {
+  "must_haves": [
+   "3-5 years of applied/deployment engineering experience",
+   "Experience working directly with C-level executives",
+   "Strong understanding of platform thinking and productization",
+   "Proven ability to build AI workflows from scratch"
+  ],
+  "nice_to_haves": [
+   "Experience in vertical-SaaS businesses",
+   "Familiarity with AI strategy development",
+   "Background in software architecture",
+   "Experience in a founding or startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-5 years of applied or deployment engineering experience?",
+   "Have you worked directly with C-level executives in your previous roles?",
+   "Do you have experience in building AI workflows from scratch?",
+   "Are you comfortable with platform thinking and productizing solutions?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "53": {
+  "must_haves": [
+   "2-7 years of experience in a technical engineering role",
+   "Proficiency in Python and FastAPI",
+   "Experience with data integration (data warehouses, CRMs, SSO)",
+   "Familiarity with CI/CD processes"
+  ],
+  "nice_to_haves": [
+   "Experience with React",
+   "Knowledge of PostgreSQL",
+   "Previous experience in a customer-facing role",
+   "Familiarity with Salesforce"
+  ],
+  "screening_questions": [
+   "Do you have 2-7 years of experience in a technical engineering role?",
+   "Are you proficient in Python and FastAPI?",
+   "Have you worked with data integration involving data warehouses, CRMs, or SSO?",
+   "Do you have experience with CI/CD processes?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "54": {
+  "must_haves": [
+   "3-5 years of applied/deployment engineering experience",
+   "Experience working directly with C-level executives",
+   "Proven ability to build AI workflows from scratch",
+   "Strong understanding of deployment lifecycles from 0-to-1"
+  ],
+  "nice_to_haves": [
+   "Experience in vertical-SaaS businesses",
+   "Familiarity with AI strategy development",
+   "Background in building shared platforms",
+   "Experience in a founding or startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-5 years of applied/deployment engineering experience?",
+   "Have you worked directly with C-level executives in your previous roles?",
+   "Have you built AI workflows from scratch in your past positions?",
+   "Do you have experience managing deployment lifecycles from 0-to-1?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "55": {
+  "must_haves": [
+   "3+ years of experience with TypeScript",
+   "3+ years of experience with React",
+   "3+ years of experience with Python",
+   "Experience building complete products from start to finish"
+  ],
+  "nice_to_haves": [
+   "Familiarity with AWS",
+   "Experience with Django",
+   "Experience with FastAPI",
+   "Background in AI/LLM integration"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience with TypeScript?",
+   "Do you have at least 3 years of experience with React?",
+   "Do you have at least 3 years of experience with Python?",
+   "Have you built complete products from start to finish?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "56": {
+  "must_haves": [
+   "2-5 years of full-stack engineering experience",
+   "Experience with real-time video streaming or video pipelines",
+   "Proficiency in TypeScript, Python, React, and NodeJS",
+   "Experience with scalable architecture and backend APIs"
+  ],
+  "nice_to_haves": [
+   "Experience with AWS and GCP",
+   "Familiarity with PostgreSQL and Redis",
+   "Experience in building mobile/desktop clients",
+   "Background in industrial applications"
+  ],
+  "screening_questions": [
+   "Do you have 2-5 years of full-stack engineering experience?",
+   "Have you worked with real-time video streaming or video pipelines?",
+   "Are you proficient in TypeScript, Python, React, and NodeJS?",
+   "Do you have experience with scalable architecture and backend APIs?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "57": {
+  "must_haves": [
+   "0-2 years of experience in software engineering",
+   "Proficiency in TypeScript",
+   "Experience with AWS services",
+   "Strong understanding of full-stack development"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or machine learning",
+   "Background in legal or compliance technology",
+   "Familiarity with agile development methodologies",
+   "Previous startup experience"
+  ],
+  "screening_questions": [
+   "Do you have 0-2 years of experience in software engineering?",
+   "Are you proficient in TypeScript?",
+   "Have you worked with AWS services in your previous roles?",
+   "Do you have experience in full-stack development?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "59": {
+  "must_haves": [
+   "2-7 years of experience in frontend development",
+   "Proficiency in React",
+   "Experience with component library design",
+   "Familiarity with TypeScript"
+  ],
+  "nice_to_haves": [
+   "Experience with Sass",
+   "Knowledge of internationalization (i18n)",
+   "Familiarity with AWS",
+   "Experience in building NPM packages"
+  ],
+  "screening_questions": [
+   "Do you have 2-7 years of experience in frontend development?",
+   "Have you worked with React in your previous roles?",
+   "Do you have experience designing component libraries?",
+   "Are you familiar with TypeScript?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "60": {
+  "must_haves": [
+   "2-4 years of experience in full stack development",
+   "Proficiency in TypeScript and React",
+   "Experience with Python for backend development",
+   "Familiarity with vector databases"
+  ],
+  "nice_to_haves": [
+   "Experience with OAuth and webhooks",
+   "Knowledge of distributed systems",
+   "Background in enterprise software development",
+   "Experience in monitoring and debugging production systems"
+  ],
+  "screening_questions": [
+   "Do you have 2-4 years of experience in full stack development?",
+   "Are you proficient in TypeScript and React?",
+   "Have you worked with Python for backend development?",
+   "Do you have experience with vector databases?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "61": {
+  "must_haves": [
+   "2-5 years of full-stack engineering experience",
+   "Proficiency in React and Next.js",
+   "Experience with Python and NodeJS",
+   "Demonstrated experience in scaling applications under growth pressure"
+  ],
+  "nice_to_haves": [
+   "Familiarity with Swift",
+   "Experience in building ETL pipelines",
+   "Knowledge of AI-powered applications",
+   "Background in fashion or consumer apps"
+  ],
+  "screening_questions": [
+   "Do you have 2-5 years of full-stack engineering experience?",
+   "Have you worked with React and Next.js in your previous roles?",
+   "Do you have experience with Python and NodeJS?",
+   "Have you been involved in scaling applications during periods of rapid growth?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "62": {
+  "must_haves": [
+   "2-8 years of full-stack engineering experience",
+   "Hands-on experience with AI agents and LLMs",
+   "Proficiency in React, Next.js, TypeScript, Python, and NodeJS",
+   "Experience presenting to government operators"
+  ],
+  "nice_to_haves": [
+   "Secret/Top Secret clearance",
+   "Prior experience on government projects",
+   "Experience with defense acquisition software",
+   "Familiarity with procurement processes"
+  ],
+  "screening_questions": [
+   "Do you have 2-8 years of full-stack engineering experience?",
+   "Have you worked with AI agents or LLMs in your previous roles?",
+   "Are you proficient in React, Next.js, TypeScript, Python, and NodeJS?",
+   "Have you presented to government operators in a professional setting?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "63": {
+  "must_haves": [
+   "2-4 years of experience in full-stack development",
+   "Proficiency in TypeScript and React",
+   "Experience with Python for backend development",
+   "Familiarity with vector databases"
+  ],
+  "nice_to_haves": [
+   "Experience with data modeling and distributed systems",
+   "Knowledge of enterprise integration processes",
+   "Ability to debug customer systems",
+   "Experience in a small technical team environment"
+  ],
+  "screening_questions": [
+   "Do you have 2-4 years of experience in full-stack development?",
+   "Are you proficient in TypeScript and React?",
+   "Have you worked with Python for backend development?",
+   "Do you have experience with vector databases?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "64": {
+  "must_haves": [
+   "3+ years of full-stack engineering experience",
+   "Proficiency in Python",
+   "Proficiency in TypeScript",
+   "Experience with AWS",
+   "Experience in building client-facing applications"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or machine learning",
+   "Familiarity with agile methodologies",
+   "Previous startup experience",
+   "Strong communication skills"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of full-stack engineering experience?",
+   "Are you proficient in Python?",
+   "Do you have experience with TypeScript?",
+   "Have you worked with AWS in your previous roles?",
+   "Have you built client-facing applications from scratch?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "65": {
+  "must_haves": [
+   "2+ years of experience in full stack development",
+   "Proficiency in React and Node.js",
+   "Experience with PostgreSQL and cloud services (AWS or GCP)",
+   "Demonstrated ability to ship end-to-end workflows in production"
+  ],
+  "nice_to_haves": [
+   "Experience in the mental health tech industry",
+   "Familiarity with Docker and Firebase",
+   "Experience in a high-growth startup environment",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience in full stack development?",
+   "Have you worked with React and Node.js in a production environment?",
+   "Do you have experience with PostgreSQL and cloud services like AWS or GCP?",
+   "Have you shipped end-to-end workflows in a previous role?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "66": {
+  "must_haves": [
+   "4+ years of experience in infrastructure engineering",
+   "Experience with AWS and Terraform",
+   "Hands-on experience with Kubernetes",
+   "Proven track record of operating systems at scale"
+  ],
+  "nice_to_haves": [
+   "Experience with GCP",
+   "Familiarity with TypeScript",
+   "Background in high-growth developer-tools companies",
+   "Experience in a collaborative, flat-team environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 4 years of experience in infrastructure engineering?",
+   "Have you worked with AWS and Terraform in your previous roles?",
+   "Do you have hands-on experience with Kubernetes?",
+   "Have you operated systems at scale in your past positions?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": true,
+  "onsite_city": null
+ },
+ "67": {
+  "must_haves": [
+   "3-10 years of infrastructure/platform engineering experience",
+   "Expertise in at least one major cloud provider (AWS, GCP, Azure)",
+   "Proficiency with Kubernetes",
+   "Experience in security-minded data governance, preferably in regulated industries"
+  ],
+  "nice_to_haves": [
+   "Familiarity with ETL processes",
+   "Experience with real-time data pipelines",
+   "Knowledge of CI/CD practices",
+   "Understanding of AI/ML infrastructure requirements"
+  ],
+  "screening_questions": [
+   "Do you have 3-10 years of experience in infrastructure/platform engineering?",
+   "Are you proficient in at least one major cloud provider (AWS, GCP, Azure)?",
+   "Do you have experience with Kubernetes?",
+   "Have you worked in a security-focused data governance role in a regulated industry?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "68": {
+  "must_haves": [
+   "8+ years of experience in software engineering",
+   "4+ years of experience building AI products",
+   "Proficiency in full-stack development",
+   "Experience with cloud platforms (AWS, Azure, GCP)"
+  ],
+  "nice_to_haves": [
+   "Experience with Docker and Kubernetes",
+   "Familiarity with Langchain and OpenAI",
+   "Startup experience",
+   "Strong architectural judgment"
+  ],
+  "screening_questions": [
+   "Do you have 8 or more years of experience in software engineering?",
+   "Have you built AI products for at least 4 years?",
+   "Are you proficient in full-stack development?",
+   "Do you have experience with cloud platforms such as AWS, Azure, or GCP?"
+  ],
+  "min_years": 8,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "69": {
+  "must_haves": [
+   "6+ years of software engineering experience",
+   "Proficiency in Python",
+   "Experience with AWS",
+   "Strong communication skills"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or compliance-related fields",
+   "Familiarity with KYB/KYC/AML processes",
+   "Experience in building end-to-end systems",
+   "Ability to work in a fast-paced environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 6 years of software engineering experience?",
+   "Are you proficient in Python?",
+   "Have you worked with AWS in your previous roles?",
+   "Do you consider yourself to have strong communication skills?"
+  ],
+  "min_years": 6,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "70": {
+  "must_haves": [
+   "2+ years of experience in a technical role",
+   "Proficiency in Python and C/C++",
+   "Experience with PostgreSQL and AWS",
+   "Ability to work in messy real-world environments"
+  ],
+  "nice_to_haves": [
+   "Experience in robotics software engineering",
+   "Familiarity with Rust",
+   "Background in AI or machine learning",
+   "Experience in customer-facing feature development"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience in a technical role?",
+   "Are you proficient in Python and C/C++?",
+   "Have you worked with PostgreSQL and AWS in your previous roles?",
+   "Do you have experience shipping products in messy real-world environments?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "71": {
+  "must_haves": [
+   "1+ years of experience in a full-stack engineering role",
+   "Proficiency in TypeScript and NodeJS",
+   "Experience with React for front-end development",
+   "Demonstrated ability to ship real products to users"
+  ],
+  "nice_to_haves": [
+   "Experience with payment processing systems like Stripe",
+   "Familiarity with collaboration tools like Slack and Notion",
+   "Previous startup experience",
+   "Strong problem-solving skills in ambiguous situations"
+  ],
+  "screening_questions": [
+   "Do you have at least 1 year of experience in a full-stack engineering role?",
+   "Have you shipped a product that is currently used by real users?",
+   "Are you proficient in TypeScript and NodeJS?",
+   "Do you have experience working with React?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "72": {
+  "must_haves": [
+   "3+ years of experience in GPU programming (CUDA, HIP)",
+   "Proficiency in Python and C/C++",
+   "Experience with Kubernetes for container orchestration",
+   "Hands-on experience with cloud platforms (AWS)"
+  ],
+  "nice_to_haves": [
+   "Familiarity with machine learning frameworks",
+   "Experience in optimizing inference for LLMs",
+   "Knowledge of heterogeneous computing environments",
+   "Background in performance tuning and optimization"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in GPU programming with CUDA or HIP?",
+   "Have you worked with Python and C/C++ in a professional setting?",
+   "Do you have experience using Kubernetes for managing containerized applications?",
+   "Have you deployed applications on AWS or similar cloud platforms?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "73": {
+  "must_haves": [
+   "3-8 years of experience in backend or full stack engineering",
+   "Proficiency in Python",
+   "Proficiency in TypeScript",
+   "Experience with building scalable systems"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or machine learning",
+   "Familiarity with cloud infrastructure",
+   "Previous startup experience",
+   "Strong problem-solving skills"
+  ],
+  "screening_questions": [
+   "Do you have 3-8 years of experience in backend or full stack engineering?",
+   "Are you proficient in Python?",
+   "Are you proficient in TypeScript?",
+   "Have you built scalable systems in your previous roles?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "74": {
+  "must_haves": [
+   "5+ years of backend engineering experience",
+   "Proficiency in Python and Django",
+   "Experience with GCP and Kubernetes",
+   "Familiarity with CI/CD processes"
+  ],
+  "nice_to_haves": [
+   "Experience in machine learning applications",
+   "Background in tax automation or financial services",
+   "Strong communication skills with non-technical stakeholders",
+   "Experience with document extraction technologies"
+  ],
+  "screening_questions": [
+   "Do you have 5 or more years of backend engineering experience?",
+   "Are you proficient in Python and Django?",
+   "Have you worked with GCP and Kubernetes in your previous roles?",
+   "Do you have experience with CI/CD processes?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "75": {
+  "must_haves": [
+   "2+ years of experience in building production ML systems",
+   "Experience with Kubernetes and Terraform",
+   "Proven track record in latency/throughput/cost optimization",
+   "Familiarity with PyTorch and TensorRT-LLM"
+  ],
+  "nice_to_haves": [
+   "Experience with video/audio models",
+   "Knowledge of CUDA kernel development",
+   "Experience with custom kernels",
+   "Familiarity with Go or Rust"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience building production ML systems?",
+   "Have you worked with Kubernetes and Terraform in a professional setting?",
+   "Do you have a proven track record in optimizing latency and throughput?",
+   "Are you familiar with PyTorch and TensorRT-LLM?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "Seattle"
+ },
+ "76": {
+  "must_haves": [
+   "Bachelor's degree in Computer Science, Engineering, or related field",
+   "Experience with Python and at least one other programming language (Rust/Go)",
+   "Familiarity with machine learning frameworks (e.g., PyTorch)",
+   "Understanding of optimization techniques for model inference"
+  ],
+  "nice_to_haves": [
+   "Experience with Kubernetes and Terraform",
+   "Knowledge of real-time systems and conversational AI",
+   "Familiarity with quantization techniques",
+   "Experience with profiling tools for performance optimization"
+  ],
+  "screening_questions": [
+   "Do you have a Bachelor's degree in Computer Science, Engineering, or a related field?",
+   "Have you worked with Python in a project or internship?",
+   "Are you familiar with any machine learning frameworks, such as PyTorch?",
+   "Do you have experience with optimization techniques for model inference?"
+  ],
+  "min_years": 0,
+  "visa_transfer_ok": true,
+  "onsite_city": "Seattle"
+ },
+ "77": {
+  "must_haves": [
+   "2+ years of product-focused engineering experience",
+   "Proficiency in React",
+   "Proficiency in TypeScript",
+   "Experience with end-to-end problem ownership"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or machine learning products",
+   "Familiarity with design systems",
+   "Experience in distributed systems",
+   "Strong collaboration skills with product and design teams"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of product-focused engineering experience?",
+   "Are you proficient in React?",
+   "Are you proficient in TypeScript?",
+   "Have you taken ownership of end-to-end problems in your previous roles?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "78": {
+  "must_haves": [
+   "4-10 years of experience in machine learning engineering or full stack development",
+   "Proficiency in Python and TypeScript",
+   "Experience with React for front-end development",
+   "Familiarity with vector databases"
+  ],
+  "nice_to_haves": [
+   "Experience in financial technology or wealth management",
+   "Knowledge of AI-driven user interfaces",
+   "Background in regulated industries",
+   "Experience with human-AI collaboration systems"
+  ],
+  "screening_questions": [
+   "Do you have 4-10 years of experience in machine learning engineering or full stack development?",
+   "Are you proficient in Python and TypeScript?",
+   "Have you worked with React for front-end development?",
+   "Do you have experience with vector databases?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "79": {
+  "must_haves": [
+   "5+ years of experience in platform engineering or related field",
+   "Proficiency in Python and TypeScript",
+   "Experience with AWS and Docker",
+   "Familiarity with Kubernetes and Terraform"
+  ],
+  "nice_to_haves": [
+   "Experience in a regulated industry",
+   "Knowledge of CI/CD practices",
+   "Background in AI or machine learning",
+   "Experience with PostgreSQL"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of experience in platform engineering or a related field?",
+   "Are you proficient in both Python and TypeScript?",
+   "Have you worked with AWS and Docker in your previous roles?",
+   "Do you have experience with Kubernetes and Terraform?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "80": {
+  "must_haves": [
+   "5+ years of experience in Machine Learning or AI engineering",
+   "Proficiency in Python and FastAPI",
+   "Experience with PostgreSQL and Vector Databases",
+   "Hands-on experience with LLMs, embeddings, and retrieval-augmented generation (RAG)"
+  ],
+  "nice_to_haves": [
+   "Experience in building scalable real-time inference infrastructure",
+   "Familiarity with product design and user experience",
+   "Background in consumer product development",
+   "Experience working in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of experience in Machine Learning or AI engineering?",
+   "Have you worked with Python and FastAPI in your previous roles?",
+   "Do you have hands-on experience with LLMs and embeddings?",
+   "Have you designed or implemented retrieval-augmented generation (RAG) systems?",
+   "Are you comfortable working in a small team environment?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "81": {
+  "must_haves": [
+   "5+ years of professional software engineering experience",
+   "Experience with multi-agent systems using modern tool stacks",
+   "Strong full-stack development skills, particularly in front-end and visualization",
+   "Proven ability to communicate clearly in writing"
+  ],
+  "nice_to_haves": [
+   "Experience with open-source contributions",
+   "Background in Software Architecture or Frontend Development Engineering",
+   "Experience in productizing ML-systems research",
+   "Familiarity with tools like Langchain, Docker, Kubernetes"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of professional software engineering experience?",
+   "Have you worked with multi-agent systems using modern tool stacks?",
+   "Do you have strong full-stack development skills, especially in front-end and visualization?",
+   "Can you provide examples of clear written communication in your previous roles?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "82": {
+  "must_haves": [
+   "STEM degree (chem eng, materials science, chemistry)",
+   "2-4 years in enterprise implementations, technical consulting, or industry research",
+   "Strong presenting, coaching, and stakeholder skills",
+   "Hands-on experience with Python"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or machine learning",
+   "Familiarity with partner ecosystems",
+   "Project management experience",
+   "Experience in the chemicals and materials industry"
+  ],
+  "screening_questions": [
+   "Do you have a STEM degree in chemistry, chemical engineering, or materials science?",
+   "Do you have 2-4 years of experience in enterprise implementations or technical consulting?",
+   "Have you worked with Python in a professional setting?",
+   "Do you have experience managing stakeholder relationships?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "83": {
+  "must_haves": [
+   "6+ years of experience in platform/infrastructure engineering",
+   "Experience with CI/CD processes",
+   "Proficiency in AWS",
+   "Background in high-growth startups"
+  ],
+  "nice_to_haves": [
+   "Experience with Next.js and Tailwind",
+   "Familiarity with Kotlin and Python",
+   "Experience in multi-tenant infrastructure",
+   "Previous role as a technical lead or CTO's right hand"
+  ],
+  "screening_questions": [
+   "Do you have at least 6 years of experience in platform or infrastructure engineering?",
+   "Have you worked with CI/CD processes in your previous roles?",
+   "Are you proficient in AWS?",
+   "Do you have experience working in a high-growth startup environment?"
+  ],
+  "min_years": 6,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "84": {
+  "must_haves": [
+   "Proficiency in React",
+   "Experience with Next.js",
+   "Strong understanding of front-end development",
+   "Ability to communicate directly with customers"
+  ],
+  "nice_to_haves": [
+   "Familiarity with TypeScript",
+   "Experience in a startup environment",
+   "Knowledge of Python",
+   "Design experience or background"
+  ],
+  "screening_questions": [
+   "Do you have experience working with React?",
+   "Have you used Next.js in any of your projects?",
+   "Are you comfortable communicating directly with customers?",
+   "Do you have any experience in front-end development?",
+   "Have you worked in a startup environment before?"
+  ],
+  "min_years": 0,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "85": {
+  "must_haves": [
+   "1-6 years of full-stack engineering experience",
+   "Proficiency in TypeScript",
+   "Experience with NodeJS",
+   "Experience with React and Next.js"
+  ],
+  "nice_to_haves": [
+   "Experience in AI infrastructure",
+   "Familiarity with government contracting workflows",
+   "Strong problem-solving skills",
+   "Experience in customer feedback integration"
+  ],
+  "screening_questions": [
+   "Do you have 1-6 years of full-stack engineering experience?",
+   "Are you proficient in TypeScript?",
+   "Have you worked with NodeJS in your previous roles?",
+   "Do you have experience with React and Next.js?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "86": {
+  "must_haves": [
+   "3-8 years of experience in product engineering",
+   "Proficiency in TypeScript and NodeJS",
+   "Experience with REST API development",
+   "Familiarity with Git and Redis"
+  ],
+  "nice_to_haves": [
+   "Experience in developer-facing products",
+   "Knowledge of open-source software",
+   "Strong problem-solving skills",
+   "Experience in a hybrid work environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-8 years of experience in product engineering?",
+   "Are you proficient in TypeScript and NodeJS?",
+   "Have you developed REST APIs in your previous roles?",
+   "Are you familiar with Git and Redis?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "87": {
+  "must_haves": [
+   "2+ years of experience in product engineering",
+   "Proficiency in Python and FastAPI",
+   "Experience with PostgreSQL and AWS",
+   "Familiarity with React and TypeScript"
+  ],
+  "nice_to_haves": [
+   "Experience in legal-tech or similar industries",
+   "Familiarity with AI tools and LLMs",
+   "Experience working in high-intensity environments",
+   "Background in startups or founding teams"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience in product engineering?",
+   "Have you worked with Python and FastAPI in your previous roles?",
+   "Are you familiar with PostgreSQL and AWS?",
+   "Do you have experience with React and TypeScript?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "88": {
+  "must_haves": [
+   "2-5 years of experience in software engineering",
+   "Proficiency in TypeScript and NodeJS",
+   "Experience with PostgreSQL and GraphQL",
+   "Strong understanding of full-stack development"
+  ],
+  "nice_to_haves": [
+   "Experience in compliance-heavy industries",
+   "Familiarity with Redis",
+   "Background in data wrangling",
+   "Experience working in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 2-5 years of experience in software engineering?",
+   "Are you proficient in TypeScript and NodeJS?",
+   "Have you worked with PostgreSQL and GraphQL in your previous roles?",
+   "Do you have experience in full-stack development?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "89": {
+  "must_haves": [
+   "2+ years of experience in product engineering",
+   "Proficiency in Python and FastAPI",
+   "Experience with PostgreSQL and vector databases",
+   "Familiarity with front-end technologies like React and Next.js"
+  ],
+  "nice_to_haves": [
+   "Experience in healthcare or fintech industries",
+   "Knowledge of genomic and biomarker data",
+   "Familiarity with Figma for design collaboration",
+   "Experience with AI integrations"
+  ],
+  "screening_questions": [
+   "Do you have at least 2 years of experience in product engineering?",
+   "Have you worked with Python and FastAPI in your previous roles?",
+   "Are you familiar with PostgreSQL and vector databases?",
+   "Have you used React or Next.js in your projects?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "90": {
+  "must_haves": [
+   "3-10 years of experience in frontend development",
+   "Proficiency in React and Next.js",
+   "Experience with GraphQL and REST API",
+   "Strong understanding of Python and Django"
+  ],
+  "nice_to_haves": [
+   "Experience with TypeScript",
+   "Familiarity with Slack and Google Chat integrations",
+   "Background in security products",
+   "Experience in a hybrid work environment"
+  ],
+  "screening_questions": [
+   "Do you have 3-10 years of experience in frontend development?",
+   "Are you proficient in React and Next.js?",
+   "Have you worked with GraphQL and REST API in your previous roles?",
+   "Do you have experience with Python and Django?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "91": {
+  "must_haves": [
+   "1-5 years of experience in full stack development",
+   "Proficiency in TypeScript and JavaScript",
+   "Experience with React and NodeJS",
+   "Familiarity with PostgreSQL and REST APIs"
+  ],
+  "nice_to_haves": [
+   "Experience in applied-AI product engineering",
+   "Knowledge of real-time matching systems",
+   "Mentoring experience",
+   "Understanding of distributed systems"
+  ],
+  "screening_questions": [
+   "Do you have 1-5 years of experience in full stack development?",
+   "Are you proficient in TypeScript and JavaScript?",
+   "Have you worked with React and NodeJS in your previous roles?",
+   "Do you have experience with PostgreSQL and REST APIs?"
+  ],
+  "min_years": 1,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "92": {
+  "must_haves": [
+   "3+ years of experience in a research engineering role",
+   "Proficiency in Python",
+   "Experience with PyTorch",
+   "Demonstrated ability to design metrics for evaluation systems"
+  ],
+  "nice_to_haves": [
+   "Experience with web data extraction",
+   "Familiarity with machine learning concepts",
+   "Background in data science",
+   "Experience in building evaluation pipelines"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in a research engineering role?",
+   "Are you proficient in Python?",
+   "Have you worked with PyTorch in a professional setting?",
+   "Have you designed metrics for evaluation systems in your previous roles?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "94": {
+  "must_haves": [
+   "STEM degree in chemistry, materials science, or chemical engineering",
+   "Lab or research experience",
+   "Proficiency in Python scripting",
+   "Experience with data tools like Microsoft Excel"
+  ],
+  "nice_to_haves": [
+   "Experience in customer-facing roles",
+   "Familiarity with R&D processes",
+   "Knowledge of scientific data management systems",
+   "Ability to work in a hybrid environment"
+  ],
+  "screening_questions": [
+   "Do you have a STEM degree in chemistry, materials science, or chemical engineering?",
+   "Have you had any lab or research experience?",
+   "Are you proficient in Python scripting?",
+   "Do you have experience using Microsoft Excel for data analysis?"
+  ],
+  "min_years": 0,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "95": {
+  "must_haves": [
+   "6+ years of backend engineering experience",
+   "Experience with TypeScript and Next.js",
+   "Proven track record of production platform ownership",
+   "Strong understanding of reliability engineering principles"
+  ],
+  "nice_to_haves": [
+   "Experience with AI or machine learning platforms",
+   "Familiarity with property management systems",
+   "Knowledge of OAuth and integration patterns",
+   "Experience in a hybrid work environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 6 years of backend engineering experience?",
+   "Have you worked with TypeScript and Next.js in a production environment?",
+   "Have you owned a production platform in your previous roles?",
+   "Do you have experience with reliability engineering principles?"
+  ],
+  "min_years": 6,
+  "visa_transfer_ok": true,
+  "onsite_city": "South Bay Area"
+ },
+ "96": {
+  "must_haves": [
+   "6+ years of backend engineering experience",
+   "Experience with payments systems",
+   "Proficiency in Kotlin and Spring Boot",
+   "Experience with PostgreSQL and AWS"
+  ],
+  "nice_to_haves": [
+   "Experience with Stripe",
+   "Familiarity with AI tools",
+   "Experience in a startup environment",
+   "Strong communication skills"
+  ],
+  "screening_questions": [
+   "Do you have at least 6 years of backend engineering experience?",
+   "Have you worked on payments systems in your previous roles?",
+   "Are you proficient in Kotlin and Spring Boot?",
+   "Do you have experience with PostgreSQL and AWS?"
+  ],
+  "min_years": 6,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "97": {
+  "must_haves": [
+   "5+ years of experience in product engineering",
+   "Proficiency in TypeScript and React",
+   "Experience with PostgreSQL and NodeJS",
+   "Demonstrated ability to deliver products in early-stage environments"
+  ],
+  "nice_to_haves": [
+   "Experience in AI or infrastructure startups",
+   "Strong understanding of customer feedback integration",
+   "Familiarity with agile methodologies",
+   "Experience in shaping product direction"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of experience in product engineering?",
+   "Have you worked with TypeScript and React in your previous roles?",
+   "Do you have experience with PostgreSQL and NodeJS?",
+   "Have you successfully delivered products in an early-stage startup environment?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "New York"
+ },
+ "98": {
+  "must_haves": [
+   "3+ years of experience in AI system development",
+   "Proficiency in Python and TypeScript",
+   "Experience with AWS and PostgreSQL",
+   "Demonstrated experience in building voice AI applications"
+  ],
+  "nice_to_haves": [
+   "Familiarity with reinforcement learning techniques",
+   "Experience in healthcare technology",
+   "Knowledge of vector databases",
+   "Previous work in patient advocacy or similar fields"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in AI system development?",
+   "Are you proficient in both Python and TypeScript?",
+   "Have you worked with AWS and PostgreSQL in your previous roles?",
+   "Do you have experience building voice AI applications?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "99": {
+  "must_haves": [
+   "3+ years of experience in product management",
+   "Experience with AI product development",
+   "Proficiency in JavaScript and TypeScript",
+   "Hands-on experience with AWS and NodeJS"
+  ],
+  "nice_to_haves": [
+   "Experience in consumer health products",
+   "Familiarity with MySQL",
+   "Background in UI/UX design",
+   "Experience working directly with C-level executives"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in product management?",
+   "Have you worked on AI product development in your previous roles?",
+   "Are you proficient in JavaScript and TypeScript?",
+   "Do you have hands-on experience with AWS and NodeJS?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "100": {
+  "must_haves": [
+   "4+ years of experience in backend engineering",
+   "Proficiency in Python",
+   "Experience with Kubernetes and Docker",
+   "Familiarity with PostgreSQL"
+  ],
+  "nice_to_haves": [
+   "Experience with Terraform",
+   "Knowledge of TypeScript",
+   "Background in AI/LLM applications",
+   "Experience in early-stage startups"
+  ],
+  "screening_questions": [
+   "Do you have at least 4 years of experience in backend engineering?",
+   "Are you proficient in Python?",
+   "Have you worked with Kubernetes and Docker in your previous roles?",
+   "Do you have experience with PostgreSQL?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "101": {
+  "must_haves": [
+   "3+ years of experience in backend engineering",
+   "Strong proficiency in Python",
+   "Experience with CI/CD processes",
+   "Familiarity with PostgreSQL and GCP"
+  ],
+  "nice_to_haves": [
+   "Experience with LLM systems",
+   "Background in PropTech",
+   "Knowledge of TypeScript and FastAPI",
+   "Experience with integrations and third-party APIs"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in backend engineering?",
+   "Have you worked extensively with Python in your previous roles?",
+   "Are you familiar with CI/CD processes?",
+   "Do you have experience with PostgreSQL and GCP?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "102": {
+  "must_haves": [
+   "2-5 years of hands-on integration/backend engineering experience",
+   "Proficiency in Python and FastAPI",
+   "Experience with REST API development",
+   "Customer-facing experience in a technical role"
+  ],
+  "nice_to_haves": [
+   "Experience with property-management systems like Yardi, Entrata, or RealPage",
+   "Familiarity with cloud services (AWS, Azure, etc.)",
+   "Strong problem-solving skills",
+   "Experience in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 2-5 years of hands-on integration/backend engineering experience?",
+   "Are you proficient in Python and FastAPI?",
+   "Have you worked with REST API development in your previous roles?",
+   "Do you have experience in a customer-facing technical role?"
+  ],
+  "min_years": 2,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "103": {
+  "must_haves": [
+   "5+ years of experience in machine learning research",
+   "PhD in a relevant field or 5 years of industry experience with publications",
+   "Proven publication record at top conferences (NeurIPS/ICML/ICLR)",
+   "Experience with Python and PyTorch"
+  ],
+  "nice_to_haves": [
+   "Experience in audio AI",
+   "Familiarity with production inference and data pipelines",
+   "Mentorship experience",
+   "Experience working in a fast-paced startup environment"
+  ],
+  "screening_questions": [
+   "Do you have 5 or more years of experience in machine learning research?",
+   "Have you published papers at NeurIPS, ICML, or ICLR?",
+   "Do you have a PhD in a relevant field or 5 years of industry experience with publications?",
+   "Are you proficient in Python and PyTorch?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "104": {
+  "must_haves": [
+   "6-10 years of experience in building core infrastructure",
+   "Proven track record with scalable and reliable high-throughput systems",
+   "Experience with Kubernetes and cloud platforms (AWS/GCP)",
+   "Strong mentorship experience with junior engineers"
+  ],
+  "nice_to_haves": [
+   "Experience in the human-in-the-loop data space",
+   "Background in high-growth startups",
+   "Familiarity with NodeJS and Python",
+   "Knowledge of Kafka, Redis, and ElasticSearch"
+  ],
+  "screening_questions": [
+   "Do you have 6-10 years of experience in building core infrastructure?",
+   "Have you worked with scalable and reliable high-throughput systems?",
+   "Do you have experience with Kubernetes and cloud platforms like AWS or GCP?",
+   "Have you mentored junior engineers in your previous roles?"
+  ],
+  "min_years": 6,
+  "visa_transfer_ok": true,
+  "onsite_city": "San Francisco"
+ },
+ "105": {
+  "must_haves": [
+   "3+ years of experience in product engineering",
+   "Proficiency in JavaScript and TypeScript",
+   "Experience with React and NodeJS",
+   "Familiarity with AWS and MySQL"
+  ],
+  "nice_to_haves": [
+   "Experience in consumer health technology",
+   "Background in AI or machine learning",
+   "Strong user research skills",
+   "Experience working in a startup environment"
+  ],
+  "screening_questions": [
+   "Do you have at least 3 years of experience in product engineering?",
+   "Are you proficient in JavaScript and TypeScript?",
+   "Have you worked with React and NodeJS in your previous roles?",
+   "Do you have experience with AWS and MySQL?"
+  ],
+  "min_years": 3,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "106": {
+  "must_haves": [
+   "5+ years of experience in product ownership",
+   "Experience in startups",
+   "Proven track record of 0-to-1 product development",
+   "Strong understanding of developer tools and CI/CD processes"
+  ],
+  "nice_to_haves": [
+   "Experience with AI products",
+   "Background in building coding agents",
+   "Familiarity with React and TypeScript",
+   "Experience in high UX bar environments"
+  ],
+  "screening_questions": [
+   "Do you have 5 or more years of experience in product ownership?",
+   "Have you worked in a startup environment?",
+   "Have you successfully developed a product from ideation to launch?",
+   "Do you have experience with developer tools and CI/CD processes?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": false,
+  "onsite_city": "New York"
+ },
+ "107": {
+  "must_haves": [
+   "4+ years of experience as a full-stack engineer",
+   "Proficiency in Go, TypeScript, and Python",
+   "Experience with Kubernetes (K8s)",
+   "Ability to work on-site in San Francisco"
+  ],
+  "nice_to_haves": [
+   "Experience in AI systems",
+   "Previous startup experience",
+   "Mentoring junior engineers",
+   "Strong architectural decision-making skills"
+  ],
+  "screening_questions": [
+   "Do you have at least 4 years of experience as a full-stack engineer?",
+   "Are you proficient in Go, TypeScript, and Python?",
+   "Do you have experience working with Kubernetes (K8s)?",
+   "Are you able to work on-site in San Francisco?"
+  ],
+  "min_years": 4,
+  "visa_transfer_ok": false,
+  "onsite_city": "San Francisco"
+ },
+ "108": {
+  "must_haves": [
+   "5+ years of experience in AI/ML engineering",
+   "Strong applied LLM track record with production ownership",
+   "Proficiency in Python and at least one other language (Rust or Go)",
+   "Experience with Kubernetes and Terraform"
+  ],
+  "nice_to_haves": [
+   "Experience in the education technology sector",
+   "Familiarity with Airflow and PyTorch",
+   "Experience in leading teams or projects",
+   "Knowledge of data privacy regulations"
+  ],
+  "screening_questions": [
+   "Do you have at least 5 years of experience in AI/ML engineering?",
+   "Have you worked on production LLM projects before?",
+   "Are you proficient in Python and at least one other programming language?",
+   "Do you have experience with Kubernetes and Terraform?"
+  ],
+  "min_years": 5,
+  "visa_transfer_ok": true,
+  "onsite_city": null
+ }
+}

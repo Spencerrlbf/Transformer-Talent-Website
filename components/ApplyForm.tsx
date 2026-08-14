@@ -49,7 +49,7 @@ export default function ApplyForm({
 
   function toggle(jobId: string) {
     setSelected((s) =>
-      s.includes(jobId) ? s.filter((x) => x !== jobId) : s.length < 10 ? [...s, jobId] : s
+      s.includes(jobId) ? s.filter((x) => x !== jobId) : s.length < 3 ? [...s, jobId] : s
     );
   }
 
@@ -114,7 +114,7 @@ export default function ApplyForm({
   return (
     <form className="form" onSubmit={onSubmit} style={{ maxWidth: 680 }} encType="multipart/form-data">
       <label>
-        roles you&apos;re applying for ({selected.length} selected{selected.length === 0 ? " — pick at least one, or leave empty for general consideration" : ""})
+        roles you&apos;re applying for ({selected.length}/3 selected{selected.length === 0 ? " — pick up to 3, or leave empty for general consideration" : ""})
         <input
           value={roleQuery}
           onChange={(e) => setRoleQuery(e.target.value)}

@@ -10,6 +10,7 @@ import {
   linkedinUsername,
 } from "@/lib/server/applicants";
 import { getRoles, roleSlug } from "@/lib/roles";
+import { passesHardGates, screenCandidate } from "@/lib/server/screening";
 
 export const maxDuration = 60;
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, 15);
+    .slice(0, 3);
 
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide your name and a valid email." }, { status: 400 });
@@ -89,6 +90,12 @@ export async function POST(req: NextRequest) {
   if (!(await allow(`apply:email:${email}`, 4, 24)) || !(await allow(`apply:ip:${ip}`, 8, 24))) {
     return NextResponse.json(
       { error: "Too many applications today — email spencer@transformertalent.com directly." },
+      { status: 429 }
+    );
+  }
+  if (!(await allow("apply:global", 100, 24))) {
+    return NextResponse.json(
+      { error: "We're at capacity today — email spencer@transformertalent.com with your resume and we'll take it from there." },
       { status: 429 }
     );
   }
@@ -138,7 +145,17 @@ export async function POST(req: NextRequest) {
   // Enrichment pipeline — best-effort; the application is already saved.
   let matches: { jobId: string; title: string; salary: string; slug: string }[] = [];
   try {
-    const harvest = await harvestProfile(linkedin);
+    const username = linkedinUsername(linkedin);
+    let harvest: unknown | null = null;
+    const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+    const prior = await sbRest(
+      `website_applications?linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
+    );
+    if (prior.ok) {
+      const rows = await prior.json();
+      if (rows.length) harvest = rows[0].harvest_profile;
+    }
+    if (!harvest) harvest = await harvestProfile(linkedin);
     const parsed = await parseProfile(resumeText || "", harvest);
     const { candidateId, vector } = await promoteToCandidatePool({
       name,
@@ -149,11 +166,35 @@ export async function POST(req: NextRequest) {
     });
 
     let matchedIds: string[] = [];
+    let screening: unknown = null;
     if (vector) {
       const roleMatches = await matchRolesForApplicant(vector);
-      const bySim = roleMatches.filter((m) => m.similarity > 0.25);
-      matchedIds = bySim.map((m) => m.job_id);
-      matches = bySim
+      const gated = roleMatches
+        .filter((m) => m.similarity > 0.25)
+        .filter((m) =>
+          passesHardGates(m.job_id, {
+            visa,
+            years: parsed?.total_experience_years ?? null,
+          })
+        );
+      // One bounded LLM call screens the shortlist like a recruiter would.
+      const results = await screenCandidate(
+        parsed?.profile_summary || resumeText?.slice(0, 3000) || "",
+        gated.slice(0, 5).map((m) => m.job_id)
+      );
+      screening = results.length ? results : null;
+      const scoreOf = (jobId: string, sim: number) => {
+        const r = results.find((x) => x.job_id === jobId);
+        return r ? (r.qualified ? 0.5 : 0) + 0.3 * r.fit_score + 0.2 * sim : 0.2 * sim;
+      };
+      const ranked = gated
+        .filter((m) => {
+          const r = results.find((x) => x.job_id === m.job_id);
+          return !r || r.fails.length === 0;
+        })
+        .sort((a, b) => scoreOf(b.job_id, b.similarity) - scoreOf(a.job_id, a.similarity));
+      matchedIds = ranked.map((m) => m.job_id);
+      matches = ranked
         .map((m) => roles.find((r) => r.jobId === m.job_id))
         .filter((r): r is NonNullable<typeof r> => Boolean(r))
         .filter((r) => !roleIds.includes(r.jobId))
@@ -169,6 +210,7 @@ export async function POST(req: NextRequest) {
           parsed_profile: parsed,
           candidate_id: candidateId,
           matched_role_ids: matchedIds,
+          screening,
           status: "processed",
         }),
         prefer: "return=minimal",

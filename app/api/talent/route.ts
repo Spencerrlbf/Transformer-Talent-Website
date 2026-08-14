@@ -7,6 +7,7 @@ import {
 } from "@/lib/server/matcher";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
+import { screenAgainstJD } from "@/lib/server/screening";
 
 export const maxDuration = 60;
 
@@ -93,6 +94,18 @@ export async function POST(req: NextRequest) {
     const vector = await embed(jd.embedding_summary);
     const rows = await matchCandidates(vector, jd);
     const matches = rankAndAnonymize(rows, jd, 5);
+    const fits = await screenAgainstJD(
+      jd.embedding_summary,
+      jd.skills.slice(0, 6),
+      matches.map((m) => ({
+        ref: m.ref,
+        profileText: `${m.title}. ${m.yearsExperience ?? "?"} yrs. ${m.location ?? ""}. Prev: ${m.previousCompanies.join(", ")}. Education: ${m.education.join("; ")}. Skills: ${m.skills.join(", ")}`,
+      }))
+    );
+    const withFit = matches.map((m) => ({
+      ...m,
+      fit: fits.find((f) => f.ref === m.ref) || null,
+    }));
 
     if (submission) {
       await sbRest(`jd_submissions?id=eq.${submission.id}`, {
@@ -110,7 +123,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       roleTitle: jd.title,
-      matches,
+      matches: withFit,
       lowConfidence: matches.length === 0 || matches[0].score < 0.45,
     });
   } catch (err) {
