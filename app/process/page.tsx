@@ -106,8 +106,9 @@ export default function ProcessPage() {
           <details>
             <summary>Who actually works my search?</summary>
             <p className="a">
-              A senior recruiter, end to end — led by Spencer. No handoff to
-              a junior sourcer after the kickoff call.
+              A senior Transformer Talent recruiter, end to end. The person
+              who takes your brief is the person who calls the candidates —
+              no handoff to a junior sourcer after the kickoff call.
             </p>
           </details>
         </div>

@@ -104,7 +104,7 @@ export default function TalentMatcher() {
             : "Profiles are anonymized. Introductions, full profiles, and comp expectations take one conversation."}
         </p>
         <a
-          href="mailto:spencer@transformertalent.com?subject=Intro%20request%20—%20matched%20candidates"
+          href="mailto:spencer@transformertalent.com?subject=Intro%20request%20%E2%80%94%20matched%20candidates"
           className="btn hot"
         >
           GET INTRODUCTIONS →

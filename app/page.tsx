@@ -93,8 +93,8 @@ export default function Home() {
             <dl className="kv">
               <dt>FIRM</dt>
               <dd>Transformer Talent</dd>
-              <dt>LED BY</dt>
-              <dd>Spencer, Principal</dd>
+              <dt>MODEL</dt>
+              <dd>Senior recruiters, end to end</dd>
               <dt>BASE</dt>
               <dd>San Francisco / New York</dd>
               <dt>FOCUS</dt>

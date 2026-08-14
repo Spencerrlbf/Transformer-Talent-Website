@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "We hit a snag processing that JD — it's saved, and Spencer will run your search personally. You'll hear from us within 24h.",
+          "We hit a snag processing that JD — it's saved, and our team will run your search by hand. You'll hear from us within 24h.",
       },
       { status: 500 }
     );

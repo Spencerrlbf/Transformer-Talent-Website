@@ -54,7 +54,7 @@ export default function PlacementsPage() {
           <div className="cell">
             <p style={{ fontSize: "1rem", color: "var(--fog)" }}>
               “Five key hires over the last two years — we now only work with
-              Spencer.”
+              Transformer Talent.”
             </p>
             <p style={{ fontSize: "0.68rem", color: "var(--fog-30)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
               CTO — Series B Fintech
