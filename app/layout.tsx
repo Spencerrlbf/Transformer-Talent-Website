@@ -25,6 +25,21 @@ export const metadata: Metadata = {
   },
   description:
     "We place AI/ML and software engineers with startups backed by Sequoia, 8VC, and Felicis. Upload your JD and see potential matches in seconds.",
+  ...(process.env.GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } }
+    : {}),
+};
+
+const ORG_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Transformer Talent",
+  url: "https://transformertalent.com",
+  email: "spencer@transformertalent.com",
+  description:
+    "AI/ML and software engineering search firm placing engineers with VC-backed startups.",
+  areaServed: "US",
+  slogan: "Talent is all you need",
 };
 
 export default function RootLayout({
@@ -33,6 +48,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${plexMono.variable} ${archivo.variable}`}>
       <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_LD) }}
+        />
         <div className="topbar-outer">
           <div className="wrap">
             <div className="topbar">

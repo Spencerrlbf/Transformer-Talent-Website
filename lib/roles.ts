@@ -1,5 +1,14 @@
 import rolesSnapshot from "@/data/roles.json";
 
+export interface CompanyProfile {
+  blurb: string;
+  stage?: string;
+  funding?: string;
+  teamSize?: string;
+  founded?: string;
+  investors?: string;
+}
+
 export interface Role {
   jobId: string;
   title: string;
@@ -15,6 +24,21 @@ export interface Role {
   teamSize: string;
   visa: string;
   yoe: string;
+  company?: CompanyProfile;
+}
+
+export function roleSlug(role: Role): string {
+  const base = role.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `${base}-${role.jobId}`;
+}
+
+export async function getRoleBySlug(slug: string): Promise<Role | undefined> {
+  const roles = await getRoles();
+  return roles.find((r) => roleSlug(r) === slug);
 }
 
 const NOTION_VERSION = "2022-06-28";
@@ -27,7 +51,12 @@ export async function getRoles(): Promise<Role[]> {
   const dbId = process.env.NOTION_DATABASE_ID;
   if (token && dbId) {
     try {
-      return await fetchNotionRoles(token, dbId);
+      const live = await fetchNotionRoles(token, dbId);
+      // Anonymized company profiles live only in the snapshot; carry them over.
+      const profiles = new Map(
+        (rolesSnapshot as Role[]).map((r) => [r.jobId, r.company])
+      );
+      return live.map((r) => ({ ...r, company: profiles.get(r.jobId) }));
     } catch (err) {
       console.error("notion roles fetch failed; using snapshot", err);
     }

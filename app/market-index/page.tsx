@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import marketData from "@/data/market-index.json";
+import { FAMILY_PAGES } from "@/lib/market";
 
 export const metadata: Metadata = {
   title: "Market Index",
@@ -115,6 +116,23 @@ export default function MarketIndexPage() {
               FDEs are priced by impact, not by band.
             </p>
           </div>
+        </div>
+
+        <div className="sec-label">
+          <b>GUIDES</b> — per-role salary deep dives
+        </div>
+        <div className="logs" style={{ marginBottom: "1rem" }}>
+          {FAMILY_PAGES.map((f) => (
+            <Link
+              key={f.slug}
+              href={`/market-index/${f.slug}`}
+              className="log"
+              style={{ gridTemplateColumns: "1fr auto" }}
+            >
+              <span className="co">{f.title}</span>
+              <span className="t" style={{ color: "var(--signal)" }}>READ →</span>
+            </Link>
+          ))}
         </div>
 
         <div className="sec-label">

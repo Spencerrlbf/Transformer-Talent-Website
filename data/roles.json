@@ -27,7 +27,12 @@
     "funding": "2000000",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "1 - 6 years"
+    "yoe": "1 - 6 years",
+    "company": {
+      "blurb": "Simplifying Success Through Smart Analytics.",
+      "stage": "seed-stage",
+      "funding": "seed funding"
+    }
   },
   {
     "jobId": "17",
@@ -45,12 +50,20 @@
     "funding": "$110m",
     "teamSize": "275",
     "visa": "None, Visa transfers",
-    "yoe": "8 - 15 years"
+    "yoe": "8 - 15 years",
+    "company": {
+      "blurb": "Accelerating Vehicle Software Innovation.",
+      "stage": "scale-up",
+      "funding": "$110M+ raised",
+      "teamSize": "250+ people",
+      "founded": "2018",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "18",
     "title": "AI Engineer",
-    "description": "A new kind of dating service, from the creator of Hinge.",
+    "description": "Consumer AI startup reinventing how people meet, led by a founder with a landmark consumer-dating exit",
     "salary": "$200K - $300K",
     "locations": [
       "New York"
@@ -63,12 +76,19 @@
     "funding": "$18M",
     "teamSize": "5",
     "visa": "None, Visa transfers",
-    "yoe": "5 - 8 years"
+    "yoe": "5 - 8 years",
+    "company": {
+      "blurb": "Consumer AI startup reinventing how people meet, led by a founder with a landmark consumer-dating exit.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "19",
     "title": "AI Forward Deployed Engineer",
-    "description": "AI that automates operations for commodity companies.",
+    "description": "AI that automates operations for commodity companies",
     "salary": "$150K - $250K",
     "locations": [
       "San Francisco"
@@ -81,12 +101,19 @@
     "funding": "$2.5M+",
     "teamSize": "6",
     "visa": "None",
-    "yoe": "3 - 7 years"
+    "yoe": "3 - 7 years",
+    "company": {
+      "blurb": "AI that automates operations for commodity companies.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "20",
     "title": "AI Forward Deployed Strategist",
-    "description": "AI that automates operations for commodity companies.",
+    "description": "AI that automates operations for commodity companies",
     "salary": "$165K - $240K",
     "locations": [
       "San Francisco"
@@ -99,12 +126,19 @@
     "funding": "$2.5M+",
     "teamSize": "6",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "AI that automates operations for commodity companies.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "21",
     "title": "AI Product Engineer, Clinical AI",
-    "description": "Altitude is building the clinical AI execution platform for risk-bearing care organizations.",
+    "description": "They are building the clinical AI execution platform for risk-bearing care organizations",
     "salary": "$220K - $245K",
     "locations": [
       "New York"
@@ -117,7 +151,14 @@
     "funding": "12.8M",
     "teamSize": "-",
     "visa": "None, Visa transfers",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "They are building the clinical AI execution platform for risk-bearing care organizations.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "founded": "2025",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "16",
@@ -135,12 +176,20 @@
     "funding": "$7M",
     "teamSize": "7",
     "visa": "None, Visa transfers",
-    "yoe": "4+ years"
+    "yoe": "4+ years",
+    "company": {
+      "blurb": "VC-backed startup building computer-use AI agents to automate healthcare back-office operations.",
+      "stage": "Series A-stage",
+      "funding": "$7M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "22",
     "title": "Applied AI Product Engineer",
-    "description": "AI-powered QA platform that uses autonomous browser agents to test websites like real users \u2014 replacing brittle scripts and manual testing for top e-commerce brands.",
+    "description": "AI-powered QA platform that uses autonomous browser agents to test websites like real users \u2014 replacing brittle scripts and manual testing for top e-commerce brands",
     "salary": "$185K - $260K",
     "locations": [
       "New York"
@@ -153,7 +202,15 @@
     "funding": "$5M",
     "teamSize": "11",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 4 years"
+    "yoe": "1 - 4 years",
+    "company": {
+      "blurb": "AI-powered QA platform that uses autonomous browser agents to test websites like real users \u2014 replacing brittle scripts and manual testing for top e-commerce brands.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "~10 people",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "23",
@@ -171,12 +228,19 @@
     "funding": "$31M",
     "teamSize": "55",
     "visa": "None",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "Human risk management that works like magic.",
+      "stage": "growth-stage",
+      "funding": "$30M+ raised",
+      "teamSize": "~60 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "24",
     "title": "Backend Engineer (Infra)",
-    "description": "We're building an agent-to-agent hiring ecosystem where personal agents capture your work context and engage on your behalf  to eliminate discovery friction",
+    "description": "We're building an agent-to-agent hiring ecosystem where personal agents capture your work context and engage on your behalf to eliminate discovery friction",
     "salary": "$150K - $220K",
     "locations": [
       "New York"
@@ -189,7 +253,13 @@
     "funding": "$4M",
     "teamSize": "4",
     "visa": "None",
-    "yoe": "3 - 6 years"
+    "yoe": "3 - 6 years",
+    "company": {
+      "blurb": "We're building an agent-to-agent hiring ecosystem where personal agents capture your work context and engage on your behalf to eliminate discovery friction.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10"
+    }
   },
   {
     "jobId": "25",
@@ -208,7 +278,15 @@
     "funding": "$16.2M",
     "teamSize": "39",
     "visa": "None, Visa transfers",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "Web data API for AI.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2022",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "26",
@@ -226,12 +304,19 @@
     "funding": "$10M",
     "teamSize": "17",
     "visa": "None, Visa transfers",
-    "yoe": "5 - 8 years"
+    "yoe": "5 - 8 years",
+    "company": {
+      "blurb": "Trusted Intelligence for Insurance.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~15 people",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "27",
     "title": "Deployment Strategist",
-    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise",
     "salary": "$140K - $180K",
     "locations": [
       "San Francisco"
@@ -244,12 +329,19 @@
     "funding": "$2.5M",
     "teamSize": "6",
     "visa": "None",
-    "yoe": "1 - 4 years"
+    "yoe": "1 - 4 years",
+    "company": {
+      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "28",
     "title": "Deployment Strategist",
-    "description": "Stewardship reports for your entire book and new business.",
+    "description": "Stewardship reports for your entire book and new business",
     "salary": "$105K - $200K",
     "locations": [
       "San Francisco"
@@ -262,12 +354,17 @@
     "funding": "-",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "3 - 8 years"
+    "yoe": "3 - 8 years",
+    "company": {
+      "blurb": "Stewardship reports for your entire book and new business.",
+      "stage": "early-stage",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "29",
     "title": "Deployment Strategist",
-    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise",
     "salary": "$140K - $180K",
     "locations": [
       "San Francisco"
@@ -280,7 +377,14 @@
     "funding": "$2.5M",
     "teamSize": "6",
     "visa": "None",
-    "yoe": "1 - 4 years"
+    "yoe": "1 - 4 years",
+    "company": {
+      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "30",
@@ -298,7 +402,14 @@
     "funding": "$4.1M",
     "teamSize": "15",
     "visa": "None",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "Forefront of AI-driven software development for state and local governments.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "~15 people",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "31",
@@ -316,12 +427,20 @@
     "funding": "$5M",
     "teamSize": "25",
     "visa": "None",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "Enterprise AI Data Agents.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "~25 people",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "32",
     "title": "Forward Deployed Engineer",
-    "description": "We are a community to assist Founders, Recruiters & Job Seekers to connect for Startup focused Initiatives.",
+    "description": "Growth-stage AI company deploying engineers directly with enterprise customers across finance and education",
     "salary": "$150K - $200K",
     "locations": [
       "San Francisco",
@@ -335,12 +454,20 @@
     "funding": "$30M",
     "teamSize": "7",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 5 years"
+    "yoe": "2 - 5 years",
+    "company": {
+      "blurb": "Growth-stage AI company deploying engineers directly with enterprise customers across finance and education.",
+      "stage": "growth-stage",
+      "funding": "$30M+ raised",
+      "teamSize": "founding team of <10",
+      "founded": "2020",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "33",
     "title": "Forward Deployed Engineer",
-    "description": "Building AGI for banking.",
+    "description": "Building AGI for banking",
     "salary": "$160K - $265K",
     "locations": [
       "San Francisco"
@@ -353,12 +480,20 @@
     "funding": "$33M",
     "teamSize": "35",
     "visa": "None",
-    "yoe": "0 - 5 years"
+    "yoe": "0 - 5 years",
+    "company": {
+      "blurb": "Building AGI for banking.",
+      "stage": "growth-stage",
+      "funding": "$30M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2023",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "34",
     "title": "Forward Deployed Engineer",
-    "description": "Usul helps America and its allies buy and field technology at the speed of Amazon Prime.",
+    "description": "A company that helps America and its allies buy and field technology at the speed of Amazon Prime",
     "salary": "$180K - $240K",
     "locations": [
       "San Francisco",
@@ -372,7 +507,15 @@
     "funding": "$3.3M",
     "teamSize": "11",
     "visa": "None",
-    "yoe": "2 - 8 years"
+    "yoe": "2 - 8 years",
+    "company": {
+      "blurb": "A company that helps America and its allies buy and field technology at the speed of Amazon Prime.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "~10 people",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "35",
@@ -390,12 +533,20 @@
     "funding": "$108M",
     "teamSize": "75",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 6 years"
+    "yoe": "3 - 6 years",
+    "company": {
+      "blurb": "Building the ingestion layer to connect human data with machines.",
+      "stage": "scale-up",
+      "funding": "$100M+ raised",
+      "teamSize": "~80 people",
+      "founded": "2023",
+      "investors": "backed by a16z, Y Combinator"
+    }
   },
   {
     "jobId": "36",
     "title": "Forward Deployed Engineer",
-    "description": "Take2 AI builds autonomous AI agents that automate the end-to-end healthcare recruiting process \u2014 from job posting to job offer.",
+    "description": "A company that builds autonomous AI agents that automate the end-to-end healthcare recruiting process \u2014 from job posting to job offer",
     "salary": "$150K - $200K",
     "locations": [
       "New York"
@@ -408,7 +559,15 @@
     "funding": "$14M",
     "teamSize": "22",
     "visa": "None",
-    "yoe": "4 - 6 years"
+    "yoe": "4 - 6 years",
+    "company": {
+      "blurb": "A company that builds autonomous AI agents that automate the end-to-end healthcare recruiting process \u2014 from job posting to job offer.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~20 people",
+      "founded": "2021",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "37",
@@ -426,12 +585,19 @@
     "funding": "$4.1M",
     "teamSize": "15",
     "visa": "None",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "Forefront of AI-driven software development for state and local governments.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "~15 people",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "38",
     "title": "Forward Deployed Engineer (New York)",
-    "description": "We acquire, own, and operate world-class vertical software and tech-enabled businesses.",
+    "description": "We acquire, own, and operate world-class vertical software and tech-enabled businesses",
     "salary": "$185K - $240K",
     "locations": [
       "New York",
@@ -446,12 +612,19 @@
     "funding": "$250M",
     "teamSize": "85",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 6 years"
+    "yoe": "3 - 6 years",
+    "company": {
+      "blurb": "We acquire, own, and operate world-class vertical software and tech-enabled businesses.",
+      "stage": "scale-up",
+      "funding": "$250M+ raised",
+      "teamSize": "~80 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "39",
     "title": "Founding AI Engineer",
-    "description": "Automate architecture.",
+    "description": "Automate architecture",
     "salary": "$165K - $210K",
     "locations": [
       "San Francisco"
@@ -464,7 +637,14 @@
     "funding": "4500000",
     "teamSize": "3",
     "visa": "None",
-    "yoe": "2 - 8 years"
+    "yoe": "2 - 8 years",
+    "company": {
+      "blurb": "Automate architecture.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "40",
@@ -482,12 +662,18 @@
     "funding": "$2.5M",
     "teamSize": "1",
     "visa": "None, Visa transfers",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "Enterprise agents built for procurement.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10"
+    }
   },
   {
     "jobId": "41",
     "title": "Founding Engineer",
-    "description": "GoodLane turns top-tier W-2 freight agents into independent agency owners. We partner with the best and provide the playbook, tools, and support to build a successful agency in 12 months.",
+    "description": "A company that turns top-tier W-2 freight agents into independent agency owners. We partner with the best and provide the playbook, tools, and support to build a successful agency in 12 months",
     "salary": "$180K - $250K",
     "locations": [
       "New York"
@@ -500,7 +686,15 @@
     "funding": "$10M",
     "teamSize": "4",
     "visa": "None, Visa transfers",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "A company that turns top-tier W-2 freight agents into independent agency owners. We partner with the best and provide the playbook, tools, and support to build a successful agency in 12 months.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "42",
@@ -518,12 +712,19 @@
     "funding": "6M",
     "teamSize": "5",
     "visa": "None",
-    "yoe": "1.5+ years"
+    "yoe": "1.5+ years",
+    "company": {
+      "blurb": "Connect Agents to the External World, Confidently.",
+      "stage": "Series A-stage",
+      "funding": "$6M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "43",
     "title": "Founding Engineer",
-    "description": "Transforming how the U.S.'s largest healthcare providers get paid.",
+    "description": "Transforming how the U.S.'s largest healthcare providers get paid",
     "salary": "$170K - $250K",
     "locations": [
       "San Francisco"
@@ -536,7 +737,15 @@
     "funding": "$5M",
     "teamSize": "3",
     "visa": "None",
-    "yoe": "0 - 8 years"
+    "yoe": "0 - 8 years",
+    "company": {
+      "blurb": "Transforming how the U.S.'s largest healthcare providers get paid.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "44",
@@ -554,12 +763,19 @@
     "funding": "$5M",
     "teamSize": "6",
     "visa": "None, Visa transfers",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "Headcount management for scaling teams.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2023"
+    }
   },
   {
     "jobId": "45",
     "title": "Founding Engineer",
-    "description": "Optimize sales rep pricing performance and recover lost revenue.",
+    "description": "Optimize sales rep pricing performance and recover lost revenue",
     "salary": "$160K - $200K",
     "locations": [
       "San Francisco"
@@ -572,7 +788,15 @@
     "funding": "$7M",
     "teamSize": "12",
     "visa": "None, Visa transfers",
-    "yoe": "4 - 8 years"
+    "yoe": "4 - 8 years",
+    "company": {
+      "blurb": "Optimize sales rep pricing performance and recover lost revenue.",
+      "stage": "Series A-stage",
+      "funding": "$7M raised",
+      "teamSize": "~10 people",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "46",
@@ -590,7 +814,12 @@
     "funding": "$6M",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "0 - 5 years"
+    "yoe": "0 - 5 years",
+    "company": {
+      "blurb": "Email Inboxes for AI Agents.",
+      "stage": "Series A-stage",
+      "funding": "$6M raised"
+    }
   },
   {
     "jobId": "47",
@@ -608,12 +837,17 @@
     "funding": "-",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "3 - 5 years"
+    "yoe": "3 - 5 years",
+    "company": {
+      "blurb": "Military AI that runs your admin work.",
+      "stage": "early-stage",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "48",
     "title": "Founding Engineer",
-    "description": "Quill is the agent platform for data reliability, fixing the messy data inside the systems of record that every company runs on.",
+    "description": "They are the agent platform for data reliability, fixing the messy data inside the systems of record that every company runs on",
     "salary": "$150K - $250K",
     "locations": [
       "New York"
@@ -626,12 +860,20 @@
     "funding": "4.5M",
     "teamSize": "2",
     "visa": "None",
-    "yoe": "2 - 6 years"
+    "yoe": "2 - 6 years",
+    "company": {
+      "blurb": "They are the agent platform for data reliability, fixing the messy data inside the systems of record that every company runs on.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2026",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "49",
     "title": "Founding Engineer",
-    "description": "Equip the offline economy with foundational intelligence.",
+    "description": "Equip the offline economy with foundational intelligence",
     "salary": "$150K - $250K",
     "locations": [
       "New York"
@@ -644,12 +886,19 @@
     "funding": "5000000",
     "teamSize": "3",
     "visa": "None",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "Equip the offline economy with foundational intelligence.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2026"
+    }
   },
   {
     "jobId": "50",
     "title": "Founding Engineer - Full Stack",
-    "description": "Unusual drives more leads from AI models by helping you discover and change AI's opinion of your brand.",
+    "description": "A company that drives more leads from AI models by helping you discover and change AI's opinion of your brand",
     "salary": "$170K - $250K",
     "locations": [
       "San Francisco"
@@ -662,7 +911,15 @@
     "funding": "$3,600,000",
     "teamSize": "5",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "A company that drives more leads from AI models by helping you discover and change AI's opinion of your brand.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "51",
@@ -680,12 +937,19 @@
     "funding": "$8.3M",
     "teamSize": "5",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 12 years"
+    "yoe": "3 - 12 years",
+    "company": {
+      "blurb": "Agentic integration platform automating mission-critical system connections for the physical economy.",
+      "stage": "Series A-stage",
+      "funding": "$8M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2023"
+    }
   },
   {
     "jobId": "52",
     "title": "Founding Forward Deployed Engineer",
-    "description": "Recur partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+    "description": "A company that partners with mission-critical software companies to unlock growth and build for an AI-first future",
     "salary": "$200K - $300K",
     "locations": [
       "New York",
@@ -699,12 +963,19 @@
     "funding": "$50M+",
     "teamSize": "1",
     "visa": "None",
-    "yoe": "3 - 5 years"
+    "yoe": "3 - 5 years",
+    "company": {
+      "blurb": "A company that partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+      "stage": "growth-stage",
+      "funding": "$50M+ raised",
+      "teamSize": "founding team of <10",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "53",
     "title": "Founding Forward Deployed Engineer",
-    "description": "We\u2019re building the first customer lifecycle automation platform powered by AI agents, purpose-built for B2B companies.",
+    "description": "We\u2019re building the first customer lifecycle automation platform powered by AI agents, purpose-built for B2B companies",
     "salary": "$180K - $230K",
     "locations": [
       "San Francisco",
@@ -718,12 +989,19 @@
     "funding": "$4M",
     "teamSize": "6",
     "visa": "None",
-    "yoe": "2 - 7 years"
+    "yoe": "2 - 7 years",
+    "company": {
+      "blurb": "We\u2019re building the first customer lifecycle automation platform powered by AI agents, purpose-built for B2B companies.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "54",
     "title": "Founding Forward Deployed Engineer",
-    "description": "Recur partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+    "description": "A company that partners with mission-critical software companies to unlock growth and build for an AI-first future",
     "salary": "$200K - $300K",
     "locations": [
       "New York",
@@ -737,7 +1015,14 @@
     "funding": "$50M+",
     "teamSize": "1",
     "visa": "None",
-    "yoe": "3 - 5 years"
+    "yoe": "3 - 5 years",
+    "company": {
+      "blurb": "A company that partners with mission-critical software companies to unlock growth and build for an AI-first future.",
+      "stage": "growth-stage",
+      "funding": "$50M+ raised",
+      "teamSize": "founding team of <10",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "55",
@@ -756,12 +1041,17 @@
     "funding": "$6M",
     "teamSize": "-",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 7 years"
+    "yoe": "3 - 7 years",
+    "company": {
+      "blurb": "AI Solutions and Services for Patents.",
+      "stage": "Series A-stage",
+      "funding": "$6M raised"
+    }
   },
   {
     "jobId": "56",
     "title": "Founding Full-Stack Engineer",
-    "description": "Alcor Labs builds wearable AI co-pilots on smart glasses for industrial field workers, deploying agentic vision-language models to data centers, energy grids, and aerospace.",
+    "description": "A company that builds wearable AI co-pilots on smart glasses for industrial field workers, deploying agentic vision-language models to data centers, energy grids, and aerospace",
     "salary": "$180K - $240K",
     "locations": [
       "San Francisco"
@@ -774,12 +1064,19 @@
     "funding": "$5M",
     "teamSize": "2",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 5 years"
+    "yoe": "2 - 5 years",
+    "company": {
+      "blurb": "A company that builds wearable AI co-pilots on smart glasses for industrial field workers, deploying agentic vision-language models to data centers, energy grids, and aerospace.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2026"
+    }
   },
   {
     "jobId": "57",
     "title": "Founding Member of Technical Staff",
-    "description": "Arca builds AI agents for life sciences that take drug development from 10 years to 5.",
+    "description": "A company that builds AI agents for life sciences that take drug development from 10 years to 5",
     "salary": "$175K - $250K",
     "locations": [
       "New York"
@@ -792,12 +1089,20 @@
     "funding": "$9M",
     "teamSize": "6",
     "visa": "None",
-    "yoe": "0 - 2 years"
+    "yoe": "0 - 2 years",
+    "company": {
+      "blurb": "A company that builds AI agents for life sciences that take drug development from 10 years to 5.",
+      "stage": "Series A-stage",
+      "funding": "$9M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2026",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "58",
     "title": "Founding Product Engineer",
-    "description": "AI-native startup rebuilding how businesses price and manage risk in the insurance industry, replacing manual processes that drive multi-million-dollar decisions.",
+    "description": "AI-native startup rebuilding how businesses price and manage risk in the insurance industry, replacing manual processes that drive multi-million-dollar decisions",
     "salary": "$160K - $250K",
     "locations": [
       "San Francisco",
@@ -811,12 +1116,20 @@
     "funding": "$5M",
     "teamSize": "5",
     "visa": "None",
-    "yoe": "3 - 7 years"
+    "yoe": "3 - 7 years",
+    "company": {
+      "blurb": "AI-native startup rebuilding how businesses price and manage risk in the insurance industry, replacing manual processes that drive multi-million-dollar decisions.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2026",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "59",
     "title": "Frontend Engineer",
-    "description": "Embedded accounting software for SMB platforms.",
+    "description": "Embedded accounting software for SMB platforms",
     "salary": "$185K - $225K",
     "locations": [
       "San Francisco"
@@ -829,12 +1142,20 @@
     "funding": "$9M",
     "teamSize": "18",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 7 years"
+    "yoe": "2 - 7 years",
+    "company": {
+      "blurb": "Embedded accounting software for SMB platforms.",
+      "stage": "Series A-stage",
+      "funding": "$9M raised",
+      "teamSize": "~20 people",
+      "founded": "2023",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "60",
     "title": "Full Stack Engineer",
-    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise",
     "salary": "$120K - $200K",
     "locations": [
       "San Francisco"
@@ -847,12 +1168,19 @@
     "funding": "$2.5M",
     "teamSize": "6",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 4 years"
+    "yoe": "2 - 4 years",
+    "company": {
+      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "61",
     "title": "Full Stack Engineer",
-    "description": "Your personal AI Stylist. . instagram.com/alta",
+    "description": "Consumer AI startup building a personal AI stylist for fashion and e-commerce",
     "salary": "$175K - $250K",
     "locations": [
       "New York"
@@ -865,12 +1193,19 @@
     "funding": "11000000",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "2 - 6 years"
+    "yoe": "2 - 6 years",
+    "company": {
+      "blurb": "Consumer AI startup building a personal AI stylist for fashion and e-commerce.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "founded": "2023",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "62",
     "title": "Full Stack Engineer",
-    "description": "Usul helps America and its allies buy and field technology at the speed of Amazon Prime.",
+    "description": "A company that helps America and its allies buy and field technology at the speed of Amazon Prime",
     "salary": "$180K - $240K",
     "locations": [
       "San Francisco",
@@ -884,12 +1219,20 @@
     "funding": "$3.3M",
     "teamSize": "11",
     "visa": "None",
-    "yoe": "2 - 8 years"
+    "yoe": "2 - 8 years",
+    "company": {
+      "blurb": "A company that helps America and its allies buy and field technology at the speed of Amazon Prime.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "~10 people",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "63",
     "title": "Full Stack Engineer",
-    "description": "The Knowledge Infrastructure for the Agentic Enterprise.",
+    "description": "The Knowledge Infrastructure for the Agentic Enterprise",
     "salary": "$120K - $200K",
     "locations": [
       "San Francisco"
@@ -902,7 +1245,14 @@
     "funding": "$2.5M",
     "teamSize": "6",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 4 years"
+    "yoe": "2 - 4 years",
+    "company": {
+      "blurb": "The Knowledge Infrastructure for the Agentic Enterprise.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "64",
@@ -920,12 +1270,19 @@
     "funding": "$11.2M",
     "teamSize": "5",
     "visa": "None",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "The first AI-native OS for deployment teams.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "founding team of <10",
+      "founded": "2026"
+    }
   },
   {
     "jobId": "65",
     "title": "Fullstack Product Engineer",
-    "description": "Big Leap Health empowers clinics that offers interventional psychiatry services to see more patients.",
+    "description": "A company that empowers clinics that offers interventional psychiatry services to see more patients",
     "salary": "$160K - $220K",
     "locations": [
       "New York"
@@ -938,7 +1295,15 @@
     "funding": "$10M",
     "teamSize": "10",
     "visa": "None",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "A company that empowers clinics that offers interventional psychiatry services to see more patients.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~10 people",
+      "founded": "2025",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "3",
@@ -966,12 +1331,20 @@
     "funding": "$84M",
     "teamSize": "160",
     "visa": "None, Visa transfers",
-    "yoe": "7 - 15 years"
+    "yoe": "7 - 15 years",
+    "company": {
+      "blurb": "The Fraud Experts.",
+      "stage": "growth-stage",
+      "funding": "$80M+ raised",
+      "teamSize": "150+ people",
+      "founded": "2017",
+      "investors": "backed by Craft Ventures, Felicis, a16z"
+    }
   },
   {
     "jobId": "66",
     "title": "Infrastructure Engineer",
-    "description": "Your app, Enterprise Ready.",
+    "description": "Your app, Enterprise Ready",
     "salary": "$175K - $275K",
     "locations": [
       "Canada",
@@ -986,12 +1359,20 @@
     "funding": "$198M",
     "teamSize": "110",
     "visa": "None, Visa transfers",
-    "yoe": "4 - 7 years"
+    "yoe": "4 - 7 years",
+    "company": {
+      "blurb": "Your app, Enterprise Ready.",
+      "stage": "scale-up",
+      "funding": "$190M+ raised",
+      "teamSize": "100+ people",
+      "founded": "2020",
+      "investors": "backed by Craft Ventures"
+    }
   },
   {
     "jobId": "67",
     "title": "Infrastructure Engineer",
-    "description": "You built your firm's edge. Compound it with AI.",
+    "description": "You built your firm's edge. Compound it with AI",
     "salary": "$150K - $300K",
     "locations": [
       "San Francisco",
@@ -1005,7 +1386,15 @@
     "funding": "$50M",
     "teamSize": "17",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 10 years"
+    "yoe": "1 - 10 years",
+    "company": {
+      "blurb": "You built your firm's edge. Compound it with AI.",
+      "stage": "growth-stage",
+      "funding": "$50M+ raised",
+      "teamSize": "~15 people",
+      "founded": "2024",
+      "investors": "backed by Sequoia"
+    }
   },
   {
     "jobId": "3",
@@ -1023,12 +1412,17 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 2 years"
+    "yoe": "0 - 2 years",
+    "company": {
+      "blurb": "Simplifying Success Through Smart Analytics.",
+      "stage": "seed-stage",
+      "funding": "seed funding"
+    }
   },
   {
     "jobId": "68",
     "title": "Lead AI Engineer (NYC)",
-    "description": "Contracting intelligence from the first turn through obligation management.",
+    "description": "Contracting intelligence from the first turn through obligation management",
     "salary": "$175K - $300K",
     "locations": [
       "New York",
@@ -1042,12 +1436,18 @@
     "funding": "-",
     "teamSize": "1800",
     "visa": "None, Visa transfers",
-    "yoe": "8+ years"
+    "yoe": "8+ years",
+    "company": {
+      "blurb": "Contracting intelligence from the first turn through obligation management.",
+      "teamSize": "1,000+ people",
+      "founded": "2009",
+      "investors": "backed by Y Combinator"
+    }
   },
   {
     "jobId": "80",
     "title": "ML / AI Engineer",
-    "description": "-",
+    "description": "Early-stage consumer-AI startup building ML-powered products",
     "salary": "$200K - $300K",
     "locations": [
       "San Francisco",
@@ -1061,7 +1461,15 @@
     "funding": "$9.5M",
     "teamSize": "7",
     "visa": "None, Visa transfers",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "Early-stage consumer-AI startup building ML-powered products.",
+      "stage": "Series A-stage",
+      "funding": "$9M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "81",
@@ -1080,12 +1488,19 @@
     "funding": "$5M",
     "teamSize": "3",
     "visa": "None, Visa transfers",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "The Workflow Intelligence Layer.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "4",
     "title": "Machine Learning Engineer",
-    "description": "Sardine is the leading agentic risk platform to fight financial crime.",
+    "description": "They are the leading agentic risk platform to fight financial crime",
     "salary": "$175K - $220K",
     "locations": [
       "New York",
@@ -1110,12 +1525,19 @@
     "funding": "175200000",
     "teamSize": "210",
     "visa": "None",
-    "yoe": "5 - 8 years"
+    "yoe": "5 - 8 years",
+    "company": {
+      "blurb": "They are the leading agentic risk platform to fight financial crime.",
+      "stage": "scale-up",
+      "funding": "$170M+ raised",
+      "teamSize": "200+ people",
+      "founded": "2019"
+    }
   },
   {
     "jobId": "5",
     "title": "Member of Technical Staff",
-    "description": "High-fidelity trajectories and environments for frontier AI research.",
+    "description": "High-fidelity trajectories and environments for frontier AI research",
     "salary": "$200K - $280K",
     "locations": [
       "New York",
@@ -1129,7 +1551,13 @@
     "funding": "-",
     "teamSize": "6",
     "visa": "None, Visa transfers",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "High-fidelity trajectories and environments for frontier AI research.",
+      "stage": "early-stage",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "69",
@@ -1147,12 +1575,20 @@
     "funding": "$7.1M",
     "teamSize": "10",
     "visa": "None, Visa transfers",
-    "yoe": "6 - 14 years"
+    "yoe": "6 - 14 years",
+    "company": {
+      "blurb": "AI Agents for KYC & AML.",
+      "stage": "Series A-stage",
+      "funding": "$7M raised",
+      "teamSize": "~10 people",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "70",
     "title": "Member of Technical Staff",
-    "description": "AI that autonomously operates factories \u2014 connecting legacy systems into a unified layer and deploying agents that optimize production for profit.",
+    "description": "AI that autonomously operates factories \u2014 connecting legacy systems into a unified layer and deploying agents that optimize production for profit",
     "salary": "$150K - $300K",
     "locations": [
       "San Francisco"
@@ -1165,12 +1601,19 @@
     "funding": "$5 M",
     "teamSize": "7",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 8 years"
+    "yoe": "2 - 8 years",
+    "company": {
+      "blurb": "AI that autonomously operates factories \u2014 connecting legacy systems into a unified layer and deploying agents that optimize production for profit.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "71",
     "title": "Member of Technical Staff",
-    "description": "Caddy is your personal AI in iMessage \u2014 a proactive teammate that plugs into your apps and gets work done on your behalf.",
+    "description": "They are your personal AI in iMessage \u2014 a proactive teammate that plugs into your apps and gets work done on your behalf",
     "salary": "$120K - $180K",
     "locations": [
       "New York"
@@ -1183,12 +1626,18 @@
     "funding": "$500K",
     "teamSize": "4",
     "visa": "None",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "They are your personal AI in iMessage \u2014 a proactive teammate that plugs into your apps and gets work done on your behalf.",
+      "stage": "early-stage",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "72",
     "title": "Member of Technical Staff",
-    "description": "Wafer builds AI agents that work as autonomous performance engineers, optimizing GPU kernels for AI inference.",
+    "description": "A company that builds AI agents that work as autonomous performance engineers, optimizing GPU kernels for AI inference",
     "salary": "$200K - $200K",
     "locations": [
       "San Francisco"
@@ -1201,12 +1650,19 @@
     "funding": "$4M",
     "teamSize": "7",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "A company that builds AI agents that work as autonomous performance engineers, optimizing GPU kernels for AI inference.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "77",
     "title": "Member of Technical Staff (Product)",
-    "description": "Listen is an autonomous researcher that talks to thousands of people, revealing exactly what they want and why.",
+    "description": "They are an autonomous researcher that talks to thousands of people, revealing exactly what they want and why",
     "salary": "$200K - $300K",
     "locations": [
       "San Francisco"
@@ -1219,7 +1675,13 @@
     "funding": "US$ 100M",
     "teamSize": "80",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 8 years"
+    "yoe": "2 - 8 years",
+    "company": {
+      "blurb": "They are an autonomous researcher that talks to thousands of people, revealing exactly what they want and why.",
+      "teamSize": "~80 people",
+      "founded": "2023",
+      "investors": "backed by Sequoia"
+    }
   },
   {
     "jobId": "73",
@@ -1237,7 +1699,15 @@
     "funding": "$140M",
     "teamSize": "120",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 8 years"
+    "yoe": "3 - 8 years",
+    "company": {
+      "blurb": "AI Platform for Accounting firms giving accountants a team of AI assistants.",
+      "stage": "scale-up",
+      "funding": "$140M+ raised",
+      "teamSize": "100+ people",
+      "founded": "2023",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "74",
@@ -1255,7 +1725,13 @@
     "funding": "-",
     "teamSize": "20",
     "visa": "None, Visa transfers",
-    "yoe": "4+ years"
+    "yoe": "4+ years",
+    "company": {
+      "blurb": "Removing the friction that keeps tax and accounting professionals from doing their best work, by using cutting-edge AI to automate tax document processing.",
+      "stage": "early-stage",
+      "teamSize": "~20 people",
+      "founded": "2023"
+    }
   },
   {
     "jobId": "6",
@@ -1273,7 +1749,14 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "Face-to-face AI interaction that feels human.",
+      "stage": "growth-stage",
+      "funding": "$60M+ raised",
+      "teamSize": "~25 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "75",
@@ -1291,7 +1774,14 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "Face-to-face AI interaction that feels human.",
+      "stage": "growth-stage",
+      "funding": "$60M+ raised",
+      "teamSize": "~25 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "76",
@@ -1309,7 +1799,14 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 2 years"
+    "yoe": "0 - 2 years",
+    "company": {
+      "blurb": "Face-to-face AI interaction that feels human.",
+      "stage": "growth-stage",
+      "funding": "$60M+ raised",
+      "teamSize": "~25 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "7",
@@ -1327,7 +1824,14 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 2 years"
+    "yoe": "0 - 2 years",
+    "company": {
+      "blurb": "Face-to-face AI interaction that feels human.",
+      "stage": "growth-stage",
+      "funding": "$60M+ raised",
+      "teamSize": "~25 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "78",
@@ -1345,7 +1849,15 @@
     "funding": "$64M",
     "teamSize": "15",
     "visa": "None, Visa transfers",
-    "yoe": "4 - 10 years"
+    "yoe": "4 - 10 years",
+    "company": {
+      "blurb": "Wealth management firm rebuilt from the ground up with AI.",
+      "stage": "growth-stage",
+      "funding": "$60M+ raised",
+      "teamSize": "~15 people",
+      "founded": "2025",
+      "investors": "backed by Craft Ventures"
+    }
   },
   {
     "jobId": "79",
@@ -1363,7 +1875,15 @@
     "funding": "$64M",
     "teamSize": "15",
     "visa": "None",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "Wealth management firm rebuilt from the ground up with AI.",
+      "stage": "growth-stage",
+      "funding": "$60M+ raised",
+      "teamSize": "~15 people",
+      "founded": "2025",
+      "investors": "backed by Craft Ventures"
+    }
   },
   {
     "jobId": "82",
@@ -1382,7 +1902,15 @@
     "funding": "$27M",
     "teamSize": "130",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 3 years"
+    "yoe": "1 - 3 years",
+    "company": {
+      "blurb": "AI-Platform for End-to-End product development.",
+      "stage": "growth-stage",
+      "funding": "$20M+ raised",
+      "teamSize": "100+ people",
+      "founded": "2016",
+      "investors": "backed by Y Combinator, 8VC"
+    }
   },
   {
     "jobId": "83",
@@ -1400,12 +1928,19 @@
     "funding": "$5M",
     "teamSize": "7",
     "visa": "None, Visa transfers, New visa sponsorships",
-    "yoe": "6+ years"
+    "yoe": "6+ years",
+    "company": {
+      "blurb": "Unleashing engineering for the built environment.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "84",
     "title": "Product Engineer",
-    "description": "We are a community to assist Founders, Recruiters & Job Seekers to connect for Startup focused Initiatives.",
+    "description": "AI startup building product experiences for education and B2B customers",
     "salary": "$150K - $250K",
     "locations": [
       "San Francisco"
@@ -1418,12 +1953,20 @@
     "funding": "$5.2M",
     "teamSize": "5",
     "visa": "None, Visa transfers",
-    "yoe": "0+ years"
+    "yoe": "0+ years",
+    "company": {
+      "blurb": "AI startup building product experiences for education and B2B customers.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "85",
     "title": "Product Engineer",
-    "description": "The only end-to-end AI system built for GovCon. Unite your workflow across capture, proposals, delivery and operations.",
+    "description": "The only end-to-end AI system built for GovCon. Unite your workflow across capture, proposals, delivery and operations",
     "salary": "$160K - $250K",
     "locations": [
       "New York"
@@ -1436,7 +1979,15 @@
     "funding": "$42M",
     "teamSize": "50",
     "visa": "None",
-    "yoe": "1 - 6 years"
+    "yoe": "1 - 6 years",
+    "company": {
+      "blurb": "The only end-to-end AI system built for GovCon. Unite your workflow across capture, proposals, delivery and operations.",
+      "stage": "growth-stage",
+      "funding": "$40M+ raised",
+      "teamSize": "~50 people",
+      "founded": "2021",
+      "investors": "backed by Y Combinator, Craft Ventures"
+    }
   },
   {
     "jobId": "86",
@@ -1455,12 +2006,20 @@
     "funding": "$16.2M",
     "teamSize": "39",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 8 years"
+    "yoe": "3 - 8 years",
+    "company": {
+      "blurb": "Web data API for AI.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2022",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "87",
     "title": "Product Engineer",
-    "description": "Alma simplifies immigration for technologists, founders, researchers, and others at the top of their fields with our highly experienced immigration lawyers and a user-friendly platform.",
+    "description": "A company that simplifies immigration for technologists, founders, researchers, and others at the top of their fields with our highly experienced immigration lawyers and a user-friendly platform",
     "salary": "$140K - $250K",
     "locations": [
       "San Francisco",
@@ -1474,12 +2033,19 @@
     "funding": "$20M",
     "teamSize": "70",
     "visa": "None, Visa transfers",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "A company that simplifies immigration for technologists, founders, researchers, and others at the top of their fields with our highly experienced immigration lawyers and a user-friendly platform.",
+      "stage": "Series A-stage",
+      "funding": "$20M+ raised",
+      "teamSize": "~70 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "88",
     "title": "Product Engineer",
-    "description": "AI-powered trade advisory platform that helps companies navigate tariffs, recover duty refunds, and reduce costs across global trade.",
+    "description": "AI-powered trade advisory platform that helps companies navigate tariffs, recover duty refunds, and reduce costs across global trade",
     "salary": "$185K - $230K",
     "locations": [
       "San Francisco"
@@ -1492,7 +2058,15 @@
     "funding": "$5.4M",
     "teamSize": "8",
     "visa": "None, Visa transfers",
-    "yoe": "2 - 5 years"
+    "yoe": "2 - 5 years",
+    "company": {
+      "blurb": "AI-powered trade advisory platform that helps companies navigate tariffs, recover duty refunds, and reduce costs across global trade.",
+      "stage": "Series A-stage",
+      "funding": "$5M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2024",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "89",
@@ -1510,7 +2084,14 @@
     "funding": "7M",
     "teamSize": "7",
     "visa": "None, Visa transfers",
-    "yoe": "2+ years"
+    "yoe": "2+ years",
+    "company": {
+      "blurb": "Building a world where preventable disease is actually prevented.",
+      "stage": "Series A-stage",
+      "funding": "$7M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "90",
@@ -1528,7 +2109,14 @@
     "funding": "$31M",
     "teamSize": "55",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 10 years"
+    "yoe": "3 - 10 years",
+    "company": {
+      "blurb": "Human risk management that works like magic.",
+      "stage": "growth-stage",
+      "funding": "$30M+ raised",
+      "teamSize": "~60 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "91",
@@ -1546,7 +2134,15 @@
     "funding": "$45.6m",
     "teamSize": "75",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 5 years"
+    "yoe": "1 - 5 years",
+    "company": {
+      "blurb": "The autonomous future of industrial labor.",
+      "stage": "growth-stage",
+      "funding": "$40M+ raised",
+      "teamSize": "~80 people",
+      "founded": "2021",
+      "investors": "backed by Founders Fund, General Catalyst"
+    }
   },
   {
     "jobId": "92",
@@ -1564,25 +2160,15 @@
     "funding": "$16.2M",
     "teamSize": "39",
     "visa": "None, Visa transfers",
-    "yoe": "3+ years"
-  },
-  {
-    "jobId": "93",
-    "title": "Role",
-    "description": "One liner",
-    "salary": "Salary",
-    "locations": [
-      "Locations"
-    ],
-    "techStack": "Tech Stack",
-    "industry": "Industry",
-    "workplace": "Workplace",
-    "roleType": "Role Type",
-    "equity": "Equity",
-    "funding": "Funding",
-    "teamSize": "Team Size",
-    "visa": "Visa",
-    "yoe": "YOE"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "Web data API for AI.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2022",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "94",
@@ -1601,7 +2187,15 @@
     "funding": "$27M",
     "teamSize": "130",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 1 years"
+    "yoe": "0 - 1 years",
+    "company": {
+      "blurb": "AI-Platform for End-to-End product development.",
+      "stage": "growth-stage",
+      "funding": "$20M+ raised",
+      "teamSize": "100+ people",
+      "founded": "2016",
+      "investors": "backed by Y Combinator, 8VC"
+    }
   },
   {
     "jobId": "95",
@@ -1615,11 +2209,19 @@
     "industry": "AI, Real Estate, Software Development",
     "workplace": "Hybrid",
     "roleType": "Backend Engineer",
-    "equity": "Competitive equity in parent, Vantaca. Expected to take total annual comp to ~$350K - $450K and potentially higher for Staff level.",
+    "equity": "Competitive equity in parent company \u2014 expected total annual comp ~$350K-$450K, higher for Staff.",
     "funding": "$350M",
     "teamSize": "35",
     "visa": "None, Visa transfers",
-    "yoe": "6+ years"
+    "yoe": "6+ years",
+    "company": {
+      "blurb": "Leading AI solution for the community association management industry.",
+      "stage": "scale-up",
+      "funding": "$350M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2022",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "96",
@@ -1638,12 +2240,20 @@
     "funding": "$300M",
     "teamSize": "375",
     "visa": "None, Visa transfers",
-    "yoe": "6+ years"
+    "yoe": "6+ years",
+    "company": {
+      "blurb": "Leading AI solution for the community association management industry.",
+      "stage": "scale-up",
+      "funding": "$300M+ raised",
+      "teamSize": "350+ people",
+      "founded": "2016",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "97",
     "title": "Senior / Staff Product Engineer",
-    "description": "For everything that happens after you deploy.",
+    "description": "For everything that happens after you deploy",
     "salary": "$200K - $400K",
     "locations": [
       "New York",
@@ -1657,7 +2267,14 @@
     "funding": "$20M",
     "teamSize": "20",
     "visa": "None, Visa transfers",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "For everything that happens after you deploy.",
+      "stage": "Series A-stage",
+      "funding": "$20M+ raised",
+      "teamSize": "~20 people",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "98",
@@ -1675,12 +2292,19 @@
     "funding": "$6.5M",
     "teamSize": "9",
     "visa": "None, Visa transfers",
-    "yoe": "1 - 10 years"
+    "yoe": "1 - 10 years",
+    "company": {
+      "blurb": "Connecting you with dedicated health advocates who put you first and take charge of your healthcare journey.",
+      "stage": "Series A-stage",
+      "funding": "$6M raised",
+      "teamSize": "founding team of <10",
+      "founded": "2025"
+    }
   },
   {
     "jobId": "99",
     "title": "Senior AI Product Manager",
-    "description": "AI-enabled personal training, covered by insurance.",
+    "description": "AI-enabled personal training, covered by insurance",
     "salary": "$200K - $230K",
     "locations": [
       "New York"
@@ -1693,7 +2317,14 @@
     "funding": "11200000",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "AI-enabled personal training, covered by insurance.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "founded": "2018",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "100",
@@ -1711,12 +2342,20 @@
     "funding": "$27.5M",
     "teamSize": "40",
     "visa": "None, Visa transfers",
-    "yoe": "3 - 8 years"
+    "yoe": "3 - 8 years",
+    "company": {
+      "blurb": "AI agents for document OCR + workflows.",
+      "stage": "growth-stage",
+      "funding": "$20M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2022",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "101",
     "title": "Senior Engineer, Platform",
-    "description": "Self-guided tours that actually work.",
+    "description": "Self-guided tours that actually work",
     "salary": "$180K - $220K",
     "locations": [
       "New York"
@@ -1729,12 +2368,19 @@
     "funding": "$2M",
     "teamSize": "22",
     "visa": "None",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "Self-guided tours that actually work.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "~20 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "102",
     "title": "Senior Forward-Deployed Engineer",
-    "description": "Self-guided tours that actually work.",
+    "description": "Self-guided tours that actually work",
     "salary": "$180K - $220K",
     "locations": [
       "New York"
@@ -1747,12 +2393,19 @@
     "funding": "$2M",
     "teamSize": "22",
     "visa": "None",
-    "yoe": "2 - 5 years"
+    "yoe": "2 - 5 years",
+    "company": {
+      "blurb": "Self-guided tours that actually work.",
+      "stage": "seed-stage",
+      "funding": "seed funding",
+      "teamSize": "~20 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "8",
     "title": "Senior Machine Learning Engineer, Recommendation",
-    "description": "Sekai is building the next TikTok for interactive content.",
+    "description": "Consumer AI startup building an interactive-content platform with recommendation at its core",
     "salary": "$160K - $250K",
     "locations": [
       "South Bay Area",
@@ -1767,7 +2420,15 @@
     "funding": "$30M",
     "teamSize": "30",
     "visa": "None, Visa transfers",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "Consumer AI startup building an interactive-content platform with recommendation at its core.",
+      "stage": "growth-stage",
+      "funding": "$30M+ raised",
+      "teamSize": "~30 people",
+      "founded": "2023",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "103",
@@ -1785,12 +2446,20 @@
     "funding": "$80M",
     "teamSize": "50",
     "visa": "None, Visa transfers",
-    "yoe": "5 - 15 years"
+    "yoe": "5 - 15 years",
+    "company": {
+      "blurb": "The data layer for audio AI.",
+      "stage": "growth-stage",
+      "funding": "$80M+ raised",
+      "teamSize": "~50 people",
+      "founded": "2024",
+      "investors": "backed by Y Combinator"
+    }
   },
   {
     "jobId": "104",
     "title": "Senior Platform Engineer, Applied AI",
-    "description": "AfterQuery is a frontier data provider for foundational AI labs.",
+    "description": "They are a frontier data provider for foundational AI labs",
     "salary": "$250K - $350K",
     "locations": [
       "San Francisco"
@@ -1803,12 +2472,19 @@
     "funding": "$34M",
     "teamSize": "40",
     "visa": "None, Visa transfers",
-    "yoe": "6 - 10 years"
+    "yoe": "6 - 10 years",
+    "company": {
+      "blurb": "They are a frontier data provider for foundational AI labs.",
+      "stage": "growth-stage",
+      "funding": "$30M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "105",
     "title": "Senior Product Engineer",
-    "description": "AI-enabled personal training, covered by insurance.",
+    "description": "AI-enabled personal training, covered by insurance",
     "salary": "$200K - $230K",
     "locations": [
       "New York"
@@ -1821,12 +2497,19 @@
     "funding": "11200000",
     "teamSize": "-",
     "visa": "None",
-    "yoe": "3+ years"
+    "yoe": "3+ years",
+    "company": {
+      "blurb": "AI-enabled personal training, covered by insurance.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "founded": "2018",
+      "investors": "VC-backed"
+    }
   },
   {
     "jobId": "106",
     "title": "Senior Product Engineer",
-    "description": "The fastest way to run your GitHub Actions. Trusted by Ashby, Pylon, VEED, and 600+ others.",
+    "description": "The fastest way to run your GitHub Actions \u2014 trusted by 600+ engineering teams",
     "salary": "$200K - $300K",
     "locations": [
       "New York"
@@ -1839,12 +2522,19 @@
     "funding": "$58.5",
     "teamSize": "37",
     "visa": "None",
-    "yoe": "5+ years"
+    "yoe": "5+ years",
+    "company": {
+      "blurb": "The fastest way to run your GitHub Actions \u2014 trusted by 600+ engineering teams.",
+      "stage": "growth-stage",
+      "funding": "$50M+ raised",
+      "teamSize": "~40 people",
+      "founded": "2024"
+    }
   },
   {
     "jobId": "107",
     "title": "Senior Software Engineer",
-    "description": "AI platform that gives every employee full company context across 40+ enterprise apps \u2014 at 80% lower cost than generic AI tools.",
+    "description": "AI platform that gives every employee full company context across 40+ enterprise apps \u2014 at 80% lower cost than generic AI tools",
     "salary": "$180K - $200K",
     "locations": [
       "San Francisco"
@@ -1857,6 +2547,13 @@
     "funding": "10",
     "teamSize": "25",
     "visa": "None",
-    "yoe": "4 - 8 years"
+    "yoe": "4 - 8 years",
+    "company": {
+      "blurb": "AI platform that gives every employee full company context across 40+ enterprise apps \u2014 at 80% lower cost than generic AI tools.",
+      "stage": "Series A-stage",
+      "funding": "$10M+ raised",
+      "teamSize": "~25 people",
+      "founded": "2023"
+    }
   }
 ]

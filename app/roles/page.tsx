@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getRoles, parseSalary } from "@/lib/roles";
+import { getRoles, parseSalary, roleSlug } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Open Roles",
@@ -69,7 +69,7 @@ export default async function RolesPage() {
           {roles.map((role) => (
             <Link
               key={`${role.jobId}-${role.title}`}
-              href={`/apply?role=${encodeURIComponent(`${role.title} (#${role.jobId})`)}`}
+              href={`/roles/${roleSlug(role)}`}
               className="log"
               style={{ gridTemplateColumns: "70px 2fr 2fr 1fr" }}
             >
@@ -79,7 +79,7 @@ export default async function RolesPage() {
                   {role.title}
                 </span>
                 <span className="role" style={{ fontSize: "0.7rem" }}>
-                  {role.description}
+                  {role.company ? `${role.company.stage ? role.company.stage + " · " : ""}${role.company.blurb}` : role.description}
                 </span>
               </span>
               <span className="role" style={{ fontSize: "0.72rem" }}>
