@@ -46,7 +46,14 @@ export default async function RolePage({
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: role.title,
-    description: [role.description, role.company?.blurb].filter(Boolean).join(" "),
+    description: [
+      role.jd?.about || role.description,
+      role.company?.blurb,
+      role.jd?.doing?.length ? "Responsibilities: " + role.jd.doing.join("; ") : "",
+      role.jd?.needs?.length ? "Requirements: " + role.jd.needs.join("; ") : "",
+    ]
+      .filter(Boolean)
+      .join(" "),
     datePosted: POSTED,
     employmentType: "FULL_TIME",
     hiringOrganization: {
@@ -129,6 +136,7 @@ export default async function RolePage({
                   {c.teamSize && <FactRow k="TEAM" v={c.teamSize} />}
                   {c.founded && <FactRow k="FOUNDED" v={c.founded} />}
                   {c.investors && <FactRow k="BACKING" v={c.investors} />}
+                  {c.note && <FactRow k="NOTE" v={c.note} />}
                 </dl>
               </>
             ) : (
@@ -136,6 +144,58 @@ export default async function RolePage({
             )}
           </div>
         </div>
+
+        {role.jd && (
+          <>
+            <div className="sec-label">
+              <b>JD</b> — the work
+            </div>
+            <div className="grid2">
+              <div className="cell" style={{ gridColumn: "1 / -1" }}>
+                <h3>
+                  About the <span>role</span>
+                </h3>
+                <p style={{ maxWidth: "72ch" }}>{role.jd.about}</p>
+              </div>
+              {role.jd.doing && role.jd.doing.length > 0 && (
+                <div className="cell">
+                  <h3>
+                    What you&apos;ll <span>do</span>
+                  </h3>
+                  <ul className="jd-list">
+                    {role.jd.doing.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {role.jd.needs && role.jd.needs.length > 0 && (
+                <div className="cell">
+                  <h3>
+                    What they&apos;re <span>looking for</span>
+                  </h3>
+                  <ul className="jd-list">
+                    {role.jd.needs.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                  {role.jd.bonus && role.jd.bonus.length > 0 && (
+                    <>
+                      <p style={{ color: "var(--signal)", fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", margin: "1rem 0 0.4rem" }}>
+                        Nice to have
+                      </p>
+                      <ul className="jd-list">
+                        {role.jd.bonus.map((d) => (
+                          <li key={d}>{d}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         <div className="cta-row" style={{ marginTop: "2.4rem" }}>
           <Link

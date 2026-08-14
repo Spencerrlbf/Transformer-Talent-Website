@@ -680,3 +680,26 @@ footer a { color: var(--signal); text-decoration: none; }
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
 }
+
+/* ---------- JD lists ---------- */
+
+.jd-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    font-size: 0.8rem;
+    color: var(--fog-60);
+}
+
+.jd-list li {
+    padding-left: 1.1rem;
+    position: relative;
+}
+
+.jd-list li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--signal);
+}

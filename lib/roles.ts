@@ -7,6 +7,15 @@ export interface CompanyProfile {
   teamSize?: string;
   founded?: string;
   investors?: string;
+  note?: string;
+}
+
+export interface RoleJD {
+  about: string;
+  doing?: string[];
+  needs?: string[];
+  bonus?: string[];
+  benefits?: string[];
 }
 
 export interface Role {
@@ -25,6 +34,7 @@ export interface Role {
   visa: string;
   yoe: string;
   company?: CompanyProfile;
+  jd?: RoleJD;
 }
 
 export function roleSlug(role: Role): string {
@@ -53,10 +63,10 @@ export async function getRoles(): Promise<Role[]> {
     try {
       const live = await fetchNotionRoles(token, dbId);
       // Anonymized company profiles live only in the snapshot; carry them over.
-      const profiles = new Map(
-        (rolesSnapshot as Role[]).map((r) => [r.jobId, r.company])
+      const extras = new Map(
+        (rolesSnapshot as Role[]).map((r) => [r.jobId, { company: r.company, jd: r.jd }])
       );
-      return live.map((r) => ({ ...r, company: profiles.get(r.jobId) }));
+      return live.map((r) => ({ ...r, ...(extras.get(r.jobId) || {}) }));
     } catch (err) {
       console.error("notion roles fetch failed; using snapshot", err);
     }

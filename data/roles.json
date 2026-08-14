@@ -32,6 +32,22 @@
       "blurb": "Education-technology company helping schools, universities, and nonprofits run smarter \u2014 practical AI systems and tools for real operational challenges across education.",
       "stage": "seed-stage",
       "funding": "seed funding"
+    },
+    "jd": {
+      "about": "A hands-on AI engineering role at an education-technology startup: you'd build the LLM-powered layer of a modern K-12 student-data platform \u2014 embedded assistants that help teachers make sense of assessment results, automated intervention flagging, and natural-language interfaces over sensitive student data. Fast feedback loops with real school partners, and your work directly shapes the roadmap.",
+      "doing": [
+        "Ship AI features end to end: assistants, automated reporting, natural-language query, and recommendation/flagging systems",
+        "Prototype net-new products adjacent to the core platform \u2014 predictive early-warning systems, new analytics modules, new data products",
+        "Apply statistical modeling and predictive analytics to K-12 data (assessments, attendance, behavior) to find product opportunities",
+        "Own prompt design, retrieval architecture, and evaluation pipelines for LLM features",
+        "Build the production reliability layer: evals, guardrails, monitoring, cost/latency trade-offs",
+        "Hold a high bar for student-data privacy and responsible AI (FERPA territory)"
+      ],
+      "needs": [
+        "Applied LLM engineering experience shipping production features",
+        "Data-science fundamentals: statistical modeling, cohort and trend analysis",
+        "Comfort working with structured, regulated data and explainable outputs"
+      ]
     }
   },
   {
@@ -58,6 +74,22 @@
       "teamSize": "250+ people",
       "founded": "2018",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Staff-level AI engineering for software-defined vehicles: build the AI layer \u2014 LLMs, agentic frameworks, RAG \u2014 that brings intelligent diagnostics and automation to next-generation automotive software, at a company working with major global carmakers.",
+      "doing": [
+        "Lead development of AI-powered solutions for complex automotive use cases",
+        "Run the full model lifecycle: modeling, training, tuning, validation, deployment, maintenance",
+        "Build with LLMs, agentic frameworks, RAG, and the surrounding data engineering",
+        "Analyze vehicle and fleet data to inform product decisions",
+        "Translate customer requirements into working AI systems with cross-functional teams",
+        "Document and communicate architecture and design to stakeholders"
+      ],
+      "needs": [
+        "Staff-level applied-AI engineering depth",
+        "LLM application development: agents, RAG, evaluation, data engineering",
+        "Python with TensorFlow or PyTorch in production"
+      ]
     }
   },
   {
@@ -68,7 +100,7 @@
     "locations": [
       "New York"
     ],
-    "techStack": "Python, FastAPI, PostgreSQL",
+    "techStack": "Python, FastAPI, PostgreSQL, vector databases, Langfuse, Promptfoo",
     "industry": "Consumer, AI",
     "workplace": "On-site",
     "roleType": "Machine Learning Engineer",
@@ -83,6 +115,24 @@
       "funding": "$10M+ raised",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Founding AI engineer at a consumer startup rethinking online dating, led by a founder with a landmark consumer-dating exit. You'd own the AI systems behind the core product \u2014 conversational intelligence, matchmaking insight, and the prompting/evaluation/serving infrastructure that keeps them reliable and improving.",
+      "doing": [
+        "Design the prompts, structured outputs, and orchestration behind AI-driven product features",
+        "Build evaluation infrastructure (Langfuse, TensorZero, Promptfoo-class tooling) and keep LLM judges aligned",
+        "Run structured experiments across models, prompts, and configs for quality, cost, latency",
+        "Build internal observability: dashboards, admin tools, debugging workflows",
+        "Apply lightweight ML and ranking where it beats prompt-based approaches for match quality",
+        "Own model serving: API and self-hosted inference, versioning, cost/latency optimization",
+        "Fine-tune open models (SFT, DPO, RLHF) where it pays off",
+        "Design vector-database memory architectures for personalization"
+      ],
+      "needs": [
+        "Hands-on LLM systems experience from prompt architecture to production serving",
+        "Evaluation-first mindset with real infrastructure to back it",
+        "Early-stage comfort: experiments, shipping, and tooling in one role"
+      ]
     }
   },
   {
@@ -107,7 +157,26 @@
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
-      "founded": "2024"
+      "founded": "2024",
+      "investors": "Y Combinator-backed",
+      "note": "revenue tripled in six months; enterprise customers include a Fortune-500 commodities leader"
+    },
+    "jd": {
+      "about": "First forward-deployed hire at a fast-growing YC-backed AI startup automating document-heavy workflows in the commodities industry. You'd own customer deployments end to end \u2014 technical PM, onboarding lead, and customer champion in one \u2014 taking each account from sales handoff to stable production.",
+      "doing": [
+        "Own the onboarding lifecycle: customers live in production within the first weeks of a paid pilot",
+        "Act as technical PM per account: bridge engineering and customer stakeholders, keep deployments unblocked",
+        "Configure and tune AI agents and workflows to each customer's operational data and logic",
+        "Build tooling that lets future FDEs and customers onboard faster",
+        "Lead kickoffs, progress reviews, and training across SMB to enterprise, with up to ~30% travel for enterprise accounts"
+      ],
+      "needs": [
+        "3+ years in customer-facing engineering (FDE, solutions, implementation), ideally early-stage",
+        "Proven multi-deployment project management",
+        "Daily AI-tool fluency \u2014 you automate your own work, not just talk about it",
+        "Technically credible: Python or TypeScript, APIs, data flows",
+        "San Francisco based, in-office 4 days/week"
+      ]
     }
   },
   {
@@ -132,7 +201,24 @@
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
-      "founded": "2024"
+      "founded": "2024",
+      "investors": "Y Combinator-backed"
+    },
+    "jd": {
+      "about": "One of the first deployment hires at a YC-backed AI startup whose revenue tripled in six months, with a Fortune-500 commodities giant already on the books. You'd turn messy real-world trading workflows into production AI systems and help design the deployment function itself.",
+      "doing": [
+        "Own deployments end to end: discovery, scoping, configuration, UAT, go-live across concurrent customers",
+        "Map customer workflows onto the agent platform: data modeling, field mappings, business rules",
+        "Run kickoffs and working sessions with everyone from warehouse operators to VPs",
+        "Be the customer's internal PM and feed structured insight back to product",
+        "Build playbooks and internal tools with AI-assisted dev tooling"
+      ],
+      "needs": [
+        "1-5 years in strategy consulting, biz ops, applied-AI deployment, or professional services with hands-on execution",
+        "Genuine daily AI fluency for prototyping and automation",
+        "Comfort with structured data: CSV/JSON, field mappings, APIs",
+        "San Francisco based (or relocating), in-office 4 days/week, up to 30% travel"
+      ]
     }
   },
   {
@@ -158,6 +244,21 @@
       "funding": "$10M+ raised",
       "founded": "2025",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Build the technical foundation of an agentic clinical platform at a seed-stage healthcare-AI company: the context management, tool use, orchestration, and human-in-the-loop workflows that let AI complete complex clinical tasks safely \u2014 work that directly shapes care for chronic-disease patients.",
+      "doing": [
+        "Build the agentic platform: context management, tool use, orchestration, permissions, memory, human-in-the-loop",
+        "Prototype clinical AI experiences fast; productionize the strongest for real clinicians",
+        "Design evals, regression suites, and launch criteria covering quality, safety, latency, cost",
+        "Build observability across model behavior, tool calls, traces, and workflow outcomes",
+        "Translate real clinical workflows into trustworthy software with clinicians and product"
+      ],
+      "needs": [
+        "3+ years as a product-minded full-stack engineer",
+        "Comfort spanning applied AI, backend systems, and user-facing surfaces",
+        "Care for safety and reliability in a regulated domain"
+      ]
     }
   },
   {
@@ -168,7 +269,7 @@
     "locations": [
       "New York"
     ],
-    "techStack": "TypeScript, PostgreSQL, GCP, Docker, NodeJS, Go, Java, Kotlin, Rust",
+    "techStack": "TypeScript, PostgreSQL, GCP, Docker, NodeJS, Go, Java, Kotlin, Rust, Node.js, Temporal",
     "industry": "AI, Healthcare",
     "workplace": "On-site",
     "roleType": "Backend Engineer",
@@ -184,6 +285,26 @@
       "teamSize": "founding team of <10",
       "founded": "2024",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Platform engineering for computer-use agents in healthcare operations: build the infrastructure that lets agents work reliably across the messy reality of EMRs, portals, faxes, and PDFs \u2014 browser and desktop automation, state management, retries, and the observability to debug agent decisions.",
+      "doing": [
+        "Build and maintain core agent infrastructure: browser/desktop automation, tool use, state, retry logic",
+        "Design evaluation and observability systems for agent performance and regressions",
+        "Productionize better approaches to planning, execution, memory, validation, recovery",
+        "Own backend systems and durable workflow orchestration across a TypeScript monorepo",
+        "Turn recurring deployment pain into reusable platform capabilities with forward-deployed engineers",
+        "Create clean abstractions so agents operate safely across fragmented healthcare systems"
+      ],
+      "needs": [
+        "4+ years of software engineering with deep TypeScript backend expertise",
+        "Production-grade infrastructure experience in fast-moving environments",
+        "Comfort at the intersection of AI agents and systems engineering"
+      ],
+      "bonus": [
+        "Computer-use agents or browser automation",
+        "Workflow orchestration (e.g. Temporal)"
+      ]
     }
   },
   {
@@ -209,7 +330,21 @@
       "funding": "$5M raised",
       "teamSize": "~10 people",
       "founded": "2024",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "household-name e-commerce brands in weekly pilots"
+    },
+    "jd": {
+      "about": "Join a small, elite YC-backed team building autonomous browser agents that test e-commerce sites like real users \u2014 with explosive inbound demand and household-name consumer brands running pilots weekly. Generalist role: agent infrastructure to product UI, shipped fast.",
+      "doing": [
+        "Ship end-to-end features from browser orchestration to customer-facing frontend",
+        "Turn customer feedback into product improvements within hours",
+        "Build and iterate on AI testing agents that adapt to UI changes and catch real bugs"
+      ],
+      "needs": [
+        "1-4 years of engineering with full-stack range",
+        "TypeScript/React/Next.js fluency",
+        "Bias for shipping and direct customer contact"
+      ]
     }
   },
   {
@@ -235,6 +370,23 @@
       "funding": "$30M+ raised",
       "teamSize": "~60 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Own production backend services at a growth-stage security company tackling the biggest breach vector there is: human behavior. Reliability and scale work with a modern data-heavy stack, at a company where backend systems are the product's backbone.",
+      "doing": [
+        "Design, implement, and own production-facing backend services",
+        "Drive reliability, scalability, and maintainability of core systems",
+        "Translate customer requirements into durable platform designs",
+        "Build integrations, ETL/data pipelines, and distributed-systems components",
+        "Contribute to cloud infrastructure with AWS, Terraform, EKS"
+      ],
+      "needs": [
+        "3+ years of backend engineering with production ownership",
+        "Reliable, scalable systems in fast-moving environments"
+      ],
+      "bonus": [
+        "Data pipelines, distributed systems, or cloud infra depth"
+      ]
     }
   },
   {
@@ -258,7 +410,23 @@
       "blurb": "Early-stage startup building an agent-to-agent professional network where personal AI agents capture your work context and engage on your behalf.",
       "stage": "seed-stage",
       "funding": "seed funding",
-      "teamSize": "founding team of <10"
+      "teamSize": "founding team of <10",
+      "note": "800M+ rows under management"
+    },
+    "jd": {
+      "about": "One of the first engineering hires at a freshly seed-funded NYC startup building the context layer for human work \u2014 agents that represent people and companies in professional matching. You'd own the AWS infrastructure behind enterprise deployments handling hundreds of millions of rows.",
+      "doing": [
+        "Optimize and harden AWS infrastructure for rapidly scaling customer deployments",
+        "Build multi-tenant architecture: permissioning, data isolation, redeployability",
+        "Own infrastructure-as-code (Terraform, Kubernetes, Docker) and pattern decisions",
+        "Ship features driven by design-partner signal",
+        "Fold bespoke deployment learnings back into the core product"
+      ],
+      "needs": [
+        "3-6+ years of backend/infra engineering",
+        "Multi-tenant enterprise architecture experience",
+        "Comfort as an early engineer setting foundations"
+      ]
     }
   },
   {
@@ -285,7 +453,22 @@
       "funding": "$10M+ raised",
       "teamSize": "~40 people",
       "founded": "2022",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "eight-figure ARR in year one, more than doubled since; 150K+ GitHub stars"
+    },
+    "jd": {
+      "about": "Adversarial web-extraction infrastructure at one of the fastest-growing developer-infrastructure companies in AI: keep high-volume extraction working against sites that actively fight back. Anti-bot evasion, proxy management, fingerprinting, challenge handling \u2014 real infrastructure ownership from day one at a company already at eight-figure revenue with a massive open-source following.",
+      "doing": [
+        "Architect proxy rotation, IP/session management, and egress isolation at scale",
+        "Keep success rates high against active anti-bot and anti-scraping defenses",
+        "Build browser/TLS fingerprint management and challenge-handling infrastructure",
+        "Own the health, cost efficiency, and economics of the proxy layer",
+        "Debug hard, intermittent adversarial failures and make fixes stick"
+      ],
+      "needs": [
+        "Production-scale experience building proxy infrastructure, anti-bot evasion, or web-extraction pipelines",
+        "Deep systems debugging under adversarial conditions"
+      ]
     }
   },
   {
@@ -310,7 +493,22 @@
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "teamSize": "~15 people",
-      "founded": "2025"
+      "founded": "2025",
+      "investors": "backed by top-tier VCs"
+    },
+    "jd": {
+      "about": "Founding engineer owning the data layer of an AI platform for insurance P&L teams \u2014 a seed-stage company backed by top-tier VCs attacking a $6-trillion industry. You'd own the full path from raw external data sources to production signals that AI agents can trust.",
+      "doing": [
+        "Work with customers to identify high-value data use cases and choose external sources",
+        "Build end-to-end pipelines: ingest, extract, synthesize from new sources",
+        "Expose data through product surfaces agents can consume accurately",
+        "Build evaluation harnesses for data quality and agent reliability at scale"
+      ],
+      "needs": [
+        "5-8 years of data/product engineering",
+        "End-to-end pipeline ownership from raw source to production",
+        "Customer-facing comfort at a founding-engineer level"
+      ]
     }
   },
   {
@@ -336,6 +534,21 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Be the third face of a fast-moving AI-infrastructure startup with strong product-market fit: own the full enterprise sales journey \u2014 sourcing, demoing, educating Fortune-500 executives on AI concepts, and closing six-figure contracts \u2014 working directly alongside the founders.",
+      "doing": [
+        "Source, cold-call, and book meetings with VPs and execs at Fortune 500s",
+        "Demo the product and teach enterprise buyers real AI concepts: RAG, MCP, knowledge bases, agent reliability",
+        "Attend conferences and dinners 4-5 days/month, primarily East Coast travel",
+        "Run full sales cycles to $100K+ ACV contracts",
+        "Feed customer insight back into product direction"
+      ],
+      "needs": [
+        "1-4 years in sales, deployment, or customer-facing strategy roles",
+        "Genuine comfort explaining technical AI concepts to executives",
+        "Appetite for founder-adjacent, high-travel, high-ownership work"
+      ]
     }
   },
   {
@@ -346,7 +559,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "AWS, GCP, Azure",
+    "techStack": "AWS, GCP, Azure, SQL",
     "industry": "Insurance, Software Development, Enterprise",
     "workplace": "On-site",
     "roleType": "Forward Deployed Engineer, Solutions & Support Engineer, Account Management / Customer Success",
@@ -359,6 +572,23 @@
       "blurb": "Insurance-data company automating loss-run retrieval, summaries, and trend analysis across 1,000+ carriers, wholesalers, and MGAs.",
       "stage": "early-stage",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Founding post-sale hire at an insurance-data startup serving top-100 US brokerages: own the journey from contract signature to full activation \u2014 part project manager, part technical integrator, part relationship owner \u2014 and design the onboarding program while running it.",
+      "doing": [
+        "Own enterprise onboarding end to end: kickoff, training, full user activation",
+        "Build the program itself: playbooks, activation metrics, milestone tracking, change management",
+        "Handle technical integrations independently (SQL, cloud platforms) without engineering support",
+        "Be the primary post-sale relationship owner for senior brokerage stakeholders",
+        "Feed field insight back into product development"
+      ],
+      "needs": [
+        "4-8 years in technical account management, program management, or similar hybrid roles",
+        "Non-negotiable technical depth: SQL and real integration work",
+        "Executive presence with senior stakeholders",
+        "Experience building (not just running) an onboarding function",
+        "San Francisco, in-person 5 days/week"
+      ]
     }
   },
   {
@@ -384,6 +614,21 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Be the third face of a fast-moving AI-infrastructure startup with strong product-market fit: own the full enterprise journey \u2014 sourcing, demoing, educating Fortune-500 executives on AI infrastructure, and closing six-figure contracts \u2014 directly alongside the founders.",
+      "doing": [
+        "Source, cold-call, and book meetings with Fortune-500 VPs and executives",
+        "Demo the product and teach real AI concepts: RAG, MCP, knowledge bases, agent reliability",
+        "Attend conferences and dinners 4-5 days/month, primarily East Coast",
+        "Run full sales cycles to $100K+ ACV contracts",
+        "Shape product direction with structured customer feedback"
+      ],
+      "needs": [
+        "1-4 years in customer-facing sales, deployment, or strategy roles",
+        "Comfort explaining technical AI concepts credibly to executives",
+        "High-travel, high-ownership, founder-adjacent appetite"
+      ]
     }
   },
   {
@@ -409,6 +654,21 @@
       "funding": "seed funding",
       "teamSize": "~15 people",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Own end-to-end delivery of AI-native software for state, local, and federal government: meet the client, design the solution, build it with AI-native tooling, and ship systems that replace decades-old public infrastructure. Roughly 75% building, 25% client-facing.",
+      "doing": [
+        "Own entire projects: client discovery, solution design, build, delivery",
+        "Use AI-native coding tools daily to iterate at speed against live requirements",
+        "Design reusable scaffolding that compounds across future deployments",
+        "Work directly with non-technical civil servants",
+        "Occasional travel (~5 days/quarter) to client sites"
+      ],
+      "needs": [
+        "1-5 years as a high-agency full-stack engineer",
+        "Comfort pairing with a forward-deployed PM in a customer environment",
+        "Motivation to modernize public services"
+      ]
     }
   },
   {
@@ -419,7 +679,7 @@
     "locations": [
       "New York"
     ],
-    "techStack": "Snowflake, AWS, Python, Docker, Airflow, CI/CD",
+    "techStack": "Snowflake, AWS, Python, Docker, Airflow, CI/CD, Databricks",
     "industry": "Software Development, Data, Enterprise, AI",
     "workplace": "Hybrid",
     "roleType": "Forward Deployed Engineer, Solutions & Support Engineer",
@@ -435,6 +695,21 @@
       "teamSize": "~25 people",
       "founded": "2024",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Bridge an autonomous data-agent product and the messy reality of enterprise data environments: embed with the highest-value clients, architect real integrations across Snowflake, AWS, and Databricks, and operate with founding-engineer autonomy inside customer environments.",
+      "doing": [
+        "Own end-to-end enterprise deployment: configure the platform, design workflow blueprints, integrate with existing data infrastructure",
+        "Debug live during engagements across Docker, AWS, Snowflake, Python, APIs",
+        "Turn client friction into concrete engineering input \u2014 tickets, productized patterns, prototypes",
+        "Support pre-sales with tailored technical demos and POCs",
+        "Become the trusted technical point of contact for major accounts"
+      ],
+      "needs": [
+        "Strong data-engineering foundations across cloud warehouses and pipelines",
+        "Customer-facing composure with real-time problem solving",
+        "Field-to-product instinct: knowing what should be productized"
+      ]
     }
   },
   {
@@ -456,12 +731,28 @@
     "visa": "None, Visa transfers",
     "yoe": "2 - 5 years",
     "company": {
-      "blurb": "Data-intelligence company whose engine tracks tens of millions of companies and professional profiles in real time for founders, investors, and recruiters.",
+      "blurb": "Transformation-equity firm applying frontier AI and technology to founder-led American businesses outside the Fortune 500, built by leaders from a storied forward-deployed engineering culture.",
       "stage": "growth-stage",
       "funding": "$30M+ raised",
       "teamSize": "founding team of <10",
       "founded": "2020",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Deploy frontier technology into great American businesses at a new kind of transformation company founded by leaders who built one of the most storied forward-deployed engineering cultures in tech. You'd turn ambiguous business problems into deployed systems \u2014 and co-author the transformation roadmap itself.",
+      "doing": [
+        "Build and deploy software, AI systems, data workflows, and operational tools for partner companies",
+        "Work directly with executives, operators, and frontline users",
+        "Own outcomes end to end from discovery through adoption",
+        "Co-author transformation roadmaps: what to build, what to scale, what to change organizationally",
+        "Travel 30-40% to work shoulder to shoulder with management teams"
+      ],
+      "needs": [
+        "2+ years post-college with a strong CS/software foundation",
+        "Production-quality Python, TypeScript, or similar",
+        "AI-native working style \u2014 daily AI tooling for code, data, automation",
+        "Comfort creating structure with no roadmap or spec"
+      ]
     }
   },
   {
@@ -488,6 +779,20 @@
       "teamSize": "~40 people",
       "founded": "2023",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "The forward-deployed model applied to one of the least automated industries in the economy: embed on-site with bank teams, learn underwriting and lending workflows firsthand, and build the software that changes how they work \u2014 roughly 70% building, 30% embedded. Hiring across levels, from strong early-career builders to senior tech leads.",
+      "doing": [
+        "Embed with bank teams on-site alongside underwriters, lenders, and operators",
+        "Develop the deepest understanding anywhere of their workflows and bottlenecks",
+        "Build and ship the platform capabilities that remove the tedium",
+        "Help decide what's worth building across customer, product, and engineering"
+      ],
+      "needs": [
+        "FDE level: 0-3 years with demonstrated shipping ability",
+        "Senior/Tech Lead: 3-5+ years with architecture ownership and comfort in ambiguity",
+        "Deep user empathy paired with real building speed"
+      ]
     }
   },
   {
@@ -514,7 +819,24 @@
       "funding": "seed funding",
       "teamSize": "~10 people",
       "founded": "2024",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "selected for one of the largest AI initiatives in US defense"
+    },
+    "jd": {
+      "about": "Embed with government customers \u2014 including elite military units \u2014 for an AI lab modernizing how America and its allies acquire technology. Recently selected for one of the largest AI initiatives in US defense: gather requirements on-site, translate mission problems into software, and ship fast. The most customer-facing of the company's engineering tracks; the engineering bar stays high.",
+      "doing": [
+        "Embed forward at military installations, gathering requirements directly from operators",
+        "Build the full-stack data tools and workflows operators use daily",
+        "Translate ambiguous mission-critical problems into shipped software in tight loops",
+        "Represent the company in the room; build trust with operators",
+        "Ship across Python, Next.js, and React, building AI agents and LLM workflows",
+        "Travel 1-2 weeks per month to customer sites"
+      ],
+      "needs": [
+        "2-8 years as a deeply technical full-stack builder",
+        "Exceptional communication \u2014 equally comfortable with operators and engineers",
+        "US work authorization suited to government environments"
+      ]
     }
   },
   {
@@ -540,7 +862,23 @@
       "funding": "$100M+ raised",
       "teamSize": "~80 people",
       "founded": "2023",
-      "investors": "backed by a16z, Y Combinator"
+      "investors": "backed by a16z, Y Combinator",
+      "note": "revenue growing ~8x YoY; tens of millions of pages processed monthly"
+    },
+    "jd": {
+      "about": "Founding FDE at a Series B document-AI company processing tens of millions of pages monthly and growing revenue ~8x year over year, backed by three of the most respected names in venture. You'd own technical deployment for some of the world's most sophisticated enterprise customers and shape the FDE function from scratch.",
+      "doing": [
+        "Run rigorous pre-sales evals, custom demos, and win competitive bake-offs",
+        "Own post-sales success for 1-3 enterprise accounts: unblock, deepen adoption, unlock expansion",
+        "Build whatever drives value: eval apps, customized agents, product modifications",
+        "Create diagnostics, dashboards, and eval harnesses tracking performance and regressions",
+        "Work directly with founders to shape product and engineering strategy"
+      ],
+      "needs": [
+        "3-6 years deploying production software, ideally with enterprise or regulated customers",
+        "Excellent Python; capable across Bash and infrastructure",
+        "High agency and an uncompromising quality bar"
+      ]
     }
   },
   {
@@ -567,6 +905,19 @@
       "teamSize": "~20 people",
       "founded": "2021",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Own the full lifecycle of AI-interviewer deployments at a healthcare-recruiting automation company: from onboarding and requirements through production and continuous iteration \u2014 a function at the core of the company's growth.",
+      "doing": [
+        "Build, deploy, and iterate on AI interviewer agents with internal tooling (Python/JavaScript, agentic pipelines)",
+        "Own the post-sale cycle end to end through go-live and ongoing improvement",
+        "Monitor production agent performance and ship rapid improvements from customer feedback",
+        "Contribute to the core codebase alongside the engineering team"
+      ],
+      "needs": [
+        "4-6 years of technically sharp, customer-facing engineering",
+        "Applied-AI comfort: agent pipelines, production monitoring, iteration"
+      ]
     }
   },
   {
@@ -592,6 +943,21 @@
       "funding": "seed funding",
       "teamSize": "~15 people",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Own end-to-end delivery of AI-native software for state, local, and federal government: meet the client, design the solution, build with AI-native tooling, ship systems replacing decades-old public infrastructure. Roughly 75% building, 25% client-facing.",
+      "doing": [
+        "Own entire projects: discovery, design, build, delivery",
+        "Use AI-native coding tools daily against live customer requirements",
+        "Design reusable scaffolding that compounds across deployments",
+        "Work directly with non-technical government stakeholders",
+        "Occasional travel (~5 days/quarter)"
+      ],
+      "needs": [
+        "1-5 years as a high-agency full-stack engineer",
+        "Comfort pairing with a forward-deployed PM",
+        "Motivation to modernize public services"
+      ]
     }
   },
   {
@@ -619,6 +985,23 @@
       "funding": "$250M+ raised",
       "teamSize": "~80 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "A classic embedded-FDE role inside a software holding company: embed with portfolio businesses, find the highest-leverage workflow opportunities, and ship agentic software into live operations \u2014 systems that compound across an entire portfolio, not one-off consulting.",
+      "doing": [
+        "Embed with portfolio companies, earn operator trust, find the 2-3 highest-leverage agentic opportunities",
+        "Ship the wedge: integrations, prompts, evals, and UI to land the first agentic loop",
+        "Operate and tune deployed systems, adjusting autonomy tiers before clean handoff",
+        "Be the technical face to portfolio GMs",
+        "Codify field patterns into reusable playbooks at HQ"
+      ],
+      "needs": [
+        "3-6 years full-stack (TypeScript or Python, React, SQL) with solo end-to-end delivery",
+        "Shipped production LLM/agentic systems with real evals and autonomy gating",
+        "Embedded or customer-facing engineering background",
+        "Operator instincts: read a P&L, translate business problems into technical wedges",
+        "NYC-based or relocating; frequent portfolio-site travel"
+      ]
     }
   },
   {
@@ -629,7 +1012,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "Python",
+    "techStack": "Python, multimodal ML, computer vision",
     "industry": "Software Development, AI, Real Estate, Construction",
     "workplace": "On-site",
     "roleType": "Founding Engineer, Machine Learning Engineer",
@@ -644,6 +1027,23 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Mission-driven founding role automating architecture to attack the housing crisis: run high-autonomy experiments improving multimodal agents that check building plans for code compliance \u2014 directly changing how fast housing gets built.",
+      "doing": [
+        "Generate hypotheses and run time-boxed experiments improving multimodal agent accuracy",
+        "Direct your own research roadmap from experimental results",
+        "Work across SFT, distillation, retrieval, and context engineering",
+        "Run computer-vision evals and build internal experimentation tooling",
+        "Talk to users and dogfood weekly"
+      ],
+      "needs": [
+        "2-8 years blending SWE speed with ML rigor",
+        "High autonomy \u2014 you generate the experiments, nobody assigns them",
+        "Daily AI coding-tool usage",
+        "San Francisco, in-person 5 days/week",
+        "Genuine resonance with the housing mission"
+      ]
     }
   },
   {
@@ -668,6 +1068,21 @@
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10"
+    },
+    "jd": {
+      "about": "Small, talent-dense founding team deploying AI agents into some of the world's most critical supply chains: from a customer's factory floor to shipped production code in the same week.",
+      "doing": [
+        "Deploy forward with procurement and supply-chain teams to learn their hardest problems firsthand",
+        "Translate field insight into product and infrastructure features",
+        "Own entire workstreams from scoping through deployment",
+        "Define technical and strategic direction with the founders",
+        "Set the standard for agentic supply-chain software"
+      ],
+      "needs": [
+        "End-to-end engineering range across Python/TypeScript/React",
+        "Comfort embedding with industrial customers",
+        "Founding-team ownership appetite"
+      ]
     }
   },
   {
@@ -678,7 +1093,7 @@
     "locations": [
       "New York"
     ],
-    "techStack": "CI/CD",
+    "techStack": "CI/CD, LLM/agentic workflows",
     "industry": "Logistics, AI, Transportation, Education",
     "workplace": "Hybrid",
     "roleType": "Founding Engineer",
@@ -694,6 +1109,22 @@
       "teamSize": "founding team of <10",
       "founded": "2025",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Own the AI stack for freight at a modern brokerage platform: agents for carrier sales automation, quoting, email triage, and fraud prevention across dozens of load-theft vectors \u2014 with a real seat at the table on business direction.",
+      "doing": [
+        "Build LLM agents and workflows for carrier sales, quoting, and email routing",
+        "Set the technical foundation: architecture, deployment, tooling, CI/CD, culture",
+        "Build fraud-prevention systems against load theft",
+        "Embed with freight brokers \u2014 join their calls, watch them work, encode it in software",
+        "Partner with the Head of Product on build/buy/integrate decisions",
+        "Ship prototype-to-production in hours, not sprints"
+      ],
+      "needs": [
+        "5+ years full-stack (flexible for exceptional AI-native builders)",
+        "Products shipped end-to-end at early-stage startups",
+        "Real LLM product experience in production"
+      ]
     }
   },
   {
@@ -704,7 +1135,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "Python, PostgreSQL, React, JavaScript, AWS, Kubernetes",
+    "techStack": "Python, PostgreSQL, React, JavaScript, AWS, Kubernetes, MCP",
     "industry": "AI, Software Development, B2B, API SDK",
     "workplace": "Hybrid",
     "roleType": "Founding Engineer",
@@ -719,6 +1150,21 @@
       "funding": "$6M raised",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Build the infrastructure that lets AI agents fluently operate any software system: continuous context layers, MCP design and generation, and agent deployment across dominant vertical-software partners from biosciences to auto retail. Lean team, direct line to the founder.",
+      "doing": [
+        "Scale agentic systems as industry partners onboard",
+        "Build the continuous context layer that makes agents fluent in complex vertical software",
+        "Design and generate MCPs: ingest API docs, build specs, create agent tools",
+        "Deploy out-of-the-box agent solutions embedded in partner products",
+        "Work directly with the founder; interface with customers"
+      ],
+      "needs": [
+        "1.5-7 years as a versatile applied-AI engineer",
+        "Full-stack shipping speed in ambiguity",
+        "Python, PostgreSQL, React, AWS, Kubernetes fluency"
+      ]
     }
   },
   {
@@ -745,6 +1191,21 @@
       "teamSize": "founding team of <10",
       "founded": "2025",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Founding engineering at a healthcare-revenue-cycle AI company with more customer demand than the team can serve: build multi-modal agents (browser, voice, text, API) that outperform human workers at complex healthcare workflows.",
+      "doing": [
+        "Design and ship multi-modal AI agents for complex healthcare workflows",
+        "Deploy directly with health-system operators and drive measurable financial impact",
+        "Build rigorous eval infrastructure across every customer",
+        "Identify cross-customer patterns that shape the platform",
+        "Scale the core agent layer: context engineering, tool orchestration, memory, evals"
+      ],
+      "needs": [
+        "Strong full-stack + applied-AI engineering",
+        "Python/TypeScript with cloud depth",
+        "Customer-facing comfort in operational healthcare settings"
+      ]
     }
   },
   {
@@ -770,6 +1231,21 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2023"
+    },
+    "jd": {
+      "about": "Founding engineer on a headcount-management platform for enterprise teams: ship fast, work directly with founders and early customers, and own large parts of the product from technical design to production on the road to product-market fit.",
+      "doing": [
+        "Ship and iterate quickly with thoughtful quality trade-offs",
+        "Design solutions with the founders for real customer problems",
+        "Diagnose and resolve product issues directly with customers",
+        "Own major product areas independently",
+        "Wear engineering, product, and support hats"
+      ],
+      "needs": [
+        "2+ years of product engineering",
+        "TypeScript/Node.js background",
+        "Fast-paced early-stage appetite"
+      ]
     }
   },
   {
@@ -795,7 +1271,23 @@
       "funding": "$7M raised",
       "teamSize": "~10 people",
       "founded": "2024",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "customers include category-leading fintech and AI companies"
+    },
+    "jd": {
+      "about": "Join a 6-person engineering team building next-generation revenue infrastructure for B2B AI companies \u2014 replacing a legacy CPQ category whose incumbent is sunsetting this year, with category-leading fintech and AI companies already as customers.",
+      "doing": [
+        "Build core backend features for the pricing and quoting platform",
+        "Develop AI-powered quoting and admin agents launching near-term",
+        "Own features end-to-end from design through implementation",
+        "Contribute to product decisions \u2014 understand the why",
+        "Occasionally support onboarding and sales in a 12-person company"
+      ],
+      "needs": [
+        "5-10 years as a product-minded, backend-leaning full-stack engineer",
+        "TypeScript/Python/React/PostgreSQL fluency",
+        "Ownership-driven style"
+      ]
     }
   },
   {
@@ -818,7 +1310,27 @@
     "company": {
       "blurb": "Developer-infrastructure startup giving AI agents real email inboxes via API \u2014 create, send, receive, and search programmatically.",
       "stage": "Series A-stage",
-      "funding": "$6M raised"
+      "funding": "$6M raised",
+      "note": "hundreds of thousands of emails processed daily"
+    },
+    "jd": {
+      "about": "Build the core product at an infrastructure startup giving AI agents real email inboxes: the APIs and backend systems agents use to communicate, authenticate, and operate \u2014 already processing hundreds of thousands of emails daily.",
+      "doing": [
+        "Design and build the core API and backend infrastructure",
+        "Own 0-to-1 projects end-to-end: IMAP integration, usage-based pricing, more",
+        "Work ~80% backend / ~20% elsewhere across distributed systems and developer tooling",
+        "Pitch growth experiments and product ideas \u2014 bring ideas, not just execution",
+        "Be the frontline for customer feedback, including enterprise custom deployments"
+      ],
+      "needs": [
+        "0-5 years (flexible upward) with production software at a pedigreed company \u2014 big tech or Series A+ startups",
+        "0-to-1 building track record",
+        "Clear code and strong documentation habits"
+      ],
+      "bonus": [
+        "Big-tech-to-startup path",
+        "Founder/ex-founder experience"
+      ]
     }
   },
   {
@@ -841,7 +1353,26 @@
     "company": {
       "blurb": "Defense-technology company powering the highest-stakes national-security missions.",
       "stage": "early-stage",
-      "founded": "2024"
+      "founded": "2024",
+      "funding": "seed funding",
+      "investors": "backed by investors who were early in top defense-tech companies",
+      "teamSize": "founding team of <10",
+      "note": "deployed with multiple US defense customers"
+    },
+    "jd": {
+      "about": "True founding role at a 7-person defense-tech startup already deployed with multiple US military customers: build the agents that automate administrative work for mission-critical units, with significant equity and a direct line to the users.",
+      "doing": [
+        "Own full-stack development of the core platform: knowledge graph, agent workflows, customer-facing features in TypeScript",
+        "Iterate directly on feedback from military users, translating mission needs into production code",
+        "Mature the orchestration platform: customer-configurable agents and workflows",
+        "Travel to bases ~monthly (mostly SF-local) to embed with users",
+        "Shape product direction with real autonomy"
+      ],
+      "needs": [
+        "3-5 years of full-stack engineering (TypeScript, Python, Next.js, PostgreSQL, AWS)",
+        "Early-stage shipping speed and ownership",
+        "Comfort working directly with defense customers"
+      ]
     }
   },
   {
@@ -893,6 +1424,21 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2026"
+    },
+    "jd": {
+      "about": "One of the first hires at a startup building AI-native systems for the offline economy \u2014 outcome-oriented agents that transform how physical brands run finance, sales, and operations. High-pedigree founders, premier Silicon Valley backing, and the chance to set both product and culture.",
+      "doing": [
+        "Build evaluation-harness platforms for fast feedback on product outcomes",
+        "Build foundational data infrastructure at terabyte scale, single- and multi-tenant",
+        "Own end-to-end delivery of production agents for marquee customers",
+        "Design a reinforcing context layer capturing how companies operate",
+        "Help define the culture and operating bar"
+      ],
+      "needs": [
+        "3+ years as a true generalist across backend data infra and customer-facing product",
+        "Comfort in ambiguous, fast-moving environments",
+        "Customer-facing product judgment"
+      ]
     }
   },
   {
@@ -918,7 +1464,23 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2024",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "Fortune-100 customers"
+    },
+    "jd": {
+      "about": "Tiny, high-performing YC-backed team doing applied psychology on LLMs: help brands understand and influence how AI models perceive them \u2014 with Fortune-100 customers and revenue scaling fast.",
+      "doing": [
+        "Build a universal context-management platform powering agentic workflows",
+        "Apply black-box interpretability techniques to reverse-engineer how LLMs form brand opinions",
+        "Own features end-to-end from customer need through research to shipped product",
+        "Define engineering patterns around agentic coding tools",
+        "Build internal automation and custom client software with full-context AI agents"
+      ],
+      "needs": [
+        "1-5 years of full-stack engineering",
+        "Genuine curiosity about LLM behavior and interpretability",
+        "Small-team ownership and speed"
+      ]
     }
   },
   {
@@ -944,6 +1506,21 @@
       "funding": "$8M raised",
       "teamSize": "founding team of <10",
       "founded": "2023"
+    },
+    "jd": {
+      "about": "First infrastructure hire, working directly with the CTO: build the entire runtime layer of an agentic integration platform \u2014 durable execution, sandboxed isolation, self-healing, and a self-hostable enterprise build. Set the patterns every future infra engineer inherits, then help hire and lead the team.",
+      "doing": [
+        "Own infra end-to-end: a 'Vercel for integration runtimes' with durable, sandboxed, self-healing execution",
+        "Scale the infrastructure powering coding agents that write, test, and deploy integration code",
+        "Design enterprise-grade observability across integrations and agents",
+        "Architect a single-tenant, self-hostable build customers run in their own cloud",
+        "Help recruit the infra team and grow into leadership"
+      ],
+      "needs": [
+        "3+ years of infrastructure/platform work at high-growth startups",
+        "Production shipping cadence in ambiguous environments",
+        "Architecture judgment that holds up under scale"
+      ]
     }
   },
   {
@@ -970,6 +1547,21 @@
       "funding": "$50M+ raised",
       "teamSize": "founding team of <10",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Zero-to-one founding FDE at a software holding company: build the applied-AI function across a growing portfolio of eight mission-critical vertical-SaaS businesses \u2014 with C-level customer exposure and a Foundry-style shared platform to architect underneath it all.",
+      "doing": [
+        "Run discovery, translate business problems into specs, build AI workflows from scratch",
+        "Own deployment lifecycles 0-to-1 through adoption, on-site with executives",
+        "Build the shared ontology tying common data models into productized vertical solutions",
+        "Define AI strategy directly with the co-founders and Head of AI",
+        "Shape how the FDE pod grows \u2014 this hire sets the mold"
+      ],
+      "needs": [
+        "3-5 years of applied/deployment engineering",
+        "Comfort owning C-level relationships",
+        "Platform thinking: productize patterns, not one-offs"
+      ]
     }
   },
   {
@@ -995,7 +1587,23 @@
       "stage": "seed-stage",
       "funding": "seed funding",
       "teamSize": "founding team of <10",
-      "founded": "2025"
+      "founded": "2025",
+      "note": "trusted by well-known B2B software companies"
+    },
+    "jd": {
+      "about": "Be the technical heartbeat of a fast-growing customer-lifecycle AI startup already trusted by well-known B2B software companies: embed with enterprise customers, wire agents into their real systems, and own accounts end to end.",
+      "doing": [
+        "Embed with customers to map onboarding, adoption, and renewal workflows to agent value",
+        "Deploy agents against real systems: data warehouses, Salesforce, SSO, integrations",
+        "Build evals on real customer data and hill-climb until agents clear the bar",
+        "Partner with GTM as the technical credibility in the room",
+        "Fix the platform when it gets in the way; debug live deployments to root cause"
+      ],
+      "needs": [
+        "Strong applied engineering with data-integration depth (warehouses, CRMs, SSO)",
+        "Eval-driven quality mindset",
+        "Customer-facing composure and ownership"
+      ]
     }
   },
   {
@@ -1022,6 +1630,21 @@
       "funding": "$50M+ raised",
       "teamSize": "founding team of <10",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Zero-to-one founding FDE at a software holding company: build the applied-AI function across a growing portfolio of eight mission-critical vertical-SaaS businesses \u2014 C-level customer exposure plus a Foundry-style shared platform underneath.",
+      "doing": [
+        "Run discovery, translate business problems into specs, build AI workflows from scratch",
+        "Own deployment lifecycles 0-to-1 through adoption, on-site with executives",
+        "Build shared ontology and productized vertical solutions",
+        "Define AI strategy with the co-founders and Head of AI",
+        "Shape the growing FDE pod"
+      ],
+      "needs": [
+        "3-5 years of applied/deployment engineering",
+        "C-level relationship comfort",
+        "Platform instincts over one-off consulting"
+      ]
     }
   },
   {
@@ -1046,6 +1669,21 @@
       "blurb": "AI company for patent search, analysis, and intellectual-property workflows.",
       "stage": "Series A-stage",
       "funding": "$6M raised"
+    },
+    "jd": {
+      "about": "Founding engineer building AI-powered patent-intelligence products alongside technical co-founders and domain-expert attorneys \u2014 shipping enterprise-grade features used by Fortune 500s and top law firms.",
+      "doing": [
+        "Ship full-stack features end to end: UI, APIs, production",
+        "Build complex patent-search and document-processing workflows",
+        "Integrate AI/LLM capabilities across the platform",
+        "Harden products for large enterprise customers",
+        "Own outcomes independently in a small, fast team"
+      ],
+      "needs": [
+        "3+ years with production TypeScript/React and Python",
+        "Complete-product building ability",
+        "Bay Area based or relocating (on-site, Downtown San Jose)"
+      ]
     }
   },
   {
@@ -1056,7 +1694,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "TypeScript, Python, React, NodeJS, AWS, GCP, PostgreSQL, Redis, Docker, REST API, CI/CD",
+    "techStack": "TypeScript, Python, React, NodeJS, AWS, GCP, PostgreSQL, Redis, Docker, REST API, CI/CD, real-time video streaming, backend APIs, mobile/desktop clients",
     "industry": "AI, Hardware, Robotics, Enterprise, B2B, Defense",
     "workplace": "On-site",
     "roleType": "Founding Engineer, Full Stack Engineer",
@@ -1071,6 +1709,25 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2026"
+    },
+    "jd": {
+      "about": "Own the product layer around a wearable-AI core: real-time video pipelines from smart glasses to backend within tight latency budgets, plus the companion apps and deployment paths that let industrial customers use it without an engineer present.",
+      "doing": [
+        "Ship the end-to-end experience: glasses \u2194 backend \u2194 companion app",
+        "Build and optimize the real-time video/streaming pipeline",
+        "Own backend APIs and the data layer \u2014 reliable, observable, scalable",
+        "Build mobile/desktop clients for setup, monitoring, configuration",
+        "Stand up safe deployment paths to hardware in the field",
+        "Define product architecture as the team scales"
+      ],
+      "needs": [
+        "2-5 years full-stack with scalable architectural judgment",
+        "Real-time or video-pipeline experience",
+        "Cross-stack debugging from device to frontend"
+      ],
+      "bonus": [
+        "Video-heavy platforms, low-latency systems, industrial exposure"
+      ]
     }
   },
   {
@@ -1097,6 +1754,21 @@
       "teamSize": "founding team of <10",
       "founded": "2026",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "One of the first engineers on a platform of AI agents for legal and compliance work, founded by staff engineers from a top fintech: full-stack ownership across agent harnesses, backend, frontend, and infrastructure, for customers from solo GCs to $30B+ enterprises.",
+      "doing": [
+        "Work whatever is highest-leverage daily: agent harnesses, backend, frontend, infra",
+        "Build agents automating complex legal and compliance workflows",
+        "Ship features end-to-end for customers of every size",
+        "Define what to build next directly with founders and customers",
+        "Shape engineering culture and mentor future hires"
+      ],
+      "needs": [
+        "0-5 years with strong full-stack fundamentals",
+        "High-leverage prioritization instincts",
+        "Founding-team appetite"
+      ]
     }
   },
   {
@@ -1150,6 +1822,20 @@
       "teamSize": "~20 people",
       "founded": "2023",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Frontend with unusual leverage: build the publicly published React component library (on NPM) that thousands of small businesses touch through the platforms that embed it \u2014 with hard problems in theming, backwards compatibility, and internationalization. 14-person team, well-funded, in a $44B market.",
+      "doing": [
+        "Build and maintain an NPM-published React component library embedded in vertical SaaS and neobanks",
+        "Solve styling customization, componentization, backwards compatibility, i18n",
+        "Own projects end-to-end with high autonomy",
+        "Ship with a small, high-performing SF engineering team"
+      ],
+      "needs": [
+        "2-7 years of React depth",
+        "Library/API design sensibility \u2014 your users are other developers",
+        "San Francisco team"
+      ]
     }
   },
   {
@@ -1175,6 +1861,21 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Backend-leaning full-stack work on continuous-improvement infrastructure for enterprise agents: a closed loop where every production failure becomes signal that improves both the knowledge base and the agents using it. Small, highly technical team; meaningful architecture ownership.",
+      "doing": [
+        "Build backend systems powering agent evaluation and continuous improvement",
+        "Model evaluation datasets, experiment runs, agent traces, knowledge versions, quality criteria",
+        "Own enterprise integrations end to end: OAuth, webhooks, syncs, backfills, rate limits, retries, monitoring",
+        "Carry features from design through deployment, monitoring, and iteration",
+        "Work directly with enterprise customers to diagnose failures"
+      ],
+      "needs": [
+        "Strong backend fundamentals: data modeling, queues, execution pipelines, distributed debugging",
+        "Full-stack ability to ship the product surface too",
+        "Comfort with enterprise customer environments"
+      ]
     }
   },
   {
@@ -1199,7 +1900,23 @@
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2023",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "top-100 app in the US and 12 other countries; featured in major fashion and tech press"
+    },
+    "jd": {
+      "about": "Small elite team behind a top-100 US consumer app (top-100 in a dozen other countries too) doing AI-powered fashion: millions of images processed daily across outfit generation, virtual try-on, and a new social feed. Server capacity doubles every other week \u2014 scaling is the job.",
+      "doing": [
+        "Scale backend infrastructure for fast-growing user data (5-10 image uploads/second)",
+        "Ship polished React/Next.js features through a real A/B experimentation pipeline",
+        "Build ETL pipelines ingesting catalogs from 4,000+ brands",
+        "Contribute to ranking and recommendations for the social feed",
+        "Ship playful, fast-turnaround product experiments"
+      ],
+      "needs": [
+        "2-5 years of full-stack engineering",
+        "Scaling experience under real growth pressure",
+        "Product taste and experimentation appetite"
+      ]
     }
   },
   {
@@ -1227,6 +1944,26 @@
       "teamSize": "~10 people",
       "founded": "2024",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Full-stack engineering for defense acquisition software used by the world's largest defense contractors and government operators across 30+ allied nations: build the workflows, UIs, and AI agents that make procurement move at mission speed \u2014 including regular time on-site with military users.",
+      "doing": [
+        "Build the data workflows and tools operators use daily",
+        "Develop the commercial platform used by major defense primes to win contracts",
+        "Design intuitive React/Next.js UIs over complex procurement processes",
+        "Build AI agents for opportunity identification and competitive intelligence",
+        "Travel to military bases (1-2 weeks/month max) to deploy directly with users",
+        "Shape product with the CTO and CPO"
+      ],
+      "needs": [
+        "2-8 years full-stack with hands-on AI-agent and LLM experience",
+        "Comfort presenting to government operators",
+        "Track record shipping intuitive production products"
+      ],
+      "bonus": [
+        "Secret/Top Secret clearance",
+        "Prior government projects"
+      ]
     }
   },
   {
@@ -1252,6 +1989,21 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Backend-leaning full-stack work on continuous-improvement infrastructure for enterprise agents \u2014 production failures become signal that improves the knowledge and the agents together. Small, highly technical team with real architecture ownership.",
+      "doing": [
+        "Build the backend of the agent evaluation and improvement platform",
+        "Own data models across traces, experiments, knowledge versions, quality criteria",
+        "Run enterprise integrations through their full lifecycle",
+        "Ship features from design to monitored production",
+        "Debug customer systems directly when needed"
+      ],
+      "needs": [
+        "Backend depth: data modeling, queues, pipelines, distributed systems",
+        "Full-stack shipping ability",
+        "Enterprise-facing composure"
+      ]
     }
   },
   {
@@ -1277,6 +2029,21 @@
       "funding": "$10M+ raised",
       "teamSize": "founding team of <10",
       "founded": "2026"
+    },
+    "jd": {
+      "about": "Core builder on a small elite San Francisco team constructing the AI operating layer for forward-deployed engineering and professional-services teams \u2014 a $400B+ market. Greenfield work including a brand-new client-facing dashboard, reporting directly to the CTO.",
+      "doing": [
+        "Build the client-facing dashboard from scratch: system design, UI, full-stack implementation",
+        "Architect and ship features with quality and scale in mind",
+        "Build on existing agent frameworks and data pipelines",
+        "Make key engineering decisions with the CTO and founding engineers",
+        "Talk to clients directly about how they want to engage"
+      ],
+      "needs": [
+        "3+ years of high-ownership full-stack engineering",
+        "Ground-up product shipping at early stage",
+        "San Francisco team"
+      ]
     }
   },
   {
@@ -1287,7 +2054,7 @@
     "locations": [
       "New York"
     ],
-    "techStack": "React, Vue, TypeScript, NodeJS, PostgreSQL, Docker, AWS, GCP",
+    "techStack": "React, Vue, TypeScript, NodeJS, PostgreSQL, Docker, AWS, GCP, Node.js, Firebase",
     "industry": "Healthcare",
     "workplace": "Hybrid",
     "roleType": "Product Engineer, Full Stack Engineer",
@@ -1303,6 +2070,20 @@
       "teamSize": "~10 people",
       "founded": "2025",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Early technical steward at a tech-enabled mental-health provider expanding access to breakthrough psychiatric treatments: ship end-to-end workflows at outsized scale, set the engineering patterns, and grow your scope as the company 10x's. NYC, 3-4 days in office.",
+      "doing": [
+        "Build end-to-end workflows from database schema to UI and own them in production",
+        "Raise the bar on code quality and decision-making as an early steward",
+        "Take high-level requirements and run \u2014 no over-planning",
+        "Work across React/Vue, TypeScript, Node, PostgreSQL on AWS/GCP"
+      ],
+      "needs": [
+        "Generalist engineering with true end-to-end shipping history",
+        "High-growth startup or serious side-project pedigree",
+        "Genuine care about access to mental healthcare"
+      ]
     }
   },
   {
@@ -1339,6 +2120,22 @@
       "teamSize": "150+ people",
       "founded": "2017",
       "investors": "backed by Craft Ventures, Felicis, a16z"
+    },
+    "jd": {
+      "about": "A player-coach leadership role: manage and grow a team of full-stack data scientists building the fraud-detection models behind a widely used identity-risk platform. You'd be the technical leader and mentor for a domain with high visibility \u2014 and stay hands-on across the full model lifecycle.",
+      "doing": [
+        "Manage a team of 2-3 data scientists, growing it to 5-6",
+        "Mentor deeply and technically \u2014 dive into the work, probe understanding, raise the bar",
+        "Lead planning, resourcing, and communication with senior leadership, product, and engineering",
+        "Own fraud models end to end: data acquisition, featurization, labeling strategy, training, productionization, monitoring",
+        "Research emerging fraud patterns and shape new identity-verification products",
+        "Write production-ready code used for real-time decisions by partner institutions"
+      ],
+      "needs": [
+        "Strong full-stack data-science background: modeling, analysis, and production code",
+        "Appetite for end-to-end ownership in a fast-moving, domain-driven environment",
+        "Leadership through depth \u2014 insight and iteration over methodology novelty"
+      ]
     }
   },
   {
@@ -1367,6 +2164,25 @@
       "teamSize": "100+ people",
       "founded": "2020",
       "investors": "backed by Craft Ventures"
+    },
+    "jd": {
+      "about": "Own distributed-systems reliability at a developer platform handling millions of requests for thousands of companies' enterprise features: embedded with product teams, driving architecture, scaling AWS/Terraform infrastructure sustainably.",
+      "doing": [
+        "Design and maintain the distributed systems behind the core platform",
+        "Own infrastructure architecture: reliability, scalability, performance end to end",
+        "Embed with product engineering on system design",
+        "Evolve AWS + Terraform infrastructure-as-code",
+        "Build internal tooling, shared infra, and CI for company-wide productivity",
+        "Take part in on-call and incident learning"
+      ],
+      "needs": [
+        "4+ years of infrastructure engineering at modern tech companies",
+        "Systems operated at real scale",
+        "Collaborative, flat-team working style"
+      ],
+      "bonus": [
+        "Background at high-growth developer-tools or SaaS companies"
+      ]
     }
   },
   {
@@ -1394,6 +2210,23 @@
       "teamSize": "~15 people",
       "founded": "2024",
       "investors": "backed by Sequoia"
+    },
+    "jd": {
+      "about": "Build and secure the backbone of an enterprise AI platform for financial data: tenant-isolated private-cloud deployments correlating public market data with sensitive customer data in real time, under strict financial-services compliance.",
+      "doing": [
+        "Design scalable infrastructure for an AI knowledge engine over structured and unstructured financial data",
+        "Implement security-first architecture for private-cloud (BYOC) deployments",
+        "Build ingestion pipelines spanning market-data feeds to internal document stores",
+        "Implement access controls and audit trails tracing AI interactions to primary sources",
+        "Optimize infrastructure for LLM inference, training, and agents",
+        "Establish CI/CD and IaC across multiple clouds"
+      ],
+      "needs": [
+        "3-10 years of infrastructure/platform engineering",
+        "Cloud depth (AWS/GCP/Azure) with Kubernetes expertise",
+        "Security-minded data-governance experience, ideally regulated industries",
+        "ETL/real-time pipeline familiarity"
+      ]
     }
   },
   {
@@ -1412,7 +2245,28 @@
     "funding": "$60M",
     "teamSize": "25",
     "visa": "None, Visa transfers",
-    "yoe": "0 - 2 years"
+    "yoe": "0 - 2 years",
+    "jd": {
+      "about": "A senior version of the AI engineering role at an education-technology startup: lead the build-out of LLM-native features on a K-12 student-data platform \u2014 teacher-facing assistants, automated intervention flagging, natural-language analytics \u2014 with broad ownership of architecture and product direction.",
+      "doing": [
+        "Lead design and delivery of AI features across the platform: assistants, report generation, NL query, flagging systems",
+        "Stand up new products beyond the core platform \u2014 early-warning systems and new analytics/data products",
+        "Own prompt design, retrieval architecture, and evaluation pipelines",
+        "Build production AI infrastructure: evals, guardrails, monitoring, cost/latency trade-offs",
+        "Set technical direction on model selection, fine-tuning vs prompting, build-vs-buy",
+        "Champion student-data privacy and responsible AI practice"
+      ],
+      "needs": [
+        "Strong applied-LLM track record with production ownership",
+        "Data-science depth: statistical modeling, predictive analytics",
+        "Comfort in a hands-on lead role at an early-stage company"
+      ]
+    },
+    "company": {
+      "blurb": "Education-technology company helping schools, universities, and nonprofits run smarter \u2014 practical AI systems and tools for real operational challenges across education.",
+      "stage": "seed-stage",
+      "funding": "seed funding"
+    }
   },
   {
     "jobId": "68",
@@ -1437,6 +2291,24 @@
       "teamSize": "1,000+ people",
       "founded": "2009",
       "investors": "backed by Y Combinator"
+    },
+    "jd": {
+      "about": "Early engineer on a hyper-focused team inside a global contract-intelligence leader, fresh off acquiring one of the best legal-AI products in market: build the contract operating system for the enterprise, reporting to the acquired company's former CEO with startup-level ownership and enterprise-scale distribution.",
+      "doing": [
+        "Architect, develop, and own the user-facing application",
+        "Design intelligent full-stack solutions across backend and frontend",
+        "Drive technical strategy, roadmaps, and sound engineering practice",
+        "Define and measure what success looks like for the team",
+        "Initiate and drive technical projects"
+      ],
+      "needs": [
+        "4+ years building AI products",
+        "Full-stack range with architectural judgment",
+        "Comfort on hard problems with high ownership"
+      ],
+      "bonus": [
+        "Startup experience"
+      ]
     }
   },
   {
@@ -1448,7 +2320,7 @@
       "San Francisco",
       "New York"
     ],
-    "techStack": "Python, FastAPI, PostgreSQL, Vector Database",
+    "techStack": "Python, FastAPI, PostgreSQL, Vector Database, LLMs, embeddings, RAG, retrieval, inference infrastructure",
     "industry": "Consumer, AI",
     "workplace": "On-site",
     "roleType": "Machine Learning Engineer",
@@ -1464,6 +2336,22 @@
       "teamSize": "founding team of <10",
       "founded": "2025",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Founding-team ML role architecting the intelligent foundation of consumer products designed to feel personal and magical: pipelines, retrieval, and inference powering categorization, summarization, search, personalization, and assistant experiences.",
+      "doing": [
+        "Architect the ML and retrieval systems behind the core product",
+        "Design pipelines that ingest, classify, enrich, and summarize user data at volume",
+        "Build scalable real-time and batch inference infrastructure",
+        "Lead model selection, fine-tuning, embeddings, RAG, and evaluation",
+        "Prototype fast, then harden what works",
+        "Make complex AI feel intuitive with product and design"
+      ],
+      "needs": [
+        "Deep ML-product experience: LLMs, embeddings, RAG, ranking, retrieval",
+        "Product quality obsession equal to model accuracy",
+        "Small senior-team fit"
+      ]
     }
   },
   {
@@ -1475,7 +2363,7 @@
       "San Francisco",
       "South Bay Area"
     ],
-    "techStack": "Langchain, Docker, Kubernetes, K8s, Python, Tableau, Grafana",
+    "techStack": "Langchain, Docker, Kubernetes, K8s, Python, Tableau, Grafana, LangGraph/AutoGen-class agent stacks, vLLM, SGLang, Ray, full-stack web",
     "industry": "Software Development, AI, Enterprise",
     "workplace": "On-site",
     "roleType": "Machine Learning Engineer, Full Stack Engineer",
@@ -1490,6 +2378,27 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Senior full-stack ML-systems role working directly with the Chief Architect and CEO: turn multi-agent systems research into a product developers and enterprises enjoy using \u2014 from serving infrastructure to the front-end that makes it legible.",
+      "doing": [
+        "Productize ML-systems research into developer-grade software",
+        "Build on multi-agent stacks (LangGraph, AutoGen, CrewAI, or custom)",
+        "Work with model-serving platforms (vLLM, SGLang, Ray)",
+        "Build strong front-end and visualization surfaces",
+        "Turn research ideas into docs, examples, and onboarding flows"
+      ],
+      "needs": [
+        "5+ years of professional software engineering",
+        "Multi-agent systems built with modern tool stacks",
+        "Full-stack strength, especially front-end/visualization",
+        "Clear written communication"
+      ],
+      "bonus": [
+        "Multi-agent systems in live production",
+        "Open-source contributions",
+        "SA/FDE background"
+      ]
     }
   },
   {
@@ -1526,7 +2435,32 @@
       "stage": "scale-up",
       "funding": "$170M+ raised",
       "teamSize": "200+ people",
-      "founded": "2019"
+      "founded": "2019",
+      "investors": "backed by a16z and major financial-industry strategics"
+    },
+    "jd": {
+      "about": "More than a modeling job: you'd own the full path from raw device and behavioral signals to live fraud decisions \u2014 the models, the data pipelines, and the Go backend that keeps everything fast and reliable at production scale, in a high-stakes and constantly shifting adversarial domain.",
+      "doing": [
+        "Build and tune real-time pipelines and backend services for device and behavioral data",
+        "Develop, deploy, and maintain fraud-detection models that hold up in production",
+        "Turn raw signals into production-ready features",
+        "Integrate tightly with platform and backend engineering",
+        "Keep security, privacy, and compliance standards high",
+        "Champion testing, documentation, and observability"
+      ],
+      "needs": [
+        "5+ years of software engineering with strong backend depth (Go or Python)",
+        "Hands-on applied ML on large datasets (PyTorch, scikit-learn)",
+        "Strong SQL across relational and non-relational stores",
+        "End-to-end ML system experience: feature pipelines, deployment, monitoring",
+        "BS/MS in CS, engineering, or related field"
+      ],
+      "bonus": [
+        "Fraud, risk, or cybersecurity domain knowledge",
+        "CI/CD, Docker, Kubernetes fluency",
+        "Modern browser APIs and high-entropy data collection",
+        "Using frontier LLMs for automation"
+      ]
     }
   },
   {
@@ -1538,7 +2472,7 @@
       "New York",
       "Seattle"
     ],
-    "techStack": "Kubernetes, Kafka",
+    "techStack": "Kubernetes, Kafka, SQS, LLM infrastructure",
     "industry": "Data, AI",
     "workplace": "Hybrid",
     "roleType": "Machine Learning Engineer, Infrastructure/DevOps/SRE",
@@ -1552,6 +2486,20 @@
       "stage": "early-stage",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Infrastructure at the frontier of agent evaluation: orchestrate hundreds of simultaneous agent runs \u2014 each with its own stateful environment \u2014 at a combined throughput of ~100M tokens per minute. You'd own the dispatch layer and help design the environments and tasks that genuinely stress-test frontier agents.",
+      "doing": [
+        "Own agent orchestration at scale: queueing, concurrency control, failure handling across the fleet",
+        "Design realistic environments and evaluation tasks that push agents to their limits",
+        "Build new evaluation modalities and integrations with external orchestration frameworks",
+        "Stay on the leading edge of a fast-moving agent-evaluation space"
+      ],
+      "needs": [
+        "Distributed-systems experience in production",
+        "Container orchestration (Kubernetes) and message-driven architectures (SQS, Kafka)",
+        "A track record of running LLM workloads at scale"
+      ]
     }
   },
   {
@@ -1578,6 +2526,20 @@
       "teamSize": "~10 people",
       "founded": "2024",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Senior engineering at a fast-growing AI-compliance company automating KYB/KYC/AML for banks and fintechs: browser agents for heavy integrations, novel agentic workflows, and direct customer contact \u2014 as the team doubles.",
+      "doing": [
+        "Automate browser agents for integration-heavy work",
+        "Optimize core product logic across KYB, KYC, AML",
+        "Build end-to-end systems and ship fast",
+        "Experiment with frontier models and design novel agentic workflows",
+        "Talk to customers and prospects directly"
+      ],
+      "needs": [
+        "6+ years of exceptional software engineering",
+        "Great communication with high ownership and agency"
+      ]
     }
   },
   {
@@ -1602,7 +2564,24 @@
       "stage": "Series A-stage",
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
-      "founded": "2024"
+      "founded": "2024",
+      "investors": "backed by a top early-stage venture firm",
+      "note": "team from leading hardware and AI companies"
+    },
+    "jd": {
+      "about": "Early team (seven people, from top hardware and AI companies) building AI that autonomously operates factories \u2014 already deployed at a precision aerospace manufacturer supplying leading space companies. Own customer-facing features whose impact shows up on the factory floor the week they ship.",
+      "doing": [
+        "Own features end to end \u2014 e.g. AI-assisted collaborative interfaces for factory operators",
+        "Extend agent orchestration for scheduling, dispatch, and driving indirect labor toward zero",
+        "Work the unified data layer over legacy factory systems: ERPs, MES, PLCs, spreadsheets",
+        "Apply context engineering, agent harnesses, small-model training, and RL in production",
+        "Deploy with customers and watch throughput move"
+      ],
+      "needs": [
+        "2+ years as a high-ownership technical builder",
+        "Comfort shipping into messy real-world environments",
+        "Background flexibility: systems, agents, quant, or founder"
+      ]
     }
   },
   {
@@ -1626,7 +2605,23 @@
       "blurb": "Consumer-AI startup building a personal assistant that lives in your messages, watches your apps, and gets work done proactively.",
       "stage": "early-stage",
       "teamSize": "founding team of <10",
-      "founded": "2025"
+      "founded": "2025",
+      "investors": "backed by a top accelerator and a leading venture firm"
+    },
+    "jd": {
+      "about": "True founding-engineer opportunity on a 4-person team of former founders building a personal AI that lives in your messages \u2014 backed by top accelerators and investors, launched a month ago, and scaling fast.",
+      "doing": [
+        "Build the memory system: productize frontier agent-memory research for non-technical users",
+        "Own large ambiguous problems: approach, build, ship, iterate",
+        "Build integrations across consumer and work tools to make the assistant truly proactive",
+        "Work agent reliability, context retrieval, and personalization",
+        "Ship at an intense pace with full ownership"
+      ],
+      "needs": [
+        "1+ years with something real shipped to users",
+        "Product-minded full-stack ability",
+        "Thrives in ambiguity at founding pace"
+      ]
     }
   },
   {
@@ -1637,7 +2632,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "Python, AWS, C/C++",
+    "techStack": "Python, AWS, C/C++, CUDA, HIP, Triton, vLLM-class serving, Kubernetes",
     "industry": "AI, Hardware",
     "workplace": "On-site",
     "roleType": "Machine Learning Engineer, Backend Engineer",
@@ -1652,6 +2647,21 @@
       "funding": "seed funding",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Maximize intelligence per watt: serve open-source LLM inference at the best performance per dollar through autonomous optimization of heterogeneous hardware \u2014 NVIDIA, AMD, TPU, Trainium and beyond. Small SF team, complete autonomy, kernels to customers.",
+      "doing": [
+        "Ship day-zero support for new open models, tuned for latency and throughput",
+        "Optimize serving: batching, KV cache, speculative decoding, quantization",
+        "Write and tune kernels in CUDA, HIP, and Triton across vendors",
+        "Design and operate heterogeneous clusters",
+        "Run production inference at scale: reliability, observability, cost per token"
+      ],
+      "needs": [
+        "Deep systems/GPU engineering ability",
+        "First-principles problem solving with unreasonable standards",
+        "San Francisco, on-site 5 days/week"
+      ]
     }
   },
   {
@@ -1676,6 +2686,21 @@
       "teamSize": "~80 people",
       "founded": "2023",
       "investors": "backed by Sequoia"
+    },
+    "jd": {
+      "about": "Product engineering on an AI research platform changing how companies make decisions: analysis and insight surfaces, self-serve growth features, and the design system that holds it together.",
+      "doing": [
+        "Build analysis and insight features including in-platform chat",
+        "Develop incentives, recruitment, lists, and panels for self-serve motions",
+        "Shape platform design and design systems",
+        "Partner with product and design on product-heavy initiatives",
+        "Contribute to distributed systems and APIs"
+      ],
+      "needs": [
+        "2+ years of product-focused engineering",
+        "End-to-end problem ownership",
+        "Design sensibility"
+      ]
     }
   },
   {
@@ -1702,6 +2727,20 @@
       "teamSize": "100+ people",
       "founded": "2023",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "An internal moonshot team inside a well-funded accounting-AI company ($100M raised) answering one question: what does knowledge work look like with AGI? They've shipped agent teammates that push code to production and self-repairing services \u2014 the mandate is zero-human loops that own entire jobs.",
+      "doing": [
+        "Build agent systems that do real work inside the company today",
+        "Invent infrastructure, interfaces, and operating models for human-agent teams",
+        "Push past 10% productivity gains toward entire jobs handled end-to-end",
+        "Embed with internal teams to build intelligence into their workflows"
+      ],
+      "needs": [
+        "Builder profile: engineers, former founders welcome",
+        "Obsession with the future-of-work question",
+        "Comfort inventing without a playbook"
+      ]
     }
   },
   {
@@ -1726,6 +2765,22 @@
       "stage": "early-stage",
       "teamSize": "~20 people",
       "founded": "2023"
+    },
+    "jd": {
+      "about": "Build the core systems deploying ML for tax automation: document extraction at production quality, inference integration, and the architecture decisions that let the product iterate fast \u2014 engaging directly with the accountants who use it.",
+      "doing": [
+        "Build core systems deploying ML in training and production",
+        "Drive architecture for rapid product iteration",
+        "Extract tax documents into structured data at scale and quality",
+        "Integrate inference, monitoring, LLMs, application layers, and tax logic",
+        "Build database layers and external vendor integrations",
+        "Talk to accountants directly"
+      ],
+      "needs": [
+        "5+ years of backend engineering",
+        "Pragmatic, thoughtful decision-making history",
+        "Appetite for outsized responsibility"
+      ]
     }
   },
   {
@@ -1736,7 +2791,7 @@
     "locations": [
       "Seattle"
     ],
-    "techStack": "Kubernetes, K8s, Terraform, Python, Rust, Go, Airflow, PyTorch",
+    "techStack": "Kubernetes, K8s, Terraform, Python, Rust, Go, Airflow, PyTorch, vLLM, SGLang, TensorRT-LLM, CUDA",
     "industry": "Software Development, AI",
     "workplace": "On-site",
     "roleType": "Machine Learning Engineer",
@@ -1750,7 +2805,29 @@
       "stage": "growth-stage",
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
-      "founded": "2024"
+      "founded": "2024",
+      "note": "research team with PhDs from top programs"
+    },
+    "jd": {
+      "about": "An ML-systems role at a research lab building real-time, photorealistic conversational AI: own inference performance across the entire model stack \u2014 LLMs, audio models, and diffusion components \u2014 from serving frameworks down to custom kernels, for a product where latency is the product.",
+      "doing": [
+        "Own end-to-end inference optimization across LLM, audio, and diffusion models",
+        "Design KV-cache strategy for long conversations: eviction, compression, memory-efficient attention",
+        "Deploy and extend serving frameworks (vLLM, SGLang, TensorRT-LLM) for unusual workloads",
+        "Profile latency and throughput; systematically eliminate bottlenecks",
+        "Accelerate diffusion inference: consistency models, step distillation, caching, custom kernels",
+        "Apply quantization (INT8/INT4, GPTQ, AWQ) without meaningful quality loss"
+      ],
+      "needs": [
+        "2+ years building production ML systems",
+        "Scalable-infrastructure design from scratch, with well-reasoned technology choices",
+        "Track record optimizing for latency, throughput, and cost",
+        "Broad ML-infra fluency: inference, real-time streaming, data engineering"
+      ],
+      "bonus": [
+        "Video or audio model experience",
+        "CUDA kernel-level optimization"
+      ]
     }
   },
   {
@@ -1761,7 +2838,7 @@
     "locations": [
       "Seattle"
     ],
-    "techStack": "Kubernetes, K8s, Terraform, Python, Rust, Go, Airflow, PyTorch",
+    "techStack": "Kubernetes, K8s, Terraform, Python, Rust, Go, Airflow, PyTorch, vLLM, SGLang, TensorRT-LLM, CUDA",
     "industry": "Software Development, AI",
     "workplace": "On-site",
     "roleType": "Machine Learning Engineer",
@@ -1776,6 +2853,26 @@
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "ML-systems engineering at a research lab building real-time, photorealistic conversational AI: own inference performance across LLMs, audio, and diffusion \u2014 from serving frameworks to custom kernels, where latency is the product.",
+      "doing": [
+        "Own end-to-end inference optimization across the model stack",
+        "Tune KV-cache strategy: eviction, compression, memory-efficient attention",
+        "Extend serving frameworks (vLLM, SGLang, TensorRT-LLM) for unusual workloads",
+        "Profile and systematically eliminate latency/throughput bottlenecks",
+        "Accelerate diffusion inference: distillation, caching, custom kernels",
+        "Quantize (INT8/INT4, GPTQ, AWQ) without losing quality"
+      ],
+      "needs": [
+        "2+ years building production ML systems",
+        "Infrastructure design from scratch with sound technology choices",
+        "Latency/throughput/cost optimization track record"
+      ],
+      "bonus": [
+        "Video/audio models",
+        "CUDA kernel work"
+      ]
     }
   },
   {
@@ -1801,6 +2898,22 @@
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "For early-career engineers who want to squeeze every millisecond out of trained models: full-stack inference work \u2014 quantization, KV cache, kernels, batching \u2014 at a research lab building real-time conversational AI. BS/MS/PhD all welcome; systems intuition matters more than credentials.",
+      "doing": [
+        "Contribute to inference optimization across LLM, audio, and diffusion models",
+        "Implement KV-cache strategies for long-context conversation",
+        "Work with and extend vLLM/SGLang/TensorRT-LLM-class frameworks",
+        "Profile latency and throughput; eliminate bottlenecks",
+        "Build internal profiling and test tooling",
+        "Apply quantization techniques throughput-first"
+      ],
+      "needs": [
+        "Finishing or recently finished BS/MS/PhD",
+        "Framework exposure through coursework, research, internships, or open source \u2014 with opinions on where they fall short",
+        "Appetite to go deep"
+      ]
     }
   },
   {
@@ -1811,7 +2924,7 @@
     "locations": [
       "Seattle"
     ],
-    "techStack": "Python, PyTorch",
+    "techStack": "Python, PyTorch, RL/post-training frameworks",
     "industry": "Software Development, AI",
     "workplace": "On-site",
     "roleType": "AI / ML Researcher",
@@ -1826,6 +2939,21 @@
       "funding": "$60M+ raised",
       "teamSize": "~25 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "A rare 0\u21921 post-training role for a finishing or recent PhD: build the RL and post-training stack of a frontier lab whose models are omni from the ground up \u2014 audio, video, language, and real-time full-duplex interaction. The problems go beyond text: timing, interruption, emotional response, and audiovisual coherence are all training targets.",
+      "doing": [
+        "Build the RL/post-training stack from scratch: rollouts, policy optimization, reward serving, feedback loops, evaluation, observability",
+        "Develop and scale methods like PPO, GRPO, DPO, rejection sampling, RLHF/RLAIF, and online RL",
+        "Design the abstractions connecting research ideas to production-scale runs: trainers, rollout workers, reward models, experience buffers",
+        "Build evaluation loops for interactive behavior: turn-taking, interruption, timing, emotional response",
+        "Optimize the full loop across rollout throughput, serving latency, and GPU utilization"
+      ],
+      "needs": [
+        "Completing or recently completed PhD with deep RL/post-training grounding",
+        "Systems ability to build and debug distributed training infrastructure",
+        "Drive to turn evolving research ideas into reliable, fast tooling"
+      ]
     }
   },
   {
@@ -1852,6 +2980,21 @@
       "teamSize": "~15 people",
       "founded": "2025",
       "investors": "backed by Craft Ventures"
+    },
+    "jd": {
+      "about": "Own the AI stack of an AI-native wealth-management firm where agents are the primary users of the system of record: a general agent for advisors, ambient agents acting for clients, and the harness, generative UI, and eval infrastructure that make human-AI collaboration actually work in a regulated, judgment-heavy domain.",
+      "doing": [
+        "Build a general agent for complex multi-step tasks: planning, sandboxed execution, retrieval",
+        "Build ambient agents: email triage, meeting processing, drafting, proactive surfacing",
+        "Own the agent harness orchestrating LLMs, context, tools, and business logic",
+        "Design generative UI and human-in-the-loop collaboration surfaces",
+        "Build eval infrastructure spanning high-correctness financial data and subjective judgment"
+      ],
+      "needs": [
+        "Deep applied-AI engineering: agents, retrieval, orchestration",
+        "Product sense for human-AI collaboration",
+        "Rigor appropriate to a regulated financial domain"
+      ]
     }
   },
   {
@@ -1878,6 +3021,20 @@
       "teamSize": "~15 people",
       "founded": "2025",
       "investors": "backed by Craft Ventures"
+    },
+    "jd": {
+      "about": "Own the foundation of an AI-native wealth-management firm: infrastructure, backend systems, safe agent-execution environments, and the developer experience that lets a 12-person team ship into a regulated, high-stakes domain \u2014 where reliability and cost are the product, not afterthoughts.",
+      "doing": [
+        "Build core infrastructure and backend systems",
+        "Create safe execution environments for AI agents at scale",
+        "Own developer tooling and experience",
+        "Drive performance and cost optimization through multiple acquisitions this year"
+      ],
+      "needs": [
+        "Strong platform/infrastructure engineering background",
+        "Reliability instincts for high-stakes domains",
+        "Small-team ownership"
+      ]
     }
   },
   {
@@ -1905,6 +3062,21 @@
       "teamSize": "100+ people",
       "founded": "2016",
       "investors": "backed by Y Combinator, 8VC"
+    },
+    "jd": {
+      "about": "The technical bridge between an R&D-AI platform and its growing partner ecosystem: six months hands-on in live enterprise implementations across chemicals and materials, then accountable ownership of a growing book of partner-led accounts.",
+      "doing": [
+        "Learn the platform as a hands-on implementation IC (~6 months)",
+        "Manage 3-5 growing to 10-20 partner-led enterprise accounts",
+        "Run partner check-ins: questions, issues, best practices",
+        "Work cross-functionally with product, engineering, and account management",
+        "Build enablement infrastructure and training that lets partners implement independently"
+      ],
+      "needs": [
+        "STEM degree (chem eng, materials science, chemistry) with real research-workflow understanding",
+        "2-4 years in enterprise implementations, technical consulting, or industry research",
+        "Strong presenting, coaching, and stakeholder skills"
+      ]
     }
   },
   {
@@ -1930,6 +3102,24 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Technical co-pilot to the CTO at a next-generation engineering firm: build the platform from zero \u2014 CI/CD, multi-tenant infrastructure, observability \u2014 so that onboarding each new engineering client takes a fraction of the time the last one did.",
+      "doing": [
+        "Own platform architecture and shared infrastructure for the forward-deployed team",
+        "Own commit-to-production: CI/CD, preview environments, test infra, DX",
+        "Define observability and incident practice \u2014 then instrument it",
+        "Build multi-tenant infrastructure that compounds",
+        "Occasionally visit client sites to see workflows firsthand"
+      ],
+      "needs": [
+        "6+ years of platform/infrastructure with large-scale production ownership",
+        "High-growth startup background",
+        "Comfort as the CTO's right hand in ambiguity"
+      ],
+      "bonus": [
+        "Multi-tenant scaling during rapid growth"
+      ]
     }
   },
   {
@@ -1955,7 +3145,23 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2025",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "powers outbound for 40+ fast-growing startups"
+    },
+    "jd": {
+      "about": "Own the front-end and UX layer of an AI outbound platform on a 5-person team backed by a top accelerator \u2014 already powering outbound for 40+ fast-growing startups. You'd unblock the design bottleneck and turn vague user requests into polished interfaces.",
+      "doing": [
+        "Engage customers directly in Slack and translate pain into great UX",
+        "Own front-end and design tickets, easing load on the sole designer",
+        "Build polished React/Next.js interfaces over complex outbound workflows",
+        "Break vague requests into well-designed solutions",
+        "Ship rapidly with the co-founders and founding engineer"
+      ],
+      "needs": [
+        "Front-end strength in React/Next.js with real design sensibility",
+        "Direct-to-customer communication comfort",
+        "Startup builder energy at any experience level"
+      ]
     }
   },
   {
@@ -1982,6 +3188,21 @@
       "teamSize": "~50 people",
       "founded": "2021",
       "investors": "backed by Y Combinator, Craft Ventures"
+    },
+    "jd": {
+      "about": "Product-oriented full-stack engineering (up to Staff) on AI infrastructure for government contractors: own features end-to-end across product pods \u2014 capture, proposal, contract, platform \u2014 for mission-critical GovCon workflows.",
+      "doing": [
+        "Design, build, and ship full-stack features end to end",
+        "Set technical direction within your product area",
+        "Watch customers use the product; fold feedback straight in",
+        "Build interfaces and APIs that make AI workflows trustworthy",
+        "Improve reliability, performance, and scalability as the platform grows"
+      ],
+      "needs": [
+        "1-6 years (up to Staff) of product-focused full-stack work",
+        "Relentless customer-experience focus",
+        "End-to-end ownership habits"
+      ]
     }
   },
   {
@@ -2009,6 +3230,20 @@
       "teamSize": "~40 people",
       "founded": "2022",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Hands-on product engineering at the core of a breakout developer-infrastructure company: ship features thousands of developers hit daily, own them idea-to-production, and obsess over the details that make an API a joy \u2014 at a company past eight-figure revenue with a massive open-source following.",
+      "doing": [
+        "Build and ship developer-facing features from idea to production",
+        "Own reliability against a web that changes and fights back",
+        "Turn hard ambiguous problems into product developers love",
+        "Run your piece of the product end to end \u2014 no ticket factory"
+      ],
+      "needs": [
+        "Strong product-engineering fundamentals",
+        "Developer-experience obsession",
+        "Frontier pace and depth"
+      ]
     }
   },
   {
@@ -2035,6 +3270,21 @@
       "funding": "$20M+ raised",
       "teamSize": "~70 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Backend-leaning product engineering at a legal-tech startup transforming US immigration: sit directly with the internal legal team (no PM buffer), ship AI-powered tools that save them hours daily, and build at 5-10x speed with AI-native tooling. High-intensity environment \u2014 expect 50-60+ hour weeks.",
+      "doing": [
+        "Own features end to end: APIs, schemas, React frontend",
+        "Build tools with the legal team sitting next to you",
+        "Use AI coding tools as your primary shipping method",
+        "Build AI features on LLMs for high-stakes immigration casework",
+        "Iterate rapidly with founders and external customers"
+      ],
+      "needs": [
+        "2+ years with strong pedigree: top-tier company, top startup, or founder background",
+        "AI-native daily workflow (Cursor/Claude Code/Codex-class tools)",
+        "Relentless work ethic \u2014 50-60+ hour weeks are the norm"
+      ]
     }
   },
   {
@@ -2060,7 +3310,23 @@
       "funding": "$5M raised",
       "teamSize": "founding team of <10",
       "founded": "2024",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "80+ customers live"
+    },
+    "jd": {
+      "about": "Ground floor of a category-defining trade platform: turn messy, fragmented customs data into insights that save companies millions in tariffs \u2014 80+ customers live, growth inflecting as US tariff spend explodes. Work directly with the founders on a system that has never existed.",
+      "doing": [
+        "Build full-stack features marrying client data to scalable product",
+        "Wrangle fragmented trade data (documents, CSVs, APIs) into clean structure",
+        "Design PostgreSQL data models equal to global-trade complexity",
+        "Push back on specs and own ambiguous-requirement-to-shipped-product",
+        "Build agentic workflows where accuracy has real consequences"
+      ],
+      "needs": [
+        "2-5 years mentored in a credible engineering culture",
+        "Strong fundamentals with product instincts",
+        "Comfort in compliance-heavy, high-accuracy domains"
+      ]
     }
   },
   {
@@ -2086,6 +3352,21 @@
       "funding": "$7M raised",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Founding product engineer for personalized preventive healthcare, working directly with founders from top fintech and health-tech companies: turn genomic and biomarker data into clear, actionable products for patients and clinicians. You get high-level problems and a Figma \u2014 the approach is yours.",
+      "doing": [
+        "Ship full-stack features: clinician dashboards, patient health views, AI experiences",
+        "Present complex health data (genomics, biomarkers, epigenetics) accessibly",
+        "Build AI integrations: vector databases, intelligent parsing over health records",
+        "Shape product with design and founders, minimal hand-offs",
+        "Ship continuously \u2014 no sprint cycles"
+      ],
+      "needs": [
+        "2+ years with strong product taste",
+        "AI-native building habits",
+        "Speed without quality loss"
+      ]
     }
   },
   {
@@ -2096,7 +3377,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "React, Next.js, GraphQL, Django, Python, TypeScript, REST API, Slack",
+    "techStack": "React, Next.js, GraphQL, Django, Python, TypeScript, REST API, Slack, Python backend",
     "industry": "Cybersecurity, Security, Enterprise, AI, B2B",
     "workplace": "Hybrid",
     "roleType": "Product Engineer",
@@ -2111,6 +3392,20 @@
       "funding": "$30M+ raised",
       "teamSize": "~60 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Own the customer-facing surfaces of a human-risk security product \u2014 the interfaces where behavioral interventions actually reach employees: video briefings, compliance-training modules, slideware, and real-time Slack/Google Chat notifications. Roughly 70% frontend, 30% backend, with real opinions required about how the two meet.",
+      "doing": [
+        "Own the delivery surfaces: training modules, briefings, notifications across chat platforms",
+        "Hold both sides of features like JSON-assembled training content rendered through a visual editor",
+        "Evolve the GraphQL schema between front and back end, keeping it backwards-compatible",
+        "Improve data-loading efficiency across the stack"
+      ],
+      "needs": [
+        "Frontend-strong full-stack ability focused on shipping to real users",
+        "Comfort owning GraphQL contracts",
+        "Explicitly NOT for platform/design-system/tooling-first engineers"
+      ]
     }
   },
   {
@@ -2137,6 +3432,20 @@
       "teamSize": "~80 people",
       "founded": "2021",
       "investors": "backed by Founders Fund, General Catalyst"
+    },
+    "jd": {
+      "about": "Applied-AI product engineering at an industrial-labor marketplace: wire frontier models and existing agents into the products that source, vet, match, and place workers across millions of shifts \u2014 partnering with the CTO on architecture while shipping across worker, business, and ops surfaces.",
+      "doing": [
+        "Apply agents and frontier models across the stack to automate vetting, matching, fulfilment",
+        "Lead frontend and backend development; mentor other engineers",
+        "Architect core systems: real-time matching, autonomous vetting, distributed systems, APIs",
+        "Own product surfaces end to end with product and design"
+      ],
+      "needs": [
+        "Track record shipping scalable applications frontend to backend",
+        "Pragmatism: the highest-priority problem wins, model or not",
+        "Range across API design, UX, and deployment infrastructure"
+      ]
     }
   },
   {
@@ -2163,6 +3472,20 @@
       "teamSize": "~40 people",
       "founded": "2022",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Build the evaluation systems that decide whether web-extraction actually works \u2014 rigorous measurement across millions of sites, formats, and edge cases at a breakout developer-infrastructure company. Not an inherit-a-framework eval job: you design the metrics, build the pipelines, generate the datasets, and own the loop from quality back to product decisions.",
+      "doing": [
+        "Design the metrics defining what 'good extraction' means",
+        "Build eval pipelines and generate datasets at web scale",
+        "Own the feedback loop from output quality to model and product decisions",
+        "Make 'did that work?' answerable as systems get more complex"
+      ],
+      "needs": [
+        "Engineering depth to measure quality rigorously",
+        "Evaluation/data-science instincts",
+        "Frontier-pace ownership"
+      ]
     }
   },
   {
@@ -2190,6 +3513,22 @@
       "teamSize": "100+ people",
       "founded": "2016",
       "investors": "backed by Y Combinator, 8VC"
+    },
+    "jd": {
+      "about": "Entry into a high-velocity R&D-software implementations team: work directly with enterprise chemists and materials scientists, translating lab workflows and experimental data into a modern system of record \u2014 path from IC to leading enterprise deployments.",
+      "doing": [
+        "Run hands-on implementations: migrating legacy scientific data and workflows",
+        "Restructure experimental datasets and decide how paradigms map to the platform",
+        "Join, then lead, meetings with scientists and R&D stakeholders",
+        "Independently manage SMB accounts alongside larger deployments",
+        "Feed field observations into product"
+      ],
+      "needs": [
+        "STEM degree (chemistry, materials, chem eng) from a strong program",
+        "Lab or research experience",
+        "Software fluency (Python scripting, data tools)",
+        "Confident customer-facing communication"
+      ]
     }
   },
   {
@@ -2216,6 +3555,22 @@
       "teamSize": "~40 people",
       "founded": "2022",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Senior/staff backend for a large-scale platform of vertical AI agents transforming property management: agent runtime services, multi-tenant data modeling, integrations at scale, and the reliability engineering that keeps autonomous agents trustworthy.",
+      "doing": [
+        "Own agent runtime: tool execution, state, orchestration, retries, idempotency, rate limiting",
+        "Design stable versioned APIs, webhooks, and integration adapters",
+        "Model agent memory, workflow history, audit trails, permissions, tenant isolation",
+        "Run integrations at scale: OAuth, sync engines, connectors with strong observability",
+        "Control performance and cost: throughput, queues, caching, inference spend, runaway guards",
+        "Define SLOs, tracing, circuit breakers; run incidents; raise standards"
+      ],
+      "needs": [
+        "6+ years of backend with production platform ownership",
+        "Product-minded systems thinking",
+        "Reliability-engineering depth"
+      ]
     }
   },
   {
@@ -2243,6 +3598,21 @@
       "teamSize": "350+ people",
       "founded": "2016",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Payments infrastructure with startup intensity inside a unicorn-valued organization: orchestrate money movement through banking APIs for vendor payments across thousands of community-management companies \u2014 on a ~12-engineer team with outsized ownership.",
+      "doing": [
+        "Build payment flows through third-party banking APIs, end to end and reliable",
+        "Build vendor onboarding, analytics, and the payment-status portal",
+        "Develop the vendor marketplace",
+        "Build AI features like a virtual-card agent that autonomously pays invoices",
+        "Participate in product, pricing, and customer conversations"
+      ],
+      "needs": [
+        "6+ years of backend engineering, payments experience valued",
+        "Scrappy, fast-paced comfort",
+        "AI tools as a core part of your workflow"
+      ]
     }
   },
   {
@@ -2268,7 +3638,23 @@
       "stage": "Series A-stage",
       "funding": "$20M+ raised",
       "teamSize": "~20 people",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "revenue in steep growth with deal flow doubling monthly"
+    },
+    "jd": {
+      "about": "Own features end-to-end at one of the fastest-growing AI-infrastructure startups on the coasts: a platform whose agents investigate, resolve, and prevent production issues \u2014 with revenue in steep growth and deal flow doubling monthly.",
+      "doing": [
+        "Ship full-stack features from data models to polished React",
+        "Turn direct customer feedback into product users are passionate about",
+        "Break ambiguous projects into milestones and drive them without mandates",
+        "Push frontend polish and interaction patterns with design",
+        "Shape product direction as the company scales"
+      ],
+      "needs": [
+        "5+ years with proven early-stage product delivery",
+        "Customer-minded full-stack range",
+        "Absurd shipping pace in ambiguity"
+      ]
     }
   },
   {
@@ -2294,6 +3680,21 @@
       "funding": "$6M raised",
       "teamSize": "founding team of <10",
       "founded": "2025"
+    },
+    "jd": {
+      "about": "Own the loop that turns real patient interactions into better AI agents at a healthcare-advocacy company: voice AI handling calls to insurers and providers, autonomous care-coordination workflows, and the eval/RL pipelines that make every agent smarter with use.",
+      "doing": [
+        "Launch and scale voice AI for patient activation and outbound calls",
+        "Design agents orchestrating end-to-end workflows: equipment delivery, prior auths, care coordination",
+        "Build real-time copilots for human advocates",
+        "Build eval infrastructure measuring quality across every interaction",
+        "Implement RL/feedback pipelines for continuous improvement from production usage"
+      ],
+      "needs": [
+        "Experience building AI systems that improve with usage",
+        "Voice/agent production depth",
+        "Care about patient-outcome impact"
+      ]
     }
   },
   {
@@ -2318,7 +3719,23 @@
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2018",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "~37% month-over-month growth, eight-figure revenue"
+    },
+    "jd": {
+      "about": "A build-it-yourself product role (reporting to the CEO) at a consumer-health company growing ~37% month over month with eight-figure revenue: own product areas end to end \u2014 research, design, and ship with AI tools \u2014 for the first personal-training platform covered by insurance.",
+      "doing": [
+        "Own a product area per quarter: research with coaches and clients, design, ship",
+        "Build AI recommendation systems: real-time in-call guidance, re-engagement flows",
+        "Create polished consumer and coach UI/UX using AI agents for design",
+        "Define and own success metrics",
+        "Push back on the CEO's vision with informed perspective"
+      ],
+      "needs": [
+        "Product + AI + hands-on engineering blend \u2014 not a traditional PM profile",
+        "Deep user empathy with shipping speed",
+        "Metric ownership instincts"
+      ]
     }
   },
   {
@@ -2329,7 +3746,7 @@
     "locations": [
       "San Francisco"
     ],
-    "techStack": "Python, Kubernetes, Terraform, PostgreSQL, NodeJS, K8s, TypeScript, Docker",
+    "techStack": "Python, Kubernetes, Terraform, PostgreSQL, NodeJS, K8s, TypeScript, Docker, Temporal",
     "industry": "AI, Data, Devtools, Enterprise",
     "workplace": "Hybrid",
     "roleType": "Backend Engineer",
@@ -2345,6 +3762,25 @@
       "teamSize": "~40 people",
       "founded": "2022",
       "investors": "VC-backed"
+    },
+    "jd": {
+      "about": "Backend ownership at a widely adopted AI-infrastructure company: scale the core APIs behind leading open-source document-parsing and agent tooling \u2014 prototype to production fast, close to customers.",
+      "doing": [
+        "Build and scale core API features",
+        "Own backend services and drive production-ready solutions",
+        "Co-develop the roadmap with product and engineering",
+        "Build on Python, Kubernetes, Terraform, Postgres, Temporal",
+        "Lead projects prototype-to-production serving users quickly",
+        "Translate user feedback into features"
+      ],
+      "needs": [
+        "4+ years, ideally early-stage startup pace",
+        "End-to-end product lifecycle ownership",
+        "Customer-facing appetite"
+      ],
+      "bonus": [
+        "AI/LLM-native application experience"
+      ]
     }
   },
   {
@@ -2355,7 +3791,7 @@
     "locations": [
       "New York"
     ],
-    "techStack": "Python, TypeScript, FastAPI, Next.js, PostgreSQL, NodeJS, GCP, CI/CD, React, Salesforce",
+    "techStack": "Python, TypeScript, FastAPI, Next.js, PostgreSQL, NodeJS, GCP, CI/CD, React, Salesforce, LLM systems, integrations",
     "industry": "Real Estate, AI",
     "workplace": "Hybrid",
     "roleType": "Backend Engineer",
@@ -2370,6 +3806,26 @@
       "funding": "seed funding",
       "teamSize": "~20 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Own the core platform API behind a proptech startup automating apartment showings and leasing: the LLM system serving renters and operators, the data models behind analytics, and the reliability of integrations with property-management systems.",
+      "doing": [
+        "Own and evolve the platform API powering web, admin, and mobile apps",
+        "Improve the LLM system delivering capabilities to renters and operators",
+        "Build performant data models for analytics",
+        "Harden third-party integrations: property management, CRMs, access control",
+        "Drive CI/CD and testability improvements",
+        "Shape problems with a small team, not just implement"
+      ],
+      "needs": [
+        "3+ years building customer-facing products with strong Python",
+        "End-to-end feature ownership without heavy PM oversight",
+        "Small-team iteration speed"
+      ],
+      "bonus": [
+        "LLM-powered systems",
+        "PropTech background"
+      ]
     }
   },
   {
@@ -2395,6 +3851,20 @@
       "funding": "seed funding",
       "teamSize": "~20 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Own the integration layer at a fast-growing proptech startup: build zero-to-one connections with property-management systems (Yardi, Entrata, RealPage and bespoke client systems), working directly with enterprise customers from requirements to shipped integration.",
+      "doing": [
+        "Build and maintain integrations with major property-management systems and custom client systems",
+        "Join customer calls to intake requirements and translate them into technical designs",
+        "Design zero-to-one integrations for enterprise customers with proprietary systems",
+        "Refactor and scale the integration layer with the platform team"
+      ],
+      "needs": [
+        "2-5 years of hands-on integration/backend engineering",
+        "Fast learner on complex third-party systems",
+        "Customer-facing ownership"
+      ]
     }
   },
   {
@@ -2422,7 +3892,20 @@
       "funding": "$30M+ raised",
       "teamSize": "~30 people",
       "founded": "2023",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "5M+ monthly active users"
+    },
+    "jd": {
+      "about": "Build the recommendation engine behind a consumer platform where users scroll a feed of playable, AI-generated interactive experiences and create their own by describing what they want. Already at 5M+ monthly users and growing fast \u2014 the feed is the product, and ranking quality directly drives it.",
+      "doing": [
+        "Own recommendation and ranking for an infinite feed of interactive content",
+        "Build the ML systems connecting content creation, engagement signals, and personalization",
+        "Scale models and pipelines with a rapidly growing user base"
+      ],
+      "needs": [
+        "5+ years including deep recommendation-systems experience",
+        "Strong Python plus TensorFlow or PyTorch in production"
+      ]
     }
   },
   {
@@ -2449,6 +3932,21 @@
       "teamSize": "~50 people",
       "founded": "2024",
       "investors": "backed by Y Combinator"
+    },
+    "jd": {
+      "about": "Own full research directions at the frontier of audio AI \u2014 from design and training to deployment \u2014 at a fast-growing data-research company backed by NVIDIA and top-tier investors, whose speech and audio models power the data layer for the world's leading AI labs.",
+      "doing": [
+        "Own ML research end to end: design, train, deploy, fine-tune speech/audio models",
+        "Publish at the NeurIPS/ICML/ICLR level and advance the state of the art",
+        "Build production inference and pipelines processing terabytes of audio daily",
+        "Partner with ops and engineering on training/eval datasets",
+        "Set ML roadmaps and mentor as the team scales"
+      ],
+      "needs": [
+        "5+ years (PhD + industry, or 5 years industry with publications)",
+        "Top-conference publication record",
+        "Research-driven, end-to-end ownership style"
+      ]
     }
   },
   {
@@ -2474,6 +3972,25 @@
       "funding": "$30M+ raised",
       "teamSize": "~40 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Design the shared infrastructure beneath all of a frontier-data company's generation platforms, human-in-the-loop systems, and evaluation pipelines \u2014 high-throughput distributed systems plus mentorship of the entire junior engineering team.",
+      "doing": [
+        "Build the core shared infrastructure across data-generation and eval platforms",
+        "Own foundational systems for scale and reliability",
+        "Provide platform services to vertical engineering teams",
+        "Architect distributed systems for large datasets and high throughput",
+        "Establish best practices; mentor the junior team"
+      ],
+      "needs": [
+        "6-10 years building core infrastructure at growing tech companies",
+        "Scalable, reliable, high-throughput systems track record",
+        "Mentorship strength"
+      ],
+      "bonus": [
+        "Human-in-the-loop data space",
+        "High-growth startups"
+      ]
     }
   },
   {
@@ -2498,7 +4015,22 @@
       "stage": "Series A-stage",
       "funding": "$10M+ raised",
       "founded": "2018",
-      "investors": "VC-backed"
+      "investors": "VC-backed",
+      "note": "grown 5x this year, approaching $20M run rate"
+    },
+    "jd": {
+      "about": "Own major product areas on a 3-engineer team reporting to the CEO at a consumer-health company grown 5x this year toward a ~$20M run rate: AI-native building \u2014 research, spec, design, ship \u2014 for the first personal-training platform covered by insurance.",
+      "doing": [
+        "Own a product area per quarter: user research, specs, design, production shipping",
+        "Build recommendation systems guiding coaches on personalized next steps",
+        "Ship delightful consumer and coach experiences across web and mobile",
+        "Develop proprietary models on a unique health/behavior dataset"
+      ],
+      "needs": [
+        "3+ years with product taste and strong technical judgment",
+        "AI-native shipping speed",
+        "User empathy with metric ownership"
+      ]
     }
   },
   {
@@ -2524,6 +4056,24 @@
       "funding": "$50M+ raised",
       "teamSize": "~40 people",
       "founded": "2024"
+    },
+    "jd": {
+      "about": "Own entire product surfaces at a CI-infrastructure company trusted by hundreds of engineering teams: next-generation developer tools including a background coding agent \u2014 0-to-1 products in ambiguous space, shipped in days with the founders.",
+      "doing": [
+        "Own products end to end: ideation, systems design, ship, iterate with customers",
+        "Build developer tools that let engineers delegate coding to AI",
+        "Validate and launch product ideas in days, not months",
+        "Make full-stack architecture decisions that define products long-term",
+        "Prototype AI features fast: prompt design to backend to UI"
+      ],
+      "needs": [
+        "5+ years with end-to-end product ownership in startups",
+        "0-to-1 track record with a high UX bar",
+        "Developer-tools sensibility"
+      ],
+      "bonus": [
+        "Dev tooling, AI products, coding agents, or CI/CD platforms"
+      ]
     }
   },
   {
@@ -2549,6 +4099,21 @@
       "funding": "$10M+ raised",
       "teamSize": "~25 people",
       "founded": "2023"
+    },
+    "jd": {
+      "about": "One of the first engineers at a fast-growing seed-stage enterprise-AI startup: full-stack work spanning deep AI systems \u2014 context graphs, model routing \u2014 and the application layer, with early architecture decisions and engineering culture yours to shape.",
+      "doing": [
+        "Build full-stack: context graphs and model routing to traditional application code",
+        "Guide architecture decisions that must scale",
+        "Use AI aggressively in your own workflow",
+        "Mentor and set engineering culture",
+        "Craft vision and roadmap with product"
+      ],
+      "needs": [
+        "4+ years as an autonomous full-stack engineer",
+        "Comfort in ambiguity with customer obsession",
+        "Early-stage appetite"
+      ]
     }
   }
 ]
