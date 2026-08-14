@@ -118,9 +118,16 @@ async function main() {
   const unsynced = records.filter((r) => !byAirtableId.has(r.id));
   const byUsername = new Map();
   const usernames = [...new Set(unsynced.map((r) => usernameOf(normalizeLinkedin(r.fields["LinkedIn URL"]))).filter(Boolean))];
-  for (const batch of chunk(usernames, 80)) {
+  const SAFE = /^[a-zA-Z0-9\-_.]+$/;
+  const safeNames = usernames.filter((u) => SAFE.test(u));
+  const oddNames = usernames.filter((u) => !SAFE.test(u));
+  for (const batch of chunk(safeNames, 80)) {
     const inList = batch.map((u) => `"${u}"`).join(",");
     const res = await sb(`candidates?linkedin_username=in.(${inList})&select=id,linkedin_username,airtable_id,matching_embedding`);
+    for (const row of await res.json()) byUsername.set((row.linkedin_username || "").toLowerCase(), row);
+  }
+  for (const u of oddNames) {
+    const res = await sb(`candidates?linkedin_username=eq.${encodeURIComponent(u)}&select=id,linkedin_username,airtable_id,matching_embedding`);
     for (const row of await res.json()) byUsername.set((row.linkedin_username || "").toLowerCase(), row);
   }
 
