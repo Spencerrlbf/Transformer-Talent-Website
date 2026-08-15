@@ -75,7 +75,9 @@ export async function screenRolesWithCache(args: {
   cacheKeyText: string;
   jobIds: string[];
   facts?: CandidateFacts | null;
-  source?: "apply" | "precompute";
+  source?: "apply" | "precompute" | "stretch";
+  // stretch channel: which inferred signal spawned each pairing (jobId -> signal)
+  originByJobId?: Record<string, string>;
 }): Promise<RoleVerdict[]> {
   const jobIds = args.jobIds.slice(0, 5);
   if (!jobIds.length || !args.evidence) return [];
@@ -157,7 +159,12 @@ export async function screenRolesWithCache(args: {
               org_role_id: meta.orgRoleId,
               candidate_hash: candidateHash,
               role_hash: meta.roleHash,
-              verdict: { ...v, cached: undefined, facts: args.facts ?? undefined },
+              verdict: {
+                ...v,
+                cached: undefined,
+                facts: args.facts ?? undefined,
+                ...(args.originByJobId?.[meta.jobId] ? { origin_signal: args.originByJobId[meta.jobId] } : {}),
+              },
               model: "gpt-4o-mini",
               source: args.source || "apply",
             };

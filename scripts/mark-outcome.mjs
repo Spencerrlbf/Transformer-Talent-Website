@@ -47,6 +47,7 @@ if (!cmd || cmd === "list") {
         nameOf(r.candidate_id).padEnd(24).slice(0, 24),
         `#${r.org_roles?.external_id} ${r.org_roles?.title || ""}`.padEnd(40).slice(0, 40),
         r.verdict.qualified ? `fit ${r.verdict.fit_score}` : "not qual",
+        r.source === "stretch" ? `STRETCH(${(r.verdict.origin_signal || "").slice(0, 30)})` : r.source,
         `surfaced ${r.surfaced_count}x`,
         r.outcome || "—",
       ].join("  ")

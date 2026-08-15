@@ -32,7 +32,12 @@ const {
   syncExperiences,
   syncCandidateEmbeddings,
   screenRolesWithCache,
+  findStretchRoles,
 } = await import("./dist/worker-lib.mjs");
+
+// Internal experiment: retrieval by inferred capability. Verdicts land with
+// source='stretch' and are never user-facing. Kill switch: STRETCH_CHANNEL=0.
+const STRETCH = process.env.STRETCH_CHANNEL !== "0";
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -113,6 +118,43 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
   });
   const fresh = verdicts.filter((v) => !v.cached).length;
   console.log(`  precompute ${username}: ${verdicts.length} verdicts (${fresh} fresh, ${verdicts.length - fresh} cached)`);
+
+  // Stretch channel: signals from the evidence verdicts become search
+  // queries; only NEW roles count, capped, same strict screener.
+  if (STRETCH) {
+    try {
+      const signals = [];
+      const seenSignal = new Set();
+      for (const v of verdicts) {
+        for (const s of v.inferred_signals || []) {
+          if (!seenSignal.has(s.signal)) {
+            seenSignal.add(s.signal);
+            signals.push(s);
+          }
+        }
+      }
+      if (signals.length) {
+        const stretchRoles = await findStretchRoles(signals, ids, 2);
+        if (stretchRoles.length) {
+          const stretchVerdicts = await screenRolesWithCache({
+            candidateId,
+            evidence,
+            cacheKeyText: ["", JSON.stringify(h)].join("|"),
+            jobIds: stretchRoles.map((r) => r.jobId),
+            facts,
+            source: "stretch",
+            originByJobId: Object.fromEntries(stretchRoles.map((r) => [r.jobId, r.fromSignal])),
+          });
+          const q = stretchVerdicts.filter((v) => v.qualified).length;
+          console.log(
+            `  stretch ${username}: ${stretchRoles.map((r) => "#" + r.jobId).join(",")} via signals -> ${q}/${stretchVerdicts.length} qualified`
+          );
+        }
+      }
+    } catch (err) {
+      console.error(`  stretch channel failed for ${username}: ${err.message}`);
+    }
+  }
   return fresh;
 }
 
