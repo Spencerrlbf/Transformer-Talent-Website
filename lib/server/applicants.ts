@@ -327,6 +327,28 @@ async function signResumeUrl(resumePath: string): Promise<string | null> {
   }
 }
 
+// Look up Airtable Roles-record ids for a set of job ids. Best-effort — a
+// role not yet synced just links later via the nightly pass.
+async function airtableRoleRecords(jobIds: string[]): Promise<Record<string, string>> {
+  const token = process.env.AIRTABLE_API_TOKEN;
+  const base = process.env.AIRTABLE_BASE_ID;
+  const ids = [...new Set(jobIds)].filter(Boolean).slice(0, 20);
+  if (!token || !base || !ids.length) return {};
+  try {
+    const formula = encodeURIComponent(`OR(${ids.map((id) => `{Job ID}="${id}"`).join(",")})`);
+    const res = await fetch(
+      `https://api.airtable.com/v0/${base}/Roles?filterByFormula=${formula}&fields%5B%5D=Job%20ID`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return {};
+    const out: Record<string, string> = {};
+    for (const rec of (await res.json()).records || []) out[rec.fields["Job ID"]] = rec.id;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 // Review table: EVERY application gets a row here — including repeat
 // applicants, who leave no trace in the create-only Candidates mirror.
 export async function mirrorApplicationToAirtable(args: {
@@ -338,6 +360,8 @@ export async function mirrorApplicationToAirtable(args: {
   roleTitles: string[];
   matchedTitles: string[];
   resumePath?: string | null;
+  appliedRoleIds?: string[];
+  matchedRoleIds?: string[];
 }): Promise<void> {
   const token = process.env.AIRTABLE_API_TOKEN;
   const base = process.env.AIRTABLE_BASE_ID;
@@ -359,6 +383,14 @@ export async function mirrorApplicationToAirtable(args: {
     const resumeFilename = args.resumePath
       ? args.resumePath.split("/").pop()!.replace(/^[0-9a-f-]{37}/, "")
       : null;
+    const roleRecs = await airtableRoleRecords([
+      ...(args.appliedRoleIds || []),
+      ...(args.matchedRoleIds || []),
+    ]);
+    const linkTo = (ids?: string[]) =>
+      (ids || []).map((id) => roleRecs[id]).filter(Boolean);
+    const appliedLinks = linkTo(args.appliedRoleIds);
+    const matchedLinks = linkTo(args.matchedRoleIds).filter((id) => !appliedLinks.includes(id));
 
     await fetch(`https://api.airtable.com/v0/${base}/Website%20Applications`, {
       method: "POST",
@@ -377,6 +409,8 @@ export async function mirrorApplicationToAirtable(args: {
               "Applied At": new Date().toISOString(),
               "Application ID": args.applicationId,
               ...(resumeUrl ? { Resume: [{ url: resumeUrl, filename: resumeFilename || "resume.pdf" }] } : {}),
+              ...(appliedLinks.length ? { "Applied Roles": appliedLinks } : {}),
+              ...(matchedLinks.length ? { "Matched Roles Linked": matchedLinks } : {}),
               ...(candidateRecordId ? { Candidate: [candidateRecordId] } : {}),
             },
           },

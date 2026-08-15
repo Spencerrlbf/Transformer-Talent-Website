@@ -1,6 +1,14 @@
 #!/usr/bin/env node
-// Regenerate site_role_embeddings from data/roles.json. Run after roles change.
+// Regenerate site_role_embeddings from data/roles.json. Run after roles change
+// (part of `npm run sync-roles`: DB + embeddings + Airtable in one step).
 import fs from "node:fs";
+try {
+  const envFile = fs.readFileSync(new URL("../.env.scripts", import.meta.url), "utf8");
+  for (const line of envFile.split("\n")) {
+    const m = line.match(/^([A-Z_]+)="?([^"]*)"?$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+} catch {}
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://kmuihequfurvjxpnugxf.supabase.co";
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const OPENAI = process.env.OPENAI_API_KEY;

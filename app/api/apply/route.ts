@@ -339,6 +339,8 @@ export async function POST(req: NextRequest) {
       roleTitles,
       matchedTitles: matches.map((m) => `${m.title} (#${m.jobId})`),
       resumePath,
+      appliedRoleIds: applied.map((r) => r.jobId),
+      matchedRoleIds: matches.map((m) => m.jobId),
     });
   }
 

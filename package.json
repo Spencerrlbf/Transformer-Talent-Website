@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "sync-roles": "node scripts/sync-org-roles.mjs && node scripts/embed-roles.mjs && node scripts/sync-airtable-roles.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.4.1",
