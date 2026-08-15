@@ -10,12 +10,21 @@ export const metadata: Metadata = {
 
 export const revalidate = 3600;
 
+function slugOf(title: string, jobId: string): string {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `${base}-${jobId}`;
+}
+
 export default async function ApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ role?: string }>;
+  searchParams: Promise<{ role?: string; speculative?: string }>;
 }) {
-  const { role } = await searchParams;
+  const { role, speculative } = await searchParams;
   const roles = await getRoles();
 
   return (
@@ -37,8 +46,12 @@ export default async function ApplyPage({
               title: r.title,
               salary: r.salary,
               locations: r.locations,
+              workplace: r.workplace,
+              yoe: r.yoe,
+              slug: slugOf(r.title, r.jobId),
             }))}
             preselected={role}
+            speculative={speculative === "1"}
           />
         </div>
       </div>

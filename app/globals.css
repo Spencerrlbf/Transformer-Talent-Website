@@ -703,3 +703,44 @@ footer a { color: var(--signal); text-decoration: none; }
     left: 0;
     color: var(--signal);
 }
+
+/* ---------- apply checkout flow ---------- */
+.apply-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; align-items: start; }
+@media (max-width: 760px) { .apply-grid { grid-template-columns: 1fr; } }
+.cart-panel { border: 1px solid var(--line); background: var(--panel); padding: 1.1rem 1.2rem; }
+.cart-role {
+  display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; align-items: center;
+  border: 1px solid var(--line); border-left: 3px solid var(--signal);
+  padding: 0.65rem 0.85rem; margin-bottom: 0.55rem; background: rgba(255, 90, 31, 0.04);
+}
+.cart-role .meta { color: var(--fog-60); font-size: 0.68rem; margin-top: 0.1rem; }
+.cart-role .meta em { color: var(--signal); font-style: normal; }
+.cart-remove {
+  color: var(--fog-30); font-size: 0.75rem; cursor: pointer; background: none;
+  border: 1px solid var(--line); padding: 0.18rem 0.45rem; font-family: var(--font-mono), monospace;
+}
+.cart-remove:hover { color: var(--signal); border-color: var(--signal); }
+.cart-empty { border: 1px dashed var(--line); color: var(--fog-30); font-size: 0.7rem; padding: 0.55rem 0.85rem; }
+.apply-add-btn {
+  border: 1px solid var(--fog-30); background: none; color: var(--fog-60);
+  font-family: var(--font-mono), monospace; font-size: 0.64rem; letter-spacing: 0.05em;
+  padding: 0.3rem 0.5rem; cursor: pointer; white-space: nowrap;
+}
+.apply-add-btn:hover { border-color: var(--signal); color: var(--signal); }
+.apply-add-btn.sel { border-color: var(--ok); color: var(--ok); }
+.sel-bar {
+  position: sticky; bottom: 0; z-index: 20; display: flex; justify-content: space-between;
+  align-items: center; gap: 1rem; border: 1px solid var(--signal); background: var(--panel);
+  padding: 0.7rem 1rem; margin-top: 1rem; box-shadow: 0 -8px 24px rgba(6, 8, 11, 0.8);
+}
+.sel-bar .names { color: var(--fog-60); font-size: 0.68rem; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding-top: 0.9rem; flex-wrap: wrap; }
+.pager .info { color: var(--fog-30); font-size: 0.68rem; letter-spacing: 0.08em; }
+.pager .pages { display: flex; gap: 0.3rem; }
+.pg-btn {
+  border: 1px solid var(--line); color: var(--fog-60); font-size: 0.7rem;
+  padding: 0.22rem 0.55rem; cursor: pointer; background: none; font-family: var(--font-mono), monospace;
+}
+.pg-btn.cur { border-color: var(--signal); color: var(--signal); }
+.pg-btn:hover { border-color: var(--fog-60); }
+.pg-btn:disabled { opacity: 0.35; cursor: default; }

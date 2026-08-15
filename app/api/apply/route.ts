@@ -77,11 +77,14 @@ export async function POST(req: NextRequest) {
   const linkedin = clean(form.get("linkedin"), 300);
   const visa = clean(form.get("visa"), 150);
   const note = clean(form.get("note"), 2000);
-  const roleIds = clean(form.get("roleIds"), 500)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 3);
+  const speculative = clean(form.get("speculative"), 5) === "1";
+  const roleIds = speculative
+    ? []
+    : clean(form.get("roleIds"), 500)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 3);
 
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide your name and a valid email." }, { status: 400 });
@@ -110,8 +113,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Resume (optional)
+  // Resume (optional; required for speculative — it's what we match with)
   const file = form.get("resume");
+  if (speculative && !(file instanceof File && file.size > 0)) {
+    return NextResponse.json(
+      { error: "A resume is required for a speculative application." },
+      { status: 400 }
+    );
+  }
   let resumePath: string | null = null;
   let resumeText: string | null = null;
   let resumeParser: "llamaparse" | "pdf-parse" | null = null;
@@ -149,7 +158,9 @@ export async function POST(req: NextRequest) {
       resume_path: resumePath,
       resume_text: resumeText,
       status: "processing",
-      source: note ? `note: ${note}` : null,
+      source: [speculative ? "speculative" : null, note ? `note: ${note}` : null]
+        .filter(Boolean)
+        .join("; ") || null,
       ip: ip === "unknown" ? null : ip,
       user_agent: clean(req.headers.get("user-agent"), 500),
     },
@@ -336,11 +347,12 @@ export async function POST(req: NextRequest) {
       email,
       linkedinUrl: linkedin,
       visa: visa || null,
-      roleTitles,
+      roleTitles: speculative ? ["Speculative — resume drop"] : roleTitles,
       matchedTitles: matches.map((m) => `${m.title} (#${m.jobId})`),
       resumePath,
       appliedRoleIds: applied.map((r) => r.jobId),
       matchedRoleIds: matches.map((m) => m.jobId),
+      applicationType: roleIds.length ? "Applied" : "Speculative",
     });
   }
 

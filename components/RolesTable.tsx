@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Role } from "@/lib/roles";
+import { MAX_ROLES, getSelection, toggleSelection, onSelectionChange } from "./applySelection";
+
+const PAGE_SIZE = 25;
 
 function slugOf(role: Role): string {
   const base = role.title
@@ -62,6 +65,18 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
   const [visaF, setVisaF] = useState("");
   const [sort, setSort] = useState<SortKey>("id");
   const [dir, setDir] = useState<1 | -1>(1);
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  // Selection lives in localStorage (shared with /apply); sync on mount + changes.
+  useEffect(() => {
+    setSelected(getSelection());
+    return onSelectionChange(() => setSelected(getSelection()));
+  }, []);
+  // Any query change goes back to page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [q, loc, office, type, visaF]);
 
   const locations = useMemo(
     () => [...new Set(roles.flatMap((r) => r.locations))].sort(),
@@ -163,10 +178,16 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
           <option value="Visa transfers OK">Visa transfers OK</option>
           <option value="No sponsorship">No sponsorship</option>
         </select>
+        {selected.length === 0 && (
+          <Link href="/apply?speculative=1" className="btn cold" style={{ fontSize: "0.68rem", padding: "0.55rem 0.9rem", whiteSpace: "nowrap" }}>
+            NO ROLE IN MIND? DROP YOUR RESUME →
+          </Link>
+        )}
       </div>
 
       <p style={{ fontSize: "0.66rem", color: "var(--fog-30)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.6rem" }}>
         {shown.length} of {roles.length} roles
+        {shown.length > PAGE_SIZE ? ` · page ${page} of ${Math.ceil(shown.length / PAGE_SIZE)}` : ""}
       </p>
 
       <div style={{ overflowX: "auto" }}>
@@ -186,10 +207,11 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
                   </span>
                 </th>
               ))}
+              <th style={{ whiteSpace: "nowrap" }}>Apply</th>
             </tr>
           </thead>
           <tbody>
-            {shown.map((r) => (
+            {shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r) => (
               <tr key={`${r.jobId}-${r.title}`}>
                 <td className="hi" style={{ whiteSpace: "nowrap" }}>#{r.jobId}</td>
                 <td style={{ minWidth: 260 }}>
@@ -225,11 +247,73 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
                 <td className="hi" style={{ whiteSpace: "nowrap" }}>
                   <span className="sig">{r.salary || "On request"}</span>
                 </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button
+                    type="button"
+                    className={`apply-add-btn${selected.includes(r.jobId) ? " sel" : ""}`}
+                    onClick={() => setSelected(toggleSelection(r.jobId))}
+                    aria-pressed={selected.includes(r.jobId)}
+                  >
+                    {selected.includes(r.jobId)
+                      ? `✓ ${selected.indexOf(r.jobId) + 1}/${MAX_ROLES}`
+                      : "APPLY +"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {shown.length > PAGE_SIZE && (
+        <div className="pager">
+          <span className="info">
+            showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, shown.length)} of {shown.length} roles
+          </span>
+          <div className="pages">
+            <button type="button" className="pg-btn" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>‹</button>
+            {Array.from({ length: Math.ceil(shown.length / PAGE_SIZE) }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`pg-btn${n === page ? " cur" : ""}`}
+                onClick={() => setPage(n)}
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="pg-btn"
+              disabled={page === Math.ceil(shown.length / PAGE_SIZE)}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selected.length > 0 && (
+        <div className="sel-bar">
+          <div>
+            <b style={{ color: "var(--signal)", fontSize: "0.78rem" }}>
+              {selected.length}/{MAX_ROLES} roles selected
+            </b>
+            <div className="names">
+              {selected
+                .map((id) => {
+                  const r = roles.find((x) => x.jobId === id);
+                  return r ? `${r.title} (#${id})` : `#${id}`;
+                })
+                .join(" · ")}
+            </div>
+          </div>
+          <Link href="/apply" className="btn hot" style={{ whiteSpace: "nowrap" }}>
+            CONTINUE TO APPLY →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
