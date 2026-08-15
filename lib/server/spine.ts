@@ -85,47 +85,56 @@ interface HarvestExperience {
   endDate?: { year?: number; month?: unknown; text?: string };
 }
 
+// Pure converter shared by the DB sync and the in-request fact engine.
+export function harvestToExperiences(harvest: Record<string, unknown> | null) {
+  const list = (harvest?.experience || harvest?.experiences) as HarvestExperience[] | undefined;
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 25).map((e, i) => {
+    const title = e.position || e.title || null;
+    const company = e.companyName || e.company || null;
+    const skills = Array.isArray(e.skills)
+      ? e.skills.map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean)
+      : [];
+    return {
+      // Stable per-position key so re-enrichment updates in place.
+      provider_experience_key: sha(
+        [e.companyId, company, title, e.startDate?.text].filter(Boolean).join("|") || `idx-${i}`
+      ).slice(0, 32),
+      title,
+      company_name: company,
+      company_linkedin_url: e.companyLinkedinUrl || e.companyLink || null,
+      employment_type: e.employmentType || null,
+      location: e.location || null,
+      start_month: monthNum(e.startDate?.month),
+      start_year: e.startDate?.year ?? null,
+      end_month: monthNum(e.endDate?.month),
+      end_year: e.endDate?.year ?? null,
+      is_current: /present/i.test(e.endDate?.text || "") || (!e.endDate?.year && i === 0),
+      duration_text: e.duration || null,
+      description: (e.description || "").slice(0, 8000) || null,
+      skills,
+      raw: e,
+      sort_order: i,
+    };
+  });
+}
+
 export async function syncExperiences(
   candidateId: string,
   harvest: Record<string, unknown> | null
 ): Promise<void> {
   try {
     const orgId = await getOrgId();
-    const list = (harvest?.experience || harvest?.experiences) as HarvestExperience[] | undefined;
-    if (!orgId || !Array.isArray(list) || !list.length) return;
+    const mapped = harvestToExperiences(harvest);
+    if (!orgId || !mapped.length) return;
 
-    const rows = list.slice(0, 25).map((e, i) => {
-      const title = e.position || e.title || null;
-      const company = e.companyName || e.company || null;
-      const skills = Array.isArray(e.skills)
-        ? e.skills.map((s) => (typeof s === "string" ? s : s?.name || "")).filter(Boolean)
-        : [];
-      return {
-        organization_id: orgId,
-        candidate_id: candidateId,
-        source: "harvest",
-        // Stable per-position key so re-enrichment updates in place.
-        provider_experience_key: sha(
-          [e.companyId, company, title, e.startDate?.text].filter(Boolean).join("|") || `idx-${i}`
-        ).slice(0, 32),
-        title,
-        company_name: company,
-        company_linkedin_url: e.companyLinkedinUrl || e.companyLink || null,
-        employment_type: e.employmentType || null,
-        location: e.location || null,
-        start_month: monthNum(e.startDate?.month),
-        start_year: e.startDate?.year ?? null,
-        end_month: monthNum(e.endDate?.month),
-        end_year: e.endDate?.year ?? null,
-        is_current: /present/i.test(e.endDate?.text || "") || (!e.endDate?.year && i === 0),
-        duration_text: e.duration || null,
-        description: (e.description || "").slice(0, 8000) || null,
-        skills,
-        raw: e,
-        sort_order: i,
-        updated_at: new Date().toISOString(),
-      };
-    });
+    const rows = mapped.map((m) => ({
+      organization_id: orgId,
+      candidate_id: candidateId,
+      source: "harvest",
+      ...m,
+      updated_at: new Date().toISOString(),
+    }));
 
     const res = await sbRest("candidate_experiences?on_conflict=candidate_id,source,provider_experience_key", {
       method: "POST",

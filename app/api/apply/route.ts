@@ -11,14 +11,16 @@ import {
   linkedinUsername,
 } from "@/lib/server/applicants";
 import { getRoles, roleSlug } from "@/lib/roles";
-import { passesHardGates, screenCandidate } from "@/lib/server/screening";
+import { passesHardGates, screenRolesWithCache } from "@/lib/server/screening";
 import { llamaParsePdf } from "@/lib/server/llamaparse";
 import {
   recordEnrichment,
   syncExperiences,
   syncCandidateEmbeddings,
   linkedinProfileText,
+  harvestToExperiences,
 } from "@/lib/server/spine";
+import { computeFacts, formatFacts } from "@/lib/server/facts";
 
 export const maxDuration = 60;
 
@@ -236,11 +238,35 @@ export async function POST(req: NextRequest) {
             years: parsed?.total_experience_years ?? null,
           })
         );
-      // One bounded LLM call screens the shortlist like a recruiter would.
-      const results = await screenCandidate(
-        parsed?.profile_summary || resumeText?.slice(0, 3000) || "",
-        gated.slice(0, 5).map((m) => m.job_id)
-      );
+      // Question-sheet screening: deterministic facts first, then ONE cached
+      // batched LLM call answering each role's questions with evidence.
+      const shortlistIds = gated.slice(0, 5).map((m) => m.job_id);
+      const stackTerms = [
+        ...new Set(
+          shortlistIds.flatMap((id) =>
+            (roles.find((r) => r.jobId === id)?.techStack || "")
+              .split(/[,/•]/)
+              .map((s) => s.trim())
+              .filter((s) => s.length >= 2)
+          )
+        ),
+      ].slice(0, 20);
+      const facts = computeFacts(harvestToExperiences(harvest as Record<string, unknown> | null), stackTerms, harvestSkills);
+      const evidence = [
+        parsed?.profile_summary,
+        `FACTS (computed from dated position history):\n${formatFacts(facts)}`,
+        resumeText ? `RESUME EXCERPT:\n${resumeText.slice(0, 3000)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const results = await screenRolesWithCache({
+        candidateId,
+        evidence,
+        // Stable raw inputs only — the parsed summary is LLM output and varies.
+        cacheKeyText: [resumeText || "", JSON.stringify(harvest ?? null)].join("|"),
+        jobIds: shortlistIds,
+        facts,
+      });
       screening = results.length ? results : null;
       const scoreOf = (m: { job_id: string; similarity: number; keyword_hits: number }) => {
         const r = results.find((x) => x.job_id === m.job_id);
@@ -251,7 +277,7 @@ export async function POST(req: NextRequest) {
       const ranked = gated
         .filter((m) => {
           const r = results.find((x) => x.job_id === m.job_id);
-          return !r || r.fails.length === 0;
+          return !r || r.qualified || r.answers.filter((a) => a.answer === "no").length === 0;
         })
         .sort((a, b) => scoreOf(b) - scoreOf(a));
       matchedIds = ranked.map((m) => m.job_id);
