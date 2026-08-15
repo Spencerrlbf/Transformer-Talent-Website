@@ -66,7 +66,7 @@ export default async function RolesPage() {
           directly. Apply once — we&apos;ll consider you for everything
           we&apos;re working on, including roles that never get posted.
         </p>
-        <div className="b3">
+        <div className="b3 breakout">
           <RolesTable roles={roles} />
         </div>
         <p className="page-intro" style={{ marginTop: "2.4rem" }}>

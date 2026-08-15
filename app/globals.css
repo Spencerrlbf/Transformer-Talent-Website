@@ -767,3 +767,16 @@ footer a { color: var(--signal); text-decoration: none; }
 @media (max-width: 899px) {
   .roles-layout.with-panel { grid-template-columns: 1fr; }
 }
+
+/* Full-width breakout for the roles table + selection panel — the table
+   deserves the whole page, not the 1240px content column. Capped for
+   ultra-wide monitors; body overflow-x hidden absorbs the 100vw scrollbar. */
+.breakout {
+  /* margin-based centering — transform would clash with the b1/b2/b3
+     entrance animations */
+  width: min(calc(100vw - 4rem), 1680px);
+  margin-left: calc((100% - min(100vw - 4rem, 1680px)) / 2);
+}
+@media (max-width: 700px) {
+  .breakout { width: 100%; margin-left: 0; }
+}
