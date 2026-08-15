@@ -135,13 +135,27 @@ export async function matchCandidates(
 ): Promise<MatchRow[]> {
   const minYears = jd.min_years && jd.min_years > 2 ? jd.min_years - 2 : null;
   const locations = jd.remote_ok ? null : expandLocations(jd.locations);
-  // v2: best-of legacy matching_embedding and the multi-vector spine.
-  const rows = await sbRpc<MatchRow[]>("match_candidates_v2", {
-    query_embedding: embedding,
-    match_count: count,
-    min_years: minYears,
-    location_patterns: locations,
-  });
+  // Hybrid: vector channel (best-of legacy + spine) ∪ keyword channel over
+  // skills/titles — exact stack matches join the pool even when embeddings miss.
+  const [vecRows, kwRows] = await Promise.all([
+    sbRpc<MatchRow[]>("match_candidates_v2", {
+      query_embedding: embedding,
+      match_count: count,
+      min_years: minYears,
+      location_patterns: locations,
+    }),
+    jd.skills.length
+      ? sbRpc<MatchRow[]>("match_candidates_keyword", {
+          skill_terms: jd.skills,
+          match_count: 15,
+          min_years: minYears,
+          location_patterns: locations,
+          query_embedding: embedding,
+        }).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+  const seen = new Set(vecRows.map((r) => r.id));
+  let rows = [...vecRows, ...kwRows.filter((r) => !seen.has(r.id))];
   if (rows.length >= 5 || !locations) return rows;
   // Location filter left too few — widen to nationwide and merge.
   const widened = await sbRpc<MatchRow[]>("match_candidates_v2", {
@@ -150,7 +164,7 @@ export async function matchCandidates(
     min_years: minYears,
     location_patterns: null,
   });
-  const seen = new Set(rows.map((r) => r.id));
+  rows.forEach((r) => seen.add(r.id));
   return [...rows, ...widened.filter((r) => !seen.has(r.id))];
 }
 
@@ -178,8 +192,9 @@ export interface AnonymizedMatch {
   score: number;
 }
 
-// Composite scoring mirrors the local pipeline (embedding-major, keyword-minor);
-// skills coverage is sparse in the pool so it's a boost, not a gate.
+// Composite scoring: embedding-major with a real keyword term now that
+// refreshed candidates carry full skill lists. Evidence-backed profiles
+// deliberately outrank equally-similar sparse ones.
 export function rankAndAnonymize(
   rows: MatchRow[],
   jd: ExtractedJD,
@@ -188,7 +203,7 @@ export function rankAndAnonymize(
   const scored = rows
     .map((r) => ({
       row: r,
-      score: 0.85 * r.similarity + 0.15 * skillOverlap(jd.skills, r.top_skills),
+      score: 0.7 * r.similarity + 0.3 * skillOverlap(jd.skills, r.top_skills),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, top);

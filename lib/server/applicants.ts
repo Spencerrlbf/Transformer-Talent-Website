@@ -220,23 +220,40 @@ export async function promoteToCandidatePool(args: {
   return { candidateId: row.id, vector };
 }
 
-// ---------- Reverse role matching ----------
+// ---------- Reverse role matching (hybrid: embedding ∪ keyword) ----------
 
 export interface RoleMatch {
   job_id: string;
   title: string;
   similarity: number;
+  keyword_hits: number;
 }
 
-export async function matchRolesForApplicant(vector: number[]): Promise<RoleMatch[]> {
-  try {
-    return await sbRpc<RoleMatch[]>("match_site_roles", {
+export async function matchRolesForApplicant(
+  vector: number[],
+  skills: string[] = []
+): Promise<RoleMatch[]> {
+  const [vec, kw] = await Promise.all([
+    sbRpc<{ job_id: string; title: string; similarity: number }[]>("match_site_roles", {
       query_embedding: vector,
       match_count: 5,
-    });
-  } catch {
-    return [];
+    }).catch(() => []),
+    skills.length
+      ? sbRpc<{ job_id: string; title: string; keyword_hits: number }[]>("match_roles_keyword", {
+          skills: skills.slice(0, 40),
+          match_count: 5,
+        }).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+  // Union: exact stack hits make the shortlist even when the embedding misses.
+  const merged = new Map<string, RoleMatch>();
+  for (const v of vec) merged.set(v.job_id, { ...v, keyword_hits: 0 });
+  for (const k of kw) {
+    const existing = merged.get(k.job_id);
+    if (existing) existing.keyword_hits = k.keyword_hits;
+    else merged.set(k.job_id, { job_id: k.job_id, title: k.title, similarity: 0, keyword_hits: k.keyword_hits });
   }
+  return [...merged.values()];
 }
 
 // ---------- Reply-ops Airtable mirror (create-only, deduped) ----------

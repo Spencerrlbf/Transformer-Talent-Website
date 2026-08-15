@@ -225,9 +225,11 @@ export async function POST(req: NextRequest) {
     let matchedIds: string[] = [];
     let screening: unknown = null;
     if (vector) {
-      const roleMatches = await matchRolesForApplicant(vector);
+      const skillTerms = harvestSkills.length ? harvestSkills : parsed?.top_skills || [];
+      const roleMatches = await matchRolesForApplicant(vector, skillTerms);
       const gated = roleMatches
-        .filter((m) => m.similarity > 0.25)
+        // Vector rows need a floor; keyword rows earned their spot via ≥2 stack hits.
+        .filter((m) => m.similarity > 0.25 || m.keyword_hits >= 2)
         .filter((m) =>
           passesHardGates(m.job_id, {
             visa,
@@ -240,16 +242,18 @@ export async function POST(req: NextRequest) {
         gated.slice(0, 5).map((m) => m.job_id)
       );
       screening = results.length ? results : null;
-      const scoreOf = (jobId: string, sim: number) => {
-        const r = results.find((x) => x.job_id === jobId);
-        return r ? (r.qualified ? 0.5 : 0) + 0.3 * r.fit_score + 0.2 * sim : 0.2 * sim;
+      const scoreOf = (m: { job_id: string; similarity: number; keyword_hits: number }) => {
+        const r = results.find((x) => x.job_id === m.job_id);
+        const kw = 0.05 * Math.min(m.keyword_hits, 4); // exact stack hits, up to 0.2
+        const base = 0.15 * m.similarity + kw;
+        return r ? (r.qualified ? 0.5 : 0) + 0.3 * r.fit_score + base : base;
       };
       const ranked = gated
         .filter((m) => {
           const r = results.find((x) => x.job_id === m.job_id);
           return !r || r.fails.length === 0;
         })
-        .sort((a, b) => scoreOf(b.job_id, b.similarity) - scoreOf(a.job_id, a.similarity));
+        .sort((a, b) => scoreOf(b) - scoreOf(a));
       matchedIds = ranked.map((m) => m.job_id);
       matches = ranked
         .map((m) => roles.find((r) => r.jobId === m.job_id))
