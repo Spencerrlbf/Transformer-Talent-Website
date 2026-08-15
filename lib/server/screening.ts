@@ -49,11 +49,21 @@ export interface VerdictAnswer {
   evidence: string;
 }
 
+// Inference, fenced off from facts: a plausible capability suggested by
+// evidence combinations. May inform probe lists and small ranking nudges —
+// NEVER a yes-answer or a qualification decision.
+export interface InferredSignal {
+  signal: string; // "Likely ML-infrastructure deployment experience"
+  basis: string; // the evidence combination that suggests it, cited
+  probe: string; // what to ask on a call to confirm or kill it
+}
+
 export interface RoleVerdict {
   job_id: string;
   qualified: boolean;
   fit_score: number;
   answers: VerdictAnswer[];
+  inferred_signals?: InferredSignal[]; // max 3
   cached: boolean;
 }
 
@@ -82,8 +92,8 @@ export async function screenRolesWithCache(args: {
     roleRows.find((r) => r.external_id === jobId)?.matching_profile || PROFILES[jobId];
 
   // Version prefix: bumping it invalidates every cached verdict, forcing a
-  // re-screen under new fact rules. v2 = career-years rules (2026-08-15).
-  const candidateHash = sha("factsv2|" + args.cacheKeyText);
+  // re-screen under new rules. v3 = co-occurrence facts + inferred signals.
+  const candidateHash = sha("factsv3|" + args.cacheKeyText);
   const roleMeta = jobIds
     .map((jobId) => {
       const p = profileOf(jobId);
@@ -218,8 +228,21 @@ async function interrogate(
                         required: ["question", "answer", "evidence"],
                       },
                     },
+                    inferred_signals: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          signal: { type: "string" },
+                          basis: { type: "string" },
+                          probe: { type: "string" },
+                        },
+                        required: ["signal", "basis", "probe"],
+                      },
+                    },
                   },
-                  required: ["job_id", "qualified", "fit_score", "answers"],
+                  required: ["job_id", "qualified", "fit_score", "answers", "inferred_signals"],
                 },
               },
             },
@@ -236,7 +259,12 @@ async function interrogate(
             "The FACTS block is pre-computed from the candidate's dated position history — treat it " +
             "as ground truth over your own inference. No evidence = 'unclear', never a guess. " +
             "qualified = no must-have is clearly failed and most questions are yes. " +
-            "fit_score = 0-1 overall judgment.",
+            "fit_score = 0-1 overall judgment. " +
+            "inferred_signals (0-3 per role, [] when none): capabilities the evidence SUGGESTS but does not " +
+            "prove — especially from Co-occurrence lines (e.g. PyTorch + Kubernetes in one position suggests " +
+            "ML-infrastructure exposure). Each needs: signal, basis (cite the exact evidence combination), " +
+            "probe (what to ask on a call). Signals are leads for a recruiter — they must NEVER justify a " +
+            "'yes' answer or affect qualified. Only signals relevant to that role's requirements.",
         },
         { role: "user", content: `CANDIDATE:\n${evidence.slice(0, 7000)}\n\n${rolesBlock}` },
       ],
@@ -250,7 +278,8 @@ async function interrogate(
       // The model sometimes echoes "ROLE 76" instead of "76".
       .map((r) => ({ ...r, job_id: String(r.job_id).replace(/^role\s*/i, "").trim() }))
       .filter((r) => roles.some((x) => x.jobId === r.job_id))
-      .map((r) => ({ ...r, cached: false }));
+      // Hard cap regardless of what the model returned.
+      .map((r) => ({ ...r, inferred_signals: (r.inferred_signals || []).slice(0, 3), cached: false }));
   } catch {
     return [];
   }
