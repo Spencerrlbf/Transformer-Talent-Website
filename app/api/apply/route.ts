@@ -303,6 +303,7 @@ export async function POST(req: NextRequest) {
       visa: visa || null,
       roleTitles,
       matchedTitles: matches.map((m) => `${m.title} (#${m.jobId})`),
+      resumePath,
     });
   }
 

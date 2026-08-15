@@ -289,6 +289,27 @@ export async function mirrorToAirtable(args: {
   }
 }
 
+// Short-lived signed URL for a private resume — Airtable fetches it once and
+// keeps its own copy, so the bucket stays private.
+async function signResumeUrl(resumePath: string): Promise<string | null> {
+  const key = process.env.SUPABASE_STORAGE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL;
+  if (!key || !url) return null;
+  try {
+    const res = await fetch(`${url}/storage/v1/object/sign/resumes/${resumePath}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ expiresIn: 3600 }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return null;
+    const { signedURL } = (await res.json()) as { signedURL?: string };
+    return signedURL ? `${url}/storage/v1${signedURL}` : null;
+  } catch {
+    return null;
+  }
+}
+
 // Review table: EVERY application gets a row here — including repeat
 // applicants, who leave no trace in the create-only Candidates mirror.
 export async function mirrorApplicationToAirtable(args: {
@@ -299,6 +320,7 @@ export async function mirrorApplicationToAirtable(args: {
   visa: string | null;
   roleTitles: string[];
   matchedTitles: string[];
+  resumePath?: string | null;
 }): Promise<void> {
   const token = process.env.AIRTABLE_API_TOKEN;
   const base = process.env.AIRTABLE_BASE_ID;
@@ -316,6 +338,11 @@ export async function mirrorApplicationToAirtable(args: {
     );
     if (found.ok) candidateRecordId = (await found.json()).records?.[0]?.id ?? null;
 
+    const resumeUrl = args.resumePath ? await signResumeUrl(args.resumePath) : null;
+    const resumeFilename = args.resumePath
+      ? args.resumePath.split("/").pop()!.replace(/^[0-9a-f-]{37}/, "")
+      : null;
+
     await fetch(`https://api.airtable.com/v0/${base}/Website%20Applications`, {
       method: "POST",
       headers,
@@ -332,6 +359,7 @@ export async function mirrorApplicationToAirtable(args: {
               ...(args.visa ? { Visa: args.visa } : {}),
               "Applied At": new Date().toISOString(),
               "Application ID": args.applicationId,
+              ...(resumeUrl ? { Resume: [{ url: resumeUrl, filename: resumeFilename || "resume.pdf" }] } : {}),
               ...(candidateRecordId ? { Candidate: [candidateRecordId] } : {}),
             },
           },
