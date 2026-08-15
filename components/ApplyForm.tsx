@@ -246,6 +246,13 @@ export default function ApplyForm({
         <div className="sec-label" style={{ paddingTop: 0 }}>
           <b>YOUR DETAILS</b>
         </div>
+        <p style={{ color: "var(--fog-60)", fontSize: "0.72rem", margin: "0 0 0.6rem", lineHeight: 1.5 }}>
+          {isSpeculative
+            ? "Complete this form and attach your resume — we'll match you and be in touch."
+            : selected.length > 0
+              ? `Complete this form to finish your application for the ${selected.length} selected role${selected.length > 1 ? "s" : ""} — one form covers them all.`
+              : "Pick roles from the table, then complete this form to apply."}
+        </p>
         <label>
           name
           <input name="name" required maxLength={120} autoComplete="name" />
