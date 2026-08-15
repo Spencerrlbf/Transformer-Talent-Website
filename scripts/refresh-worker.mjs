@@ -47,13 +47,13 @@ const spentRes = await fetch(
 const spent = parseInt((spentRes.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
 const remaining = Math.max(0, CAP - spent);
 console.log(`cap ${CAP}, spent today ${spent}, remaining ${remaining}`);
-if (!remaining) process.exit(0);
+if (!remaining && !process.env.PRECOMPUTE_BACKFILL) process.exit(0);
 
 // Top up the queue with engaged candidates (priority 50) if it's running dry.
 const queued = await rest(
   `refresh_queue?status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
 );
-if (queued.length < remaining) {
+if (queued.length < remaining && !process.env.PRECOMPUTE_BACKFILL) {
   const everQueued = new Set((await rest("refresh_queue?select=candidate_id")).map((r) => r.candidate_id));
   const engaged = await rest(
     `candidates?source=eq.airtable_sync&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc&limit=${(remaining - queued.length) * 3}`
@@ -142,7 +142,189 @@ function chunkText(text, size = 2800, max = 6) {
   return out.filter((c) => c.length >= 40);
 }
 
-let refreshed = 0, failed = 0, skipped = 0;
+// ---- Precompute helpers: facts + cached question-sheet verdicts ----
+// (compact ports of lib/server/facts.ts + screening.ts for the worker)
+
+function mergedYears(intervals) {
+  if (!intervals.length) return 0;
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+  let months = 0, [curS, curE] = sorted[0];
+  for (const [s, e] of sorted.slice(1)) {
+    if (s <= curE) curE = Math.max(curE, e);
+    else { months += curE - curS; [curS, curE] = [s, e]; }
+  }
+  return Math.round(((months + curE - curS) / 12) * 10) / 10;
+}
+const normSkill = (s) => String(s).toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9+#. ]/g, " ").replace(/\s+/g, " ").trim();
+function skillMatch(a, b) {
+  const x = normSkill(a), y = normSkill(b);
+  if (!x || !y) return false;
+  return x === y || (x.length >= 3 && y.includes(x)) || (y.length >= 3 && x.includes(y));
+}
+function computeWorkerFacts(expList, skillTerms, profileSkills) {
+  const now = new Date(); const nowN = now.getUTCFullYear() * 12 + now.getUTCMonth() + 1;
+  const iv = (e) => {
+    if (!e.startDate?.year) return null;
+    const s = e.startDate.year * 12 + (monthNum(e.startDate.month) ?? 6);
+    const cur = /present/i.test(e.endDate?.text || "") || !e.endDate?.year;
+    const en = cur ? nowN : e.endDate.year * 12 + (monthNum(e.endDate.month) ?? 6);
+    return en > s ? [s, en] : null;
+  };
+  const uses = (e, skill) => {
+    const sk = Array.isArray(e.skills) ? e.skills.map((s) => (typeof s === "string" ? s : s?.name || "")) : [];
+    if (sk.some((s) => skillMatch(skill, s))) return true;
+    return e.description ? new RegExp("\\b" + normSkill(skill).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(e.description) : false;
+  };
+  const lines = [];
+  const total = mergedYears(expList.map(iv).filter(Boolean));
+  if (total) lines.push(`Total experience: ${total} years`);
+  for (const skill of [...new Set(skillTerms)].slice(0, 20)) {
+    const using = expList.filter((e) => uses(e, skill));
+    if (using.length) {
+      const yrs = mergedYears(using.map(iv).filter(Boolean));
+      const where = using[0].position || using[0].title || "prior role";
+      lines.push(`${skill}: ${yrs}y (${where}${using[0].companyName ? " at " + using[0].companyName : ""})`);
+    } else if ((profileSkills || []).some((s) => skillMatch(skill, s))) {
+      lines.push(`${skill}: listed on profile, no dated position evidence`);
+    }
+  }
+  return { lines, totalYears: total || null };
+}
+
+async function precomputeVerdicts(row, h, vector, username) {
+  if (!OPENAI || !vector) {
+    console.log(`  precompute skip ${username || row.candidate_id}: ${!OPENAI ? "no OPENAI key" : "no profile vector"}`);
+    return 0;
+  }
+  // Retrieval: vector + keyword channels over org roles.
+  const skills = (h.skills || []).map((s) => s?.name).filter(Boolean);
+  const logErr = (ch) => (e) => { console.error(`  precompute ${username} ${ch} channel failed: ${e.message}`); return []; };
+  const [vec, kw] = await Promise.all([
+    rest("rpc/match_org_roles", { method: "POST", body: JSON.stringify({ query_embedding: vector, match_count: 5 }) }).catch(logErr("vector")),
+    skills.length
+      ? rest("rpc/match_roles_keyword", { method: "POST", body: JSON.stringify({ skills: skills.slice(0, 40), match_count: 5 }) }).catch(logErr("keyword"))
+      : [],
+  ]);
+  const ids = [...new Set([...vec.map((r) => r.external_id), ...kw.map((r) => r.job_id)])].slice(0, 5);
+  if (!ids.length) {
+    console.log(`  precompute ${username}: no roles matched (vec ${vec.length}, kw ${kw.length})`);
+    return 0;
+  }
+  const roleRows = await rest(`org_roles?external_id=in.(${ids.map((i) => `"${i}"`).join(",")})&select=id,external_id,title,tech_stack,matching_profile`);
+  const expList = Array.isArray(h.experience) ? h.experience : [];
+
+  const cacheKeyText = ["", JSON.stringify(h)].join("|"); // same format as the website (no resume)
+  const candidateHash = sha(cacheKeyText);
+  const targets = [];
+  for (const r of roleRows) {
+    const p = r.matching_profile;
+    if (!p?.screening_questions?.length) continue;
+    // min-years gate from dated history (visa unknown for pool candidates).
+    const roleHash = sha(JSON.stringify({ m: p.must_haves, q: p.screening_questions }));
+    const cached = await rest(
+      `match_verdicts?candidate_id=eq.${row.candidate_id}&org_role_id=eq.${r.id}&candidate_hash=eq.${candidateHash}&role_hash=eq.${roleHash}&select=id&limit=1`
+    );
+    if (cached.length) continue;
+    targets.push({ ...r, roleHash, profile: p });
+  }
+  if (!targets.length) {
+    console.log(`  precompute ${username}: no fresh targets (matched ${ids.length} roles, all cached or unprofiled)`);
+    return 0;
+  }
+
+  const stackTerms = [...new Set(targets.flatMap((t) => (t.tech_stack || "").split(/[,/•]/).map((s) => s.trim()).filter((s) => s.length >= 2)))].slice(0, 20);
+  const facts = computeWorkerFacts(expList, stackTerms, skills);
+  const evidence = [profileText(h).slice(0, 4000), facts.lines.length ? `FACTS (computed from dated position history):\n${facts.lines.join("\n")}` : ""].filter(Boolean).join("\n\n");
+
+  const rolesBlock = targets
+    .map((t) => `ROLE ${t.external_id}:\nMUST-HAVES: ${t.profile.must_haves.join("; ")}\nQUESTIONS:\n${t.profile.screening_questions.slice(0, 8).map((q, i) => `${i + 1}. ${q}`).join("\n")}`)
+    .join("\n\n");
+  const llm = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      response_format: { type: "json_schema", json_schema: { name: "verdicts", strict: true, schema: {
+        type: "object", additionalProperties: false, required: ["results"],
+        properties: { results: { type: "array", items: {
+          type: "object", additionalProperties: false, required: ["job_id", "qualified", "fit_score", "answers"],
+          properties: {
+            job_id: { type: "string" }, qualified: { type: "boolean" }, fit_score: { type: "number" },
+            answers: { type: "array", items: { type: "object", additionalProperties: false, required: ["question", "answer", "evidence"],
+              properties: { question: { type: "string" }, answer: { type: "string", enum: ["yes", "no", "unclear"] }, evidence: { type: "string" } } } },
+          } } } } } } },
+      messages: [
+        { role: "system", content:
+          "You screen one candidate against several roles. Answer EVERY question for every role with yes/no/unclear plus a short evidence citation (max 12 words). The FACTS block is computed from dated position history — treat it as ground truth. No evidence = 'unclear'. qualified = no must-have clearly failed and most questions yes. fit_score = 0-1." },
+        { role: "user", content: `CANDIDATE:\n${evidence.slice(0, 7000)}\n\n${rolesBlock}` },
+      ],
+    }),
+  });
+  if (!llm.ok) {
+    console.error(`  precompute LLM failed ${llm.status}: ${(await llm.text()).slice(0, 200)}`);
+    return 0;
+  }
+  let results;
+  try { results = JSON.parse((await llm.json()).choices[0].message.content).results; } catch (e) {
+    console.error(`  precompute parse failed: ${e.message}`);
+    return 0;
+  }
+  // The model sometimes echoes "ROLE 76" instead of "76".
+  results = results.map((v) => ({ ...v, job_id: String(v.job_id).replace(/^role\s*/i, "").trim() }));
+  if (results.length !== targets.length) {
+    console.log(`  precompute ${username}: LLM returned ${results.length}/${targets.length} roles [${results.map((r) => r.job_id).join(",")}]`);
+  }
+  const inserts = results
+    .map((v) => {
+      const t = targets.find((x) => x.external_id === v.job_id);
+      if (!t) return null;
+      return {
+        organization_id: org.id, candidate_id: row.candidate_id, org_role_id: t.id,
+        candidate_hash: candidateHash, role_hash: t.roleHash,
+        verdict: { ...v, facts: { totalYears: facts.totalYears, lines: facts.lines } },
+        model: "gpt-4o-mini", source: "precompute",
+      };
+    })
+    .filter(Boolean);
+  console.log(`  precompute ${username}: ${targets.length} targets -> ${results.length} results [${results.map((r) => r.job_id).join(",")}] -> ${inserts.length} inserts`);
+  if (inserts.length) {
+    await rest("match_verdicts?on_conflict=candidate_id,org_role_id,candidate_hash,role_hash", {
+      method: "POST",
+      headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+      body: JSON.stringify(inserts),
+    });
+  }
+  return inserts.length;
+}
+
+// PRECOMPUTE_BACKFILL=N: no Harvest spend — precompute verdicts for the N
+// most recently enriched candidates from their stored payloads, then exit.
+if (process.env.PRECOMPUTE_BACKFILL) {
+  const n = parseInt(process.env.PRECOMPUTE_BACKFILL, 10) || 5;
+  const enr = await rest(
+    `candidate_enrichments?provider=eq.harvest&status=eq.ok&raw_payload=not.is.null&candidate_id=not.is.null&select=candidate_id,linkedin_username,raw_payload&order=created_at.desc&limit=${n * 3}`
+  );
+  const seen = new Set();
+  let stored = 0, processed = 0;
+  for (const e of enr) {
+    if (seen.has(e.candidate_id) || processed >= n) continue;
+    seen.add(e.candidate_id);
+    processed++;
+    let vec = null;
+    const [ex] = await rest(
+      `candidate_embeddings?candidate_id=eq.${e.candidate_id}&source_type=eq.linkedin_profile&chunk_index=eq.0&select=embedding&limit=1`
+    );
+    if (ex?.embedding) vec = JSON.parse(ex.embedding);
+    const cnt = await precomputeVerdicts({ candidate_id: e.candidate_id }, e.raw_payload, vec, e.linkedin_username);
+    console.log(`backfill ${e.linkedin_username}: ${cnt} verdicts`);
+    stored += cnt;
+  }
+  console.log(`backfill done: ${stored} verdicts across ${processed} candidates`);
+  process.exit(0);
+}
+
+let refreshed = 0, failed = 0, skipped = 0, verdictsStored = 0;
 for (const row of queued.slice(0, remaining)) {
   try {
     let { linkedin_url: url, linkedin_username: username } = row;
@@ -222,6 +404,7 @@ for (const row of queued.slice(0, remaining)) {
     }
 
     // linkedin_profile embeddings (hash-deduped replace).
+    let profileVector = null; // chunk-0 vector, reused for role precompute
     if (OPENAI) {
       const text = clean(profileText(h));
       const chunks = chunkText(text).map((content, i) => ({
@@ -252,6 +435,7 @@ for (const row of queued.slice(0, remaining)) {
           });
           if (embRes.ok) {
             const vectors = (await embRes.json()).data;
+            if (todo[0]?.chunk_index === 0) profileVector = vectors[0].embedding;
             await rest("candidate_embeddings?on_conflict=candidate_id,source_type,chunk_index,content_hash", {
               method: "POST",
               headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -291,6 +475,21 @@ for (const row of queued.slice(0, remaining)) {
       }).catch((e) => console.error(`candidate patch failed for ${row.candidate_id}:`, e.message));
     }
 
+    // Precompute cached verdicts against their closest roles — JD searches
+    // then return pre-screened, evidence-backed candidates instantly.
+    try {
+      if (!profileVector) {
+        const [ex] = await rest(
+          `candidate_embeddings?candidate_id=eq.${row.candidate_id}&source_type=eq.linkedin_profile&chunk_index=eq.0&select=embedding&limit=1`
+        );
+        if (ex?.embedding) profileVector = JSON.parse(ex.embedding);
+      }
+      const stored = await precomputeVerdicts(row, h, profileVector, username);
+      verdictsStored += stored;
+    } catch (err) {
+      console.error(`precompute failed for ${row.candidate_id}:`, err.message);
+    }
+
     await finishQueueRow(row, "done");
     refreshed++;
     console.log(`refreshed ${username || row.candidate_id} (priority ${row.priority})`);
@@ -314,4 +513,4 @@ for (const row of queued.slice(0, remaining)) {
     await finishQueueRow(row, "failed").catch(() => {});
   }
 }
-console.log(`done: ${refreshed} refreshed, ${failed} failed, ${skipped} skipped`);
+console.log(`done: ${refreshed} refreshed, ${failed} failed, ${skipped} skipped, ${verdictsStored} verdicts precomputed`);

@@ -245,6 +245,8 @@ async function interrogate(
     const data = await res.json();
     const results = JSON.parse(data.choices[0].message.content).results as Omit<RoleVerdict, "cached">[];
     return results
+      // The model sometimes echoes "ROLE 76" instead of "76".
+      .map((r) => ({ ...r, job_id: String(r.job_id).replace(/^role\s*/i, "").trim() }))
       .filter((r) => roles.some((x) => x.jobId === r.job_id))
       .map((r) => ({ ...r, cached: false }));
   } catch {
