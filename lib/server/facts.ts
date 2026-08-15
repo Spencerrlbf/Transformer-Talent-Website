@@ -41,6 +41,13 @@ export interface SkillFact {
   listedOnly?: boolean; // on their profile, but no dated position evidence
 }
 
+export interface SkillCoOccurrence {
+  skills: string[]; // role-relevant skills used in the SAME position
+  position: string; // "Title at Company"
+  span: string; // "2024–2026" | "2024–now"
+  career: boolean; // false = internship/clinic position
+}
+
 export interface CandidateFacts {
   careerYears: number | null; // post-graduation, non-internship
   careerSince: string | null; // e.g. "Aug 2022"
@@ -49,6 +56,9 @@ export interface CandidateFacts {
   currentTitle: string | null;
   currentCompany: string | null;
   skills: SkillFact[];
+  // Deterministic basis lines for the screener's inferred signals: which
+  // role-relevant skills co-occur within a single position.
+  coOccurrences: SkillCoOccurrence[];
 }
 
 const NON_CAREER_TITLE =
@@ -194,6 +204,24 @@ export function computeFacts(
     });
   }
 
+  // Per-position skill co-occurrence: which of the role-relevant terms were
+  // used together in one job. Deterministic basis for inferred signals.
+  const terms = [...new Set(skillTerms.map((s) => s.trim()).filter(Boolean))].slice(0, 20);
+  const coOccurrences: SkillCoOccurrence[] = [];
+  for (const c of classified) {
+    const used = terms.filter((t) => usedSkill(c.row, t));
+    if (used.length < 2) continue;
+    const startY = c.row.start_year;
+    const endY = c.row.is_current ? "now" : c.row.end_year || "?";
+    coOccurrences.push({
+      skills: used.slice(0, 5),
+      position: [c.row.title, c.row.company_name && `at ${c.row.company_name}`].filter(Boolean).join(" "),
+      span: startY ? `${startY}–${endY}` : "undated",
+      career: c.career,
+    });
+  }
+  coOccurrences.sort((a, b) => Number(b.career) - Number(a.career) || b.skills.length - a.skills.length);
+
   return {
     careerYears: careerIvs.length ? mergedYears(careerIvs) : rows.length ? 0 : null,
     careerSince,
@@ -202,6 +230,7 @@ export function computeFacts(
     currentTitle: current?.title ?? null,
     currentCompany: current?.company_name ?? null,
     skills,
+    coOccurrences: coOccurrences.slice(0, 4),
   };
 }
 
@@ -233,6 +262,11 @@ export function formatFacts(facts: CandidateFacts): string {
   }
   if (facts.currentTitle) {
     lines.push(`Current role: ${facts.currentTitle}${facts.currentCompany ? ` at ${facts.currentCompany}` : ""}`);
+  }
+  for (const co of facts.coOccurrences) {
+    lines.push(
+      `Co-occurrence: ${co.skills.join(" + ")} used in the same position (${co.position}, ${co.span}${co.career ? "" : "; internship/clinic"})`
+    );
   }
   for (const s of facts.skills) {
     if (s.listedOnly) {
