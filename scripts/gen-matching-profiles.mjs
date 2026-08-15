@@ -33,7 +33,9 @@ async function profileFor(r) {
       messages: [
         { role: "system", content:
           "Build a candidate-screening profile for this role. must_haves: 3-6 hard requirements a recruiter would reject on (concise). " +
-          "nice_to_haves: max 4. screening_questions: 4-6 yes/no-answerable questions testing the must-haves against a candidate's history. " +
+          "nice_to_haves: max 4. screening_questions: 4-8 yes/no-answerable questions testing the must-haves against a candidate's history. " +
+          "Each question must test exactly ONE fact — never join two distinct skills/tools with 'and' " +
+          "('Python and FastAPI?' must be two questions); 'or'-alternatives where either satisfies may stay as one. " +
           "min_years: minimum years of experience implied (null if genuinely open). " +
           "visa_transfer_ok: true only if VISA field mentions transfers/sponsorship. " +
           "onsite_city: the required city if strictly on-site in one city, else null." },
