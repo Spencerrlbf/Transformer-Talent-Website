@@ -31,16 +31,9 @@ export default async function ApplyPage({
   return (
     <main className="page">
       <div className="wrap">
-        <h1 className="h-page b1">
-          <span>Apply</span> once
-        </h1>
-        <p className="page-intro b2">
-          Pick one role or several — either way we match your profile against{" "}
-          <b>everything</b> we&apos;re working on and show you other fits
-          instantly. Most of our placements come from roles that are never
-          posted publicly.
-        </p>
-        <div className={`b3${speculative === "1" ? "" : " breakout apply-layout"}`}>
+        {/* No hero here — visitors arrive to finish an application; the
+            table + rail start immediately. */}
+        <div className={`b1${speculative === "1" ? "" : " breakout apply-layout"}`} style={{ paddingTop: "1.6rem" }}>
           {speculative !== "1" && (
             <div style={{ minWidth: 0 }}>
               <RolesTable roles={roles} showSelectionUI={false} />

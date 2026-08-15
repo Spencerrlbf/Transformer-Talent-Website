@@ -783,9 +783,17 @@ footer a { color: var(--signal); text-decoration: none; }
 
 /* ---------- /apply: table left, checkout rail right ---------- */
 .apply-layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 1.4rem; align-items: start; }
-.apply-rail { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; }
-.apply-rail-solo { max-width: 560px; }
-.apply-rail .form label { margin-top: 0.7rem; }
+/* No inner scrollbar ever: the rail is compact enough to fit tall viewports
+   (where it sticks); on short ones it simply scrolls with the page. */
+.apply-rail { position: static; }
+@media (min-height: 880px) {
+  .apply-rail { position: sticky; top: 1rem; }
+}
+.apply-rail-solo { max-width: 560px; padding-top: 1rem; }
+.apply-rail .form label { margin-top: 0.55rem; }
+.apply-rail .form input,
+.apply-rail .form select,
+.apply-rail .form textarea { padding: 0.55rem 0.7rem; }
 @media (max-width: 980px) {
   .apply-layout { grid-template-columns: 1fr; }
   .apply-rail { position: static; max-height: none; overflow: visible; order: -1; }
