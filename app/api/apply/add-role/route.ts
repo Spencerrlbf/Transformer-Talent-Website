@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbRest } from "@/lib/server/supabase";
 import { getRoles } from "@/lib/roles";
+import { updateAirtableApplicationRoles } from "@/lib/server/applicants";
 
 // Adds one suggested role to a just-submitted application. Guarded hard:
 // the application must be under an hour old, the role must be one WE
@@ -68,5 +69,9 @@ export async function POST(req: NextRequest) {
     prefer: "return=minimal",
   });
   if (!patch.ok) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+  await updateAirtableApplicationRoles(applicationId, [
+    ...(app.role_titles || []),
+    `${role.title} (#${jobId})`,
+  ]);
   return NextResponse.json({ ok: true });
 }

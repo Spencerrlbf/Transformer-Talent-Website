@@ -7,6 +7,7 @@ import {
   promoteToCandidatePool,
   matchRolesForApplicant,
   mirrorToAirtable,
+  mirrorApplicationToAirtable,
   linkedinUsername,
 } from "@/lib/server/applicants";
 import { getRoles, roleSlug } from "@/lib/roles";
@@ -290,6 +291,19 @@ export async function POST(req: NextRequest) {
         prefer: "return=minimal",
       }).catch(() => {});
     }
+  }
+
+  // Review row for EVERY application — even when enrichment failed above.
+  if (submission) {
+    await mirrorApplicationToAirtable({
+      applicationId: submission.id,
+      name,
+      email,
+      linkedinUrl: linkedin,
+      visa: visa || null,
+      roleTitles,
+      matchedTitles: matches.map((m) => `${m.title} (#${m.jobId})`),
+    });
   }
 
   // applicationId lets the thank-you page add suggested roles for 1 hour.

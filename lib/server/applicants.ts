@@ -286,3 +286,86 @@ export async function mirrorToAirtable(args: {
     // Mirroring must never fail an application.
   }
 }
+
+// Review table: EVERY application gets a row here — including repeat
+// applicants, who leave no trace in the create-only Candidates mirror.
+export async function mirrorApplicationToAirtable(args: {
+  applicationId: string;
+  name: string;
+  email: string;
+  linkedinUrl: string | null;
+  visa: string | null;
+  roleTitles: string[];
+  matchedTitles: string[];
+}): Promise<void> {
+  const token = process.env.AIRTABLE_API_TOKEN;
+  const base = process.env.AIRTABLE_BASE_ID;
+  if (!token || !base) return;
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  try {
+    // Link to the Candidates record when one exists.
+    let candidateRecordId: string | null = null;
+    const formula = encodeURIComponent(
+      `OR({Primary Email}="${args.email}",{LinkedIn URL}="${args.linkedinUrl || ""}")`
+    );
+    const found = await fetch(
+      `https://api.airtable.com/v0/${base}/Candidates?maxRecords=1&filterByFormula=${formula}`,
+      { headers, signal: AbortSignal.timeout(10000) }
+    );
+    if (found.ok) candidateRecordId = (await found.json()).records?.[0]?.id ?? null;
+
+    await fetch(`https://api.airtable.com/v0/${base}/Website%20Applications`, {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        records: [
+          {
+            fields: {
+              Name: args.name,
+              Email: args.email,
+              ...(args.linkedinUrl ? { LinkedIn: args.linkedinUrl } : {}),
+              "Roles Applied": args.roleTitles.join("\n") || "General consideration",
+              "Matched Roles": args.matchedTitles.join("\n"),
+              ...(args.visa ? { Visa: args.visa } : {}),
+              "Applied At": new Date().toISOString(),
+              "Application ID": args.applicationId,
+              ...(candidateRecordId ? { Candidate: [candidateRecordId] } : {}),
+            },
+          },
+        ],
+      }),
+    });
+  } catch {
+    // Mirroring must never fail an application.
+  }
+}
+
+// add-role updates the review row so Airtable matches Supabase.
+export async function updateAirtableApplicationRoles(
+  applicationId: string,
+  roleTitles: string[]
+): Promise<void> {
+  const token = process.env.AIRTABLE_API_TOKEN;
+  const base = process.env.AIRTABLE_BASE_ID;
+  if (!token || !base) return;
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  try {
+    const formula = encodeURIComponent(`{Application ID}="${applicationId}"`);
+    const found = await fetch(
+      `https://api.airtable.com/v0/${base}/Website%20Applications?maxRecords=1&filterByFormula=${formula}`,
+      { headers, signal: AbortSignal.timeout(10000) }
+    );
+    if (!found.ok) return;
+    const rec = (await found.json()).records?.[0];
+    if (!rec) return;
+    await fetch(`https://api.airtable.com/v0/${base}/Website%20Applications/${rec.id}`, {
+      method: "PATCH",
+      headers,
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ fields: { "Roles Applied": roleTitles.join("\n") } }),
+    });
+  } catch {
+    // Best-effort.
+  }
+}
