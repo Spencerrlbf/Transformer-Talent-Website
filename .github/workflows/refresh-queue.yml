@@ -1,0 +1,22 @@
+name: Refresh candidate pool via Harvest
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/refresh-worker.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HARVEST_API_KEY: ${{ secrets.HARVEST_API_KEY }}
+          REFRESH_DAILY_CAP: ${{ vars.REFRESH_DAILY_CAP || 50 }}
