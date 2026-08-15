@@ -81,7 +81,9 @@ export async function screenRolesWithCache(args: {
   const profileOf = (jobId: string): MatchingProfile | undefined =>
     roleRows.find((r) => r.external_id === jobId)?.matching_profile || PROFILES[jobId];
 
-  const candidateHash = sha(args.cacheKeyText);
+  // Version prefix: bumping it invalidates every cached verdict, forcing a
+  // re-screen under new fact rules. v2 = career-years rules (2026-08-15).
+  const candidateHash = sha("factsv2|" + args.cacheKeyText);
   const roleMeta = jobIds
     .map((jobId) => {
       const p = profileOf(jobId);

@@ -228,6 +228,11 @@ export async function POST(req: NextRequest) {
     let screening: unknown = null;
     if (vector) {
       const skillTerms = harvestSkills.length ? harvestSkills : parsed?.top_skills || [];
+      const expRows = harvestToExperiences(harvest as Record<string, unknown> | null);
+      const eduList = (harvest as Record<string, unknown> | null)?.education ?? null;
+      // Career years (post-graduation, internships excluded) is THE years
+      // number everywhere — gates and screening facts can't disagree.
+      const careerYears = computeFacts(expRows, [], [], eduList).careerYears;
       const roleMatches = await matchRolesForApplicant(vector, skillTerms);
       const gated = roleMatches
         // Vector rows need a floor; keyword rows earned their spot via ≥2 stack hits.
@@ -235,7 +240,7 @@ export async function POST(req: NextRequest) {
         .filter((m) =>
           passesHardGates(m.job_id, {
             visa,
-            years: parsed?.total_experience_years ?? null,
+            years: careerYears ?? parsed?.total_experience_years ?? null,
           })
         );
       // Question-sheet screening: deterministic facts first, then ONE cached
@@ -251,7 +256,7 @@ export async function POST(req: NextRequest) {
           )
         ),
       ].slice(0, 20);
-      const facts = computeFacts(harvestToExperiences(harvest as Record<string, unknown> | null), stackTerms, harvestSkills);
+      const facts = computeFacts(expRows, stackTerms, harvestSkills, eduList);
       const evidence = [
         parsed?.profile_summary,
         `FACTS (computed from dated position history):\n${formatFacts(facts)}`,

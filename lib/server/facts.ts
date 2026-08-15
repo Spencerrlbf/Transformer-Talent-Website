@@ -2,12 +2,25 @@
 // ("3+ years of Python?", "used Kubernetes in current role?") straight from
 // the structured candidate_experiences rows — free, exact, and impossible to
 // hallucinate. The LLM only handles judgment questions.
+//
+// Career rules (agreed 2026-08-15):
+//  1. Positions are classified by TITLE first (intern/co-op/clinic/fellow/
+//     research- or teaching-assistant), employment type second — providers
+//     mislabel internships as "Full-time".
+//  2. Graduation anchor: with a known undergrad end date, anything that ends
+//     before it is pre-career even if the title looks professional; a job
+//     spanning graduation counts from graduation. No degree data -> rule 1 only.
+//  3. Both numbers are reported: career years AND what was excluded.
+//  4. Per-skill years count career time only; internship exposure is noted,
+//     never silently blended in.
+//  5. This is the single source of years — gates and facts can't disagree.
 
 import { sbRest } from "./supabase";
 
 export interface ExperienceRow {
   title: string | null;
   company_name: string | null;
+  employment_type?: string | null;
   start_month: number | null;
   start_year: number | null;
   end_month: number | null;
@@ -21,18 +34,28 @@ export interface ExperienceRow {
 
 export interface SkillFact {
   skill: string;
-  years: number; // merged-interval years across positions that used it (0 when listed-only)
+  years: number; // career years only (0 when internship-only or listed-only)
   usedInCurrentRole: boolean;
   positions: string[]; // "Title at Company" citations
+  usedInInternships?: boolean;
   listedOnly?: boolean; // on their profile, but no dated position evidence
 }
 
 export interface CandidateFacts {
-  totalYears: number | null;
+  careerYears: number | null; // post-graduation, non-internship
+  careerSince: string | null; // e.g. "Aug 2022"
+  excludedCount: number; // internships/clinics/pre-graduation positions
+  excludedYears: number; // merged years of the excluded positions
   currentTitle: string | null;
   currentCompany: string | null;
   skills: SkillFact[];
 }
+
+const NON_CAREER_TITLE =
+  /\bintern(ship)?\b|co-?op\b|\bclinic\b|\bfellow(ship)?\b|research assistant|teaching assistant|\bapprentice\b/i;
+const NON_CAREER_TYPE = /intern|part-?time|apprentice/i;
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const norm = (s: string) =>
   s.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9+#. ]/g, " ").replace(/\s+/g, " ").trim();
@@ -81,47 +104,101 @@ function mergedYears(intervals: [number, number][]): number {
   return Math.round((months / 12) * 10) / 10;
 }
 
+// Final undergrad graduation year from a Harvest education list. Bachelor
+// degrees only — masters/PhD must not push the career anchor later.
+export function undergradEndYear(education: unknown): number | null {
+  if (!Array.isArray(education)) return null;
+  let latest: number | null = null;
+  for (const ed of education as Record<string, any>[]) {
+    const degree = String(ed?.degree || "");
+    if (!/\bbachelor|\bb\.?\s?s\b|\bb\.?\s?a\b|\bb\.?\s?eng\b|\bbsc\b|undergrad/i.test(degree)) continue;
+    let year: number | null = ed?.endDate?.year ?? null;
+    if (!year && typeof ed?.period === "string") {
+      const m = ed.period.match(/(\d{4})\s*$/);
+      if (m) year = parseInt(m[1], 10);
+    }
+    if (year && (!latest || year > latest)) latest = year;
+  }
+  return latest;
+}
+
+interface ClassifiedRow {
+  row: ExperienceRow;
+  career: boolean;
+  // interval clamped to post-graduation for career rows
+  iv: [number, number] | null;
+}
+
+function classify(rows: ExperienceRow[], gradYear: number | null, nowY: number, nowM: number): ClassifiedRow[] {
+  const gradM = gradYear ? gradYear * 12 + 6 : null; // graduation assumed mid-year
+  return rows.map((row) => {
+    const iv = interval(row, nowY, nowM);
+    const titleSaysNo = NON_CAREER_TITLE.test(row.title || "");
+    const typeSaysNo = NON_CAREER_TYPE.test(row.employment_type || "");
+    let career = !titleSaysNo && !typeSaysNo;
+    let clamped = iv;
+    if (career && gradM && iv) {
+      if (iv[1] <= gradM) career = false; // ended before graduation: pre-career
+      else if (iv[0] < gradM) clamped = [gradM, iv[1]]; // spans graduation: count from it
+    }
+    return { row, career, iv: career ? clamped : iv };
+  });
+}
+
 export function computeFacts(
   experiences: ExperienceRow[],
   skillTerms: string[],
-  profileSkills: string[] = []
+  profileSkills: string[] = [],
+  education: unknown = null
 ): CandidateFacts {
   const now = new Date();
   const nowY = now.getUTCFullYear();
   const nowM = now.getUTCMonth() + 1;
   const rows = [...experiences].sort((a, b) => a.sort_order - b.sort_order);
-  const current = rows.find((r) => r.is_current) || rows[0] || null;
+  const gradYear = undergradEndYear(education);
+  const classified = classify(rows, gradYear, nowY, nowM);
 
-  const allIntervals = rows
-    .map((r) => interval(r, nowY, nowM))
-    .filter((i): i is [number, number] => !!i);
+  const careerRows = classified.filter((c) => c.career);
+  const excludedRows = classified.filter((c) => !c.career);
+  const careerIvs = careerRows.map((c) => c.iv).filter((i): i is [number, number] => !!i);
+  const excludedIvs = excludedRows.map((c) => c.iv).filter((i): i is [number, number] => !!i);
+
+  const firstStart = careerIvs.length ? Math.min(...careerIvs.map((i) => i[0])) : null;
+  const careerSince = firstStart
+    ? `${MONTH_NAMES[(firstStart % 12 || 12) - 1]} ${Math.floor((firstStart - 1) / 12)}`
+    : null;
+
+  const current = careerRows.find((c) => c.row.is_current)?.row || rows.find((r) => r.is_current) || rows[0] || null;
 
   const skills: SkillFact[] = [];
   for (const skill of [...new Set(skillTerms.map((s) => s.trim()).filter(Boolean))].slice(0, 20)) {
-    const using = rows.filter((r) => usedSkill(r, skill));
-    if (!using.length) {
+    const usingCareer = careerRows.filter((c) => usedSkill(c.row, skill));
+    const usingExcluded = excludedRows.filter((c) => usedSkill(c.row, skill));
+    if (!usingCareer.length && !usingExcluded.length) {
       // Harvest often leaves per-position skills empty — a profile-level
-      // listing is still a fact, just a weaker one. Report it as such
-      // instead of silently dropping the skill.
+      // listing is still a fact, just a weaker one.
       if (profileSkills.some((s) => skillMatches(skill, s))) {
         skills.push({ skill, years: 0, usedInCurrentRole: false, positions: [], listedOnly: true });
       }
       continue;
     }
-    const ivs = using.map((r) => interval(r, nowY, nowM)).filter((i): i is [number, number] => !!i);
     skills.push({
       skill,
-      years: mergedYears(ivs),
-      usedInCurrentRole: !!current && using.includes(current),
-      positions: using
+      years: mergedYears(usingCareer.map((c) => c.iv).filter((i): i is [number, number] => !!i)),
+      usedInCurrentRole: !!current && usingCareer.some((c) => c.row === current),
+      positions: usingCareer
         .slice(0, 4)
-        .map((r) => [r.title, r.company_name && `at ${r.company_name}`].filter(Boolean).join(" "))
+        .map((c) => [c.row.title, c.row.company_name && `at ${c.row.company_name}`].filter(Boolean).join(" "))
         .filter(Boolean),
+      ...(usingExcluded.length ? { usedInInternships: true } : {}),
     });
   }
 
   return {
-    totalYears: allIntervals.length ? mergedYears(allIntervals) : null,
+    careerYears: careerIvs.length ? mergedYears(careerIvs) : rows.length ? 0 : null,
+    careerSince,
+    excludedCount: excludedRows.length,
+    excludedYears: mergedYears(excludedIvs),
     currentTitle: current?.title ?? null,
     currentCompany: current?.company_name ?? null,
     skills,
@@ -131,7 +208,7 @@ export function computeFacts(
 export async function fetchExperiences(candidateId: string): Promise<ExperienceRow[]> {
   try {
     const res = await sbRest(
-      `candidate_experiences?candidate_id=eq.${candidateId}&select=title,company_name,start_month,start_year,end_month,end_year,is_current,duration_text,skills,description,sort_order&order=sort_order.asc`
+      `candidate_experiences?candidate_id=eq.${candidateId}&select=title,company_name,employment_type,start_month,start_year,end_month,end_year,is_current,duration_text,skills,description,sort_order&order=sort_order.asc`
     );
     return res.ok ? await res.json() : [];
   } catch {
@@ -142,16 +219,31 @@ export async function fetchExperiences(candidateId: string): Promise<ExperienceR
 // Compact evidence block for prompts and recommendation cards.
 export function formatFacts(facts: CandidateFacts): string {
   const lines: string[] = [];
-  if (facts.totalYears !== null) lines.push(`Total experience: ${facts.totalYears} years`);
+  if (facts.careerYears !== null) {
+    const excl = facts.excludedCount
+      ? `; excludes ${facts.excludedCount} internship/clinic position${facts.excludedCount > 1 ? "s" : ""} totaling ${facts.excludedYears}y`
+      : "";
+    if (facts.careerYears === 0 && facts.excludedYears > 0) {
+      lines.push(`Career experience: 0 years — new grad with ${facts.excludedYears}y of internships`);
+    } else {
+      lines.push(
+        `Career experience: ${facts.careerYears} years${facts.careerSince ? ` (since ${facts.careerSince}${excl})` : ""}`
+      );
+    }
+  }
   if (facts.currentTitle) {
     lines.push(`Current role: ${facts.currentTitle}${facts.currentCompany ? ` at ${facts.currentCompany}` : ""}`);
   }
   for (const s of facts.skills) {
-    lines.push(
-      s.listedOnly
-        ? `${s.skill}: listed on profile, no dated position evidence`
-        : `${s.skill}: ${s.years}y${s.usedInCurrentRole ? ", incl. current role" : ""} (${s.positions[0] || "prior role"})`
-    );
+    if (s.listedOnly) {
+      lines.push(`${s.skill}: listed on profile, no dated position evidence`);
+    } else if (s.years === 0 && s.usedInInternships) {
+      lines.push(`${s.skill}: used during internships only`);
+    } else {
+      lines.push(
+        `${s.skill}: ${s.years}y career${s.usedInCurrentRole ? ", incl. current role" : ""} (${s.positions[0] || "prior role"})${s.usedInInternships ? "; also used in internships" : ""}`
+      );
+    }
   }
   return lines.join("\n");
 }

@@ -161,8 +161,26 @@ function skillMatch(a, b) {
   if (!x || !y) return false;
   return x === y || (x.length >= 3 && y.includes(x)) || (y.length >= 3 && x.includes(y));
 }
-function computeWorkerFacts(expList, skillTerms, profileSkills) {
+// Career rules (v2, mirrors lib/server/facts.ts): titles trump employment
+// type, undergrad graduation anchors the career clock, internships are
+// reported separately — never blended into career years.
+const NON_CAREER_TITLE = /\bintern(ship)?\b|co-?op\b|\bclinic\b|\bfellow(ship)?\b|research assistant|teaching assistant|\bapprentice\b/i;
+const NON_CAREER_TYPE = /intern|part-?time|apprentice/i;
+function undergradEndYear(education) {
+  if (!Array.isArray(education)) return null;
+  let latest = null;
+  for (const ed of education) {
+    if (!/\bbachelor|\bb\.?\s?s\b|\bb\.?\s?a\b|\bb\.?\s?eng\b|\bbsc\b|undergrad/i.test(String(ed?.degree || ""))) continue;
+    let year = ed?.endDate?.year ?? null;
+    if (!year && typeof ed?.period === "string") { const m = ed.period.match(/(\d{4})\s*$/); if (m) year = parseInt(m[1], 10); }
+    if (year && (!latest || year > latest)) latest = year;
+  }
+  return latest;
+}
+function computeWorkerFacts(expList, skillTerms, profileSkills, education) {
   const now = new Date(); const nowN = now.getUTCFullYear() * 12 + now.getUTCMonth() + 1;
+  const gradYear = undergradEndYear(education);
+  const gradM = gradYear ? gradYear * 12 + 6 : null;
   const iv = (e) => {
     if (!e.startDate?.year) return null;
     const s = e.startDate.year * 12 + (monthNum(e.startDate.month) ?? 6);
@@ -170,25 +188,47 @@ function computeWorkerFacts(expList, skillTerms, profileSkills) {
     const en = cur ? nowN : e.endDate.year * 12 + (monthNum(e.endDate.month) ?? 6);
     return en > s ? [s, en] : null;
   };
+  const classified = expList.map((e) => {
+    const i = iv(e);
+    let career = !NON_CAREER_TITLE.test(e.position || e.title || "") && !NON_CAREER_TYPE.test(e.employmentType || "");
+    let clamped = i;
+    if (career && gradM && i) {
+      if (i[1] <= gradM) career = false;
+      else if (i[0] < gradM) clamped = [gradM, i[1]];
+    }
+    return { e, career, iv: career ? clamped : i };
+  });
+  const careerRows = classified.filter((c) => c.career);
+  const excludedRows = classified.filter((c) => !c.career);
   const uses = (e, skill) => {
     const sk = Array.isArray(e.skills) ? e.skills.map((s) => (typeof s === "string" ? s : s?.name || "")) : [];
     if (sk.some((s) => skillMatch(skill, s))) return true;
     return e.description ? new RegExp("\\b" + normSkill(skill).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(e.description) : false;
   };
   const lines = [];
-  const total = mergedYears(expList.map(iv).filter(Boolean));
-  if (total) lines.push(`Total experience: ${total} years`);
+  const careerYears = mergedYears(careerRows.map((c) => c.iv).filter(Boolean));
+  const excludedYears = mergedYears(excludedRows.map((c) => c.iv).filter(Boolean));
+  if (careerYears === 0 && excludedYears > 0) {
+    lines.push(`Career experience: 0 years — new grad with ${excludedYears}y of internships`);
+  } else if (careerYears) {
+    const excl = excludedRows.length ? `; excludes ${excludedRows.length} internship/clinic positions totaling ${excludedYears}y` : "";
+    lines.push(`Career experience: ${careerYears} years${excl}`);
+  }
   for (const skill of [...new Set(skillTerms)].slice(0, 20)) {
-    const using = expList.filter((e) => uses(e, skill));
-    if (using.length) {
-      const yrs = mergedYears(using.map(iv).filter(Boolean));
-      const where = using[0].position || using[0].title || "prior role";
-      lines.push(`${skill}: ${yrs}y (${where}${using[0].companyName ? " at " + using[0].companyName : ""})`);
+    const usingCareer = careerRows.filter((c) => uses(c.e, skill));
+    const usingExcl = excludedRows.filter((c) => uses(c.e, skill));
+    if (usingCareer.length) {
+      const yrs = mergedYears(usingCareer.map((c) => c.iv).filter(Boolean));
+      const first = usingCareer[0].e;
+      const where = first.position || first.title || "prior role";
+      lines.push(`${skill}: ${yrs}y career (${where}${first.companyName ? " at " + first.companyName : ""})${usingExcl.length ? "; also used in internships" : ""}`);
+    } else if (usingExcl.length) {
+      lines.push(`${skill}: used during internships only`);
     } else if ((profileSkills || []).some((s) => skillMatch(skill, s))) {
       lines.push(`${skill}: listed on profile, no dated position evidence`);
     }
   }
-  return { lines, totalYears: total || null };
+  return { lines, careerYears: careerYears || null };
 }
 
 async function precomputeVerdicts(row, h, vector, username) {
@@ -214,7 +254,7 @@ async function precomputeVerdicts(row, h, vector, username) {
   const expList = Array.isArray(h.experience) ? h.experience : [];
 
   const cacheKeyText = ["", JSON.stringify(h)].join("|"); // same format as the website (no resume)
-  const candidateHash = sha(cacheKeyText);
+  const candidateHash = sha("factsv2|" + cacheKeyText); // version prefix matches lib/server/screening.ts
   const targets = [];
   for (const r of roleRows) {
     const p = r.matching_profile;
@@ -233,7 +273,7 @@ async function precomputeVerdicts(row, h, vector, username) {
   }
 
   const stackTerms = [...new Set(targets.flatMap((t) => (t.tech_stack || "").split(/[,/•]/).map((s) => s.trim()).filter((s) => s.length >= 2)))].slice(0, 20);
-  const facts = computeWorkerFacts(expList, stackTerms, skills);
+  const facts = computeWorkerFacts(expList, stackTerms, skills, h.education);
   const evidence = [profileText(h).slice(0, 4000), facts.lines.length ? `FACTS (computed from dated position history):\n${facts.lines.join("\n")}` : ""].filter(Boolean).join("\n\n");
 
   const rolesBlock = targets
@@ -282,7 +322,7 @@ async function precomputeVerdicts(row, h, vector, username) {
       return {
         organization_id: org.id, candidate_id: row.candidate_id, org_role_id: t.id,
         candidate_hash: candidateHash, role_hash: t.roleHash,
-        verdict: { ...v, facts: { totalYears: facts.totalYears, lines: facts.lines } },
+        verdict: { ...v, facts: { careerYears: facts.careerYears, lines: facts.lines } },
         model: "gpt-4o-mini", source: "precompute",
       };
     })
