@@ -14,7 +14,9 @@ export async function harvestProfile(linkedinUrl: string): Promise<unknown | nul
     );
     if (!res.ok) return null;
     const data = await res.json();
-    return data.element || data;
+    // Harvest wraps errors in a 200 ({status: 404, element: null, error: …}) —
+    // only a real element is a profile.
+    return data.element ?? null;
   } catch {
     return null;
   }
