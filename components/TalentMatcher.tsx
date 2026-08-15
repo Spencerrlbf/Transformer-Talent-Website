@@ -33,14 +33,19 @@ export default function TalentMatcher() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    const form = new FormData(e.currentTarget);
+    const jdFile = form.get("jdFile");
+    const jdTextLen = String(form.get("jdText") || "").trim().length;
+    if (jdTextLen < 200 && !(jdFile instanceof File && jdFile.size > 0)) {
+      setStatus({
+        kind: "error",
+        message: "Paste the full job description (200+ characters) or upload it as a PDF.",
+      });
+      return;
+    }
     setStatus({ kind: "sending" });
     try {
-      const res = await fetch("/api/talent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const res = await fetch("/api/talent", { method: "POST", body: form });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok) {
         setStatus({ kind: "done", result: json as Result });
@@ -142,11 +147,13 @@ export default function TalentMatcher() {
         <textarea
           name="jdText"
           rows={12}
-          required
-          minLength={200}
           maxLength={40000}
-          placeholder="Paste the full job description here…"
+          placeholder="Paste the full job description here… or upload it as a PDF below."
         />
+      </label>
+      <label>
+        jd_pdf (optional)
+        <input name="jdFile" type="file" accept="application/pdf,.pdf" />
       </label>
       <input
         name="website"

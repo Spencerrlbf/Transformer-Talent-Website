@@ -140,8 +140,9 @@ export async function promoteToCandidatePool(args: {
   linkedinUrl: string | null;
   resumeText: string | null;
   parsed: ParsedProfile | null;
+  allSkills?: string[]; // full uncapped skill list (Harvest), preferred over parsed top 12
 }): Promise<{ candidateId: string | null; vector: number[] | null }> {
-  const { name, email, linkedinUrl, resumeText, parsed } = args;
+  const { name, email, linkedinUrl, resumeText, parsed, allSkills } = args;
   const username = linkedinUrl ? linkedinUsername(linkedinUrl) : null;
   if (!username) return { candidateId: null, vector: null };
 
@@ -176,7 +177,11 @@ export async function promoteToCandidatePool(args: {
           education_fields: parsed.education_fields,
         }
       : {}),
-    ...(parsed?.top_skills?.length ? { top_skills: parsed.top_skills } : {}),
+    ...(allSkills?.length
+      ? { top_skills: allSkills }
+      : parsed?.top_skills?.length
+        ? { top_skills: parsed.top_skills }
+        : {}),
     ...(vector ? { matching_embedding: JSON.stringify(vector), embedding_type: "website_applicant" } : {}),
   };
 

@@ -11,6 +11,13 @@ import {
 } from "@/lib/server/applicants";
 import { getRoles, roleSlug } from "@/lib/roles";
 import { passesHardGates, screenCandidate } from "@/lib/server/screening";
+import { llamaParsePdf } from "@/lib/server/llamaparse";
+import {
+  recordEnrichment,
+  syncExperiences,
+  syncCandidateEmbeddings,
+  linkedinProfileText,
+} from "@/lib/server/spine";
 
 export const maxDuration = 60;
 
@@ -104,6 +111,7 @@ export async function POST(req: NextRequest) {
   const file = form.get("resume");
   let resumePath: string | null = null;
   let resumeText: string | null = null;
+  let resumeParser: "llamaparse" | "pdf-parse" | null = null;
   if (file instanceof File && file.size > 0) {
     if (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf")) {
       return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
@@ -112,7 +120,13 @@ export async function POST(req: NextRequest) {
     const safeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
     const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
     if (await uploadResume(path, buf)) resumePath = path;
-    resumeText = await extractPdfText(buf);
+    resumeText = await llamaParsePdf(buf, safeName);
+    if (resumeText) {
+      resumeParser = "llamaparse";
+    } else {
+      resumeText = (await extractPdfText(buf)) || null;
+      if (resumeText) resumeParser = "pdf-parse";
+    }
   }
 
   const roles = await getRoles();
@@ -147,23 +161,65 @@ export async function POST(req: NextRequest) {
   try {
     const username = linkedinUsername(linkedin);
     let harvest: unknown | null = null;
+    let harvestCache: "hit" | "miss" = "miss";
     const since = new Date(Date.now() - 30 * 86400_000).toISOString();
     const prior = await sbRest(
       `website_applications?linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
     );
     if (prior.ok) {
       const rows = await prior.json();
-      if (rows.length) harvest = rows[0].harvest_profile;
+      if (rows.length) {
+        harvest = rows[0].harvest_profile;
+        harvestCache = "hit";
+      }
     }
     if (!harvest) harvest = await harvestProfile(linkedin);
     const parsed = await parseProfile(resumeText || "", harvest);
+    // Full uncapped skill list from Harvest — richer than the parsed top 12.
+    const harvestSkills = (
+      ((harvest as Record<string, unknown> | null)?.skills as { name?: string }[] | undefined) || []
+    )
+      .map((s) => s?.name || "")
+      .filter(Boolean);
     const { candidateId, vector } = await promoteToCandidatePool({
       name,
       email,
       linkedinUrl: linkedin,
       resumeText,
       parsed,
+      allSkills: harvestSkills,
     });
+
+    // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
+    if (harvest) {
+      await recordEnrichment({
+        candidateId,
+        linkedinUsername: username,
+        provider: "harvest",
+        operation: "full_profile",
+        cacheStatus: harvestCache,
+        normalized: parsed,
+        raw: harvest,
+        costCredits: harvestCache === "miss" ? 1 : 0,
+      });
+    }
+    if (resumeParser) {
+      await recordEnrichment({
+        candidateId,
+        linkedinUsername: username,
+        provider: resumeParser,
+        operation: "resume_parse",
+        cacheStatus: "miss",
+      });
+    }
+    if (candidateId) {
+      await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
+      await syncCandidateEmbeddings(candidateId, {
+        linkedin_profile: linkedinProfileText(harvest as Record<string, unknown> | null),
+        resume: resumeText || undefined,
+        summary: parsed?.profile_summary || undefined,
+      });
+    }
 
     let matchedIds: string[] = [];
     let screening: unknown = null;

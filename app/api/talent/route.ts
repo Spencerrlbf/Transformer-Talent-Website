@@ -8,6 +8,8 @@ import {
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
 import { screenAgainstJD } from "@/lib/server/screening";
+import { llamaParsePdf } from "@/lib/server/llamaparse";
+import { enqueueMatchedCandidates, recordEnrichment } from "@/lib/server/spine";
 
 export const maxDuration = 60;
 
@@ -16,10 +18,26 @@ const DISPOSABLE = new Set([
   "temp-mail.org", "throwaway.email", "yopmail.com", "sharklasers.com",
 ]);
 
+const MAX_JD_PDF_BYTES = 8 * 1024 * 1024;
+
 export async function POST(req: NextRequest) {
   let body: { email?: string; company?: string; jdText?: string; website?: string };
+  let jdFile: File | null = null;
+  const contentType = req.headers.get("content-type") || "";
   try {
-    body = await req.json();
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      body = {
+        email: String(form.get("email") ?? ""),
+        company: String(form.get("company") ?? ""),
+        jdText: String(form.get("jdText") ?? ""),
+        website: String(form.get("website") ?? ""),
+      };
+      const f = form.get("jdFile");
+      if (f instanceof File && f.size > 0) jdFile = f;
+    } else {
+      body = await req.json();
+    }
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
@@ -30,7 +48,7 @@ export async function POST(req: NextRequest) {
   const email = (body.email || "").trim().toLowerCase().slice(0, 254);
   const company = (body.company || "").trim().slice(0, 200);
   // PDF copy-paste often carries NUL/control chars Postgres text rejects.
-  const jdText = (body.jdText || "")
+  let jdText = (body.jdText || "")
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
     .trim()
     .slice(0, 40000);
@@ -44,11 +62,14 @@ export async function POST(req: NextRequest) {
   if (!company) {
     return NextResponse.json({ error: "Please tell us your company name." }, { status: 400 });
   }
-  if (jdText.length < 200) {
+  if (jdText.length < 200 && !jdFile) {
     return NextResponse.json(
-      { error: "That job description looks too short — paste the full JD (200+ characters)." },
+      { error: "That job description looks too short — paste the full JD (200+ characters) or upload it as a PDF." },
       { status: 400 }
     );
+  }
+  if (jdFile && (jdFile.size > MAX_JD_PDF_BYTES || (jdFile.type && jdFile.type !== "application/pdf"))) {
+    return NextResponse.json({ error: "JD upload must be a PDF under 8MB." }, { status: 400 });
   }
 
   const ip =
@@ -74,6 +95,29 @@ export async function POST(req: NextRequest) {
       { error: "We're at capacity today — email spencer@transformertalent.com and we'll run your search personally." },
       { status: 429 }
     );
+  }
+
+  // JD PDF upload: parse only after the rate-limit gates (LlamaParse costs money).
+  if (jdFile) {
+    const buf = Buffer.from(await jdFile.arrayBuffer());
+    const parsedJd = await llamaParsePdf(buf, jdFile.name || "jd.pdf");
+    if (parsedJd) {
+      await recordEnrichment({
+        candidateId: null,
+        linkedinUsername: null,
+        provider: "llamaparse",
+        operation: "jd_parse",
+        cacheStatus: "miss",
+      });
+    }
+    const combined = [parsedJd, jdText].filter(Boolean).join("\n\n").trim().slice(0, 40000);
+    if (combined.length >= 200) jdText = combined;
+    if (jdText.length < 200) {
+      return NextResponse.json(
+        { error: "We couldn't read that PDF — paste the job description as text instead." },
+        { status: 400 }
+      );
+    }
   }
 
   const submission = await sbInsert<{ id: string }>(
@@ -106,6 +150,9 @@ export async function POST(req: NextRequest) {
       ...m,
       fit: fits.find((f) => f.ref === m.ref) || null,
     }));
+
+    // The candidates a real JD surfaced are the ones worth refreshing first.
+    await enqueueMatchedCandidates(rows.slice(0, 10).map((r) => r.id)).catch(() => {});
 
     if (submission) {
       await sbRest(`jd_submissions?id=eq.${submission.id}`, {

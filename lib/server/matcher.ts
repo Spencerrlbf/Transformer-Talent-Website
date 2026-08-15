@@ -135,20 +135,19 @@ export async function matchCandidates(
 ): Promise<MatchRow[]> {
   const minYears = jd.min_years && jd.min_years > 2 ? jd.min_years - 2 : null;
   const locations = jd.remote_ok ? null : expandLocations(jd.locations);
-  const rows = await sbRpc<MatchRow[]>("match_candidates_website", {
+  // v2: best-of legacy matching_embedding and the multi-vector spine.
+  const rows = await sbRpc<MatchRow[]>("match_candidates_v2", {
     query_embedding: embedding,
     match_count: count,
     min_years: minYears,
-    max_years: null,
     location_patterns: locations,
   });
   if (rows.length >= 5 || !locations) return rows;
   // Location filter left too few — widen to nationwide and merge.
-  const widened = await sbRpc<MatchRow[]>("match_candidates_website", {
+  const widened = await sbRpc<MatchRow[]>("match_candidates_v2", {
     query_embedding: embedding,
     match_count: count,
     min_years: minYears,
-    max_years: null,
     location_patterns: null,
   });
   const seen = new Set(rows.map((r) => r.id));
