@@ -75,6 +75,7 @@ export async function screenRolesWithCache(args: {
   cacheKeyText: string;
   jobIds: string[];
   facts?: CandidateFacts | null;
+  source?: "apply" | "precompute";
 }): Promise<RoleVerdict[]> {
   const jobIds = args.jobIds.slice(0, 5);
   if (!jobIds.length || !args.evidence) return [];
@@ -158,7 +159,7 @@ export async function screenRolesWithCache(args: {
               role_hash: meta.roleHash,
               verdict: { ...v, cached: undefined, facts: args.facts ?? undefined },
               model: "gpt-4o-mini",
-              source: "apply",
+              source: args.source || "apply",
             };
           })
           .filter(Boolean);

@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - run: node scripts/build-worker-lib.mjs
       - run: node scripts/refresh-worker.mjs
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
