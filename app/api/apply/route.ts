@@ -292,5 +292,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, matches });
+  // applicationId lets the thank-you page add suggested roles for 1 hour.
+  return NextResponse.json({ ok: true, matches, applicationId: submission?.id ?? null });
 }

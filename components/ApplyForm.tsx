@@ -20,7 +20,7 @@ interface MatchedRole {
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "ok"; matches: MatchedRole[] }
+  | { kind: "ok"; matches: MatchedRole[]; applicationId: string | null }
   | { kind: "error"; message: string };
 
 export default function ApplyForm({
@@ -35,6 +35,23 @@ export default function ApplyForm({
     preselected && roles.some((r) => r.jobId === preselected) ? [preselected] : []
   );
   const [roleQuery, setRoleQuery] = useState("");
+  const [added, setAdded] = useState<string[]>([]);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  async function addRole(applicationId: string, jobId: string) {
+    setAdding(jobId);
+    try {
+      const res = await fetch("/api/apply/add-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId, jobId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) setAdded((a) => [...a, jobId]);
+    } finally {
+      setAdding(null);
+    }
+  }
 
   const visibleRoles = useMemo(() => {
     const q = roleQuery.trim().toLowerCase();
@@ -64,7 +81,7 @@ export default function ApplyForm({
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok) {
         form.reset();
-        setStatus({ kind: "ok", matches: json.matches || [] });
+        setStatus({ kind: "ok", matches: json.matches || [], applicationId: json.applicationId || null });
       } else {
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
@@ -86,24 +103,44 @@ export default function ApplyForm({
               <b>MATCH</b> — you also look like a fit for
             </div>
             <div className="logs" style={{ marginBottom: "1.4rem" }}>
-              {status.matches.map((m) => (
-                <Link
-                  key={m.jobId}
-                  href={`/roles/${m.slug}`}
-                  className="log"
-                  style={{ gridTemplateColumns: "1fr auto" }}
-                >
-                  <span className="co">{m.title}</span>
-                  <span className="t" style={{ color: "var(--signal)" }}>
-                    {m.salary || "View →"}
-                  </span>
-                </Link>
-              ))}
+              {status.matches.map((m) => {
+                const isAdded = added.includes(m.jobId);
+                return (
+                  <div
+                    key={m.jobId}
+                    className="log"
+                    style={{ gridTemplateColumns: "1fr auto auto", alignItems: "center", gap: "0.8rem" }}
+                  >
+                    <Link href={`/roles/${m.slug}`} target="_blank" rel="noreferrer" className="co">
+                      {m.title} ↗
+                    </Link>
+                    <span className="t" style={{ color: "var(--signal)" }}>
+                      {m.salary}
+                    </span>
+                    {status.applicationId && (
+                      <button
+                        type="button"
+                        onClick={() => !isAdded && addRole(status.applicationId!, m.jobId)}
+                        disabled={isAdded || adding === m.jobId}
+                        className="btn"
+                        style={{
+                          fontSize: "0.62rem",
+                          padding: "0.3rem 0.6rem",
+                          cursor: isAdded ? "default" : "pointer",
+                          color: isAdded ? "var(--ok)" : undefined,
+                        }}
+                      >
+                        {isAdded ? "☑ ADDED" : adding === m.jobId ? "ADDING…" : "☐ ADD TO MY APPLICATION"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <p className="page-intro" style={{ fontSize: "0.75rem" }}>
-              These came from matching your profile against everything we&apos;re
-              working on — no need to apply again, you&apos;re already in
-              consideration for all of them.
+              Open a role in a new tab to review it, then tick{" "}
+              <b>add to my application</b> to be considered for it too — no need
+              to fill anything in again.
             </p>
           </>
         )}
