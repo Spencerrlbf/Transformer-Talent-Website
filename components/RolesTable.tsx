@@ -190,6 +190,8 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
         {shown.length > PAGE_SIZE ? ` · page ${page} of ${Math.ceil(shown.length / PAGE_SIZE)}` : ""}
       </p>
 
+      <div className={`roles-layout${selected.length > 0 ? " with-panel" : ""}`}>
+      <div style={{ minWidth: 0 }}>
       <div style={{ overflowX: "auto" }}>
         <table className="data-table">
           <thead>
@@ -294,21 +296,54 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
         </div>
       )}
 
+      </div>
+
+      {/* Desktop: sticky side panel beside the table. */}
       {selected.length > 0 && (
-        <div className="sel-bar">
-          <div>
-            <b style={{ color: "var(--signal)", fontSize: "0.78rem" }}>
-              {selected.length}/{MAX_ROLES} roles selected
-            </b>
-            <div className="names">
-              {selected
-                .map((id) => {
-                  const r = roles.find((x) => x.jobId === id);
-                  return r ? `${r.title} (#${id})` : `#${id}`;
-                })
-                .join(" · ")}
-            </div>
+        <aside className="side-panel">
+          <div className="sec-label" style={{ paddingTop: 0 }}>
+            <b>{selected.length}/{MAX_ROLES}</b> ROLES SELECTED
           </div>
+          {selected.map((id) => {
+            const r = roles.find((x) => x.jobId === id);
+            if (!r) return null;
+            return (
+              <div key={id} className="sp-role">
+                <div>
+                  <div className="t">{r.title}</div>
+                  <div className="m">
+                    <em>{r.salary || "Comp on request"}</em> · #{id}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="cart-remove"
+                  onClick={() => setSelected(toggleSelection(id))}
+                  aria-label={`Remove ${r.title}`}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          {selected.length < MAX_ROLES && (
+            <div className="cart-empty" style={{ marginBottom: "0.8rem" }}>
+              + {MAX_ROLES - selected.length} slot{MAX_ROLES - selected.length > 1 ? "s" : ""} left
+            </div>
+          )}
+          <Link href="/apply" className="btn hot" style={{ display: "block", textAlign: "center" }}>
+            CONTINUE TO APPLY →
+          </Link>
+        </aside>
+      )}
+      </div>
+
+      {/* Narrow screens: compact bottom bar instead of a side column. */}
+      {selected.length > 0 && (
+        <div className="sel-bar mobile-only">
+          <b style={{ color: "var(--signal)", fontSize: "0.78rem" }}>
+            {selected.length}/{MAX_ROLES} selected
+          </b>
           <Link href="/apply" className="btn hot" style={{ whiteSpace: "nowrap" }}>
             CONTINUE TO APPLY →
           </Link>

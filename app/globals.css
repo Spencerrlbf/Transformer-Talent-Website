@@ -744,3 +744,26 @@ footer a { color: var(--signal); text-decoration: none; }
 .pg-btn.cur { border-color: var(--signal); color: var(--signal); }
 .pg-btn:hover { border-color: var(--fog-60); }
 .pg-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* ---------- roles table + selection side panel ---------- */
+.roles-layout { display: grid; grid-template-columns: 1fr; gap: 1.2rem; align-items: start; }
+.roles-layout.with-panel { grid-template-columns: minmax(0, 1fr) 280px; }
+.side-panel {
+  display: none; position: sticky; top: 1rem;
+  border: 1px solid var(--signal); background: var(--panel); padding: 1rem 1.1rem;
+}
+.side-panel .sp-role {
+  border: 1px solid var(--line); border-left: 3px solid var(--signal);
+  background: rgba(255, 90, 31, 0.04); padding: 0.55rem 0.7rem; margin-bottom: 0.5rem;
+  display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: center;
+}
+.side-panel .sp-role .t { font-size: 0.74rem; color: var(--fog); }
+.side-panel .sp-role .m { font-size: 0.64rem; color: var(--fog-60); margin-top: 0.1rem; }
+.side-panel .sp-role .m em { color: var(--signal); font-style: normal; }
+@media (min-width: 900px) {
+  .side-panel { display: block; }
+  .sel-bar.mobile-only { display: none; }
+}
+@media (max-width: 899px) {
+  .roles-layout.with-panel { grid-template-columns: 1fr; }
+}
