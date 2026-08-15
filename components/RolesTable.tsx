@@ -149,6 +149,17 @@ export default function RolesTable({
 
   return (
     <div>
+      {showSelectionUI && selected.length === 0 && (
+        <div className="spec-banner">
+          <p>
+            <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against
+            every open role and reach out when the right one arrives.
+          </p>
+          <Link href="/apply?speculative=1" className="btn hot" style={{ whiteSpace: "nowrap", padding: "0.7rem 1.3rem", fontSize: "0.72rem" }}>
+            UPLOAD RESUME →
+          </Link>
+        </div>
+      )}
       <div
         style={{
           display: "flex",
@@ -187,11 +198,6 @@ export default function RolesTable({
           <option value="Visa transfers OK">Visa transfers OK</option>
           <option value="No sponsorship">No sponsorship</option>
         </select>
-        {showSelectionUI && selected.length === 0 && (
-          <Link href="/apply?speculative=1" className="btn cold" style={{ fontSize: "0.68rem", padding: "0.55rem 0.9rem", whiteSpace: "nowrap" }}>
-            NO ROLE IN MIND? DROP YOUR RESUME →
-          </Link>
-        )}
       </div>
 
       <p style={{ fontSize: "0.66rem", color: "var(--fog-30)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.6rem" }}>

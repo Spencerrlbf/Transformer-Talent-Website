@@ -798,3 +798,15 @@ footer a { color: var(--signal); text-decoration: none; }
   .apply-layout { grid-template-columns: 1fr; }
   .apply-rail { position: static; max-height: none; overflow: visible; order: -1; }
 }
+
+/* ---------- speculative resume banner (roles table, zero-selected) ---------- */
+.spec-banner {
+  display: flex; justify-content: space-between; align-items: center; gap: 1.2rem;
+  border: 1px solid var(--signal-dim); background: var(--panel);
+  padding: 0.85rem 1.1rem; margin-bottom: 1rem;
+}
+.spec-banner p { color: var(--fog-60); font-size: 0.74rem; margin: 0; line-height: 1.5; }
+.spec-banner p b { color: var(--fog); font-weight: 500; }
+@media (max-width: 700px) {
+  .spec-banner { flex-direction: column; align-items: stretch; text-align: center; }
+}
