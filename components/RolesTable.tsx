@@ -57,7 +57,16 @@ const HEADERS: { key: SortKey; label: string }[] = [
   { key: "salary", label: "Base salary" },
 ];
 
-export default function RolesTable({ roles }: { roles: Role[] }) {
+// showSelectionUI=false embeds the table under an external checkout rail
+// (the /apply page): same search/filters/sort/pagination and APPLY buttons,
+// but no side panel, bottom bar, or speculative button of its own.
+export default function RolesTable({
+  roles,
+  showSelectionUI = true,
+}: {
+  roles: Role[];
+  showSelectionUI?: boolean;
+}) {
   const [q, setQ] = useState("");
   const [loc, setLoc] = useState("");
   const [office, setOffice] = useState("");
@@ -178,7 +187,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
           <option value="Visa transfers OK">Visa transfers OK</option>
           <option value="No sponsorship">No sponsorship</option>
         </select>
-        {selected.length === 0 && (
+        {showSelectionUI && selected.length === 0 && (
           <Link href="/apply?speculative=1" className="btn cold" style={{ fontSize: "0.68rem", padding: "0.55rem 0.9rem", whiteSpace: "nowrap" }}>
             NO ROLE IN MIND? DROP YOUR RESUME →
           </Link>
@@ -190,7 +199,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
         {shown.length > PAGE_SIZE ? ` · page ${page} of ${Math.ceil(shown.length / PAGE_SIZE)}` : ""}
       </p>
 
-      <div className={`roles-layout${selected.length > 0 ? " with-panel" : ""}`}>
+      <div className={`roles-layout${showSelectionUI && selected.length > 0 ? " with-panel" : ""}`}>
       <div style={{ minWidth: 0 }}>
       <div style={{ overflowX: "auto" }}>
         <table className="data-table">
@@ -299,7 +308,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
       </div>
 
       {/* Desktop: sticky side panel beside the table. */}
-      {selected.length > 0 && (
+      {showSelectionUI && selected.length > 0 && (
         <aside className="side-panel">
           <div className="sec-label" style={{ paddingTop: 0 }}>
             <b>{selected.length}/{MAX_ROLES}</b> ROLES SELECTED
@@ -339,7 +348,7 @@ export default function RolesTable({ roles }: { roles: Role[] }) {
       </div>
 
       {/* Narrow screens: compact bottom bar instead of a side column. */}
-      {selected.length > 0 && (
+      {showSelectionUI && selected.length > 0 && (
         <div className="sel-bar mobile-only">
           <b style={{ color: "var(--signal)", fontSize: "0.78rem" }}>
             {selected.length}/{MAX_ROLES} selected

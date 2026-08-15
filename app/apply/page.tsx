@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import ApplyForm from "@/components/ApplyForm";
+import RolesTable from "@/components/RolesTable";
 import { getRoles } from "@/lib/roles";
 
 export const metadata: Metadata = {
@@ -39,20 +40,27 @@ export default async function ApplyPage({
           instantly. Most of our placements come from roles that are never
           posted publicly.
         </p>
-        <div className="b3">
-          <ApplyForm
-            roles={roles.map((r) => ({
-              jobId: r.jobId,
-              title: r.title,
-              salary: r.salary,
-              locations: r.locations,
-              workplace: r.workplace,
-              yoe: r.yoe,
-              slug: slugOf(r.title, r.jobId),
-            }))}
-            preselected={role}
-            speculative={speculative === "1"}
-          />
+        <div className={`b3${speculative === "1" ? "" : " breakout apply-layout"}`}>
+          {speculative !== "1" && (
+            <div style={{ minWidth: 0 }}>
+              <RolesTable roles={roles} showSelectionUI={false} />
+            </div>
+          )}
+          <aside className={speculative === "1" ? "apply-rail-solo" : "apply-rail"}>
+            <ApplyForm
+              roles={roles.map((r) => ({
+                jobId: r.jobId,
+                title: r.title,
+                salary: r.salary,
+                locations: r.locations,
+                workplace: r.workplace,
+                yoe: r.yoe,
+                slug: slugOf(r.title, r.jobId),
+              }))}
+              preselected={role}
+              speculative={speculative === "1"}
+            />
+          </aside>
         </div>
       </div>
     </main>
