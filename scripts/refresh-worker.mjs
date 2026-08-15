@@ -77,6 +77,20 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
     console.error(`  precompute ${username} ${ch} channel failed: ${e.message}`);
     return [];
   };
+  // Website applicants: their strongest evidence (resume) and the roles they
+  // applied to / were suggested live on their application — use both.
+  let resumeText = "";
+  let appRoleIds = [];
+  try {
+    const [appRow] = await rest(
+      `website_applications?candidate_id=eq.${candidateId}&select=resume_text,role_ids,matched_role_ids&order=created_at.desc&limit=1`
+    );
+    if (appRow) {
+      resumeText = appRow.resume_text || "";
+      appRoleIds = [...new Set([...(appRow.role_ids || []), ...(appRow.matched_role_ids || [])])];
+    }
+  } catch {}
+
   const [vec, kw] = await Promise.all([
     vector
       ? rest("rpc/match_org_roles", { method: "POST", body: JSON.stringify({ query_embedding: vector, match_count: 5 }) }).catch(logErr("vector"))
@@ -85,7 +99,11 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
       ? rest("rpc/match_roles_keyword", { method: "POST", body: JSON.stringify({ skills: skills.slice(0, 40), match_count: 5 }) }).catch(logErr("keyword"))
       : [],
   ]);
-  const ids = [...new Set([...vec.map((r) => r.external_id), ...kw.map((r) => r.job_id)])].slice(0, 5);
+  // Applied/suggested roles are known-relevant — they take shortlist priority
+  // over fresh retrieval (screening caps at 5 roles per candidate).
+  const ids = [
+    ...new Set([...appRoleIds, ...vec.map((r) => r.external_id), ...kw.map((r) => r.job_id)]),
+  ].slice(0, 5);
   if (!ids.length) {
     console.log(`  precompute ${username}: no roles matched (vec ${vec.length}, kw ${kw.length})`);
     return 0;
@@ -104,6 +122,7 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
   const evidence = [
     linkedinProfileText(h).slice(0, 4000),
     `FACTS (computed from dated position history):\n${formatFacts(facts)}`,
+    resumeText ? `RESUME EXCERPT:\n${resumeText.slice(0, 3000)}` : null,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -111,7 +130,8 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
   const verdicts = await screenRolesWithCache({
     candidateId,
     evidence,
-    cacheKeyText: ["", JSON.stringify(h)].join("|"), // same format as the website (no resume)
+    // Same key format as the website apply path — verdicts are interchangeable.
+    cacheKeyText: [resumeText || "", JSON.stringify(h)].join("|"),
     jobIds: ids,
     facts,
     source: "precompute",
@@ -194,7 +214,22 @@ if (queued.length < remaining) {
   const engaged = await rest(
     `candidates?source=eq.airtable_sync&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc&limit=${(remaining - queued.length) * 3}`
   );
-  const topUp = engaged.filter((c) => !everQueued.has(c.id)).slice(0, remaining - queued.length);
+  // Queue slots go to people who actually need refreshing — recently
+  // enriched candidates (e.g. fresh website applicants) are excluded.
+  const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const candidateIds = engaged.filter((c) => !everQueued.has(c.id)).map((c) => c.id);
+  const recentIds = candidateIds.length
+    ? new Set(
+        (
+          await rest(
+            `candidate_enrichments?candidate_id=in.(${candidateIds.join(",")})&provider=eq.harvest&status=eq.ok&created_at=gte.${since30}&select=candidate_id`
+          )
+        ).map((r) => r.candidate_id)
+      )
+    : new Set();
+  const topUp = engaged
+    .filter((c) => !everQueued.has(c.id) && !recentIds.has(c.id))
+    .slice(0, remaining - queued.length);
   if (topUp.length) {
     await rest("refresh_queue?on_conflict=candidate_id,status", {
       method: "POST",
@@ -236,7 +271,7 @@ async function finishQueueRow(row, status) {
   });
 }
 
-let refreshed = 0, failed = 0, skipped = 0, verdictsStored = 0;
+let refreshed = 0, failed = 0, skipped = 0, verdictsStored = 0, reused = 0;
 for (const row of queued.slice(0, remaining)) {
   try {
     let { linkedin_url: url, linkedin_username: username } = row;
@@ -252,13 +287,28 @@ for (const row of queued.slice(0, remaining)) {
       continue;
     }
 
-    const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
-      headers: { "X-API-Key": HARVEST },
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!res.ok) throw new Error(`harvest ${res.status}`);
-    const data = await res.json();
-    const h = data.element; // Harvest wraps errors in 200s — element only
+    // NEVER pay twice within 30 days: if the ledger has a recent successful
+    // pull (e.g. they applied through the site), reuse its stored payload —
+    // spine writes and verdict precompute still run, the credit doesn't.
+    const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
+    const [recent] = await rest(
+      `candidate_enrichments?candidate_id=eq.${row.candidate_id}&provider=eq.harvest&status=eq.ok&raw_payload=not.is.null&created_at=gte.${since30}&select=raw_payload&order=created_at.desc&limit=1`
+    );
+
+    let h;
+    if (recent) {
+      h = recent.raw_payload;
+      reused++;
+      console.log(`  reusing ledgered profile for ${username || row.candidate_id} (no Harvest spend)`);
+    } else {
+      const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
+        headers: { "X-API-Key": HARVEST },
+        signal: AbortSignal.timeout(25000),
+      });
+      if (!res.ok) throw new Error(`harvest ${res.status}`);
+      const data = await res.json();
+      h = data.element; // Harvest wraps errors in 200s — element only
+    }
     if (!h || typeof h !== "object" || (!h.experience && !h.headline)) throw new Error("harvest empty profile");
 
     // Shared spine writes: ledger, per-position experiences, embeddings.
@@ -267,9 +317,9 @@ for (const row of queued.slice(0, remaining)) {
       linkedinUsername: username,
       provider: "harvest",
       operation: "full_profile",
-      cacheStatus: "miss",
-      raw: h,
-      costCredits: 1,
+      cacheStatus: recent ? "hit" : "miss",
+      raw: recent ? null : h, // don't re-store a payload the ledger already holds
+      costCredits: recent ? 0 : 1,
     });
     await syncExperiences(row.candidate_id, h);
     await syncCandidateEmbeddings(row.candidate_id, { linkedin_profile: linkedinProfileText(h) });
@@ -322,4 +372,4 @@ for (const row of queued.slice(0, remaining)) {
     await finishQueueRow(row, "failed").catch(() => {});
   }
 }
-console.log(`done: ${refreshed} refreshed, ${failed} failed, ${skipped} skipped, ${verdictsStored} verdicts precomputed`);
+console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed, ${skipped} skipped, ${verdictsStored} verdicts precomputed`);
