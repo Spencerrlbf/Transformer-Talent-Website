@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "sync-roles": "node scripts/sync-org-roles.mjs && node scripts/embed-roles.mjs && node scripts/sync-airtable-roles.mjs"
+    "sync-roles": "node scripts/build-worker-lib.mjs && node scripts/sync-org-roles.mjs && node scripts/embed-roles.mjs && node scripts/sync-airtable-roles.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
