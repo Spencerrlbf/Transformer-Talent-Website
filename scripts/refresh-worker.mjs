@@ -33,6 +33,7 @@ const {
   syncCandidateEmbeddings,
   screenRolesWithCache,
   findStretchRoles,
+  roleLocationCompatible,
 } = await import("./dist/worker-lib.mjs");
 
 // Internal experiment: retrieval by inferred capability. Verdicts land with
@@ -81,14 +82,22 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
   // applied to / were suggested live on their application — use both.
   let resumeText = "";
   let appRoleIds = [];
+  let preferredLocations = [];
   try {
     const [appRow] = await rest(
-      `website_applications?candidate_id=eq.${candidateId}&select=resume_text,role_ids,matched_role_ids&order=created_at.desc&limit=1`
+      `website_applications?candidate_id=eq.${candidateId}&select=resume_text,role_ids,matched_role_ids,preferred_locations&order=created_at.desc&limit=1`
     );
     if (appRow) {
       resumeText = appRow.resume_text || "";
       appRoleIds = [...new Set([...(appRow.role_ids || []), ...(appRow.matched_role_ids || [])])];
+      preferredLocations = appRow.preferred_locations || [];
     }
+  } catch {}
+  // LinkedIn location is the gating fallback when no preferences were stated.
+  let candidateLocation = null;
+  try {
+    const [cand] = await rest(`candidates?id=eq.${candidateId}&select=location`);
+    candidateLocation = cand?.location || null;
   } catch {}
 
   const [vec, kw] = await Promise.all([
@@ -101,16 +110,27 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
   ]);
   // Applied/suggested roles are known-relevant — they take shortlist priority
   // over fresh retrieval (screening caps at 5 roles per candidate).
-  const ids = [
+  const candidateIds = [
     ...new Set([...appRoleIds, ...vec.map((r) => r.external_id), ...kw.map((r) => r.job_id)]),
-  ].slice(0, 5);
-  if (!ids.length) {
+  ];
+  if (!candidateIds.length) {
     console.log(`  precompute ${username}: no roles matched (vec ${vec.length}, kw ${kw.length})`);
     return 0;
   }
-  const roleRows = await rest(
-    `org_roles?external_id=in.(${ids.map((i) => `"${i}"`).join(",")})&select=external_id,tech_stack`
+  const allRoleRows = await rest(
+    `org_roles?external_id=in.(${candidateIds.map((i) => `"${i}"`).join(",")})&select=external_id,tech_stack,locations,workplace`
   );
+  // Location gate: on-site/hybrid roles must match preferences or LinkedIn location.
+  const compatible = new Set(
+    allRoleRows
+      .filter((r) => roleLocationCompatible(r, preferredLocations, candidateLocation))
+      .map((r) => r.external_id)
+  );
+  const dropped = candidateIds.filter((i) => !compatible.has(i));
+  if (dropped.length) console.log(`  precompute ${username}: location-gated out #${dropped.join(", #")}`);
+  const ids = candidateIds.filter((i) => compatible.has(i)).slice(0, 5);
+  if (!ids.length) return 0;
+  const roleRows = allRoleRows.filter((r) => ids.includes(r.external_id));
   const stackTerms = [
     ...new Set(
       roleRows.flatMap((t) => (t.tech_stack || "").split(/[,/•]/).map((s) => s.trim()).filter((s) => s.length >= 2))
@@ -154,7 +174,17 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
         }
       }
       if (signals.length) {
-        const stretchRoles = await findStretchRoles(signals, ids, 2);
+        let stretchRoles = await findStretchRoles(signals, candidateIds, 2);
+        // Same location gate for speculative pairings.
+        if (stretchRoles.length) {
+          const rows = await rest(
+            `org_roles?external_id=in.(${stretchRoles.map((r) => `"${r.jobId}"`).join(",")})&select=external_id,locations,workplace`
+          );
+          stretchRoles = stretchRoles.filter((sr) => {
+            const row = rows.find((r) => r.external_id === sr.jobId);
+            return !row || roleLocationCompatible(row, preferredLocations, candidateLocation);
+          });
+        }
         if (stretchRoles.length) {
           const stretchVerdicts = await screenRolesWithCache({
             candidateId,

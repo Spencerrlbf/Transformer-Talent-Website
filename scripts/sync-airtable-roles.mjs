@@ -102,7 +102,7 @@ console.log(`Roles: ${toCreate.length} created, ${toUpdate.length} updated, ${to
 const roleRecords = await atList("Roles", ["Job ID"]);
 const recOf = new Map(roleRecords.map((r) => [r.fields["Job ID"], r.id]));
 
-const apps = await sb("website_applications?select=id,candidate_id,role_ids,matched_role_ids");
+const apps = await sb("website_applications?select=id,candidate_id,role_ids,matched_role_ids,preferred_locations");
 const appRecords = await atList("Website%20Applications", ["Application ID"]);
 const appRecOf = new Map(appRecords.map((r) => [r.fields["Application ID"], r.id]));
 
@@ -148,6 +148,7 @@ for (const app of apps) {
         "Matched Roles Linked": links(matched),
         "Stretch Matches": links(stretch),
         Screened: screenedTotal ? `${screenedTotal} screened (${qualifiedCount} qualified)` : "",
+        "Preferred Locations": (app.preferred_locations || []).join(", "),
       },
     }),
   });

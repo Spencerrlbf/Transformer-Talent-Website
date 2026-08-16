@@ -21,6 +21,7 @@ import {
   harvestToExperiences,
 } from "@/lib/server/spine";
 import { computeFacts, formatFacts } from "@/lib/server/facts";
+import { sanitizeLocationOptions, roleLocationCompatible } from "@/lib/server/locations";
 
 export const maxDuration = 60;
 
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
   const visa = clean(form.get("visa"), 150);
   const note = clean(form.get("note"), 2000);
   const speculative = clean(form.get("speculative"), 5) === "1";
+  const preferredLocations = sanitizeLocationOptions(
+    form.getAll("preferredLocations").map((v) => clean(v, 30))
+  );
   const roleIds = speculative
     ? []
     : clean(form.get("roleIds"), 500)
@@ -153,6 +157,7 @@ export async function POST(req: NextRequest) {
       linkedin_url: linkedin,
       linkedin_username: linkedinUsername(linkedin),
       visa_status: visa || null,
+      preferred_locations: preferredLocations,
       role_ids: applied.map((r) => r.jobId),
       role_titles: roleTitles,
       resume_path: resumePath,
@@ -254,7 +259,12 @@ export async function POST(req: NextRequest) {
             visa,
             years: careerYears ?? parsed?.total_experience_years ?? null,
           })
-        );
+        )
+        // Location: stated preferences first, LinkedIn location as fallback.
+        .filter((m) => {
+          const role = roles.find((r) => r.jobId === m.job_id);
+          return !role || roleLocationCompatible(role, preferredLocations, parsed?.location);
+        });
       // Question-sheet screening: deterministic facts first, then ONE cached
       // batched LLM call answering each role's questions with evidence.
       const shortlistIds = gated.slice(0, 5).map((m) => m.job_id);
@@ -358,6 +368,7 @@ export async function POST(req: NextRequest) {
       matchedRoleIds: matches.map((m) => m.jobId),
       applicationType: roleIds.length ? "Applied" : "Speculative",
       screenedSummary,
+      preferredLocations,
     });
   }
 

@@ -270,6 +270,22 @@ export default function ApplyForm({
           <input name="resume" type="file" accept="application/pdf" required={isSpeculative} />
         </label>
         <label>
+          locations_open_to (optional — hold Cmd/Ctrl to select several; empty = your
+          profile location; remote roles always considered)
+          <select name="preferredLocations" multiple size={5}>
+            <option value="SF">SF / Bay Area</option>
+            <option value="NYC">NYC</option>
+            <option value="Miami">Miami</option>
+            <option value="Seattle">Seattle</option>
+            <option value="Chicago">Chicago</option>
+            <option value="Washington DC">Washington DC</option>
+            <option value="Austin">Austin</option>
+            <option value="Boston">Boston</option>
+            <option value="Los Angeles">Los Angeles</option>
+            <option value="Canada">Canada</option>
+          </select>
+        </label>
+        <label>
           visa_status
           <select name="visa" defaultValue="">
             <option value="" disabled>

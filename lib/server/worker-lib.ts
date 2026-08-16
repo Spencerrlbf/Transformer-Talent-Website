@@ -15,3 +15,4 @@ export {
 export { screenRolesWithCache } from "./screening";
 export type { RoleVerdict, InferredSignal } from "./screening";
 export { findStretchRoles } from "./stretch";
+export { roleLocationCompatible, optionsFromFreeText } from "./locations";
