@@ -111,15 +111,29 @@ for (const app of apps) {
   const recId = appRecOf.get(app.id);
   if (!recId) continue;
   const applied = new Set(app.role_ids || []);
+  // Apply-time suggestions already survived gates + screening — endorsements.
   const matched = new Set(app.matched_role_ids || []);
   const stretch = new Set();
+  let screenedTotal = 0;
+  let qualifiedCount = 0;
   if (app.candidate_id) {
-    const verdicts = await sb(
-      `match_verdicts?candidate_id=eq.${app.candidate_id}&select=source,org_roles(external_id)`
+    const rows = await sb(
+      `match_verdicts?candidate_id=eq.${app.candidate_id}&select=source,verdict,created_at,org_roles(external_id)&order=created_at.desc`
     );
+    // Only the NEWEST verdict per role counts — older generations are history.
+    const newest = new Map();
+    for (const v of rows) {
+      const id = v.org_roles?.external_id;
+      if (id && !newest.has(id)) newest.set(id, v);
+    }
+    const verdicts = [...newest.values()];
+    screenedTotal = verdicts.length;
+    qualifiedCount = verdicts.filter((v) => v.verdict?.qualified).length;
     for (const v of verdicts) {
       const id = v.org_roles?.external_id;
       if (!id || applied.has(id)) continue;
+      // Endorsement-only columns: screened-but-rejected stays in Supabase.
+      if (!v.verdict?.qualified) continue;
       if (v.source === "stretch") stretch.add(id);
       else matched.add(id);
     }
@@ -133,6 +147,7 @@ for (const app of apps) {
         "Applied Roles": links(applied),
         "Matched Roles Linked": links(matched),
         "Stretch Matches": links(stretch),
+        Screened: screenedTotal ? `${screenedTotal} screened (${qualifiedCount} qualified)` : "",
       },
     }),
   });

@@ -172,6 +172,7 @@ export async function POST(req: NextRequest) {
 
   // Enrichment pipeline — best-effort; the application is already saved.
   let matches: { jobId: string; title: string; salary: string; slug: string }[] = [];
+  let screenedSummary: string | undefined;
   try {
     const username = linkedinUsername(linkedin);
     let harvest: unknown | null = null;
@@ -284,6 +285,9 @@ export async function POST(req: NextRequest) {
         facts,
       });
       screening = results.length ? results : null;
+      screenedSummary = results.length
+        ? `${results.length} screened (${results.filter((r) => r.qualified).length} qualified)`
+        : undefined;
       const scoreOf = (m: { job_id: string; similarity: number; keyword_hits: number }) => {
         const r = results.find((x) => x.job_id === m.job_id);
         const kw = 0.05 * Math.min(m.keyword_hits, 4); // exact stack hits, up to 0.2
@@ -353,6 +357,7 @@ export async function POST(req: NextRequest) {
       appliedRoleIds: applied.map((r) => r.jobId),
       matchedRoleIds: matches.map((m) => m.jobId),
       applicationType: roleIds.length ? "Applied" : "Speculative",
+      screenedSummary,
     });
   }
 
