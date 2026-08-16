@@ -34,6 +34,8 @@ export default async function BoardPage({ params }: Params) {
         workplace: r.workplace,
         yoe: r.yoe,
         roleType: r.roleType,
+        techStack: r.techStack,
+        visa: r.visa,
         about: r.jd?.about || "",
         doing: r.jd?.doing || [],
         needs: r.jd?.needs || [],

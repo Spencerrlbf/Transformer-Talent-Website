@@ -1073,7 +1073,7 @@ a.dash-btn { display: inline-block; }
 .dash-seg button.on.nice { background: #6b7280; }
 .dash-skill .dash-skill-name { min-width: 100px; }
 
-/* ---------- Tenant job board (light, self-contained) ---------- */
+/* ---------- Tenant job board (light mirror of the site roles board) ---------- */
 body:has(.board-app) .topbar-outer,
 body:has(.board-app) footer,
 body:has(.board-app)::before {
@@ -1086,50 +1086,115 @@ body:has(.board-app) {
   background: #fff;
   color: #111418;
   font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
-  font-size: 14.5px;
+  font-size: 14px;
   line-height: 1.55;
   text-transform: none;
   letter-spacing: normal;
-  max-width: 860px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 40px 24px 24px;
+  padding: 36px 28px 24px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 .board-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; font-family: inherit; text-transform: none; }
-.board-head p { color: #6b7280; margin: 4px 0 26px; }
-.board-empty { color: #6b7280; padding: 30px 0; }
-/* Roles */
-.board-role { border: 1px solid #e6e8ec; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
-.board-role.open { border-color: #c9cfd8; }
-.board-role-row {
-  display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center;
-  width: 100%; padding: 14px 16px; background: #fff; border: 0; font: inherit; text-align: left; cursor: pointer;
+.board-head p { color: #6b7280; margin: 4px 0 22px; }
+/* Speculative banner (above filters, like the site) */
+.board-spec {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
 }
-.board-role-row:hover { background: #fafbfc; }
-.board-role-title { font-weight: 650; }
-.board-role-meta { color: #6b7280; font-size: 12.5px; }
-.board-role-add { font-size: 12.5px; font-weight: 650; color: #2a5bd7; border: 1px solid #c6d4f5; border-radius: 99px; padding: 4px 12px; white-space: nowrap; }
-.board-role-add.on { background: #111418; border-color: #111418; color: #fff; }
-.board-role-body { padding: 4px 16px 16px; border-top: 1px solid #eef0f3; }
-.board-role-body p { margin: 10px 0; color: #3d434c; }
-.board-role-body h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #8a919c; margin: 14px 0 6px; }
-.board-role-body ul { margin: 0; padding-left: 18px; color: #3d434c; }
-.board-role-body li { margin-bottom: 3px; }
-.board-role-body .board-btn { margin-top: 14px; }
+.board-spec p { margin: 0; color: #3d434c; font-size: 13.5px; }
+.board-spec b { color: #111418; }
+/* Filters */
+.board-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.board-filters input, .board-filters select {
+  border: 1px solid #d3d7dd; border-radius: 7px; padding: 9px 12px; font: inherit; font-size: 13px; color: #111418; background: #fff;
+}
+.board-filters input { flex: 1 1 240px; }
+.board-filters input:focus, .board-filters select:focus { outline: 2px solid #2a5bd7; outline-offset: -1px; border-color: #2a5bd7; }
+.board-count { font-size: 11.5px; color: #8a919c; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 10px; }
+/* Layout with side panel */
+.board-layout { display: block; }
+.board-layout.with-panel { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 26px; align-items: start; }
+/* Table */
+.board-table { width: 100%; border-collapse: collapse; }
+.board-table th {
+  text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #8a919c; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #e6e8ec;
+}
+.board-sort { color: #2a5bd7; margin-left: 4px; }
+.board-table td { padding: 13px 12px; border-bottom: 1px solid #eef0f3; vertical-align: top; font-size: 13.5px; }
+.board-table tbody tr:hover td { background: #fafbfc; }
+.board-table tr.row-open td { background: #fafbfc; border-bottom: 0; }
+.board-id { color: #8a919c; white-space: nowrap; }
+.board-salary { font-weight: 600; }
+.board-rolebtn { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; display: block; width: 100%; }
+.board-rolebtn .t { display: block; font-weight: 650; color: #111418; }
+.board-rolebtn .d { display: block; font-size: 12px; color: #8a919c; margin-top: 2px; }
+.board-rolebtn:hover .t { color: #2a5bd7; }
+/* Inline JD expansion (tenants have no detail pages) */
+.board-detail-row td { background: #fafbfc; padding: 0 12px 16px; }
+.board-detail { border-left: 2px solid #d3d7dd; padding: 4px 0 0 16px; max-width: 640px; }
+.board-detail p { margin: 8px 0; color: #3d434c; }
+.board-detail h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #8a919c; margin: 12px 0 5px; }
+.board-detail ul { margin: 0; padding-left: 18px; color: #3d434c; }
+.board-detail li { margin-bottom: 3px; }
+/* APPLY + button */
+.board-apply-btn {
+  border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px;
+  font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; padding: 6px 12px; cursor: pointer; white-space: nowrap;
+}
+.board-apply-btn:hover { border-color: #111418; }
+.board-apply-btn.sel { background: #111418; border-color: #111418; color: #fff; }
+/* Pager */
+.board-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 0; }
+.board-pager span { font-size: 12px; color: #8a919c; }
+.board-pager button {
+  border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px;
+  font: inherit; font-size: 12.5px; padding: 5px 10px; cursor: pointer; margin-left: 4px;
+}
+.board-pager button.cur { background: #111418; border-color: #111418; color: #fff; }
+.board-pager button:disabled { opacity: 0.4; cursor: default; }
+/* Side panel */
+.board-panel {
+  border: 1px solid #e6e8ec; border-radius: 10px; padding: 16px; position: sticky; top: 16px;
+}
+.board-panel-label { font-size: 11px; letter-spacing: 0.1em; color: #8a919c; font-weight: 600; margin-bottom: 12px; }
+.board-panel-label b { color: #111418; }
+.board-panel-role { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border: 1px solid #eef0f3; border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; }
+.board-panel-role .t { font-weight: 650; font-size: 13px; }
+.board-panel-role .m { font-size: 11.5px; color: #8a919c; margin-top: 2px; }
+.board-panel-role button { border: 0; background: none; color: #a2a8b3; cursor: pointer; font-size: 13px; padding: 0 2px; }
+.board-panel-role button:hover { color: #b42318; }
+.board-panel-slots { border: 1px dashed #d3d7dd; border-radius: 8px; padding: 8px 11px; color: #8a919c; font-size: 12px; margin-bottom: 12px; }
+/* Mobile bottom bar */
+.board-selbar {
+  display: none; position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e6e8ec;
+  padding: 10px 4px; margin-top: 8px; align-items: center; justify-content: space-between; gap: 12px;
+}
+@media (max-width: 900px) {
+  .board-layout.with-panel { grid-template-columns: 1fr; }
+  .board-panel { display: none; }
+  .board-selbar { display: flex; }
+}
 /* Buttons */
-.board-btn { background: #111418; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+.board-btn { background: #111418; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-size: 13px; font-weight: 650; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap; }
 .board-btn:disabled { opacity: 0.6; cursor: default; }
-.board-btn-2 { background: #fff; color: #111418; border: 1px solid #d3d7dd; }
-.board-linkbtn { background: none; border: 0; padding: 0; color: #2a5bd7; font: inherit; cursor: pointer; text-decoration: underline; }
-/* Apply */
-.board-apply { border: 1px solid #e6e8ec; border-radius: 12px; padding: 22px 24px; margin-top: 28px; }
-.board-apply-head h2 { font-size: 18px; font-weight: 700; margin: 0 0 6px; font-family: inherit; text-transform: none; }
-.board-apply-head p { color: #6b7280; margin: 0 0 12px; font-size: 13.5px; }
-.board-cart { list-style: none; margin: 0 0 14px; padding: 0; }
-.board-cart li { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid #eef0f3; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-weight: 600; font-size: 13.5px; }
+.board-linkbtn { background: none; border: 0; padding: 0; color: #2a5bd7; font: inherit; font-size: inherit; cursor: pointer; text-decoration: underline; }
+/* Checkout apply: cart + form side by side */
+.board-apply { border: 1px solid #e6e8ec; border-radius: 12px; padding: 24px; margin-top: 28px; }
+.board-checkout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 32px; }
+@media (max-width: 820px) { .board-checkout { grid-template-columns: 1fr; } }
+.board-cartcol h2 { font-size: 18px; font-weight: 700; margin: 0 0 8px; font-family: inherit; text-transform: none; }
+.board-instr { color: #6b7280; font-size: 13.5px; margin: 0 0 14px; }
+.board-instr b { color: #111418; }
+.board-cart { list-style: none; margin: 0; padding: 0; }
+.board-cart li { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid #eef0f3; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.board-cart li b { display: block; font-size: 13.5px; }
+.board-cart li em { display: block; font-style: normal; font-size: 11.5px; color: #8a919c; margin-top: 1px; }
 .board-form { display: flex; flex-direction: column; gap: 12px; }
+.board-form h3 { font-size: 13px; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 0.06em; color: #8a919c; }
 .board-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4a5160; }
 .board-form input, .board-form select, .board-form textarea {
   border: 1px solid #d3d7dd; border-radius: 7px; padding: 9px 12px; font: inherit; font-weight: 400; color: #111418; background: #fff;
@@ -1146,7 +1211,3 @@ body:has(.board-app) {
 .board-foot { margin-top: auto; padding: 26px 0 0; text-align: center; }
 .board-foot a { color: #a2a8b3; font-size: 12px; text-decoration: none; }
 .board-foot a:hover { color: #111418; }
-@media (max-width: 640px) {
-  .board-role-row { grid-template-columns: 1fr auto; }
-  .board-role-meta { grid-column: 1 / -1; }
-}
