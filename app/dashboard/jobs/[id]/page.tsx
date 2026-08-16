@@ -3,6 +3,12 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useDash } from "@/components/dashboard/DashShell";
 import type { SkillChip } from "@/components/dashboard/JobForm";
+import {
+  CandidateCards,
+  SourcedCards,
+  type CandidateView,
+  type SourcedView,
+} from "@/components/dashboard/CandidateList";
 
 type Job = {
   id: string;
@@ -25,12 +31,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const { token } = useDash();
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [cands, setCands] = useState<{ applicants: CandidateView[]; sourced: SourcedView[] } | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/dashboard/jobs/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => (r.ok ? r.json() : null))
       .then((d) => setJob(d ? d.job : null))
       .catch(() => setJob(null));
+    fetch(`/api/dashboard/jobs/${id}/candidates`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((d) => setCands(d || { applicants: [], sourced: [] }))
+      .catch(() => setCands({ applicants: [], sourced: [] }));
   }, [id, token]);
   useEffect(load, [load]);
 
@@ -124,13 +135,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           )}
         </section>
         <aside>
-          <div className="dash-sec">Applicants</div>
-          <p className="dash-body">
-            {job.applicants === 0 ? "None yet." : job.applicants} {job.applicants > 0 && "applicant" + (job.applicants === 1 ? "" : "s")}
-          </p>
-          <p className="dash-muted" style={{ fontSize: 12.5 }}>
-            The candidate view with fit tags lands here in the next release.
-          </p>
           {job.skills.length > 0 && (
             <>
               <div className="dash-sec">Skills</div>
@@ -152,6 +156,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           )}
         </aside>
       </div>
+
+      <div className="dash-sec" style={{ marginTop: 34 }}>
+        Applicants{cands ? ` — ${cands.applicants.length}` : ""}
+      </div>
+      {cands ? (
+        <>
+          <CandidateCards candidates={cands.applicants} showRoleTitles={false} />
+          <div style={{ marginTop: 24 }}>
+            <SourcedCards sourced={cands.sourced} />
+          </div>
+        </>
+      ) : (
+        <p className="dash-muted">Loading…</p>
+      )}
     </>
   );
 }

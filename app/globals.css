@@ -1206,3 +1206,30 @@ body:has(.board-app) {
 .board-foot { margin-top: auto; padding: 26px 0 0; text-align: center; }
 .board-foot a { color: #a2a8b3; font-size: 12px; text-decoration: none; }
 .board-foot a:hover { color: #111418; }
+
+/* Dashboard: candidates area (Task 6) */
+.dash-candfilters { display: flex; gap: 10px; margin-bottom: 16px; }
+.dash-candfilters select { border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; }
+.dash-candlist { display: flex; flex-direction: column; gap: 12px; max-width: 780px; }
+.dash-cand { border: 1px solid #e6e8ec; border-radius: 10px; padding: 14px 16px; }
+.dash-cand-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.dash-cand-name { font-weight: 650; font-size: 14.5px; }
+.dash-cand-head small { display: block; color: #8a919c; font-size: 12px; margin-top: 2px; }
+.dash-cand-links { display: flex; gap: 12px; align-items: baseline; flex-shrink: 0; }
+.dash-cand-links a { color: #2a5bd7; font-size: 12.5px; font-weight: 550; }
+.dash-cand-date { color: #a2a8b3; font-size: 11.5px; }
+.dash-cand-role { display: flex; gap: 12px; align-items: flex-start; padding-top: 8px; }
+.dash-cand-role + .dash-cand-role { border-top: 1px solid #f2f4f7; margin-top: 8px; }
+.dash-tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; padding: 4px 10px; border-radius: 99px; white-space: nowrap; flex-shrink: 0; }
+.dash-tag.t-strong { background: #e7f6ed; color: #0a7a3d; }
+.dash-tag.t-possible { background: #fdf3e2; color: #9a6206; }
+.dash-tag.t-stretch { background: #f1f3f6; color: #6b7280; }
+.dash-tag.t-pending { background: #f1f3f6; color: #a2a8b3; }
+.dash-cand-roletitle { font-size: 12.5px; font-weight: 650; color: #4a5160; display: block; }
+.dash-cand-roletitle em { font-style: normal; color: #a2a8b3; font-weight: 450; }
+.dash-cand-reason { margin: 3px 0 0; color: #3d434c; font-size: 13.5px; }
+/* Sourced section */
+.dash-sourced { border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 12px; padding: 18px 20px; max-width: 820px; }
+.dash-sourced .dash-sec { color: #2a5bd7; }
+.dash-cand-sourced { background: #fff; border-color: #dbe4f8; }
+.dash-sourcedbadge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #2a5bd7; border: 1px solid #c6d4f5; border-radius: 4px; padding: 1px 6px; margin-left: 8px; vertical-align: 2px; }

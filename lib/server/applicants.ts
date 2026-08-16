@@ -307,8 +307,9 @@ export async function mirrorToAirtable(args: {
 }
 
 // Short-lived signed URL for a private resume — Airtable fetches it once and
-// keeps its own copy, so the bucket stays private.
-async function signResumeUrl(resumePath: string): Promise<string | null> {
+// keeps its own copy, so the bucket stays private. Also used by the employer
+// dashboard's candidate view.
+export async function signResumeUrl(resumePath: string): Promise<string | null> {
   const key = process.env.SUPABASE_STORAGE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const url = process.env.SUPABASE_URL;
   if (!key || !url) return null;
