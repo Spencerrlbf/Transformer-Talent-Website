@@ -998,3 +998,57 @@ body:has(.dash-app) {
   .dash-side-foot { margin-top: 0; margin-left: auto; }
   .dash-main { padding: 20px; }
 }
+
+/* Dashboard: jobs area (Task 4) */
+.dash-crumb { font-size: 12.5px; color: #8a919c; margin-bottom: 6px; }
+.dash-crumb a { color: #8a919c; }
+.dash-crumb a:hover { color: #111418; }
+.dash-jobhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dash-jobhead .dash-btn { flex-shrink: 0; }
+.dash-jobactions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.dash-btn-2 { background: #fff; color: #111418; border: 1px solid #d3d7dd; }
+.dash-btn-2:hover { background: #f6f7f9; }
+a.dash-btn { display: inline-block; }
+.dash-status { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; padding: 3px 9px; border-radius: 99px; vertical-align: 3px; margin-left: 6px; text-transform: uppercase; }
+.dash-status.open { background: #e7f6ed; color: #0a7a3d; }
+.dash-status.closed { background: #f1f3f6; color: #6b7280; }
+.dash-row-link { cursor: pointer; }
+.dash-row-closed td { color: #8a919c; }
+.dash-sec { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a919c; font-weight: 600; margin: 18px 0 8px; }
+.dash-body { margin: 0 0 6px; color: #3d434c; font-size: 13.5px; }
+.dash-list { margin: 0; padding-left: 18px; color: #3d434c; font-size: 13.5px; }
+.dash-list li { margin-bottom: 4px; }
+.dash-jobgrid { display: grid; grid-template-columns: 1fr 280px; gap: 40px; margin-top: 10px; }
+@media (max-width: 900px) { .dash-jobgrid { grid-template-columns: 1fr; } }
+.dash-skilltags { display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-skilltag { border: 1px solid #d3d7dd; border-radius: 99px; padding: 3px 10px; font-size: 12px; color: #3d434c; }
+.dash-skilltag.must { border-color: #111418; font-weight: 600; color: #111418; }
+.dash-skilltag small { color: #8a919c; font-size: 10.5px; margin-left: 4px; }
+/* Job form */
+.dash-jobform { max-width: 720px; }
+.dash-prefill { border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 10px; padding: 16px 18px; margin-bottom: 24px; }
+.dash-prefill label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.dash-prefill textarea { width: 100%; border: 1px solid #c6d4f5; border-radius: 7px; padding: 9px 12px; font: inherit; margin-bottom: 10px; background: #fff; resize: vertical; }
+.dash-prefill-note { margin: 10px 0 0; font-size: 13px; color: #2a5bd7; }
+.dash-formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.dash-span2 { grid-column: span 2; }
+.dash-field label { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #8a919c; font-weight: 600; margin-bottom: 4px; }
+.dash-field input, .dash-field select, .dash-field textarea {
+  width: 100%; border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit; color: #111418; background: #fff; resize: vertical;
+}
+.dash-field input:focus, .dash-field select:focus, .dash-field textarea:focus, .dash-prefill textarea:focus, .dash-skill-alts:focus, .dash-skill-add input:focus {
+  outline: 2px solid #2a5bd7; outline-offset: -1px; border-color: #2a5bd7;
+}
+/* Skills */
+.dash-skills { margin-top: 24px; }
+.dash-skills > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.dash-skill { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dash-skill-flag { border: 1px solid #d3d7dd; background: #fff; color: #6b7280; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; border-radius: 5px; padding: 4px 8px; cursor: pointer; width: 52px; flex-shrink: 0; }
+.dash-skill-flag.must { background: #111418; border-color: #111418; color: #fff; }
+.dash-skill-name { font-weight: 600; font-size: 13.5px; min-width: 120px; }
+.dash-skill-alts { flex: 1; border: 1px solid #e6e8ec; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 12.5px; color: #3d434c; }
+.dash-skill-x { border: 0; background: none; color: #a2a8b3; font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.dash-skill-x:hover { color: #b42318; }
+.dash-skill-add { display: flex; gap: 8px; margin-top: 10px; }
+.dash-skill-add input { border: 1px solid #d3d7dd; border-radius: 7px; padding: 7px 11px; font: inherit; width: 240px; }
+.dash-formfoot { display: flex; align-items: center; gap: 14px; margin-top: 26px; }

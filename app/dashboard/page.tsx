@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
 
 type Job = {
@@ -15,6 +17,7 @@ type Job = {
 
 export default function JobsPage() {
   const { token } = useDash();
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState(false);
 
@@ -33,14 +36,21 @@ export default function JobsPage() {
 
   return (
     <>
-      <h1 className="dash-h1">Jobs</h1>
-      <p className="dash-sub">
-        {jobs
-          ? `${open.length} open · ${closed.length} closed`
-          : error
-            ? "Couldn't load jobs — refresh to retry."
-            : "Loading…"}
-      </p>
+      <div className="dash-jobhead">
+        <div>
+          <h1 className="dash-h1">Jobs</h1>
+          <p className="dash-sub">
+            {jobs
+              ? `${open.length} open · ${closed.length} closed`
+              : error
+                ? "Couldn't load jobs — refresh to retry."
+                : "Loading…"}
+          </p>
+        </div>
+        <Link className="dash-btn" href="/dashboard/jobs/new">
+          + New job
+        </Link>
+      </div>
       {jobs && jobs.length === 0 && (
         <div className="dash-empty">
           No jobs yet. Job creation from this dashboard is coming next — for
@@ -60,7 +70,11 @@ export default function JobsPage() {
           </thead>
           <tbody>
             {open.map((j) => (
-              <tr key={j.id}>
+              <tr
+                key={j.id}
+                className="dash-row-link"
+                onClick={() => router.push(`/dashboard/jobs/${j.id}`)}
+              >
                 <td>
                   <span className="dash-name">{j.title}</span>
                   <small>
@@ -78,9 +92,28 @@ export default function JobsPage() {
         </table>
       )}
       {closed.length > 0 && (
-        <p className="dash-muted" style={{ marginTop: 16 }}>
-          {closed.length} closed role{closed.length === 1 ? "" : "s"} hidden.
-        </p>
+        <>
+          <div className="dash-sec" style={{ marginTop: 28 }}>
+            Closed
+          </div>
+          <table className="dash-table">
+            <tbody>
+              {closed.map((j) => (
+                <tr
+                  key={j.id}
+                  className="dash-row-link dash-row-closed"
+                  onClick={() => router.push(`/dashboard/jobs/${j.id}`)}
+                >
+                  <td>
+                    <span className="dash-name">{j.title}</span>
+                    <small>#{j.id}</small>
+                  </td>
+                  <td className="dash-num">{j.applicants}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </>
   );
