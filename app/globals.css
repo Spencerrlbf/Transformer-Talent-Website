@@ -810,3 +810,191 @@ footer a { color: var(--signal); text-decoration: none; }
 @media (max-width: 700px) {
   .spec-banner { flex-direction: column; align-items: stretch; text-align: center; }
 }
+
+/* ---------- Company dashboard (Design A: precision light) ---------- */
+/* The dashboard is a separate light-themed surface inside the dark site
+   shell; when a .dash-app is on the page, the marketing topbar/footer are
+   hidden so the dashboard owns the viewport. */
+body:has(.dash-app) .topbar-outer,
+body:has(.dash-app) footer,
+body:has(.dash-app)::before {
+  display: none;
+}
+body:has(.dash-app) {
+  background: #fff;
+}
+.dash-app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+  background: #fff;
+  color: #111418;
+  font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.dash-app a { text-decoration: none; }
+.dash-center {
+  grid-template-columns: 1fr;
+  align-items: center;
+  justify-items: center;
+}
+.dash-card {
+  border: 1px solid #e6e8ec;
+  border-radius: 10px;
+  padding: 28px 30px;
+  max-width: 420px;
+  width: 100%;
+  background: #fff;
+}
+.dash-card h1 {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0 0 10px;
+  font-family: inherit;
+}
+.dash-card p { margin: 0 0 16px; }
+.dash-card a { color: #2a5bd7; }
+.dash-muted { color: #6b7280; font-size: 13.5px; }
+.dash-error { color: #b42318; font-size: 13px; margin-top: 10px; }
+.dash-login-form { display: flex; flex-direction: column; gap: 10px; }
+.dash-login-form input {
+  border: 1px solid #d3d7dd;
+  border-radius: 7px;
+  padding: 9px 12px;
+  font: inherit;
+  color: #111418;
+  background: #fff;
+}
+.dash-login-form input:focus { outline: 2px solid #2a5bd7; outline-offset: -1px; border-color: #2a5bd7; }
+.dash-btn {
+  background: #111418;
+  color: #fff;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dash-btn:disabled { opacity: 0.6; cursor: default; }
+/* Sidebar */
+.dash-side {
+  border-right: 1px solid #e6e8ec;
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.dash-org {
+  font-weight: 650;
+  font-size: 15px;
+  padding: 6px 10px 18px;
+  letter-spacing: -0.01em;
+}
+.dash-org small {
+  display: block;
+  color: #8a919c;
+  font-weight: 450;
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+.dash-nav a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #3d434c;
+  font-weight: 480;
+}
+.dash-nav a.on { background: #f1f3f6; color: #111418; font-weight: 600; }
+.dash-nav a:hover:not(.on) { background: #f6f7f9; }
+.dash-side-foot {
+  margin-top: auto;
+  padding: 10px;
+  font-size: 11.5px;
+  color: #a2a8b3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dash-side-foot button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #2a5bd7;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.dash-side-foot em { font-style: normal; }
+/* Main */
+.dash-main { padding: 28px 40px; max-width: 1060px; width: 100%; }
+.dash-h1 {
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+  margin: 0;
+  font-family: inherit;
+}
+.dash-sub { color: #6b7280; font-size: 13px; margin: 6px 0 26px; }
+.dash-empty {
+  border: 1px dashed #d3d7dd;
+  border-radius: 10px;
+  padding: 26px;
+  color: #6b7280;
+  font-size: 13.5px;
+  max-width: 560px;
+}
+/* Table */
+.dash-table { width: 100%; border-collapse: collapse; }
+.dash-table th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a919c;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e6e8ec;
+}
+.dash-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #eef0f3;
+  vertical-align: top;
+}
+.dash-table tr:hover td { background: #fafbfc; }
+.dash-name { font-weight: 600; }
+.dash-name + small,
+.dash-table td small {
+  display: block;
+  font-weight: 450;
+  color: #8a919c;
+  font-size: 12px;
+  margin-top: 1px;
+}
+.dash-num { text-align: right; }
+/* Settings */
+.dash-settings { display: flex; flex-direction: column; gap: 18px; max-width: 560px; }
+.dash-setting label {
+  display: block;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a919c;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.dash-setting a { color: #2a5bd7; }
+.dash-setting small { display: block; color: #8a919c; font-size: 12.5px; margin-top: 4px; }
+@media (max-width: 760px) {
+  .dash-app { grid-template-columns: 1fr; }
+  .dash-side { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .dash-side-foot { margin-top: 0; margin-left: auto; }
+  .dash-main { padding: 20px; }
+}

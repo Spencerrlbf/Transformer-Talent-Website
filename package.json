@@ -10,6 +10,7 @@
     "sync-roles": "node scripts/sync-org-roles.mjs && node scripts/embed-roles.mjs && node scripts/sync-airtable-roles.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "@vercel/analytics": "^1.4.1",
     "next": "^15.1.6",
     "pdf-parse": "^1.1.1",
