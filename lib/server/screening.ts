@@ -67,6 +67,74 @@ export interface RoleVerdict {
   cached: boolean;
 }
 
+// ---------- Deterministic years-question resolver ----------
+// gpt-4o-mini demonstrably fumbles range arithmetic ("2.1 years" answered
+// 'no' to "2-5 years?") even when instructed. Code answers what code can
+// prove; the model's answer is overridden.
+
+const YEARS_RX = /(\d+(?:\.\d+)?)\s*(?:-|–|\s*to\s*)\s*(\d+(?:\.\d+)?)\s*\+?\s*years?|at least\s+(\d+(?:\.\d+)?)\s*years?|(\d+(?:\.\d+)?)\s*\+\s*years?/i;
+// Generic-experience wording the career-years number can honestly answer.
+// Domain-scoped questions ("as an applied AI engineer") stay with the model.
+const GENERIC_EXP_RX = /years?[^.?]*\bof\b[^.?]*\b(professional|industry|work|software|engineering|development|full[- ]?stack|hands-on)\b[^.?]*experience|years?\s+of\s+experience\s*\??$/i;
+
+const normTerm = (s: string) =>
+  s.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9+#. ]/g, " ").replace(/\s+/g, " ").trim();
+
+export function resolveYearsAnswer(
+  question: string,
+  facts: CandidateFacts | null | undefined
+): { answer: "yes" | "no" | "unclear"; evidence: string } | null {
+  if (!facts) return null;
+  const m = question.match(YEARS_RX);
+  if (!m) return null;
+  const min = parseFloat(m[1] ?? m[3] ?? m[4]);
+  if (Number.isNaN(min)) return null;
+
+  // Skill-scoped: use that skill's dated career years.
+  const q = normTerm(question);
+  for (const s of facts.skills || []) {
+    const term = normTerm(s.skill);
+    if (term.length >= 2 && q.includes(term)) {
+      if (s.listedOnly) {
+        return { answer: "unclear", evidence: `${s.skill} listed on profile, no dated evidence (computed)` };
+      }
+      return s.years >= min
+        ? { answer: "yes", evidence: `${s.years}y ${s.skill} from dated history (computed)` }
+        : { answer: "no", evidence: `${s.years}y ${s.skill} from dated history (computed)` };
+    }
+  }
+
+  // Generic experience: career years answers it; domain-scoped stays with the model.
+  if (GENERIC_EXP_RX.test(question) && facts.careerYears !== null && facts.careerYears !== undefined) {
+    return facts.careerYears >= min
+      ? { answer: "yes", evidence: `${facts.careerYears}y career from dated history (computed)` }
+      : { answer: "no", evidence: `${facts.careerYears}y career from dated history (computed)` };
+  }
+  return null;
+}
+
+function applyYearsOverrides(verdict: Omit<RoleVerdict, "cached">, facts: CandidateFacts | null | undefined) {
+  let changed = false;
+  const answers = verdict.answers.map((a) => {
+    const resolved = resolveYearsAnswer(a.question, facts);
+    if (resolved && resolved.answer !== a.answer) {
+      changed = true;
+      return { ...a, ...resolved };
+    }
+    return a;
+  });
+  if (!changed) return verdict;
+  // An override moved the ground truth — recompute qualification consistently.
+  const noCount = answers.filter((a) => a.answer === "no").length;
+  const yesCount = answers.filter((a) => a.answer === "yes").length;
+  return {
+    ...verdict,
+    answers,
+    qualified: noCount === 0 && yesCount >= Math.ceil(answers.length / 2),
+    fit_score: Math.round((yesCount / Math.max(1, answers.length)) * 100) / 100,
+  };
+}
+
 export async function screenRolesWithCache(args: {
   candidateId: string | null;
   evidence: string; // profile summary + deterministic facts + resume excerpt
@@ -95,8 +163,8 @@ export async function screenRolesWithCache(args: {
     roleRows.find((r) => r.external_id === jobId)?.matching_profile || PROFILES[jobId];
 
   // Version prefix: bumping it invalidates every cached verdict, forcing a
-  // re-screen under new rules. v3 = co-occurrence facts + inferred signals.
-  const candidateHash = sha("factsv3|" + args.cacheKeyText);
+  // re-screen under new rules. v5 = code-resolved years answers.
+  const candidateHash = sha("factsv5|" + args.cacheKeyText);
   const roleMeta = jobIds
     .map((jobId) => {
       const p = profileOf(jobId);
@@ -143,7 +211,10 @@ export async function screenRolesWithCache(args: {
 
   const toScreen = roleMeta.filter((r) => !cachedRoleIds.has(r.jobId));
   if (toScreen.length) {
-    const fresh = await interrogate(args.evidence, toScreen);
+    const fresh = (await interrogate(args.evidence, toScreen)).map((v) => ({
+      ...applyYearsOverrides(v, args.facts),
+      cached: false as const,
+    }));
     verdicts.push(...fresh);
     // Store fresh verdicts for reuse + audit.
     if (args.candidateId) {
@@ -266,6 +337,8 @@ async function interrogate(
             "with yes/no/unclear plus a short evidence citation (max 12 words, quoting the source). " +
             "The FACTS block is pre-computed from the candidate's dated position history — treat it " +
             "as ground truth over your own inference. No evidence = 'unclear', never a guess. " +
+            "Numeric-range questions ('2-5 years?'): answer yes when the candidate's number falls " +
+            "anywhere WITHIN the range — 2.1 years satisfies '2-5 years'. 'At least N' means >= N. " +
             "qualified = no must-have is clearly failed and most questions are yes. " +
             "fit_score = 0-1 overall judgment. " +
             "inferred_signals (0-3 per role, [] when none): capabilities the evidence SUGGESTS but does not " +
