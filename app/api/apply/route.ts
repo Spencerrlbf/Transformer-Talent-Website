@@ -11,7 +11,8 @@ import {
   linkedinUsername,
 } from "@/lib/server/applicants";
 import { getRoles, roleSlug } from "@/lib/roles";
-import { passesHardGates, screenRolesWithCache } from "@/lib/server/screening";
+import { passesHardGates, passesProfileGates, screenRolesWithCache } from "@/lib/server/screening";
+import { loadOrgBySlug, loadOrgRoles, matchOrgRolesForApplicant, type BoardRole } from "@/lib/server/org-board";
 import { llamaParsePdf } from "@/lib/server/llamaparse";
 import {
   getOrgId,
@@ -74,6 +75,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (clean(form.get("website"), 50)) return NextResponse.json({ ok: true });
+
+  // Tenant boards post their org slug; absent/own slug = the site's own flow.
+  const boardSlug = clean(form.get("board"), 60);
+  let boardOrg: { id: string; slug: string; name: string } | null = null;
+  if (boardSlug && boardSlug !== "transformer-talent") {
+    boardOrg = await loadOrgBySlug(boardSlug);
+    if (!boardOrg) return NextResponse.json({ error: "Unknown board." }, { status: 400 });
+  }
 
   const name = clean(form.get("name"), 120);
   const email = clean(form.get("email"), 254).toLowerCase();
@@ -147,11 +156,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const roles = await getRoles();
+  // Tenant boards: roles come from that org's org_roles rows, shaped like
+  // site roles so everything downstream is identical.
+  const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
+  const roles = boardRoles ?? (await getRoles());
   const applied = roles.filter((r) => roleIds.includes(r.jobId));
   const roleTitles = applied.map((r) => `${r.title} (#${r.jobId})`);
 
-  const orgId = await getOrgId();
+  const orgId = boardOrg?.id ?? (await getOrgId());
   const submission = await sbInsert<{ id: string }>(
     "website_applications",
     {
@@ -255,15 +267,25 @@ export async function POST(req: NextRequest) {
       // Career years (post-graduation, internships excluded) is THE years
       // number everywhere — gates and screening facts can't disagree.
       const careerYears = computeFacts(expRows, [], [], eduList).careerYears;
-      const roleMatches = await matchRolesForApplicant(vector, skillTerms);
+      // Suggestions never leave the board's company: tenant boards search
+      // only that org's roles; the site searches its own.
+      const roleMatches = boardOrg
+        ? await matchOrgRolesForApplicant(vector, boardOrg.id)
+        : await matchRolesForApplicant(vector, skillTerms);
+      const applicantGate = {
+        visa,
+        years: careerYears ?? parsed?.total_experience_years ?? null,
+      };
       const gated = roleMatches
         // Vector rows need a floor; keyword rows earned their spot via ≥2 stack hits.
         .filter((m) => m.similarity > 0.25 || m.keyword_hits >= 2)
         .filter((m) =>
-          passesHardGates(m.job_id, {
-            visa,
-            years: careerYears ?? parsed?.total_experience_years ?? null,
-          })
+          boardRoles
+            ? passesProfileGates(
+                boardRoles.find((r) => r.jobId === m.job_id)?.matchingProfile,
+                applicantGate
+              )
+            : passesHardGates(m.job_id, applicantGate)
         )
         // Location: stated preferences first, LinkedIn location as fallback.
         .filter((m) => {
@@ -304,6 +326,7 @@ export async function POST(req: NextRequest) {
         facts,
         resumeText,
         profileSkills: harvestSkills,
+        organizationId: orgId,
       });
       screening = results.length ? results : null;
       screenedSummary = results.length
@@ -336,7 +359,13 @@ export async function POST(req: NextRequest) {
         .filter((r): r is NonNullable<typeof r> => Boolean(r))
         .filter((r) => !roleIds.includes(r.jobId))
         .slice(0, 4)
-        .map((r) => ({ jobId: r.jobId, title: r.title, salary: r.salary, slug: roleSlug(r) }));
+        // Tenant roles have no site detail pages — empty slug renders unlinked.
+        .map((r) => ({
+          jobId: r.jobId,
+          title: r.title,
+          salary: r.salary,
+          slug: boardOrg ? "" : roleSlug(r),
+        }));
     }
 
     if (submission) {

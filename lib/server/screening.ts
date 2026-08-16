@@ -20,18 +20,26 @@ export function profileFor(jobId: string): MatchingProfile | undefined {
   return PROFILES[jobId];
 }
 
-// Hard gates run in code — free, and absolute.
-export function passesHardGates(
-  jobId: string,
+// Hard gates run in code — free, and absolute. Core takes any matching
+// profile (site JSON or a tenant's org_roles row); the jobId wrapper keeps
+// the site's existing call sites unchanged.
+export function passesProfileGates(
+  p: { visa_transfer_ok?: boolean; min_years?: number | null } | null | undefined,
   applicant: { visa: string | null; years: number | null }
 ): boolean {
-  const p = PROFILES[jobId];
   if (!p) return true;
   const needsSponsorship =
     !!applicant.visa && !/none needed|citizen|green card/i.test(applicant.visa);
   if (needsSponsorship && !p.visa_transfer_ok) return false;
   if (p.min_years && applicant.years !== null && applicant.years < p.min_years - 1) return false;
   return true;
+}
+
+export function passesHardGates(
+  jobId: string,
+  applicant: { visa: string | null; years: number | null }
+): boolean {
+  return passesProfileGates(PROFILES[jobId], applicant);
 }
 
 // ---------- Question-sheet screening v2 (cache-aware) ----------
@@ -151,6 +159,9 @@ export async function screenRolesWithCache(args: {
   // scorecard inputs (stack evidence beyond dated skills)
   resumeText?: string | null;
   profileSkills?: string[];
+  // Tenant scoping: external ids are only unique per organization. When set,
+  // role resolution is limited to this org; unset = legacy unscoped behavior.
+  organizationId?: string | null;
 }): Promise<RoleVerdict[]> {
   const jobIds = args.jobIds.slice(0, 5);
   if (!jobIds.length || !args.evidence) return [];
@@ -158,14 +169,18 @@ export async function screenRolesWithCache(args: {
   // Resolve org_roles (id + questions) for hashes and storage.
   let roleRows: { id: string; external_id: string; matching_profile: MatchingProfile | null; tech_stack?: string | null }[] = [];
   try {
+    const orgFilter = args.organizationId ? `organization_id=eq.${args.organizationId}&` : "";
     const res = await sbRest(
-      `org_roles?external_id=in.(${jobIds.map((j) => `"${j}"`).join(",")})&select=id,external_id,matching_profile,tech_stack`
+      `org_roles?${orgFilter}external_id=in.(${jobIds.map((j) => `"${j}"`).join(",")})&select=id,external_id,matching_profile,tech_stack`
     );
     if (res.ok) roleRows = await res.json();
   } catch {}
 
+  // Tenant runs never fall back to the site's JSON profiles — those are keyed
+  // by transformer-talent job ids and would collide with tenant ids.
   const profileOf = (jobId: string): MatchingProfile | undefined =>
-    roleRows.find((r) => r.external_id === jobId)?.matching_profile || PROFILES[jobId];
+    roleRows.find((r) => r.external_id === jobId)?.matching_profile ||
+    (args.organizationId ? undefined : PROFILES[jobId]);
 
   // Version prefix: bumping it invalidates every cached verdict, forcing a
   // re-screen under new rules. v6 = dimension scorecards.

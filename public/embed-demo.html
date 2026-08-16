@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Demo of the job-board widget embedded in a "customer" page.
+     Live check: /embed-demo.html — the board below is the Demo Co iframe. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Acme-style customer page — widget demo</title>
+  <style>
+    body { font-family: Georgia, serif; margin: 0; background: #f5f2ec; color: #2b2b2b; }
+    header { background: #1f3a2d; color: #fff; padding: 28px 32px; }
+    header h1 { margin: 0; font-size: 22px; }
+    main { max-width: 920px; margin: 0 auto; padding: 32px; }
+    .note { background: #fff; border-left: 4px solid #1f3a2d; padding: 14px 18px; margin-bottom: 28px; }
+  </style>
+</head>
+<body>
+  <header><h1>Demo Co — Careers</h1></header>
+  <main>
+    <div class="note">
+      This page mimics a customer's own website. Everything below this box is
+      the embedded Transformer Talent board, rendered by one script tag.
+    </div>
+    <script src="/widget.js" data-org="demo-co"></script>
+  </main>
+</body>
+</html>
