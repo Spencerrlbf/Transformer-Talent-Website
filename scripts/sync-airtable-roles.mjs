@@ -116,6 +116,7 @@ for (const app of apps) {
   const stretch = new Set();
   let screenedTotal = 0;
   let qualifiedCount = 0;
+  const fitLines = [];
   if (app.candidate_id) {
     const rows = await sb(
       `match_verdicts?candidate_id=eq.${app.candidate_id}&select=source,verdict,created_at,org_roles(external_id)&order=created_at.desc`
@@ -131,7 +132,18 @@ for (const app of apps) {
     qualifiedCount = verdicts.filter((v) => v.verdict?.qualified).length;
     for (const v of verdicts) {
       const id = v.org_roles?.external_id;
-      if (!id || applied.has(id)) continue;
+      if (!id) continue;
+      // Applied roles: surface the scorecard as hiring guidance.
+      if (applied.has(id)) {
+        const sc = v.verdict?.scorecard;
+        if (sc) {
+          fitLines.push(
+            `#${id} ${sc.tier} — ${sc.reason}` +
+              (sc.gaps?.length ? `\n  gaps: ${sc.gaps.slice(0, 4).join("; ")}` : "")
+          );
+        }
+        continue;
+      }
       // Endorsement-only columns: screened-but-rejected stays in Supabase.
       if (!v.verdict?.qualified) continue;
       if (v.source === "stretch") stretch.add(id);
@@ -149,6 +161,7 @@ for (const app of apps) {
         "Stretch Matches": links(stretch),
         Screened: screenedTotal ? `${screenedTotal} screened (${qualifiedCount} qualified)` : "",
         "Preferred Locations": (app.preferred_locations || []).join(", "),
+        ...(fitLines.length ? { "Application Fit": fitLines.join("\n\n") } : {}),
       },
     }),
   });

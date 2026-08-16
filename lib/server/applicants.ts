@@ -365,6 +365,7 @@ export async function mirrorApplicationToAirtable(args: {
   applicationType?: "Applied" | "Speculative";
   screenedSummary?: string; // e.g. "5 screened (1 qualified)"
   preferredLocations?: string[];
+  applicationFit?: string; // rendered scorecards for the APPLIED roles
 }): Promise<void> {
   const token = process.env.AIRTABLE_API_TOKEN;
   const base = process.env.AIRTABLE_BASE_ID;
@@ -412,6 +413,7 @@ export async function mirrorApplicationToAirtable(args: {
               ...(args.preferredLocations?.length
                 ? { "Preferred Locations": args.preferredLocations.join(", ") }
                 : {}),
+              ...(args.applicationFit ? { "Application Fit": args.applicationFit } : {}),
               "Matched Roles": args.matchedTitles.join("\n"),
               ...(args.visa ? { Visa: args.visa } : {}),
               "Applied At": new Date().toISOString(),

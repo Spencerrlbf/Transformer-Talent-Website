@@ -3,6 +3,7 @@ import profilesJson from "@/data/matching-profiles.json";
 import { sbRest } from "./supabase";
 import { getOrgId } from "./spine";
 import type { CandidateFacts } from "./facts";
+import { assessScope, buildScorecard, type Scorecard, type ScopeSignal } from "./scorecard";
 
 export interface MatchingProfile {
   must_haves: string[];
@@ -64,6 +65,7 @@ export interface RoleVerdict {
   fit_score: number;
   answers: VerdictAnswer[];
   inferred_signals?: InferredSignal[]; // max 3
+  scorecard?: Scorecard; // dimension scorecard + rule-derived tier
   cached: boolean;
 }
 
@@ -146,15 +148,18 @@ export async function screenRolesWithCache(args: {
   source?: "apply" | "precompute" | "stretch";
   // stretch channel: which inferred signal spawned each pairing (jobId -> signal)
   originByJobId?: Record<string, string>;
+  // scorecard inputs (stack evidence beyond dated skills)
+  resumeText?: string | null;
+  profileSkills?: string[];
 }): Promise<RoleVerdict[]> {
   const jobIds = args.jobIds.slice(0, 5);
   if (!jobIds.length || !args.evidence) return [];
 
   // Resolve org_roles (id + questions) for hashes and storage.
-  let roleRows: { id: string; external_id: string; matching_profile: MatchingProfile | null }[] = [];
+  let roleRows: { id: string; external_id: string; matching_profile: MatchingProfile | null; tech_stack?: string | null }[] = [];
   try {
     const res = await sbRest(
-      `org_roles?external_id=in.(${jobIds.map((j) => `"${j}"`).join(",")})&select=id,external_id,matching_profile`
+      `org_roles?external_id=in.(${jobIds.map((j) => `"${j}"`).join(",")})&select=id,external_id,matching_profile,tech_stack`
     );
     if (res.ok) roleRows = await res.json();
   } catch {}
@@ -163,8 +168,8 @@ export async function screenRolesWithCache(args: {
     roleRows.find((r) => r.external_id === jobId)?.matching_profile || PROFILES[jobId];
 
   // Version prefix: bumping it invalidates every cached verdict, forcing a
-  // re-screen under new rules. v5 = code-resolved years answers.
-  const candidateHash = sha("factsv5|" + args.cacheKeyText);
+  // re-screen under new rules. v6 = dimension scorecards.
+  const candidateHash = sha("factsv6|" + args.cacheKeyText);
   const roleMeta = jobIds
     .map((jobId) => {
       const p = profileOf(jobId);
@@ -211,10 +216,23 @@ export async function screenRolesWithCache(args: {
 
   const toScreen = roleMeta.filter((r) => !cachedRoleIds.has(r.jobId));
   if (toScreen.length) {
-    const fresh = (await interrogate(args.evidence, toScreen)).map((v) => ({
-      ...applyYearsOverrides(v, args.facts),
-      cached: false as const,
-    }));
+    // Scope evidence is per-candidate: one small cited-answers call per batch.
+    const scopeSignals: ScopeSignal[] = await assessScope(args.evidence);
+    const fresh = (await interrogate(args.evidence, toScreen)).map((v) => {
+      const corrected = applyYearsOverrides(v, args.facts);
+      const meta = toScreen.find((r) => r.jobId === corrected.job_id);
+      const roleRow = roleRows.find((r) => r.external_id === corrected.job_id);
+      const scorecard = buildScorecard({
+        techStack: roleRow?.tech_stack ?? null,
+        minYears: meta?.profile.min_years ?? null,
+        facts: args.facts,
+        resumeText: args.resumeText,
+        profileSkills: args.profileSkills || [],
+        scopeSignals,
+        answers: corrected.answers,
+      });
+      return { ...corrected, scorecard, cached: false as const };
+    });
     verdicts.push(...fresh);
     // Store fresh verdicts for reuse + audit.
     if (args.candidateId) {

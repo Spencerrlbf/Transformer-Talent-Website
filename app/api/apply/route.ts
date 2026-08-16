@@ -22,6 +22,7 @@ import {
 } from "@/lib/server/spine";
 import { computeFacts, formatFacts } from "@/lib/server/facts";
 import { sanitizeLocationOptions, roleLocationCompatible } from "@/lib/server/locations";
+import { renderScorecard } from "@/lib/server/scorecard";
 
 export const maxDuration = 60;
 
@@ -178,6 +179,7 @@ export async function POST(req: NextRequest) {
   // Enrichment pipeline — best-effort; the application is already saved.
   let matches: { jobId: string; title: string; salary: string; slug: string }[] = [];
   let screenedSummary: string | undefined;
+  let applicationFit: string | undefined;
   try {
     const username = linkedinUsername(linkedin);
     let harvest: unknown | null = null;
@@ -267,7 +269,11 @@ export async function POST(req: NextRequest) {
         });
       // Question-sheet screening: deterministic facts first, then ONE cached
       // batched LLM call answering each role's questions with evidence.
-      const shortlistIds = gated.slice(0, 5).map((m) => m.job_id);
+      // APPLIED roles are always screened (bypassing gates — they chose to
+      // apply; shortfalls become verdict findings, never a reason to skip).
+      const shortlistIds = [
+        ...new Set([...roleIds, ...gated.map((m) => m.job_id)]),
+      ].slice(0, 5);
       const stackTerms = [
         ...new Set(
           shortlistIds.flatMap((id) =>
@@ -293,11 +299,22 @@ export async function POST(req: NextRequest) {
         cacheKeyText: [resumeText || "", JSON.stringify(harvest ?? null)].join("|"),
         jobIds: shortlistIds,
         facts,
+        resumeText,
+        profileSkills: harvestSkills,
       });
       screening = results.length ? results : null;
       screenedSummary = results.length
         ? `${results.length} screened (${results.filter((r) => r.qualified).length} qualified)`
         : undefined;
+      // Hiring guidance for the roles they APPLIED to.
+      applicationFit =
+        roleIds
+          .map((id) => {
+            const r = results.find((x) => x.job_id === id);
+            return r?.scorecard ? renderScorecard(id, r.scorecard) : null;
+          })
+          .filter(Boolean)
+          .join("\n\n") || undefined;
       const scoreOf = (m: { job_id: string; similarity: number; keyword_hits: number }) => {
         const r = results.find((x) => x.job_id === m.job_id);
         const kw = 0.05 * Math.min(m.keyword_hits, 4); // exact stack hits, up to 0.2
@@ -369,6 +386,7 @@ export async function POST(req: NextRequest) {
       applicationType: roleIds.length ? "Applied" : "Speculative",
       screenedSummary,
       preferredLocations,
+      applicationFit,
     });
   }
 

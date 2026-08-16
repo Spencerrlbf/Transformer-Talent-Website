@@ -120,10 +120,11 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
   const allRoleRows = await rest(
     `org_roles?external_id=in.(${candidateIds.map((i) => `"${i}"`).join(",")})&select=external_id,tech_stack,locations,workplace`
   );
-  // Location gate: on-site/hybrid roles must match preferences or LinkedIn location.
+  // Location gate: on-site/hybrid roles must match preferences or LinkedIn
+  // location. Roles they APPLIED to always bypass — they chose them.
   const compatible = new Set(
     allRoleRows
-      .filter((r) => roleLocationCompatible(r, preferredLocations, candidateLocation))
+      .filter((r) => appRoleIds.includes(r.external_id) || roleLocationCompatible(r, preferredLocations, candidateLocation))
       .map((r) => r.external_id)
   );
   const dropped = candidateIds.filter((i) => !compatible.has(i));
@@ -155,6 +156,8 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
     jobIds: ids,
     facts,
     source: "precompute",
+    resumeText,
+    profileSkills: skills,
   });
   const fresh = verdicts.filter((v) => !v.cached).length;
   console.log(`  precompute ${username}: ${verdicts.length} verdicts (${fresh} fresh, ${verdicts.length - fresh} cached)`);
@@ -189,11 +192,13 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
           const stretchVerdicts = await screenRolesWithCache({
             candidateId,
             evidence,
-            cacheKeyText: ["", JSON.stringify(h)].join("|"),
+            cacheKeyText: [resumeText || "", JSON.stringify(h)].join("|"),
             jobIds: stretchRoles.map((r) => r.jobId),
             facts,
             source: "stretch",
             originByJobId: Object.fromEntries(stretchRoles.map((r) => [r.jobId, r.fromSignal])),
+            resumeText,
+            profileSkills: skills,
           });
           const q = stretchVerdicts.filter((v) => v.qualified).length;
           console.log(
