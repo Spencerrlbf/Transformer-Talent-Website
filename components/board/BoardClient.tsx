@@ -1,12 +1,13 @@
 "use client";
 // Tenant job board: a light-skinned mirror of the site's roles board — same
 // speculative banner, search semantics, filters, sortable table with
-// APPLY +/✓ selection, sticky side panel, 25-per-page pagination, and
-// checkout-style apply — scoped to one organization. Tenant roles have no
-// detail pages, so clicking a role title expands the full JD inline.
-// Posts to /api/apply with the board slug; suggestions come back scoped to
-// this company only. When embedded via widget.js it reports its height to
-// the parent for iframe auto-resizing.
+// APPLY +/✓ selection, and 25-per-page pagination. Selecting a role (or
+// choosing the resume path) opens a checkout rail to the RIGHT of the table
+// — cart on top, details form beneath — exactly like the site's /apply
+// layout, collapsed onto one page. Tenant roles have no detail pages, so
+// clicking a role title expands the full JD inline. Posts to /api/apply
+// with the board slug; suggestions come back scoped to this company only.
+// When embedded via widget.js it reports its height for iframe auto-resize.
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const MAX_ROLES = 3;
@@ -91,7 +92,7 @@ export default function BoardClient({
   const [speculative, setSpeculative] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [formError, setFormError] = useState("");
-  const applyRef = useRef<HTMLDivElement>(null);
+  const railRef = useRef<HTMLElement>(null);
 
   // Embed mode: report height to the parent page for iframe auto-resize.
   useEffect(() => {
@@ -164,11 +165,12 @@ export default function BoardClient({
     );
   }
 
-  const goToApply = () => applyRef.current?.scrollIntoView({ behavior: "smooth" });
   const isSpeculative = speculative && selected.length === 0;
+  const railVisible = selected.length > 0 || speculative || status.kind !== "idle";
   const selectedRoles = selected
     .map((id) => roles.find((r) => r.jobId === id))
     .filter((r): r is BoardRoleView => Boolean(r));
+  const goToRail = () => railRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -182,7 +184,7 @@ export default function BoardClient({
       return;
     }
     if (!isSpeculative && selected.length === 0) {
-      setFormError("Select at least one role above (APPLY +), or upload your resume for general matching.");
+      setFormError("Select at least one role (APPLY +), or switch to a general application.");
       return;
     }
     data.set("board", org.slug);
@@ -195,6 +197,7 @@ export default function BoardClient({
       if (res.ok && json.ok) {
         form.reset();
         setSelected([]);
+        setSpeculative(false);
         setStatus({ kind: "ok", matches: json.matches || [], wasSpeculative: isSpeculative });
       } else {
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
@@ -213,7 +216,7 @@ export default function BoardClient({
         <p>Open roles</p>
       </header>
 
-      {selected.length === 0 && status.kind !== "ok" && (
+      {!railVisible && (
         <div className="board-spec">
           <p>
             <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
@@ -223,7 +226,6 @@ export default function BoardClient({
             className="board-btn"
             onClick={() => {
               setSpeculative(true);
-              goToApply();
             }}
           >
             UPLOAD RESUME →
@@ -270,7 +272,7 @@ export default function BoardClient({
         {shown.length > PAGE_SIZE ? ` · page ${page} of ${pageCount}` : ""}
       </p>
 
-      <div className={`board-layout${selected.length > 0 ? " with-panel" : ""}`}>
+      <div className={`board-layout${railVisible ? " with-panel" : ""}`}>
         <div style={{ minWidth: 0 }}>
           <div style={{ overflowX: "auto" }}>
             <table className="board-table">
@@ -297,7 +299,7 @@ export default function BoardClient({
                   return [
                     <tr key={r.jobId} className={isOpen ? "row-open" : ""}>
                       <td className="board-id">#{r.jobId}</td>
-                      <td style={{ minWidth: 240 }}>
+                      <td style={{ minWidth: 220 }}>
                         <button
                           className="board-rolebtn"
                           onClick={() => setExpanded(isOpen ? null : r.jobId)}
@@ -310,7 +312,7 @@ export default function BoardClient({
                           </span>
                         </button>
                       </td>
-                      <td style={{ fontSize: "12.5px", minWidth: 120 }}>
+                      <td style={{ fontSize: "12.5px", minWidth: 110 }}>
                         {r.locations.length > 3
                           ? `${r.locations.slice(0, 3).join(" · ")} +${r.locations.length - 3}`
                           : r.locations.join(" · ") || "—"}
@@ -382,191 +384,158 @@ export default function BoardClient({
           )}
         </div>
 
-        {/* Desktop: sticky side panel beside the table. */}
-        {selected.length > 0 && (
-          <aside className="board-panel">
-            <div className="board-panel-label">
-              <b>{selected.length}/{MAX_ROLES}</b> ROLES SELECTED
-            </div>
-            {selectedRoles.map((r) => (
-              <div key={r.jobId} className="board-panel-role">
-                <div>
-                  <div className="t">{r.title}</div>
-                  <div className="m">{r.salary || "Comp on request"} · #{r.jobId}</div>
+        {/* Checkout rail beside the table: cart on top, details beneath —
+            the site's /apply layout on one page. */}
+        {railVisible && (
+          <aside className="board-rail" ref={railRef}>
+            {status.kind === "ok" ? (
+              <div className="board-thanks">
+                <h2>{status.wasSpeculative ? "Resume received." : "Application received."}</h2>
+                <p>
+                  {status.wasSpeculative
+                    ? `We'll match you against ${org.name}'s open roles — and new ones as they arrive — and be in touch when there's a genuine fit.`
+                    : "Every application is screened and reviewed — you'll hear back when there's a fit."}
+                </p>
+                {status.matches.length > 0 && (
+                  <>
+                    <h3>You also look like a fit for</h3>
+                    <ul className="board-matchlist">
+                      {status.matches.map((m) => (
+                        <li key={m.jobId}>
+                          <b>{m.title}</b>
+                          {m.salary ? ` — ${m.salary}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="board-panel-label">
+                  {isSpeculative ? (
+                    <>GENERAL APPLICATION</>
+                  ) : (
+                    <>
+                      <b>{selected.length}/{MAX_ROLES}</b> ROLES SELECTED
+                    </>
+                  )}
                 </div>
-                <button onClick={() => toggle(r.jobId)} aria-label={`Remove ${r.title}`}>✕</button>
-              </div>
-            ))}
-            {selected.length < MAX_ROLES && (
-              <div className="board-panel-slots">
-                + {MAX_ROLES - selected.length} slot{MAX_ROLES - selected.length > 1 ? "s" : ""} left
-              </div>
+                {isSpeculative ? (
+                  <p className="board-instr">
+                    <b>No role selected — we&apos;ll do the matching.</b> Drop your resume and
+                    we&apos;ll screen you against {org.name}&apos;s roles, now and as new ones
+                    open.{" "}
+                    <button className="board-linkbtn" onClick={() => setSpeculative(false)}>
+                      back to roles
+                    </button>
+                  </p>
+                ) : (
+                  <>
+                    {selectedRoles.map((r) => (
+                      <div key={r.jobId} className="board-panel-role">
+                        <div>
+                          <div className="t">{r.title}</div>
+                          <div className="m">{r.salary || "Comp on request"} · #{r.jobId}</div>
+                        </div>
+                        <button onClick={() => toggle(r.jobId)} aria-label={`Remove ${r.title}`}>✕</button>
+                      </div>
+                    ))}
+                    {selected.length < MAX_ROLES && (
+                      <div className="board-panel-slots">
+                        + {MAX_ROLES - selected.length} slot{MAX_ROLES - selected.length > 1 ? "s" : ""} left — hit APPLY + in the table
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <form onSubmit={onSubmit} className="board-form">
+                  <h3>Your details</h3>
+                  <label>
+                    Name
+                    <input name="name" required maxLength={120} autoComplete="name" />
+                  </label>
+                  <label>
+                    Email
+                    <input name="email" type="email" required maxLength={254} autoComplete="email" />
+                  </label>
+                  <label>
+                    LinkedIn URL (required)
+                    <input name="linkedin" type="url" required placeholder="https://linkedin.com/in/…" maxLength={300} />
+                  </label>
+                  <label>
+                    Resume (PDF{isSpeculative ? ", required" : ", optional but recommended"})
+                    <input name="resume" type="file" accept="application/pdf" required={isSpeculative} />
+                  </label>
+                  <label>
+                    Locations you&apos;re open to (optional — ⌘/Ctrl-click; empty = your profile location)
+                    <select name="preferredLocations" multiple size={4}>
+                      <option value="SF">SF / Bay Area</option>
+                      <option value="NYC">NYC</option>
+                      <option value="Miami">Miami</option>
+                      <option value="Seattle">Seattle</option>
+                      <option value="Chicago">Chicago</option>
+                      <option value="Washington DC">Washington DC</option>
+                      <option value="Austin">Austin</option>
+                      <option value="Boston">Boston</option>
+                      <option value="Los Angeles">Los Angeles</option>
+                      <option value="Canada">Canada</option>
+                    </select>
+                  </label>
+                  <label>
+                    Visa status
+                    <select name="visa" defaultValue="">
+                      <option value="" disabled>
+                        select…
+                      </option>
+                      <option value="None needed (US citizen / green card)">
+                        None needed (US citizen / green card)
+                      </option>
+                      <option value="H-1B">H-1B</option>
+                      <option value="STEM OPT">STEM OPT</option>
+                      <option value="TN">TN</option>
+                      <option value="O-1">O-1</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+                  <label>
+                    Anything else
+                    <textarea name="note" rows={2} maxLength={2000} />
+                  </label>
+                  <input
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    style={{ position: "absolute", left: "-9999px" }}
+                    aria-hidden="true"
+                  />
+                  {(formError || status.kind === "error") && (
+                    <p className="board-error">
+                      {formError || (status.kind === "error" ? status.message : "")}
+                    </p>
+                  )}
+                  <button type="submit" className="board-btn" disabled={status.kind === "sending"} style={{ width: "100%" }}>
+                    {status.kind === "sending"
+                      ? "SUBMITTING & MATCHING…"
+                      : isSpeculative
+                        ? "SUBMIT FOR MATCHING →"
+                        : `SUBMIT — ${selected.length} ROLE${selected.length > 1 ? "S" : ""} →`}
+                  </button>
+                </form>
+              </>
             )}
-            <button className="board-btn" style={{ width: "100%" }} onClick={goToApply}>
-              CONTINUE TO APPLY →
-            </button>
           </aside>
         )}
       </div>
 
-      {/* Narrow screens: compact bottom bar instead of a side column. */}
-      {selected.length > 0 && (
+      {/* Narrow screens: rail stacks under the table; bar jumps to it. */}
+      {selected.length > 0 && status.kind === "idle" && (
         <div className="board-selbar">
           <b>{selected.length}/{MAX_ROLES} selected</b>
-          <button className="board-btn" onClick={goToApply}>
-            CONTINUE TO APPLY →
+          <button className="board-btn" onClick={goToRail}>
+            COMPLETE APPLICATION →
           </button>
         </div>
-      )}
-
-      {/* Checkout appears only once there's intent: roles selected, the
-          speculative path chosen, or a submission in flight/landed. */}
-      {(selected.length > 0 || speculative || status.kind !== "idle") && (
-      <div className="board-apply" ref={applyRef}>
-        {status.kind === "ok" ? (
-          <div className="board-thanks">
-            <h2>{status.wasSpeculative ? "Resume received." : "Application received."}</h2>
-            <p>
-              {status.wasSpeculative
-                ? `We'll match you against ${org.name}'s open roles — and new ones as they arrive — and be in touch when there's a genuine fit.`
-                : "Every application is screened and reviewed — you'll hear back when there's a fit."}
-            </p>
-            {status.matches.length > 0 && (
-              <>
-                <h3>You also look like a fit for</h3>
-                <ul className="board-matchlist">
-                  {status.matches.map((m) => (
-                    <li key={m.jobId}>
-                      <b>{m.title}</b>
-                      {m.salary ? ` — ${m.salary}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="board-checkout">
-            <div className="board-cartcol">
-              <h2>Your application</h2>
-              {isSpeculative ? (
-                <p className="board-instr">
-                  <b>No role selected — we&apos;ll do the matching.</b> Drop your resume and
-                  we&apos;ll screen you against {org.name}&apos;s roles, now and as new ones open.{" "}
-                  <button className="board-linkbtn" onClick={() => setSpeculative(false)}>
-                    back to selecting roles
-                  </button>
-                </p>
-              ) : selected.length === 0 ? (
-                <p className="board-instr">
-                  Nothing selected yet — hit <b>APPLY +</b> on up to {MAX_ROLES} roles in the
-                  table, or{" "}
-                  <button className="board-linkbtn" onClick={() => setSpeculative(true)}>
-                    upload your resume
-                  </button>{" "}
-                  for general matching.
-                </p>
-              ) : (
-                <p className="board-instr">
-                  Complete the form to finish your application for the{" "}
-                  <b>{selected.length} selected role{selected.length > 1 ? "s" : ""}</b> — one
-                  form covers them all.
-                  {selected.length < MAX_ROLES && <> You can add {MAX_ROLES - selected.length} more.</>}
-                </p>
-              )}
-              <ul className="board-cart">
-                {selectedRoles.map((r) => (
-                  <li key={r.jobId}>
-                    <span>
-                      <b>{r.title}</b>
-                      <em>{r.salary || "Comp on request"} · #{r.jobId}</em>
-                    </span>
-                    <button className="board-linkbtn" onClick={() => toggle(r.jobId)}>
-                      remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <form onSubmit={onSubmit} className="board-form">
-              <h3>Your details</h3>
-              <label>
-                Name
-                <input name="name" required maxLength={120} autoComplete="name" />
-              </label>
-              <label>
-                Email
-                <input name="email" type="email" required maxLength={254} autoComplete="email" />
-              </label>
-              <label>
-                LinkedIn URL (required)
-                <input name="linkedin" type="url" required placeholder="https://linkedin.com/in/…" maxLength={300} />
-              </label>
-              <label>
-                Resume (PDF{isSpeculative ? ", required" : ", optional but recommended"})
-                <input name="resume" type="file" accept="application/pdf" required={isSpeculative} />
-              </label>
-              <label>
-                Locations you&apos;re open to (optional — ⌘/Ctrl-click for several; empty = your profile location)
-                <select name="preferredLocations" multiple size={5}>
-                  <option value="SF">SF / Bay Area</option>
-                  <option value="NYC">NYC</option>
-                  <option value="Miami">Miami</option>
-                  <option value="Seattle">Seattle</option>
-                  <option value="Chicago">Chicago</option>
-                  <option value="Washington DC">Washington DC</option>
-                  <option value="Austin">Austin</option>
-                  <option value="Boston">Boston</option>
-                  <option value="Los Angeles">Los Angeles</option>
-                  <option value="Canada">Canada</option>
-                </select>
-              </label>
-              <label>
-                Visa status
-                <select name="visa" defaultValue="">
-                  <option value="" disabled>
-                    select…
-                  </option>
-                  <option value="None needed (US citizen / green card)">
-                    None needed (US citizen / green card)
-                  </option>
-                  <option value="H-1B">H-1B</option>
-                  <option value="STEM OPT">STEM OPT</option>
-                  <option value="TN">TN</option>
-                  <option value="O-1">O-1</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-              <label>
-                Anything else
-                <textarea name="note" rows={2} maxLength={2000} />
-              </label>
-              <input
-                name="website"
-                tabIndex={-1}
-                autoComplete="off"
-                style={{ position: "absolute", left: "-9999px" }}
-                aria-hidden="true"
-              />
-              {(formError || status.kind === "error") && (
-                <p className="board-error">
-                  {formError || (status.kind === "error" ? status.message : "")}
-                </p>
-              )}
-              <button type="submit" className="board-btn" disabled={status.kind === "sending"}>
-                {status.kind === "sending"
-                  ? "SUBMITTING & MATCHING…"
-                  : isSpeculative
-                    ? "SUBMIT FOR MATCHING →"
-                    : selected.length > 0
-                      ? `SUBMIT — ${selected.length} ROLE${selected.length > 1 ? "S" : ""} →`
-                      : "SUBMIT APPLICATION →"}
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
       )}
 
       <footer className="board-foot">
