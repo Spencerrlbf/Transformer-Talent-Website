@@ -419,6 +419,9 @@ export default function BoardClient({
         </div>
       )}
 
+      {/* Checkout appears only once there's intent: roles selected, the
+          speculative path chosen, or a submission in flight/landed. */}
+      {(selected.length > 0 || speculative || status.kind !== "idle") && (
       <div className="board-apply" ref={applyRef}>
         {status.kind === "ok" ? (
           <div className="board-thanks">
@@ -564,6 +567,7 @@ export default function BoardClient({
           </div>
         )}
       </div>
+      )}
 
       <footer className="board-foot">
         <a href="https://www.transformertalent.com" target="_blank" rel="noreferrer">
