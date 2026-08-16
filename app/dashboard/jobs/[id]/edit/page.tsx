@@ -15,18 +15,24 @@ export default function EditJobPage({ params }: { params: Promise<{ id: string }
       .then((d) => {
         if (!d?.job) return setInitial(null);
         const j = d.job;
+        // Stored display strings back into structured form fields.
+        const yoe = String(j.yoe || "");
+        const range = yoe.match(/^(\d+)\s*-\s*(\d+)/);
+        const plus = yoe.match(/^(\d+)\+/);
+        const upTo = yoe.match(/^Up to (\d+)/i);
         setInitial({
           title: j.title,
           roleType: j.roleType,
           salary: j.salary,
-          yoe: j.yoe,
-          visa: j.visa,
-          workplace: j.workplace,
-          locations: (j.locations || []).join(", "),
+          yoeMin: range ? range[1] : plus ? plus[1] : "",
+          yoeMax: range ? range[2] : upTo ? upTo[1] : "",
+          visa: String(j.visa || "").split(";").map((x: string) => x.trim()).filter(Boolean),
+          workplace: String(j.workplace || "").split("/").map((x: string) => x.trim()).filter(Boolean),
+          locations: j.locations || [],
           about: j.jd?.about || "",
-          doing: (j.jd?.doing || []).join("\n"),
-          needs: (j.jd?.needs || []).join("\n"),
-          bonus: (j.jd?.bonus || []).join("\n"),
+          doing: j.jd?.doing || [],
+          needs: j.jd?.needs || [],
+          bonus: j.jd?.bonus || [],
           skills: j.skills || [],
         });
       })
