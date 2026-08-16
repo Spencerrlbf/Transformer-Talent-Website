@@ -14,6 +14,7 @@ import { getRoles, roleSlug } from "@/lib/roles";
 import { passesHardGates, screenRolesWithCache } from "@/lib/server/screening";
 import { llamaParsePdf } from "@/lib/server/llamaparse";
 import {
+  getOrgId,
   recordEnrichment,
   syncExperiences,
   syncCandidateEmbeddings,
@@ -150,9 +151,11 @@ export async function POST(req: NextRequest) {
   const applied = roles.filter((r) => roleIds.includes(r.jobId));
   const roleTitles = applied.map((r) => `${r.title} (#${r.jobId})`);
 
+  const orgId = await getOrgId();
   const submission = await sbInsert<{ id: string }>(
     "website_applications",
     {
+      organization_id: orgId,
       name,
       email,
       linkedin_url: linkedin,
