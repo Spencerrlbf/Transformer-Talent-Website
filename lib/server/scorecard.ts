@@ -165,6 +165,8 @@ export async function assessScope(evidence: string): Promise<ScopeSignal[]> {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      // Same hang-protection as interrogate: never wait forever on the LLM.
+      signal: AbortSignal.timeout(90_000),
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0,
