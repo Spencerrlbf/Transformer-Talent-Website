@@ -293,10 +293,13 @@ async function interrogate(
 ): Promise<RoleVerdict[]> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return [];
+  // Explicit id="..." labeling: with short numeric ids (tenant roles start
+  // at "1") the model conflated the numbered question list with role ids and
+  // returned one result per QUESTION. The quoted id + instruction pins it.
   const rolesBlock = roles
     .map(
       (r) =>
-        `ROLE ${r.jobId}:\nMUST-HAVES: ${r.profile.must_haves.join("; ")}\nQUESTIONS:\n${r.profile.screening_questions
+        `ROLE id="${r.jobId}":\nMUST-HAVES: ${r.profile.must_haves.join("; ")}\nQUESTIONS:\n${r.profile.screening_questions
           .slice(0, 8)
           .map((q, i) => `${i + 1}. ${q}`)
           .join("\n")}`
@@ -306,6 +309,8 @@ async function interrogate(
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    // A hung call here froze an entire sourcing run once — never wait forever.
+    signal: AbortSignal.timeout(90_000),
     body: JSON.stringify({
       model: "gpt-4o-mini",
       temperature: 0,
@@ -366,7 +371,9 @@ async function interrogate(
         {
           role: "system",
           content:
-            "You screen one candidate against several roles. Answer EVERY question for every role " +
+            "You screen one candidate against one or more roles. Return EXACTLY ONE result per ROLE " +
+            "block — never one per question — and set job_id to the exact id string from ROLE id=\"...\". " +
+            "Answer EVERY question for every role " +
             "with yes/no/unclear plus a short evidence citation (max 12 words, quoting the source). " +
             "The FACTS block is pre-computed from the candidate's dated position history — treat it " +
             "as ground truth over your own inference. No evidence = 'unclear', never a guess. " +
@@ -388,10 +395,27 @@ async function interrogate(
   try {
     const data = await res.json();
     const results = JSON.parse(data.choices[0].message.content).results as Omit<RoleVerdict, "cached">[];
-    return results
-      // The model sometimes echoes "ROLE 76" instead of "76".
-      .map((r) => ({ ...r, job_id: String(r.job_id).replace(/^role\s*/i, "").trim() }))
-      .filter((r) => roles.some((x) => x.jobId === r.job_id))
+    // The model sometimes echoes "ROLE 76", "role_76", "#76", or "76." —
+    // short numeric ids (tenant roles start at "1") are especially unreliable.
+    const normalized = results.map((r) => ({
+      ...r,
+      job_id: String(r.job_id).replace(/^\s*(role|job)[\s_-]*/i, "").replace(/^#/, "").replace(/^"|"$/g, "").replace(/[.:]\s*$/, "").trim(),
+    }));
+    // Single-role calls with a single result can't be ambiguous.
+    if (roles.length === 1 && normalized.length === 1) normalized[0].job_id = roles[0].jobId;
+    // The model occasionally duplicates a role's result or splits per
+    // question (one-answer fragments). Keep the most complete result per
+    // role; drop fragments — an empty return makes the caller retry.
+    const best = new Map<string, (typeof normalized)[number]>();
+    for (const r of normalized) {
+      const role = roles.find((x) => x.jobId === r.job_id);
+      if (!role) continue;
+      const expected = Math.min(2, role.profile.screening_questions.length);
+      if ((r.answers?.length || 0) < expected) continue;
+      const prev = best.get(r.job_id);
+      if (!prev || (r.answers?.length || 0) > (prev.answers?.length || 0)) best.set(r.job_id, r);
+    }
+    return [...best.values()]
       // Hard cap regardless of what the model returned.
       .map((r) => ({ ...r, inferred_signals: (r.inferred_signals || []).slice(0, 3), cached: false }));
   } catch {
