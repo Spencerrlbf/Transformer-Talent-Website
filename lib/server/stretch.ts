@@ -34,7 +34,10 @@ function signalTerms(signal: InferredSignal): string[] {
 export async function findStretchRoles(
   signals: InferredSignal[],
   excludeJobIds: string[],
-  cap = 2
+  cap = 2,
+  // Tenant scoping: null = legacy all-orgs behavior. Pass the org id so
+  // speculative pairings never cross tenants (external ids collide).
+  organizationId: string | null = null
 ): Promise<StretchRole[]> {
   const exclude = new Set(excludeJobIds);
   const found = new Map<string, StretchRole>();
@@ -47,6 +50,7 @@ export async function findStretchRoles(
           sbRpc<{ external_id: string; title: string; similarity: number }[]>("match_org_roles", {
             query_embedding: v,
             match_count: 3,
+            org_filter: organizationId,
           })
         )
         .catch(() => []),
@@ -56,6 +60,7 @@ export async function findStretchRoles(
           ? sbRpc<{ job_id: string; title: string; keyword_hits: number }[]>("match_roles_keyword", {
               skills: terms,
               match_count: 3,
+              org_filter: organizationId,
             }).catch(() => [])
           : Promise.resolve([]);
       })(),
