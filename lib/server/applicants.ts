@@ -231,7 +231,10 @@ export interface RoleMatch {
 
 export async function matchRolesForApplicant(
   vector: number[],
-  skills: string[] = []
+  skills: string[] = [],
+  // Site org id: the keyword channel scans org_roles across ALL orgs, so it
+  // must be scoped or a site applicant can surface another tenant's role.
+  organizationId: string | null = null
 ): Promise<RoleMatch[]> {
   const [vec, kw] = await Promise.all([
     sbRpc<{ job_id: string; title: string; similarity: number }[]>("match_site_roles", {
@@ -242,6 +245,7 @@ export async function matchRolesForApplicant(
       ? sbRpc<{ job_id: string; title: string; keyword_hits: number }[]>("match_roles_keyword", {
           skills: skills.slice(0, 40),
           match_count: 5,
+          org_filter: organizationId,
         }).catch(() => [])
       : Promise.resolve([]),
   ]);

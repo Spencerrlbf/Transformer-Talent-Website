@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
       // only that org's roles; the site searches its own.
       const roleMatches = boardOrg
         ? await matchOrgRolesForApplicant(vector, boardOrg.id)
-        : await matchRolesForApplicant(vector, skillTerms);
+        : await matchRolesForApplicant(vector, skillTerms, orgId);
       const applicantGate = {
         visa,
         years: careerYears ?? parsed?.total_experience_years ?? null,

@@ -100,12 +100,15 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
     candidateLocation = cand?.location || null;
   } catch {}
 
+  // Tenant scoping: this worker serves the transformer-talent org only —
+  // retrieval, role lookups, and screening all filter to org.id so tenant
+  // roles (colliding external ids!) can never enter a TT candidate's run.
   const [vec, kw] = await Promise.all([
     vector
-      ? rest("rpc/match_org_roles", { method: "POST", body: JSON.stringify({ query_embedding: vector, match_count: 5 }) }).catch(logErr("vector"))
+      ? rest("rpc/match_org_roles", { method: "POST", body: JSON.stringify({ query_embedding: vector, match_count: 5, org_filter: org.id }) }).catch(logErr("vector"))
       : [],
     skills.length
-      ? rest("rpc/match_roles_keyword", { method: "POST", body: JSON.stringify({ skills: skills.slice(0, 40), match_count: 5 }) }).catch(logErr("keyword"))
+      ? rest("rpc/match_roles_keyword", { method: "POST", body: JSON.stringify({ skills: skills.slice(0, 40), match_count: 5, org_filter: org.id }) }).catch(logErr("keyword"))
       : [],
   ]);
   // Applied/suggested roles are known-relevant — they take shortlist priority
@@ -118,7 +121,7 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
     return 0;
   }
   const allRoleRows = await rest(
-    `org_roles?external_id=in.(${candidateIds.map((i) => `"${i}"`).join(",")})&select=external_id,tech_stack,locations,workplace`
+    `org_roles?organization_id=eq.${org.id}&external_id=in.(${candidateIds.map((i) => `"${i}"`).join(",")})&select=external_id,tech_stack,locations,workplace`
   );
   // Location gate: on-site/hybrid roles must match preferences or LinkedIn
   // location. Roles they APPLIED to always bypass — they chose them.
@@ -158,6 +161,7 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
     source: "precompute",
     resumeText,
     profileSkills: skills,
+    organizationId: org.id,
   });
   const fresh = verdicts.filter((v) => !v.cached).length;
   console.log(`  precompute ${username}: ${verdicts.length} verdicts (${fresh} fresh, ${verdicts.length - fresh} cached)`);
@@ -177,11 +181,11 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
         }
       }
       if (signals.length) {
-        let stretchRoles = await findStretchRoles(signals, candidateIds, 2);
+        let stretchRoles = await findStretchRoles(signals, candidateIds, 2, org.id);
         // Same location gate for speculative pairings.
         if (stretchRoles.length) {
           const rows = await rest(
-            `org_roles?external_id=in.(${stretchRoles.map((r) => `"${r.jobId}"`).join(",")})&select=external_id,locations,workplace`
+            `org_roles?organization_id=eq.${org.id}&external_id=in.(${stretchRoles.map((r) => `"${r.jobId}"`).join(",")})&select=external_id,locations,workplace`
           );
           stretchRoles = stretchRoles.filter((sr) => {
             const row = rows.find((r) => r.external_id === sr.jobId);
@@ -199,6 +203,7 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
             originByJobId: Object.fromEntries(stretchRoles.map((r) => [r.jobId, r.fromSignal])),
             resumeText,
             profileSkills: skills,
+            organizationId: org.id,
           });
           const q = stretchVerdicts.filter((v) => v.qualified).length;
           console.log(
