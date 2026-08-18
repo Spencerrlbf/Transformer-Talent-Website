@@ -86,6 +86,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
         <div className="dash-jobactions">
+          <Link className="dash-btn" href={`/dashboard/jobs/${job.id}/sourcing`}>
+            Source candidates
+          </Link>
           {editable && (
             <Link className="dash-btn dash-btn-2" href={`/dashboard/jobs/${job.id}/edit`}>
               Edit
