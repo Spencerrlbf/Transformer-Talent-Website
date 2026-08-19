@@ -23,12 +23,16 @@ const PAGE_SIZE = 25;
 // Harvest caps CONCURRENT requests by plan (Free 1 … Business 40); no
 // per-minute limits. Keep the default low for the basic plan.
 const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY || "2", 10) || 2);
-// LLM screening concurrency: bursts trip OpenAI rate limits, which the
-// engine surfaces as empty verdicts — keep low, tune via env once limits rise.
-const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "2", 10) || 2);
-// Circuit breaker: a screening stage that only fails must stop, not churn
-// LLM spend across the whole ranked list.
-const MAX_CONSECUTIVE_SCREEN_FAILURES = 6;
+// LLM screening concurrency. Constraint is OpenAI tokens/min, not requests:
+// each screen ≈ 5-6k tokens across 2 calls, and this key's gpt-4o-mini cap
+// is 200k TPM (~35 screens/min) — 15 concurrent finishes a top-50 in ~2min
+// with headroom left for apply-flow screening on the same key. Raise the
+// env var when the OpenAI tier (and TPM) goes up.
+const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "15", 10) || 15);
+// Circuit breaker: consecutive batches where every screen fails mean a
+// systemic problem (rate limits, outage) — stop instead of churning LLM
+// spend down the ranked list.
+const MAX_ALLFAIL_BATCHES = 3;
 
 // Our unit costs (margin analysis in usage_events; client credits are Task 6).
 const COST_SEARCH_PAGE = 0.1;
@@ -303,29 +307,39 @@ async function rankRun(run: SourcingRun): Promise<void> {
 
 // ---------- stage: screening ----------
 
-async function screenBatch(run: SourcingRun, batchSize: number): Promise<{ remaining: number }> {
+async function screenBatch(
+  run: SourcingRun,
+  batchSize: number
+): Promise<{ remaining: number; attempted: number; succeeded: number }> {
   const [role] = await rest<{ external_id: string; tech_stack: string | null }[]>(
     `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack`
   );
+  const limit = Math.min(batchSize, Math.max(0, run.screen_target - run.screened_count));
+  if (limit <= 0) return { remaining: 0, attempted: 0, succeeded: 0 };
+  // Screenable = fresh rows OR failed rows with retries left (max 3
+  // attempts) — one rank-ordered query, so a flaky LLM response on the #1
+  // candidate retries before rank-75 gets its first look.
   const todo = await rest<
-    { id: string; sourced_candidate_id: string;
+    { id: string; screen_attempts: number; sourced_candidate_id: string;
       sourced_candidates: { profile: Record<string, unknown> | null; skills: string[] | null; full_name: string | null } }[]
   >(
-    `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.none&hidden=eq.false` +
-      `&rank=not.is.null&order=rank.asc&limit=${Math.min(batchSize, Math.max(0, run.screen_target - run.screened_count))}` +
-      `&select=id,sourced_candidate_id,sourced_candidates(profile,skills,full_name)`
+    `sourcing_run_candidates?run_id=eq.${run.id}&hidden=eq.false&rank=not.is.null` +
+      `&or=(screen_status.eq.none,and(screen_status.eq.failed,screen_attempts.lt.3))` +
+      `&order=rank.asc&limit=${limit}` +
+      `&select=id,screen_attempts,sourced_candidate_id,sourced_candidates(profile,skills,full_name)`
   );
-  if (!todo.length) return { remaining: 0 };
+  if (!todo.length) return { remaining: 0, attempted: 0, succeeded: 0 };
 
   await Promise.all(todo.map((t) =>
     rest(`sourcing_run_candidates?id=eq.${t.id}`, {
-      method: "PATCH", body: JSON.stringify({ screen_status: "pending" }), prefer: "return=minimal",
+      method: "PATCH",
+      body: JSON.stringify({ screen_status: "pending", screen_attempts: t.screen_attempts + 1 }),
+      prefer: "return=minimal",
     })
   ));
 
   const stackTerms = splitStack(role?.tech_stack).slice(0, 20);
   let done = 0;
-  let failures = 0;
   await mapLimit(todo, SCREEN_CONCURRENCY, async (t) => {
     try {
       const profile = t.sourced_candidates?.profile;
@@ -368,9 +382,7 @@ async function screenBatch(run: SourcingRun, batchSize: number): Promise<{ remai
         prefer: "return=minimal",
       });
       done++;
-      failures = 0;
     } catch (err) {
-      failures++;
       await rest(`sourcing_run_candidates?id=eq.${t.id}`, {
         method: "PATCH",
         body: JSON.stringify({ screen_status: "failed" }),
@@ -382,16 +394,14 @@ async function screenBatch(run: SourcingRun, batchSize: number): Promise<{ remai
   await recordUsage(run.organization_id, run.id, "deep_screen", done, null);
   run.screened_count += done;
   await patchRun(run.id, { screened_count: run.screened_count });
-  if (failures >= MAX_CONSECUTIVE_SCREEN_FAILURES) {
-    throw new Error(`screening circuit breaker: ${failures} consecutive failures`);
-  }
-
   const remainingTarget = Math.max(0, run.screen_target - run.screened_count);
-  if (!remainingTarget) return { remaining: 0 };
+  if (!remainingTarget) return { remaining: 0, attempted: todo.length, succeeded: done };
+  // Anything still screenable? Fresh rows, or failed rows with retries left.
   const more = await rest<{ id: string }[]>(
-    `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.none&hidden=eq.false&rank=not.is.null&limit=1&select=id`
+    `sourcing_run_candidates?run_id=eq.${run.id}&hidden=eq.false&rank=not.is.null` +
+      `&or=(screen_status.eq.none,and(screen_status.eq.failed,screen_attempts.lt.3))&limit=1&select=id`
   );
-  return { remaining: more.length ? remainingTarget : 0 };
+  return { remaining: more.length ? remainingTarget : 0, attempted: todo.length, succeeded: done };
 }
 
 // ---------- the advance loop ----------
@@ -439,8 +449,13 @@ export async function advanceRun(runId: string, budgetMs = 45_000): Promise<Adva
     }
 
     if (run.status === "screening" && Date.now() < deadline) {
+      let allFailBatches = 0;
       while (Date.now() < deadline) {
-        const { remaining } = await screenBatch(run, SCREEN_CONCURRENCY * 2);
+        const { remaining, attempted, succeeded } = await screenBatch(run, SCREEN_CONCURRENCY * 2);
+        allFailBatches = attempted > 0 && succeeded === 0 ? allFailBatches + 1 : 0;
+        if (allFailBatches >= MAX_ALLFAIL_BATCHES) {
+          throw new Error(`screening circuit breaker: ${allFailBatches} consecutive all-fail batches`);
+        }
         if (!remaining) {
           await patchRun(run.id, { status: "done", finished_at: new Date().toISOString() });
           run.status = "done";

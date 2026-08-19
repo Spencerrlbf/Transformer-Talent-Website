@@ -136,6 +136,25 @@ const LIST_KEYS = [
   "excludeSeniorityLevelIds", "excludeFunctionIds", "excludeCompanyHeadquarterLocations",
 ] as const;
 
+/** Whitelist an untrusted request body down to a LeadSearchQuery. */
+export function sanitizeLeadQuery(body: Record<string, unknown>): LeadSearchQuery {
+  const query: LeadSearchQuery = {};
+  const strList = (v: unknown): string[] | undefined => {
+    if (!Array.isArray(v)) return undefined;
+    const list = v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim().slice(0, 120)).slice(0, 20);
+    return list.length ? list : undefined;
+  };
+  for (const key of LIST_KEYS) {
+    const v = strList(body[key]);
+    if (v) query[key] = v;
+  }
+  if (typeof body.search === "string" && body.search.trim()) query.search = body.search.trim().slice(0, 300);
+  if (typeof body.salesNavUrl === "string" && body.salesNavUrl.trim()) query.salesNavUrl = body.salesNavUrl.trim().slice(0, 2000);
+  if (body.recentlyChangedJobs === true) query.recentlyChangedJobs = true;
+  if (body.postedOnLinkedin === true) query.postedOnLinkedin = true;
+  return query;
+}
+
 function leadSearchParams(query: LeadSearchQuery, page: number): URLSearchParams {
   const params = new URLSearchParams();
   if (query.search?.trim()) params.set("search", query.search.trim());
