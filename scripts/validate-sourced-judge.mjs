@@ -20,9 +20,13 @@ execFileSync("npx", ["--yes", "esbuild@0.28.2", "lib/server/worker-lib.ts", "--b
 execFileSync("npx", ["--yes", "esbuild@0.28.2", "lib/server/sourcing/judge.ts", "--bundle",
   "--platform=node", "--format=esm", `--alias:@=${root}`,
   "--outfile=scripts/dist/sourcing-judge-test.mjs", "--log-level=warning"], { cwd: root, stdio: "inherit" });
+execFileSync("npx", ["--yes", "esbuild@0.28.2", "lib/server/sourcing/company-context.ts", "--bundle",
+  "--platform=node", "--format=esm", `--alias:@=${root}`,
+  "--outfile=scripts/dist/sourcing-companyctx-test.mjs", "--log-level=warning"], { cwd: root, stdio: "inherit" });
 
 const { computeFacts, formatFacts, harvestToExperiences, linkedinProfileText } = await import("./dist/worker-lib.mjs");
 const { judgeSourcedCandidate } = await import("./dist/sourcing-judge-test.mjs");
+const { getCompanyContexts, companyContextLine, companySlugFromUrl } = await import("./dist/sourcing-companyctx-test.mjs");
 
 const runPrefix = process.argv[2];
 const models = (process.argv[3] || "gpt-4o-mini").split(",");
@@ -33,7 +37,7 @@ const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 const q = async (p) => (await fetch(`${URL_}/rest/v1/${p}`, { headers: H })).json();
 
-const runs = await q(`sourcing_runs?select=id,org_role_id&order=created_at.desc&limit=50`);
+const runs = await q(`sourcing_runs?select=id,org_role_id,search_params&order=created_at.desc&limit=50`);
 const run = runs.find((r) => r.id.startsWith(runPrefix));
 if (!run) throw new Error(`run ${runPrefix} not found`);
 const [role] = await q(
@@ -50,6 +54,11 @@ const skills = (role.skills || []).map((s) => ({
   skill: s.skill, must_have: !!s.must_have, alternates: s.alternates || [],
 }));
 const minYears = role.matching_profile?.min_years ?? null;
+const sp = run.search_params || {};
+const labels = sp.companyLabels || {};
+const targetedCompanies = [...(sp.currentCompanies || []), ...(sp.pastCompanies || [])]
+  .map((u) => labels[u] || companySlugFromUrl(u) || u).filter(Boolean);
+console.log(`targeted companies: ${targetedCompanies.join(", ") || "(none)"}`);
 
 const rows = await q(
   `sourcing_run_candidates?run_id=eq.${run.id}&order=rank.asc&select=rank,tag,sourced_candidates(full_name,current_title,current_company,skills,profile)`
@@ -62,6 +71,11 @@ for (const row of rows) {
   if (!profile) continue;
   const expRows = harvestToExperiences(profile);
   const facts = computeFacts(expRows, [], c.skills || [], profile.education ?? null);
+  const exp = Array.isArray(profile.experience) ? profile.experience : [];
+  const current = exp.find((e) => /present/i.test(String(e?.endDate?.text ?? ""))) || exp[0];
+  const slug = companySlugFromUrl(current?.companyLinkedinUrl || current?.companyLink || null);
+  const ctxMap = slug ? await getCompanyContexts([slug]).catch(() => new Map()) : new Map();
+  const employerLine = slug ? companyContextLine(ctxMap.get(slug)) : null;
   const input = {
     roleTitle: role.title,
     jdText,
@@ -70,7 +84,10 @@ for (const row of rows) {
     profileText: linkedinProfileText(profile).slice(0, 5000),
     factsBlock: formatFacts(facts),
     careerYears: facts.careerYears,
+    targetedCompanies,
+    currentEmployerContext: employerLine,
   };
+  if (employerLine) console.log(`   [employer ctx] ${employerLine.slice(0, 110)}`);
   const results = await Promise.all(models.map((m) => judgeSourcedCandidate({ ...input, model: m })));
   console.log(`#${row.rank} ${c.full_name} — ${c.current_title ?? "?"} @ ${c.current_company ?? "?"}`);
   console.log(`   old engine: ${row.tag ?? "-"}`);

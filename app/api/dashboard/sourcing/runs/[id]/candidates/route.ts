@@ -21,12 +21,14 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const sp = req.nextUrl.searchParams;
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
-  const filter = sp.get("filter") || "all"; // all | strong | shortlisted
+  const filter = sp.get("filter") || "all"; // all | strong | yes | message | shortlisted
   const showHidden = sp.get("hidden") === "1";
   const filters = [
     `run_id=eq.${encodeURIComponent(id)}`,
     showHidden ? null : "hidden=eq.false",
-    filter === "strong" ? "tag=eq.strong" : null,
+    filter === "strong" ? "tag=in.(strong_yes,strong)" : null,
+    filter === "yes" ? "tag=eq.yes" : null,
+    filter === "message" ? "tag=in.(worth_message,possible)" : null,
     filter === "shortlisted" ? "shortlisted=eq.true" : null,
   ].filter(Boolean).join("&");
 
