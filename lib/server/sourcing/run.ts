@@ -535,8 +535,13 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
 
   // Renew the lease continuously so a live driver can never be superseded
   // mid-work; a failed renewal flips leaseLost and everything stops cleanly.
+  // The renewer has a LIFESPAN (2x budget): a driver whose main work hangs
+  // (e.g. a socket killed by machine sleep) must eventually lose its lease
+  // instead of heartbeating as a zombie while making no progress.
   let leaseLost = false;
+  const renewerDies = Date.now() + budgetMs * 2;
   const renewer = setInterval(() => {
+    if (Date.now() > renewerDies) { leaseLost = true; clearInterval(renewer); return; }
     sbRpc<boolean>("renew_run_lease", { p_run_id: runId, p_lease_id: leaseId, p_ttl_secs: LEASE_TTL_SECS })
       .then((ok) => { if (!ok) leaseLost = true; })
       .catch(() => {});
@@ -583,7 +588,13 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
       );
       if (!role) throw new RunFailure("role vanished");
 
-      while (!leaseLost && Date.now() + WAVE_NEED_MS < deadline) {
+      // The FIRST wave always runs regardless of budget — a caller with a
+      // budget smaller than a wave must make progress, not silently no-op
+      // forever. (The Vercel route's budget exceeds a wave, so this only
+      // matters for CLI/worker callers and misconfiguration.)
+      let firstWave = true;
+      while (!leaseLost && (firstWave || Date.now() + WAVE_NEED_MS < deadline)) {
+        firstWave = false;
         const rows = await sbRpc<ClaimedRow[]>("claim_screen_rows", {
           p_run_id: run.id, p_lease_id: leaseId, p_limit: SCREEN_CONCURRENCY,
         });
