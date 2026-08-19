@@ -5,6 +5,7 @@ import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { sanitizeLeadQuery } from "@/lib/server/sourcing/harvest";
 import { previewSearch, MAX_IMPORT } from "@/lib/server/sourcing/run";
+import { sbRpc } from "@/lib/server/supabase";
 
 export const maxDuration = 60;
 
@@ -24,8 +25,16 @@ export async function POST(req: NextRequest) {
   if (!role) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
 
   try {
-    const preview = await previewSearch(member.org.id, query);
-    return NextResponse.json({ ...preview, maxImport: MAX_IMPORT, query });
+    const [preview, [credits]] = await Promise.all([
+      previewSearch(member.org.id, query),
+      sbRpc<{ available: number }[]>("org_credit_summary", { p_org: member.org.id }),
+    ]);
+    return NextResponse.json({
+      ...preview,
+      maxImport: MAX_IMPORT,
+      query,
+      creditsAvailable: credits?.available ?? 0,
+    });
   } catch (err) {
     console.error("sourcing preview failed:", err);
     return NextResponse.json({ error: "preview_failed" }, { status: 502 });
