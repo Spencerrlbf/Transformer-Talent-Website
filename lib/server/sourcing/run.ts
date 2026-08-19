@@ -23,9 +23,12 @@ const PAGE_SIZE = 25;
 // Harvest caps CONCURRENT requests by plan (Free 1 … Business 40); no
 // per-minute limits. Keep the default low for the basic plan.
 const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY || "2", 10) || 2);
-// LLM screening concurrency: bursts trip OpenAI rate limits, which the
-// engine surfaces as empty verdicts — keep low, tune via env once limits rise.
-const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "2", 10) || 2);
+// LLM screening concurrency. Constraint is OpenAI tokens/min, not requests:
+// each screen ≈ 5-6k tokens across 2 calls, and this key's gpt-4o-mini cap
+// is 200k TPM (~35 screens/min) — 15 concurrent finishes a top-50 in ~2min
+// with headroom left for apply-flow screening on the same key. Raise the
+// env var when the OpenAI tier (and TPM) goes up.
+const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "15", 10) || 15);
 // Circuit breaker: consecutive batches where every screen fails mean a
 // systemic problem (rate limits, outage) — stop instead of churning LLM
 // spend down the ranked list.
