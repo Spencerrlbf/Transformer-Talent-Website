@@ -29,3 +29,5 @@ export {
   EMBED_DIMS,
 } from "./roles-pipeline";
 export type { RoleInput, MatchingProfile } from "./roles-pipeline";
+export { advanceRun, RunFailure } from "./sourcing/run";
+export type { AdvanceResult } from "./sourcing/run";

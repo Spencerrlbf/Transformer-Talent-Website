@@ -1,11 +1,23 @@
-// Sourcing run state machine. A run moves previewed → importing → ranking →
-// screening → done, with every stage resumable: advanceRun() does as much
-// work as fits its time budget and returns, so the same engine runs from a
-// CLI loop, a worker, or a polled API route within serverless limits.
+// Sourcing run state machine, hardened per the adversarial design review.
 //
-// Cost caps (AGENTS.md): imports are hard-capped at MAX_IMPORT matches —
-// broader searches are refused at preview time, never silently truncated.
-// Screening is capped per run by screen_target.
+// Guarantees:
+// - Single driver: a DB-clock lease (claim/renew/release RPCs) owns the run;
+//   every state write is FENCED on the lease/claim id, so a superseded
+//   "zombie" driver's late writes land on nothing.
+// - Bounded work: sourcing LLM calls are capped (~15s vs the apply flow's
+//   90s), waves/pages/sub-batches start only when they provably fit the
+//   remaining budget, and pauses are persisted (next_attempt_at), never
+//   slept inside a serverless invocation.
+// - Exactly-once billing: page commits are one atomic RPC (cursor CAS +
+//   idempotent usage inserts + counts recomputed from ground truth).
+// - Honest retries: attempts are charged only on REAL failures (junk model
+//   output), never on infra kills or rate limits; rate-limited rows get a
+//   persisted not-before time; orphaned rows heal to 'failed' (cap intact),
+//   poison rows terminate via orphan_heals; the all-fail circuit breaker is
+//   persisted on the run so it survives invocation boundaries.
+// - Review-all: every imported candidate is screened (screen_target = the
+//   run's membership count, set when ranking completes).
+import crypto from "node:crypto";
 import { sbRest, sbRpc } from "../supabase";
 import { embedTexts } from "../roles-pipeline";
 import { computeFacts, formatFacts } from "../facts";
@@ -16,27 +28,24 @@ import { clientTag, clientReason, TAG_LABEL } from "../client-reason";
 import { searchLeadsPage, previewLeadCount, getFullProfile, providerMode, type Lead, type LeadSearchQuery } from "./harvest";
 import { profileToFields, sourcedEmbedText } from "./import";
 
-export const MAX_IMPORT = 2000; // above this: refuse and ask to narrow
-export const DEFAULT_SCREEN_TARGET = 50;
-export const MAX_SCREEN_TARGET = 200;
+export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
 const PAGE_SIZE = 25;
-// Harvest caps CONCURRENT requests by plan (Free 1 … Business 40); no
-// per-minute limits. Keep the default low for the basic plan.
-const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY || "2", 10) || 2);
-// LLM screening concurrency. Constraint is OpenAI tokens/min, not requests:
-// each screen ≈ 5-6k tokens across 2 calls, and this key's gpt-4o-mini cap
-// is 200k TPM (~35 screens/min) — 15 concurrent finishes a top-50 in ~2min
-// with headroom left for apply-flow screening on the same key. Raise the
-// env var when the OpenAI tier (and TPM) goes up.
+const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY || "4", 10) || 4);
 const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "15", 10) || 15);
-// Circuit breaker: consecutive batches where every screen fails mean a
-// systemic problem (rate limits, outage) — stop instead of churning LLM
-// spend down the ranked list.
-const MAX_ALLFAIL_BATCHES = 3;
+// Short LLM cap so a wave (2 sequential calls/row) provably fits the window.
+const SCREEN_LLM_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.SOURCING_LLM_TIMEOUT_MS || "15000", 10) || 15_000);
+const WAVE_NEED_MS = 2 * SCREEN_LLM_TIMEOUT_MS + 5_000;
+const IMPORT_SLICE_NEED_MS = 12_000;
+const LEASE_TTL_SECS = Math.max(30, parseInt(process.env.SOURCING_LEASE_TTL || "90", 10) || 90);
+const MAX_ALLFAIL_STREAK = 3;
+const MAX_PAGE_ATTEMPTS = 6;
+const MAX_ROW_ATTEMPTS = 3;
 
-// Our unit costs (margin analysis in usage_events; client credits are Task 6).
 const COST_SEARCH_PAGE = 0.1;
 const COST_FULL_PROFILE = 0.004;
+
+/** Domain-terminal failure: the ONLY error class that marks a run failed. */
+export class RunFailure extends Error {}
 
 export interface SourcingRun {
   id: string;
@@ -50,6 +59,9 @@ export interface SourcingRun {
   duplicate_count: number;
   screened_count: number;
   screen_target: number;
+  allfail_streak: number;
+  page_attempts: number;
+  next_attempt_at: string | null;
 }
 
 async function rest<T>(path: string, init: Parameters<typeof sbRest>[1] = {}): Promise<T> {
@@ -73,10 +85,28 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
+/** Lease-fenced run PATCH. Returns false when the lease was lost (0 rows). */
+async function leasePatch(runId: string, leaseId: string, patch: Record<string, unknown>): Promise<boolean> {
+  const rows = await rest<unknown[]>(
+    `sourcing_runs?id=eq.${runId}&lease_id=eq.${leaseId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+      prefer: "return=representation",
+    }
+  );
+  return rows.length > 0;
+}
+
+async function countRows(path: string): Promise<number> {
+  const res = await sbRest(path, { method: "HEAD", headers: { Prefer: "count=exact", Range: "0-0" } });
+  return parseInt((res.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
+}
+
 async function recordUsage(
   organizationId: string,
   runId: string | null,
-  eventType: "search_preview" | "search_page" | "profile_import" | "deep_screen",
+  eventType: "search_preview" | "deep_screen",
   quantity: number,
   unitCostUsd: number | null,
   meta?: Record<string, unknown>
@@ -90,19 +120,11 @@ async function recordUsage(
       event_type: eventType,
       quantity,
       unit_cost_usd: unitCostUsd,
-      credits: eventType === "profile_import" ? quantity : 0,
+      credits: 0,
       meta: meta ?? null,
     }),
     prefer: "return=minimal",
   }).catch(() => {}); // metering must never kill a run
-}
-
-async function patchRun(runId: string, patch: Record<string, unknown>) {
-  await rest(`sourcing_runs?id=eq.${runId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
-    prefer: "return=minimal",
-  });
 }
 
 // ---------- preview + create ----------
@@ -111,7 +133,6 @@ export type PreviewResult =
   | { ok: true; total: number; sampleNames: string[] }
   | { ok: false; code: "too_broad" | "no_matches" | "unknown_total"; total: number | null };
 
-/** One metered page-1 request → match count + guardrail verdict. */
 export async function previewSearch(organizationId: string, query: LeadSearchQuery): Promise<PreviewResult> {
   const { total, sample } = await previewLeadCount(query);
   await recordUsage(organizationId, null, "search_preview", 1, COST_SEARCH_PAGE, { query });
@@ -127,8 +148,7 @@ export async function createRun(args: {
   orgRoleId: string;
   createdBy?: string | null;
   query: LeadSearchQuery;
-  matchEstimate: number; // from previewSearch — already guardrail-checked
-  screenTarget?: number;
+  matchEstimate: number;
 }): Promise<SourcingRun> {
   if (args.matchEstimate > MAX_IMPORT) throw new Error(`search too broad (${args.matchEstimate} > ${MAX_IMPORT})`);
   const [run] = await rest<SourcingRun[]>("sourcing_runs", {
@@ -140,7 +160,7 @@ export async function createRun(args: {
       search_params: args.query,
       status: "previewed",
       match_estimate: args.matchEstimate,
-      screen_target: Math.min(Math.max(args.screenTarget ?? DEFAULT_SCREEN_TARGET, 0), MAX_SCREEN_TARGET),
+      screen_target: 0, // review-all: set to the membership count when ranking completes
     }),
     prefer: "return=representation",
   });
@@ -149,21 +169,40 @@ export async function createRun(args: {
 
 // ---------- stage: importing ----------
 
-async function importOnePage(run: SourcingRun): Promise<{ lastPage: boolean }> {
+type ImportResult = { lastPage: boolean; leaseLost: boolean; partial: boolean };
+
+async function importOnePage(
+  run: SourcingRun,
+  leaseId: string,
+  deadline: number
+): Promise<ImportResult> {
   const page = run.pages_fetched + 1;
+
+  // Stall detector: same page failing over and over is a doomed run, not
+  // an infinite retry loop that re-pays Harvest every ~60s.
+  const attempts = run.page_attempts + 1;
+  if (attempts > MAX_PAGE_ATTEMPTS) {
+    throw new RunFailure(`import stuck on page ${page} after ${run.page_attempts} attempts`);
+  }
+  if (!(await leasePatch(run.id, leaseId, { page_attempts: attempts }))) {
+    return { lastPage: false, leaseLost: true, partial: false };
+  }
+  run.page_attempts = attempts;
+
   const result = await searchLeadsPage(run.search_params, page);
-  await recordUsage(run.organization_id, run.id, "search_page", 1, COST_SEARCH_PAGE, { page });
 
   // Pool dedupe BEFORE paying for profiles: member id first, username fallback.
   const memberIds = result.leads.map((l) => l.memberId).filter((m): m is string => !!m);
   const usernames = result.leads.map((l) => l.linkedinUsername).filter((u): u is string => !!u);
-  const existing = await rest<{ id: string; linkedin_member_id: string | null; linkedin_username: string | null }[]>(
-    `sourced_candidates?organization_id=eq.${run.organization_id}` +
-      `&or=(${[
-        memberIds.length ? `linkedin_member_id.in.(${memberIds.map((m) => `"${m}"`).join(",")})` : null,
-        usernames.length ? `linkedin_username.in.(${usernames.map((u) => `"${u}"`).join(",")})` : null,
-      ].filter(Boolean).join(",")})&select=id,linkedin_member_id,linkedin_username`
-  ).catch(() => [] as { id: string; linkedin_member_id: string | null; linkedin_username: string | null }[]);
+  const existing = result.leads.length
+    ? await rest<{ id: string; linkedin_member_id: string | null; linkedin_username: string | null }[]>(
+        `sourced_candidates?organization_id=eq.${run.organization_id}` +
+          `&or=(${[
+            memberIds.length ? `linkedin_member_id.in.(${memberIds.map((m) => `"${m}"`).join(",")})` : null,
+            usernames.length ? `linkedin_username.in.(${usernames.map((u) => `"${u}"`).join(",")})` : null,
+          ].filter(Boolean).join(",")})&select=id,linkedin_member_id,linkedin_username`
+      ).catch(() => [] as { id: string; linkedin_member_id: string | null; linkedin_username: string | null }[])
+    : [];
   const byMember = new Map(existing.filter((e) => e.linkedin_member_id).map((e) => [e.linkedin_member_id!, e.id]));
   const byUsername = new Map(existing.filter((e) => e.linkedin_username).map((e) => [e.linkedin_username!, e.id]));
 
@@ -178,75 +217,106 @@ async function importOnePage(run: SourcingRun): Promise<{ lastPage: boolean }> {
     else fresh.push(lead);
   }
 
-  // Fetch full profiles for fresh leads only (the paid part).
-  const fetched = await mapLimit(fresh, HARVEST_CONCURRENCY, async (lead) => {
-    const profile = await getFullProfile(lead.linkedinUrl).catch(() => null);
-    return { lead, profile };
-  });
-  const importable = fetched.filter((f) => f.profile);
-  await recordUsage(run.organization_id, run.id, "profile_import", importable.length, COST_FULL_PROFILE, { page });
-
-  // Embed in one batch, insert candidates, then memberships.
-  const texts = importable.map((f) => sourcedEmbedText(f.profile!) || `${f.lead.fullName} ${f.lead.headline ?? ""}`);
-  const vectors = texts.length ? await embedTexts(texts) : [];
-  const inserted = importable.length
-    ? await rest<{ id: string }[]>(
-        `sourced_candidates?on_conflict=organization_id,linkedin_username`,
-        {
-          method: "POST",
-          body: JSON.stringify(
-            importable.map((f, i) => ({
-              organization_id: run.organization_id,
-              first_run_id: run.id,
-              linkedin_member_id: f.lead.memberId,
-              ...profileToFields(f.profile!),
-              profile: f.profile,
-              embedding: JSON.stringify(vectors[i]),
-            }))
-          ),
-          prefer: "resolution=merge-duplicates,return=representation",
-        }
-      )
-    : [];
-
-  const memberships = [
-    ...inserted.map((row, i) => ({
-      run_id: run.id,
-      sourced_candidate_id: row.id,
-      organization_id: run.organization_id,
-      source_page: page,
-      source_position: result.leads.indexOf(importable[i].lead),
-    })),
-    ...dupes.map((d) => ({
-      run_id: run.id,
-      sourced_candidate_id: d.existingId,
-      organization_id: run.organization_id,
-      source_page: page,
-      source_position: result.leads.indexOf(d.lead),
-    })),
-  ];
-  if (memberships.length) {
+  // Dupes cost nothing — link them to the run immediately.
+  if (dupes.length) {
     await rest(`sourcing_run_candidates?on_conflict=run_id,sourced_candidate_id`, {
       method: "POST",
-      body: JSON.stringify(memberships),
+      body: JSON.stringify(
+        dupes.map((d) => ({
+          run_id: run.id,
+          sourced_candidate_id: d.existingId,
+          organization_id: run.organization_id,
+          source_page: page,
+          source_position: result.leads.indexOf(d.lead),
+        }))
+      ),
       prefer: "resolution=ignore-duplicates,return=minimal",
     });
   }
+
+  // Fresh leads in small sub-batches: fetch → embed → upsert, checkpointed,
+  // so a killed invocation loses at most one sub-batch (already-inserted
+  // rows become free dupes on the retry — never re-paid).
+  const SLICE = Math.max(HARVEST_CONCURRENCY * 2, 6);
+  for (let i = 0; i < fresh.length; i += SLICE) {
+    if (Date.now() + IMPORT_SLICE_NEED_MS > deadline) {
+      return { lastPage: false, leaseLost: false, partial: true };
+    }
+    const slice = fresh.slice(i, i + SLICE);
+    const fetched = await mapLimit(slice, HARVEST_CONCURRENCY, async (lead) => ({
+      lead,
+      profile: await getFullProfile(lead.linkedinUrl).catch(() => null),
+    }));
+    const importable = fetched.filter((f) => f.profile);
+    if (!importable.length) continue;
+    const texts = importable.map((f) => sourcedEmbedText(f.profile!) || `${f.lead.fullName} ${f.lead.headline ?? ""}`);
+    const vectors = await embedTexts(texts);
+    const inserted = await rest<{ id: string }[]>(
+      `sourced_candidates?on_conflict=organization_id,linkedin_username`,
+      {
+        method: "POST",
+        body: JSON.stringify(
+          importable.map((f, j) => ({
+            organization_id: run.organization_id,
+            first_run_id: run.id,
+            linkedin_member_id: f.lead.memberId,
+            ...profileToFields(f.profile!),
+            profile: f.profile,
+            embedding: JSON.stringify(vectors[j]),
+          }))
+        ),
+        prefer: "resolution=merge-duplicates,return=representation",
+      }
+    );
+    await rest(`sourcing_run_candidates?on_conflict=run_id,sourced_candidate_id`, {
+      method: "POST",
+      body: JSON.stringify(
+        inserted.map((row, j) => ({
+          run_id: run.id,
+          sourced_candidate_id: row.id,
+          organization_id: run.organization_id,
+          source_page: page,
+          source_position: result.leads.indexOf(importable[j].lead),
+        }))
+      ),
+      prefer: "resolution=ignore-duplicates,return=minimal",
+    });
+  }
+
+  // Billable imports for this page, from ground truth (covers partial-page
+  // retries: rows inserted by an earlier killed attempt still belong to
+  // this page and this run, and are billed exactly once by the commit RPC's
+  // idempotent insert). PostgREST can't subquery, so count via the ids.
+  const pageMembers = await rest<{ sourced_candidate_id: string }[]>(
+    `sourcing_run_candidates?run_id=eq.${run.id}&source_page=eq.${page}&select=sourced_candidate_id`
+  );
+  let billable = 0;
+  for (let i = 0; i < pageMembers.length; i += 100) {
+    const ids = pageMembers.slice(i, i + 100).map((m) => m.sourced_candidate_id);
+    billable += await countRows(
+      `sourced_candidates?id=in.(${ids.join(",")})&first_run_id=eq.${run.id}`
+    );
+  }
+
+  // Atomic commit: cursor CAS + idempotent usage rows + counts from truth.
+  const committed = await sbRpc<boolean>("commit_import_page", {
+    p_run_id: run.id,
+    p_lease_id: leaseId,
+    p_page: page,
+    p_org: run.organization_id,
+    p_import_qty: billable,
+    p_search_cost: COST_SEARCH_PAGE,
+    p_import_unit_cost: COST_FULL_PROFILE,
+  });
+  if (!committed) return { lastPage: false, leaseLost: true, partial: false };
+  run.pages_fetched = page;
+  run.page_attempts = 0;
 
   const lastPage =
     (result.totalPages != null && page >= result.totalPages) ||
     result.leads.length < PAGE_SIZE ||
     page >= Math.ceil(MAX_IMPORT / PAGE_SIZE);
-  await patchRun(run.id, {
-    pages_fetched: page,
-    imported_count: run.imported_count + inserted.length,
-    duplicate_count: run.duplicate_count + dupes.length,
-    ...(run.status === "previewed" ? {} : {}),
-  });
-  run.pages_fetched = page;
-  run.imported_count += inserted.length;
-  run.duplicate_count += dupes.length;
-  return { lastPage };
+  return { lastPage, leaseLost: false, partial: false };
 }
 
 // ---------- stage: ranking ----------
@@ -255,9 +325,8 @@ async function rankRun(run: SourcingRun): Promise<void> {
   // Embedding channel in SQL (vectors never leave the DB).
   await sbRpc<number>("rank_sourcing_run_embed", { p_run_id: run.id });
 
-  // Keyword channel in TS against the role's stack + must-haves.
-  const [role] = await rest<{ tech_stack: string | null; matching_profile: { must_haves?: string[] } | null; title: string }[]>(
-    `org_roles?id=eq.${run.org_role_id}&select=tech_stack,matching_profile,title`
+  const [role] = await rest<{ tech_stack: string | null; matching_profile: { must_haves?: string[] } | null }[]>(
+    `org_roles?id=eq.${run.org_role_id}&select=tech_stack,matching_profile`
   );
   const terms = [
     ...new Set(
@@ -269,10 +338,10 @@ async function rankRun(run: SourcingRun): Promise<void> {
   ].slice(0, 24);
 
   const rows = await rest<
-    { id: string; embed_score: number | null; sourced_candidate_id: string;
+    { id: string; embed_score: number | null;
       sourced_candidates: { skills: string[] | null; current_title: string | null; headline: string | null } }[]
   >(
-    `sourcing_run_candidates?run_id=eq.${run.id}&select=id,embed_score,sourced_candidate_id,` +
+    `sourcing_run_candidates?run_id=eq.${run.id}&select=id,embed_score,` +
       `sourced_candidates(skills,current_title,headline)&limit=${MAX_IMPORT + 500}`
   );
 
@@ -287,187 +356,136 @@ async function rankRun(run: SourcingRun): Promise<void> {
   });
   scored.sort((a, b) => b.rank_score - a.rank_score);
 
-  // Chunked writes: rank + scores per membership row.
-  for (let i = 0; i < scored.length; i += 200) {
-    await Promise.all(
-      scored.slice(i, i + 200).map((s, j) =>
-        rest(`sourcing_run_candidates?id=eq.${s.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            keyword_score: s.keyword_score,
-            rank_score: s.rank_score,
-            rank: i + j + 1,
-          }),
-          prefer: "return=minimal",
-        })
-      )
-    );
-  }
+  // One set-based write instead of one PATCH per row.
+  await sbRpc<number>("apply_ranks", {
+    p_run_id: run.id,
+    p_ranks: scored.map((s, i) => ({ id: s.id, rank: i + 1, keyword_score: s.keyword_score, rank_score: s.rank_score })),
+  });
 }
 
 // ---------- stage: screening ----------
 
-async function screenBatch(
+type RowOutcome = "ok" | "transient" | "junk" | "lost" | "fatal";
+type ClaimedRow = {
+  id: string; screen_attempts: number; sourced_candidate_id: string;
+};
+
+/** Fenced row completion. Returns false if the claim no longer holds. */
+async function fencedRowPatch(rowId: string, claimId: string, patch: Record<string, unknown>): Promise<boolean> {
+  const rows = await rest<unknown[]>(
+    `sourcing_run_candidates?id=eq.${rowId}&screen_claim_id=eq.${claimId}&screen_status=eq.pending`,
+    { method: "PATCH", body: JSON.stringify(patch), prefer: "return=representation" }
+  );
+  return rows.length > 0;
+}
+
+const jitter = (baseMs: number) => baseMs + Math.floor(Math.random() * baseMs * 0.5);
+
+async function screenOneRow(
+  row: ClaimedRow,
+  role: { external_id: string; tech_stack: string | null },
   run: SourcingRun,
-  batchSize: number
-): Promise<{ remaining: number; attempted: number; succeeded: number }> {
-  const [role] = await rest<{ external_id: string; tech_stack: string | null }[]>(
-    `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack`
-  );
-  const limit = Math.min(batchSize, Math.max(0, run.screen_target - run.screened_count));
-  if (limit <= 0) return { remaining: 0, attempted: 0, succeeded: 0 };
-  // Screenable = fresh rows OR failed rows with retries left (max 3
-  // attempts) — one rank-ordered query, so a flaky LLM response on the #1
-  // candidate retries before rank-75 gets its first look.
-  const todo = await rest<
-    { id: string; screen_attempts: number; sourced_candidate_id: string;
-      sourced_candidates: { profile: Record<string, unknown> | null; skills: string[] | null; full_name: string | null } }[]
-  >(
-    `sourcing_run_candidates?run_id=eq.${run.id}&hidden=eq.false&rank=not.is.null` +
-      `&or=(screen_status.eq.none,and(screen_status.eq.failed,screen_attempts.lt.3))` +
-      `&order=rank.asc&limit=${limit}` +
-      `&select=id,screen_attempts,sourced_candidate_id,sourced_candidates(profile,skills,full_name)`
-  );
-  if (!todo.length) return { remaining: 0, attempted: 0, succeeded: 0 };
-
-  await Promise.all(todo.map((t) =>
-    rest(`sourcing_run_candidates?id=eq.${t.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ screen_status: "pending", screen_attempts: t.screen_attempts + 1 }),
-      prefer: "return=minimal",
-    })
-  ));
-
-  const stackTerms = splitStack(role?.tech_stack).slice(0, 20);
-  let done = 0;
-  await mapLimit(todo, SCREEN_CONCURRENCY, async (t) => {
-    try {
-      const profile = t.sourced_candidates?.profile;
-      if (!profile) throw new Error("no stored profile");
-      const skills = t.sourced_candidates?.skills || [];
-      const expRows = harvestToExperiences(profile);
-      const facts = computeFacts(expRows, stackTerms, skills, (profile as Record<string, unknown>).education ?? null);
-      const evidence = [
-        linkedinProfileText(profile).slice(0, 4000),
-        `FACTS (computed from dated position history):\n${formatFacts(facts)}`,
-      ].join("\n\n");
-      const screenOnce = () =>
-        screenRolesWithCache({
-          candidateId: null, // sourced candidates live in their own pool, not the site spine
-          evidence,
-          cacheKeyText: JSON.stringify(profile),
-          jobIds: [role.external_id],
-          facts,
-          source: "precompute",
-          profileSkills: skills,
-          organizationId: run.organization_id,
-        });
-      // Rate-limited LLM calls surface as empty verdicts — one paced retry.
-      let [verdict] = await screenOnce();
-      if (!verdict) {
-        await new Promise((r) => setTimeout(r, 4000));
-        [verdict] = await screenOnce();
-      }
-      if (!verdict) throw new Error("screening returned no verdict (after retry)");
-      const sc = verdict.scorecard;
-      await rest(`sourcing_run_candidates?id=eq.${t.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          screen_status: "done",
-          verdict: verdict ?? null,
-          tag: sc ? clientTag(sc) : null,
-          reason: sc ? clientReason(sc) : null,
-          screened_at: new Date().toISOString(),
-        }),
-        prefer: "return=minimal",
+  leaseId: string
+): Promise<{ outcome: RowOutcome; retryAfterMs?: number }> {
+  let llmErr: { status: number; code?: string; retryAfter?: string } | null = null;
+  try {
+    const [cand] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null }[]>(
+      `sourced_candidates?id=eq.${row.sourced_candidate_id}&select=profile,skills`
+    );
+    const profile = cand?.profile;
+    if (!profile) {
+      // No stored profile = nothing to review, ever. Terminal, honestly.
+      await fencedRowPatch(row.id, leaseId, {
+        screen_status: "failed", screen_attempts: MAX_ROW_ATTEMPTS, screen_claim_id: null,
       });
-      done++;
-    } catch (err) {
-      await rest(`sourcing_run_candidates?id=eq.${t.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ screen_status: "failed" }),
-        prefer: "return=minimal",
-      }).catch(() => {});
-      console.error(`screen failed for membership ${t.id}:`, (err as Error).message);
+      return { outcome: "junk" };
     }
-  });
-  await recordUsage(run.organization_id, run.id, "deep_screen", done, null);
-  run.screened_count += done;
-  await patchRun(run.id, { screened_count: run.screened_count });
-  const remainingTarget = Math.max(0, run.screen_target - run.screened_count);
-  if (!remainingTarget) return { remaining: 0, attempted: todo.length, succeeded: done };
-  // Anything still screenable? Fresh rows, or failed rows with retries left.
-  const more = await rest<{ id: string }[]>(
-    `sourcing_run_candidates?run_id=eq.${run.id}&hidden=eq.false&rank=not.is.null` +
-      `&or=(screen_status.eq.none,and(screen_status.eq.failed,screen_attempts.lt.3))&limit=1&select=id`
-  );
-  return { remaining: more.length ? remainingTarget : 0, attempted: todo.length, succeeded: done };
+    const skills = cand?.skills || [];
+    const stackTerms = splitStack(role.tech_stack).slice(0, 20);
+    const expRows = harvestToExperiences(profile);
+    const facts = computeFacts(expRows, stackTerms, skills, (profile as Record<string, unknown>).education ?? null);
+    const evidence = [
+      linkedinProfileText(profile).slice(0, 4000),
+      `FACTS (computed from dated position history):\n${formatFacts(facts)}`,
+    ].join("\n\n");
+
+    const [verdict] = await screenRolesWithCache({
+      candidateId: null,
+      evidence,
+      cacheKeyText: JSON.stringify(profile),
+      jobIds: [role.external_id],
+      facts,
+      source: "precompute",
+      profileSkills: skills,
+      organizationId: run.organization_id,
+      llmTimeoutMs: SCREEN_LLM_TIMEOUT_MS,
+      onLLMError: (info) => { llmErr = info; },
+    });
+
+    if (verdict) {
+      const sc = verdict.scorecard;
+      const landed = await fencedRowPatch(row.id, leaseId, {
+        screen_status: "done",
+        verdict,
+        tag: sc ? clientTag(sc) : null,
+        reason: sc ? clientReason(sc) : null,
+        screened_at: new Date().toISOString(),
+        screen_claim_id: null,
+      });
+      return { outcome: landed ? "ok" : "lost" };
+    }
+
+    const err = llmErr as { status: number; code?: string; retryAfter?: string } | null;
+    // Quota-dead / auth-dead: grinding 2500 rows x 3 attempts helps no one.
+    if (err && (err.status === 401 || err.status === 403 || err.code === "insufficient_quota")) {
+      throw new RunFailure(`LLM key rejected (${err.status}${err.code ? ` ${err.code}` : ""})`);
+    }
+    if (err && (err.status === 429 || err.status >= 500)) {
+      // Rate limit / upstream blip: NOT the row's fault — no attempt charged.
+      const retryMs = err.retryAfter ? Math.min(parseInt(err.retryAfter, 10) * 1000 || 30_000, 120_000) : jitter(30_000);
+      await fencedRowPatch(row.id, leaseId, {
+        screen_status: "failed",
+        screen_next_attempt_at: new Date(Date.now() + retryMs).toISOString(),
+        screen_claim_id: null,
+      });
+      return { outcome: "transient", retryAfterMs: retryMs };
+    }
+    // Junk model output: charge the attempt, brief pause before retry.
+    await fencedRowPatch(row.id, leaseId, {
+      screen_status: "failed",
+      screen_attempts: row.screen_attempts + 1,
+      screen_next_attempt_at: new Date(Date.now() + jitter(8_000)).toISOString(),
+      screen_claim_id: null,
+    });
+    return { outcome: "junk" };
+  } catch (err) {
+    if (err instanceof RunFailure) throw err;
+    // Timeouts / aborts / transport errors: transient, no attempt charged.
+    await fencedRowPatch(row.id, leaseId, {
+      screen_status: "failed",
+      screen_next_attempt_at: new Date(Date.now() + jitter(20_000)).toISOString(),
+      screen_claim_id: null,
+    }).catch(() => {});
+    return { outcome: "transient" };
+  }
 }
 
 // ---------- the advance loop ----------
 
 export interface AdvanceResult {
-  status: SourcingRun["status"];
+  status: SourcingRun["status"] | "busy";
   done: boolean;
+  busy?: boolean;
+  retryAfterMs?: number;
   pagesFetched: number;
   imported: number;
   duplicates: number;
   screened: number;
+  screenTarget: number;
+  error?: string;
 }
 
-/**
- * Advance a run within a time budget. Callers loop (CLI/worker) or poll
- * (API route) until done:true. Safe to call concurrently-ish: stages are
- * idempotent (page cursor, upserts, screen_status flags).
- */
-export async function advanceRun(runId: string, budgetMs = 45_000): Promise<AdvanceResult> {
-  const deadline = Date.now() + budgetMs;
-  const [run] = await rest<SourcingRun[]>(`sourcing_runs?id=eq.${runId}&select=*`);
-  if (!run) throw new Error(`run ${runId} not found`);
-
-  try {
-    if (run.status === "previewed") {
-      await patchRun(run.id, { status: "importing", started_at: new Date().toISOString() });
-      run.status = "importing";
-    }
-
-    if (run.status === "importing") {
-      while (Date.now() < deadline) {
-        const { lastPage } = await importOnePage(run);
-        if (lastPage) {
-          await patchRun(run.id, { status: "ranking" });
-          run.status = "ranking";
-          break;
-        }
-      }
-    }
-
-    if (run.status === "ranking" && Date.now() < deadline) {
-      await rankRun(run);
-      await patchRun(run.id, { status: "screening" });
-      run.status = "screening";
-    }
-
-    if (run.status === "screening" && Date.now() < deadline) {
-      let allFailBatches = 0;
-      while (Date.now() < deadline) {
-        const { remaining, attempted, succeeded } = await screenBatch(run, SCREEN_CONCURRENCY * 2);
-        allFailBatches = attempted > 0 && succeeded === 0 ? allFailBatches + 1 : 0;
-        if (allFailBatches >= MAX_ALLFAIL_BATCHES) {
-          throw new Error(`screening circuit breaker: ${allFailBatches} consecutive all-fail batches`);
-        }
-        if (!remaining) {
-          await patchRun(run.id, { status: "done", finished_at: new Date().toISOString() });
-          run.status = "done";
-          break;
-        }
-      }
-    }
-  } catch (err) {
-    await patchRun(run.id, { status: "failed", error: String((err as Error).message).slice(0, 500) }).catch(() => {});
-    throw err;
-  }
-
+function resultFrom(run: SourcingRun, extra: Partial<AdvanceResult> = {}): AdvanceResult {
   return {
     status: run.status,
     done: run.status === "done" || run.status === "failed" || run.status === "cancelled",
@@ -475,7 +493,183 @@ export async function advanceRun(runId: string, budgetMs = 45_000): Promise<Adva
     imported: run.imported_count,
     duplicates: run.duplicate_count,
     screened: run.screened_count,
+    screenTarget: run.screen_target,
+    ...extra,
   };
+}
+
+/**
+ * Advance a run within a time budget. Drivers (browser poll, resumer, CLI)
+ * loop until done. Claim-or-busy, fenced writes throughout; transient
+ * errors leave the run active and rethrow — ONLY RunFailure marks it failed.
+ */
+export async function advanceRun(runId: string, budgetMs = 50_000): Promise<AdvanceResult> {
+  const deadline = Date.now() + budgetMs;
+  const leaseId = crypto.randomUUID();
+
+  const claimed = await sbRpc<SourcingRun[]>("claim_run_lease", {
+    p_run_id: runId, p_lease_id: leaseId, p_ttl_secs: LEASE_TTL_SECS,
+  });
+  if (!claimed.length) {
+    // Someone else is driving. Report their progress.
+    const [run] = await rest<SourcingRun[]>(`sourcing_runs?id=eq.${runId}&select=*`);
+    if (!run) throw new Error(`run ${runId} not found`);
+    return resultFrom(run, { busy: true, status: "busy" });
+  }
+  const run = claimed[0];
+
+  const release = () =>
+    sbRpc<boolean>("release_run_lease", { p_run_id: runId, p_lease_id: leaseId }).catch(() => {});
+
+  if (run.status === "done" || run.status === "failed" || run.status === "cancelled") {
+    await release();
+    return resultFrom(run);
+  }
+  if (run.next_attempt_at && new Date(run.next_attempt_at).getTime() > Date.now()) {
+    await release();
+    return resultFrom(run, {
+      busy: true,
+      retryAfterMs: new Date(run.next_attempt_at).getTime() - Date.now(),
+    });
+  }
+
+  // Renew the lease continuously so a live driver can never be superseded
+  // mid-work; a failed renewal flips leaseLost and everything stops cleanly.
+  // The renewer has a LIFESPAN (2x budget): a driver whose main work hangs
+  // (e.g. a socket killed by machine sleep) must eventually lose its lease
+  // instead of heartbeating as a zombie while making no progress.
+  let leaseLost = false;
+  const renewerDies = Date.now() + budgetMs * 2;
+  const renewer = setInterval(() => {
+    if (Date.now() > renewerDies) { leaseLost = true; clearInterval(renewer); return; }
+    sbRpc<boolean>("renew_run_lease", { p_run_id: runId, p_lease_id: leaseId, p_ttl_secs: LEASE_TTL_SECS })
+      .then((ok) => { if (!ok) leaseLost = true; })
+      .catch(() => {});
+  }, Math.min(20_000, (LEASE_TTL_SECS * 1000) / 3));
+
+  try {
+    if (run.status === "previewed") {
+      if (!(await leasePatch(run.id, leaseId, { status: "importing", started_at: new Date().toISOString() }))) {
+        return resultFrom(run, { busy: true });
+      }
+      run.status = "importing";
+    }
+
+    if (run.status === "importing") {
+      while (!leaseLost && Date.now() + IMPORT_SLICE_NEED_MS < deadline) {
+        const r = await importOnePage(run, leaseId, deadline);
+        if (r.leaseLost) { leaseLost = true; break; }
+        if (r.partial) break; // durable progress made; next invocation resumes the page
+        if (r.lastPage) {
+          await leasePatch(run.id, leaseId, { status: "ranking" });
+          run.status = "ranking";
+          // Fresh invocation for ranking — full budget for the big rank write.
+          return resultFrom(run);
+        }
+      }
+    }
+
+    if (run.status === "ranking" && !leaseLost && Date.now() + 10_000 < deadline) {
+      await rankRun(run);
+      const total = await countRows(`sourcing_run_candidates?run_id=eq.${run.id}&select=id`);
+      if (await leasePatch(run.id, leaseId, { status: "screening", screen_target: total })) {
+        run.status = "screening";
+        run.screen_target = total;
+      }
+      return resultFrom(run);
+    }
+
+    if (run.status === "screening" && !leaseLost) {
+      // Heal rows orphaned by dead drivers (fenced: never touches our claims).
+      await sbRpc<number>("heal_orphan_rows", { p_run_id: run.id, p_lease_id: leaseId });
+
+      const [role] = await rest<{ external_id: string; tech_stack: string | null }[]>(
+        `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack`
+      );
+      if (!role) throw new RunFailure("role vanished");
+
+      // The FIRST wave always runs regardless of budget — a caller with a
+      // budget smaller than a wave must make progress, not silently no-op
+      // forever. (The Vercel route's budget exceeds a wave, so this only
+      // matters for CLI/worker callers and misconfiguration.)
+      let firstWave = true;
+      while (!leaseLost && (firstWave || Date.now() + WAVE_NEED_MS < deadline)) {
+        firstWave = false;
+        const rows = await sbRpc<ClaimedRow[]>("claim_screen_rows", {
+          p_run_id: run.id, p_lease_id: leaseId, p_limit: SCREEN_CONCURRENCY,
+        });
+
+        if (!rows.length) {
+          const screenableEver = await countRows(
+            `sourcing_run_candidates?run_id=eq.${run.id}&hidden=eq.false&rank=not.is.null` +
+              `&screen_status=in.(none,failed)&screen_attempts=lt.${MAX_ROW_ATTEMPTS}&select=id`
+          );
+          const stillPending = await countRows(
+            `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.pending&select=id`
+          );
+          if (screenableEver === 0 && stillPending === 0) {
+            const screened = await countRows(
+              `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.done&select=id`
+            );
+            await leasePatch(run.id, leaseId, {
+              status: "done", finished_at: new Date().toISOString(), screened_count: screened,
+            });
+            run.status = "done";
+            run.screened_count = screened;
+            return resultFrom(run);
+          }
+          // Everything screenable is paced into the future — come back then.
+          return resultFrom(run, { busy: true, retryAfterMs: 15_000 });
+        }
+
+        const outcomes = await mapLimit(rows, SCREEN_CONCURRENCY, (row) =>
+          screenOneRow(row, role, run, leaseId)
+        );
+        const ok = outcomes.filter((o) => o.outcome === "ok").length;
+        const transient = outcomes.filter((o) => o.outcome === "transient").length;
+        await recordUsage(run.organization_id, run.id, "deep_screen", ok, null);
+
+        const screened = await countRows(
+          `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.done&select=id`
+        );
+        run.screened_count = screened;
+
+        // Persisted circuit breaker: survives invocation boundaries.
+        const streak = ok === 0 && rows.length > 0 ? run.allfail_streak + 1 : 0;
+        if (!(await leasePatch(run.id, leaseId, { screened_count: screened, allfail_streak: streak }))) {
+          leaseLost = true; break;
+        }
+        run.allfail_streak = streak;
+        if (streak >= MAX_ALLFAIL_STREAK) {
+          throw new RunFailure(`screening circuit breaker: ${streak} consecutive all-fail waves`);
+        }
+
+        // Systemic rate limiting: persist the pause, never sleep in-function.
+        if (transient > rows.length / 2) {
+          const retryMs = Math.max(...outcomes.map((o) => o.retryAfterMs ?? 0), 30_000);
+          await leasePatch(run.id, leaseId, {
+            next_attempt_at: new Date(Date.now() + retryMs).toISOString(),
+          });
+          return resultFrom(run, { busy: true, retryAfterMs: retryMs });
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof RunFailure) {
+      await leasePatch(run.id, leaseId, {
+        status: "failed", error: String(err.message).slice(0, 500),
+      }).catch(() => {});
+      run.status = "failed";
+      return resultFrom(run, { error: err.message });
+    }
+    // Transient: leave the run in its active stage — a driver will retry.
+    throw err;
+  } finally {
+    clearInterval(renewer);
+    await release();
+  }
+
+  return resultFrom(run);
 }
 
 export { providerMode, TAG_LABEL };

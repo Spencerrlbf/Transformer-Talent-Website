@@ -162,6 +162,13 @@ export async function screenRolesWithCache(args: {
   // Tenant scoping: external ids are only unique per organization. When set,
   // role resolution is limited to this org; unset = legacy unscoped behavior.
   organizationId?: string | null;
+  // LLM call timeout override (default 90s). The sourcing engine passes a
+  // short cap so a wave provably fits its serverless window; the apply flow
+  // omits it and behaves exactly as before.
+  llmTimeoutMs?: number;
+  // Failure visibility: called when an LLM request comes back non-ok, with
+  // enough detail for the caller to distinguish rate-limit from quota-dead.
+  onLLMError?: (info: { status: number; code?: string; retryAfter?: string }) => void;
 }): Promise<RoleVerdict[]> {
   const jobIds = args.jobIds.slice(0, 5);
   if (!jobIds.length || !args.evidence) return [];
@@ -232,8 +239,9 @@ export async function screenRolesWithCache(args: {
   const toScreen = roleMeta.filter((r) => !cachedRoleIds.has(r.jobId));
   if (toScreen.length) {
     // Scope evidence is per-candidate: one small cited-answers call per batch.
-    const scopeSignals: ScopeSignal[] = await assessScope(args.evidence);
-    const fresh = (await interrogate(args.evidence, toScreen)).map((v) => {
+    const llmOpts = { timeoutMs: args.llmTimeoutMs, onError: args.onLLMError };
+    const scopeSignals: ScopeSignal[] = await assessScope(args.evidence, llmOpts);
+    const fresh = (await interrogate(args.evidence, toScreen, llmOpts)).map((v) => {
       const corrected = applyYearsOverrides(v, args.facts);
       const meta = toScreen.find((r) => r.jobId === corrected.job_id);
       const roleRow = roleRows.find((r) => r.external_id === corrected.job_id);
@@ -289,7 +297,8 @@ export async function screenRolesWithCache(args: {
 
 async function interrogate(
   evidence: string,
-  roles: { jobId: string; profile: MatchingProfile }[]
+  roles: { jobId: string; profile: MatchingProfile }[],
+  opts?: { timeoutMs?: number; onError?: (info: { status: number; code?: string; retryAfter?: string }) => void }
 ): Promise<RoleVerdict[]> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return [];
@@ -310,7 +319,7 @@ async function interrogate(
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     // A hung call here froze an entire sourcing run once — never wait forever.
-    signal: AbortSignal.timeout(90_000),
+    signal: AbortSignal.timeout(opts?.timeoutMs ?? 90_000),
     body: JSON.stringify({
       model: "gpt-4o-mini",
       temperature: 0,
@@ -391,7 +400,15 @@ async function interrogate(
       ],
     }),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    // Surface WHY so callers can distinguish rate-limit from quota-dead.
+    if (opts?.onError) {
+      let code: string | undefined;
+      try { code = (await res.json())?.error?.code; } catch {}
+      opts.onError({ status: res.status, code, retryAfter: res.headers.get("retry-after") ?? undefined });
+    }
+    return [];
+  }
   try {
     const data = await res.json();
     const results = JSON.parse(data.choices[0].message.content).results as Omit<RoleVerdict, "cached">[];

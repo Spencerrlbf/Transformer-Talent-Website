@@ -1,19 +1,13 @@
-// Advance a run within this invocation's time budget. The run view calls
-// this in a sequential loop while the page is open; the engine is resumable
-// so a closed tab just pauses the run until someone reopens it.
-//
-// Soft lock: an active run freshly touched by another advance (updated_at
-// heartbeat) returns busy instead of double-processing — two open tabs
-// must not both fetch page 7.
+// Advance a run within this invocation's time budget. Drivers loop until
+// done. The engine claims a DB-clock lease itself (busy when another driver
+// holds it) and every write is fenced — concurrent callers are harmless.
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
-import { advanceRun } from "@/lib/server/sourcing/run";
+import { advanceRun, RunFailure } from "@/lib/server/sourcing/run";
 
 export const maxDuration = 60;
-const BUDGET_MS = 40_000;
-const HEARTBEAT_MS = 20_000;
-const ACTIVE = new Set(["importing", "ranking", "screening"]);
+const BUDGET_MS = 50_000;
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,22 +15,22 @@ export async function POST(req: NextRequest, { params }: Params) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const { id } = await params;
-  const res = await sbRest(
-    `sourcing_runs?id=eq.${encodeURIComponent(id)}&organization_id=eq.${member.org.id}&select=id,status,updated_at&limit=1`
+  const owned = await sbRest(
+    `sourcing_runs?id=eq.${encodeURIComponent(id)}&organization_id=eq.${member.org.id}&select=id&limit=1`
   );
-  const [run] = res.ok ? await res.json() : [];
-  if (!run) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (run.status === "done" || run.status === "failed" || run.status === "cancelled") {
-    return NextResponse.json({ status: run.status, done: true });
-  }
-  if (ACTIVE.has(run.status) && Date.now() - new Date(run.updated_at).getTime() < HEARTBEAT_MS) {
-    return NextResponse.json({ busy: true, status: run.status, done: false });
-  }
+  const rows = owned.ok ? await owned.json() : [];
+  if (!rows.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
   try {
-    const result = await advanceRun(run.id, BUDGET_MS);
+    const result = await advanceRun(id, BUDGET_MS);
     return NextResponse.json(result);
   } catch (err) {
-    console.error(`advance run ${run.id} failed:`, err);
-    return NextResponse.json({ status: "failed", done: true, error: String((err as Error).message).slice(0, 200) });
+    if (err instanceof RunFailure) {
+      return NextResponse.json({ status: "failed", done: true, error: err.message });
+    }
+    // Transient (network/DB blip): the run stays active — tell the driver
+    // to retry rather than stop.
+    console.error(`advance run ${id} transient error:`, err);
+    return NextResponse.json({ transient: true, busy: true, done: false, retryAfterMs: 8000 }, { status: 200 });
   }
 }

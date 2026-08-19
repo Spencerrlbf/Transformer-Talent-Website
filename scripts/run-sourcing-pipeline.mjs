@@ -77,14 +77,14 @@ const run = await createRun({
   orgRoleId: role.id,
   query,
   matchEstimate: preview.total,
-  screenTarget: parseInt(process.env.SCREEN_TARGET || "3", 10),
 });
-console.log(`run ${run.id} created (screen_target ${run.screen_target})`);
+console.log(`run ${run.id} created (review-all)`);
 
-for (let i = 0; i < 100; i++) {
+for (let i = 0; i < 300; i++) {
   const s = await advanceRun(run.id, 45_000);
-  console.log(`  [${((Date.now() - t0) / 1000).toFixed(0)}s] ${s.status}: pages ${s.pagesFetched}, imported ${s.imported}, dupes ${s.duplicates}, screened ${s.screened}`);
+  console.log(`  [${((Date.now() - t0) / 1000).toFixed(0)}s] ${s.status}: pages ${s.pagesFetched}, imported ${s.imported}, dupes ${s.duplicates}, reviewed ${s.screened}/${s.screenTarget}${s.busy ? " (busy)" : ""}`);
   if (s.done) break;
+  if (s.busy) await new Promise((r) => setTimeout(r, Math.min(s.retryAfterMs ?? 5000, 30_000)));
 }
 
 const top = await rest(

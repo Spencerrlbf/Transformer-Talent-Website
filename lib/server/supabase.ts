@@ -21,7 +21,14 @@ export async function sbRest(
     ...(init.prefer ? { Prefer: init.prefer } : {}),
     ...((init.headers as Record<string, string>) || {}),
   };
-  return fetch(`${url()}/rest/v1/${path}`, { ...init, headers });
+  return fetch(`${url()}/rest/v1/${path}`, {
+    // A socket killed by machine sleep otherwise hangs its await forever —
+    // observed holding a sourcing run's lease hostage overnight. No PostgREST
+    // call here legitimately takes a minute.
+    signal: init.signal ?? AbortSignal.timeout(60_000),
+    ...init,
+    headers,
+  });
 }
 
 export async function sbInsert<T>(
