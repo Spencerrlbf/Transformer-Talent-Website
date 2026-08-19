@@ -59,7 +59,7 @@ function CompanyPicker({
 }: { draft: QueryDraft; field: "currentCompanies" | "pastCompanies" | "excludeCurrentCompanies"; onChange: (d: QueryDraft) => void }) {
   const { token } = useDash();
   const [text, setText] = useState("");
-  const [hits, setHits] = useState<{ name: string; linkedinUrl: string; location: string | null; followers: string | null }[]>([]);
+  const [hits, setHits] = useState<{ name: string; linkedinUrl: string; location: string | null; followers: string | null; logo: string | null }[]>([]);
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urls = draft[field];
@@ -110,10 +110,17 @@ function CompanyPicker({
         <div className="dash-src-codrop">
           {hits.map((h) => (
             <button type="button" key={h.linkedinUrl} onMouseDown={(e) => { e.preventDefault(); pick(h); }}>
-              <b>{h.name}</b>
-              <small>
-                {[h.location, h.followers].filter(Boolean).join(" · ") || "\u00a0"}
-              </small>
+              {h.logo ? (
+                // LinkedIn CDN logo — the fastest "that's the one" signal there is.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={h.logo} alt="" width={28} height={28} loading="lazy" />
+              ) : (
+                <span className="dash-src-cologo-fallback">{h.name.charAt(0).toUpperCase()}</span>
+              )}
+              <span className="dash-src-cotext">
+                <b>{h.name}</b>
+                <small>{[h.location, h.followers].filter(Boolean).join(" · ") || "\u00a0"}</small>
+              </span>
             </button>
           ))}
         </div>

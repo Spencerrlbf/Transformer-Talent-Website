@@ -1348,3 +1348,10 @@ body:has(.board-app) {
 .dash-src-history b { font-variant-numeric: tabular-nums; }
 .dash-src-history b.pos { color: #0a7a3d; }
 .dash-src-history b.neg { color: #6b7280; }
+
+/* Company typeahead: logo + two-line label */
+.dash-src-codrop button { display: flex; align-items: center; gap: 10px; }
+.dash-src-codrop img { border-radius: 5px; flex-shrink: 0; object-fit: contain; background: #f6f7f9; }
+.dash-src-cologo-fallback { width: 28px; height: 28px; border-radius: 5px; background: #f1f3f6; color: #a2a8b3; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dash-src-cotext { display: flex; flex-direction: column; min-width: 0; }
+.dash-src-cotext small { color: #a2a8b3; }
