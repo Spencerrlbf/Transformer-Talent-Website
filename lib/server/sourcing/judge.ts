@@ -38,6 +38,9 @@ export interface JudgeVerdict {
   tag: JudgeTag;
   why_fit: string;
   gaps_to_probe: string[];
+  /** For worth_message/not_now: where this person WOULD fit ("strong for a
+   *  mid-level backend role") — a redirect, not a dismissal. Empty when N/A. */
+  better_suited: string;
   judge: string; // e.g. "em-v2/gpt-4o"
 }
 
@@ -60,8 +63,9 @@ JUDGING RULES:
 8. An unnecessary outreach costs minutes; a missed great candidate costs a hire. When genuinely torn between two adjacent tags, choose the higher one.
 
 OUTPUT:
-- why_fit: 2-3 concrete sentences a hiring manager would respect, citing the profile (companies, titles, durations, inferred capabilities). No hedging boilerplate.
-- gaps_to_probe: at most 3, each phrased as a specific question to ask in a first conversation. Empty array if there is genuinely nothing to probe.`;
+- why_fit: 2-3 concrete sentences a hiring manager would respect, citing the profile (companies, titles, durations, inferred capabilities). No hedging boilerplate. Required for EVERY tier — a not_now still deserves an honest, specific explanation.
+- gaps_to_probe: at most 3, each phrased as a specific question to ask in a first conversation. Empty array if there is genuinely nothing to probe.
+- better_suited: for worth_message and not_now candidates who are genuinely good engineers, ONE sentence naming where they WOULD fit ("strong candidate for a mid-level backend role", "better suited to an ML-platform position"). This turns a rejection into a routing note the employer can act on. Empty string when the tag is strong_yes/yes or nothing honest can be said.`;
 
 export async function judgeSourcedCandidate(input: JudgeInput): Promise<JudgeVerdict | null> {
   const key = process.env.OPENAI_API_KEY;
@@ -97,8 +101,9 @@ export async function judgeSourcedCandidate(input: JudgeInput): Promise<JudgeVer
               tag: { type: "string", enum: ["strong_yes", "yes", "worth_message", "not_now"] },
               why_fit: { type: "string" },
               gaps_to_probe: { type: "array", items: { type: "string" } },
+              better_suited: { type: "string" },
             },
-            required: ["tag", "why_fit", "gaps_to_probe"],
+            required: ["tag", "why_fit", "gaps_to_probe", "better_suited"],
           },
         },
       },
@@ -161,6 +166,7 @@ export async function judgeSourcedCandidate(input: JudgeInput): Promise<JudgeVer
       tag,
       why_fit: out.why_fit.slice(0, 600),
       gaps_to_probe: (out.gaps_to_probe || []).slice(0, 3).map((g) => g.slice(0, 200)),
+      better_suited: (out.better_suited || "").slice(0, 250),
       judge: `em-v2/${model}`,
     };
   } catch {
@@ -171,5 +177,6 @@ export async function judgeSourcedCandidate(input: JudgeInput): Promise<JudgeVer
 /** Client-facing reason line assembled from the judgment. */
 export function judgeReason(v: JudgeVerdict): string {
   const probe = v.gaps_to_probe.length ? ` Worth asking: ${v.gaps_to_probe.join(" · ")}` : "";
-  return `${v.why_fit}${probe}`;
+  const route = v.better_suited ? ` → ${v.better_suited}` : "";
+  return `${v.why_fit}${probe}${route}`;
 }

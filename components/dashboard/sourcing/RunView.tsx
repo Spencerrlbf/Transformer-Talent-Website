@@ -196,6 +196,17 @@ export default function RunView({
                     <td>
                       <span className="nm">{r.name}</span>
                       <div className="sub">{[r.title, r.company, r.location].filter(Boolean).join(" · ")}</div>
+                      {(r.years != null || r.priorCompanies.length > 0 || r.topSkills.length > 0) && (
+                        <div className="dash-src-snapshot">
+                          {[
+                            r.years != null ? `${r.years} yrs` : null,
+                            r.priorCompanies.length ? `prev: ${r.priorCompanies.join(", ")}` : null,
+                            r.topSkills.length
+                              ? r.topSkills.join(", ") + (r.skillCount > r.topSkills.length ? ` +${r.skillCount - r.topSkills.length}` : "")
+                              : null,
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
                     </td>
                     <td>
                       {r.tag ? (

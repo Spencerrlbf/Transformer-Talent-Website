@@ -1358,3 +1358,6 @@ body:has(.board-app) {
 
 /* 4-tier sourcing tag: "Yes" sits between strong (green) and message (amber) */
 .dash-tag.t-yes { background: #e5f4f6; color: #0b6e7d; }
+
+/* 5-second candidate snapshot: years · trajectory · skills */
+.dash-src-snapshot { font-size: 11.5px; color: #8a919c; margin-top: 3px; font-variant-numeric: tabular-nums; }

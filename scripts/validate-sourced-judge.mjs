@@ -96,6 +96,7 @@ for (const row of rows) {
     console.log(`   ${models[i]}: ${r.tag.toUpperCase()}`);
     console.log(`      why: ${r.why_fit}`);
     if (r.gaps_to_probe.length) console.log(`      probe: ${r.gaps_to_probe.join(" · ")}`);
+    if (r.better_suited) console.log(`      route: ${r.better_suited}`);
   });
   console.log("");
 }

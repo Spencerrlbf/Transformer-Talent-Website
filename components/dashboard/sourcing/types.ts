@@ -103,6 +103,10 @@ export type CandidateRow = {
   company: string | null;
   location: string | null;
   linkedinUrl: string | null;
+  years: number | null;
+  priorCompanies: string[];
+  topSkills: string[];
+  skillCount: number;
 };
 
 export const TAG_UI: Record<string, { label: string; cls: string }> = {

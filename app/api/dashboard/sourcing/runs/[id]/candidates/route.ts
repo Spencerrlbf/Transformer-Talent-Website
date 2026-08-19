@@ -35,7 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const res = await sbRest(
     `sourcing_run_candidates?${filters}` +
       `&select=id,rank,tag,reason,screen_status,shortlisted,hidden,` +
-      `sourced_candidates(full_name,headline,location,current_title,current_company,linkedin_url,linkedin_username)` +
+      `sourced_candidates(full_name,headline,location,current_title,current_company,linkedin_url,linkedin_username,years_experience,skills,profile)` +
       `&order=rank.asc.nullslast,created_at.asc&limit=${PAGE}&offset=${(page - 1) * PAGE}`,
     { headers: { Prefer: "count=exact" } }
   );
@@ -48,6 +48,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       full_name: string | null; headline: string | null; location: string | null;
       current_title: string | null; current_company: string | null;
       linkedin_url: string | null; linkedin_username: string | null;
+      years_experience: number | null; skills: string[] | null;
+      profile: { experience?: { companyName?: string; company?: string }[] } | null;
     } | null;
   };
   const rows = (await res.json()) as Row[];
@@ -68,6 +70,15 @@ export async function GET(req: NextRequest, { params }: Params) {
       company: r.sourced_candidates?.current_company || null,
       location: r.sourced_candidates?.location || null,
       linkedinUrl: r.sourced_candidates?.linkedin_url || null,
+      // 5-second snapshot: years · company trajectory · top skills
+      years: r.sourced_candidates?.years_experience ?? null,
+      priorCompanies: [...new Set(
+        (r.sourced_candidates?.profile?.experience || [])
+          .map((e) => e.companyName || e.company)
+          .filter((c): c is string => !!c)
+      )].slice(1, 4), // skip current (shown already), next 3 priors
+      topSkills: (r.sourced_candidates?.skills || []).slice(0, 5),
+      skillCount: (r.sourced_candidates?.skills || []).length,
     })),
   });
 }
