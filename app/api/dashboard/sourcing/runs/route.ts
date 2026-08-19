@@ -2,8 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
-import { sanitizeLeadQuery } from "@/lib/server/sourcing/harvest";
-import { createRun, MAX_IMPORT } from "@/lib/server/sourcing/run";
+import { sanitizeLeadQuery, providerMode } from "@/lib/server/sourcing/harvest";
+import { MAX_IMPORT } from "@/lib/server/sourcing/run";
+import { sbRpc } from "@/lib/server/supabase";
 
 export const maxDuration = 60;
 
@@ -49,14 +50,26 @@ export async function POST(req: NextRequest) {
   if (!role) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
 
   try {
-    const run = await createRun({
-      organizationId: member.org.id,
-      orgRoleId: role.id,
-      createdBy: member.userId,
-      query,
-      matchEstimate: Math.trunc(matchEstimate),
-    });
-    return NextResponse.json({ run });
+    // Atomic credit check + creation: an org-level lock means two
+    // simultaneous imports can never both spend the same balance.
+    const result = await sbRpc<{ ok: boolean; run?: unknown; available?: number; needed?: number }>(
+      "create_run_with_credits",
+      {
+        p_org: member.org.id,
+        p_role: role.id,
+        p_created_by: member.userId,
+        p_params: query,
+        p_estimate: Math.trunc(matchEstimate),
+        p_mode: providerMode(),
+      }
+    );
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: "insufficient_credits", available: result.available, needed: result.needed },
+        { status: 402 }
+      );
+    }
+    return NextResponse.json({ run: result.run });
   } catch (err) {
     console.error("sourcing run create failed:", err);
     return NextResponse.json({ error: "create_failed" }, { status: 502 });

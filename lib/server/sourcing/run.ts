@@ -62,6 +62,7 @@ export interface SourcingRun {
   allfail_streak: number;
   page_attempts: number;
   next_attempt_at: string | null;
+  provider_mode?: string;
 }
 
 async function rest<T>(path: string, init: Parameters<typeof sbRest>[1] = {}): Promise<T> {
@@ -161,6 +162,7 @@ export async function createRun(args: {
       status: "previewed",
       match_estimate: args.matchEstimate,
       screen_target: 0, // review-all: set to the membership count when ranking completes
+      provider_mode: providerMode(),
     }),
     prefer: "return=representation",
   });
@@ -524,6 +526,12 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
   if (run.status === "done" || run.status === "failed" || run.status === "cancelled") {
     await release();
     return resultFrom(run);
+  }
+  // Mode fence: a mock-created run (preview/CLI test) must never be driven
+  // by a live-mode process — that would turn a demo into real spend.
+  if ((run.provider_mode ?? "live") !== providerMode()) {
+    await release();
+    return resultFrom(run, { busy: true, error: `provider mode mismatch (run: ${run.provider_mode}, driver: ${providerMode()})` });
   }
   if (run.next_attempt_at && new Date(run.next_attempt_at).getTime() > Date.now()) {
     await release();

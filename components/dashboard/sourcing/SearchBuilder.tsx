@@ -18,7 +18,7 @@ const HEADCOUNTS = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000
 type Preview =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ok"; total: number }
+  | { kind: "ok"; total: number; creditsAvailable: number }
   | { kind: "too_broad"; total: number; maxImport: number }
   | { kind: "no_matches" }
   | { kind: "error" };
@@ -148,7 +148,7 @@ export default function SearchBuilder({
       });
       const d = await res.json();
       if (!res.ok) { setPreview({ kind: "error" }); return; }
-      if (d.ok) setPreview({ kind: "ok", total: d.total });
+      if (d.ok) setPreview({ kind: "ok", total: d.total, creditsAvailable: d.creditsAvailable ?? 0 });
       else if (d.code === "too_broad") setPreview({ kind: "too_broad", total: d.total, maxImport: d.maxImport });
       else if (d.code === "no_matches") setPreview({ kind: "no_matches" });
       else setPreview({ kind: "error" });
@@ -167,7 +167,9 @@ export default function SearchBuilder({
       });
       const d = await res.json();
       if (res.ok && d.run?.id) onStarted(d.run.id);
-      else setPreview({ kind: "error" });
+      else if (res.status === 402) {
+        setPreview({ kind: "ok", total, creditsAvailable: d.available ?? 0 });
+      } else setPreview({ kind: "error" });
     } catch {
       setPreview({ kind: "error" });
     } finally {
@@ -243,15 +245,27 @@ export default function SearchBuilder({
         </div>
       </div>
 
-      {preview.kind === "ok" && (
+      {preview.kind === "ok" && preview.creditsAvailable >= preview.total && (
         <div className="dash-src-preview ok">
           <div>
             <b>This search matches ~{preview.total.toLocaleString()} candidates</b>
-            <small>Everyone who matches is imported — our review engine finds the best of them.</small>
+            <small>
+              Everyone who matches is imported and reviewed — {preview.total.toLocaleString()} credits
+              (you have {preview.creditsAvailable.toLocaleString()}).
+            </small>
           </div>
           <button className="dash-btn" disabled={starting} onClick={() => startRun(preview.total)}>
             {starting ? "Starting…" : `Import all ${preview.total.toLocaleString()}`}
           </button>
+        </div>
+      )}
+      {preview.kind === "ok" && preview.creditsAvailable < preview.total && (
+        <div className="dash-src-preview broad">
+          <b>This search matches ~{preview.total.toLocaleString()} candidates — you have {preview.creditsAvailable.toLocaleString()} credits</b>
+          <p>
+            Importing costs 1 credit per candidate (review included). Narrow the search to fit your
+            balance, or contact us to top up.
+          </p>
         </div>
       )}
       {preview.kind === "too_broad" && (

@@ -30,6 +30,7 @@ export default function SourcingPage({ params }: { params: Promise<{ id: string 
   const { token } = useDash();
   const [job, setJob] = useState<{ id: string; title: string; status: string } | null | undefined>(undefined);
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
   const [view, setView] = useState<View>({ kind: "list" });
 
   const loadRuns = useCallback(() => {
@@ -46,8 +47,12 @@ export default function SourcingPage({ params }: { params: Promise<{ id: string 
       .then(async (r) => (r.ok ? r.json() : null))
       .then((d) => setJob(d ? d.job : null))
       .catch(() => setJob(null));
+    fetch("/api/dashboard/credits", { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((d) => setCredits(d?.summary?.available ?? null))
+      .catch(() => {});
     loadRuns();
-  }, [id, token, loadRuns]);
+  }, [id, token, loadRuns, view.kind]);
 
   if (job === undefined) return <p className="dash-muted">Loading…</p>;
   if (!job)
@@ -68,13 +73,16 @@ export default function SourcingPage({ params }: { params: Promise<{ id: string 
           <h1 className="dash-h1">Source candidates</h1>
           <p className="dash-sub">{job.title} · #{job.id}</p>
         </div>
-        {view.kind === "list" && (
-          <div className="dash-jobactions">
+        <div className="dash-jobactions">
+          {credits !== null && (
+            <span className="dash-src-credits">Credits: <b>{credits.toLocaleString()}</b></span>
+          )}
+          {view.kind === "list" && (
             <button className="dash-btn" onClick={() => setView({ kind: "builder", initial: null })}>
               New search
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {view.kind === "list" && (
