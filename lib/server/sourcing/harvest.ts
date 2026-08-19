@@ -245,7 +245,9 @@ export interface CompanyHit {
   universalName: string | null;
   location: string | null;
   logo: string | null;
-  followers: number | null;
+  /** LinkedIn's display string, e.g. "2M followers" — the decisive
+   *  real-vs-imposter signal in the typeahead. */
+  followers: string | null;
 }
 
 /** Name → LinkedIn companies, for the ideal-companies typeahead. */
@@ -267,7 +269,7 @@ export async function searchCompanies(search: string, limit = 8): Promise<Compan
         universalName: str(c.universalName),
         location: str(obj(c.location)?.linkedinText) || str(c.location),
         logo: str(logos[0]?.url) || str(c.logo),
-        followers: num(c.followers),
+        followers: str(c.followers),
       }];
     })
     .slice(0, limit);
@@ -361,6 +363,6 @@ function mockCompanies(search: string, limit: number): CompanyHit[] {
     universalName: `${slug}${i ? `-${i}` : ""}`,
     location: "San Francisco, California",
     logo: null,
-    followers: 1000 * (i + 1),
+    followers: `${(i + 1)}K followers`,
   }));
 }
