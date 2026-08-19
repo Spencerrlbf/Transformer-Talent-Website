@@ -158,7 +158,10 @@ export function renderScorecard(jobId: string, sc: Scorecard): string {
 }
 
 // The one LLM task in this module: pointed evidence questions, cited answers.
-export async function assessScope(evidence: string): Promise<ScopeSignal[]> {
+export async function assessScope(
+  evidence: string,
+  opts?: { timeoutMs?: number; onError?: (info: { status: number; code?: string; retryAfter?: string }) => void }
+): Promise<ScopeSignal[]> {
   const key = process.env.OPENAI_API_KEY;
   if (!key || !evidence) return [];
   try {
@@ -166,7 +169,7 @@ export async function assessScope(evidence: string): Promise<ScopeSignal[]> {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       // Same hang-protection as interrogate: never wait forever on the LLM.
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(opts?.timeoutMs ?? 90_000),
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0,

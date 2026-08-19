@@ -1,0 +1,28 @@
+name: Resume stalled sourcing runs
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# Never two resumers at once — the lease makes it safe, but it's wasted work.
+concurrency:
+  group: sourcing-resumer
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/resume-sourcing-runs.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HARVEST_API_KEY: ${{ secrets.HARVEST_API_KEY }}

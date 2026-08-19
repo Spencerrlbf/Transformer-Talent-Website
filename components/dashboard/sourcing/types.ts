@@ -76,6 +76,8 @@ export type RunSummary = {
   duplicate_count: number;
   screened_count: number;
   screen_target: number;
+  next_attempt_at?: string | null;
+  unreviewable?: number;
   created_at: string;
   finished_at: string | null;
   org_roles?: { external_id: string; title: string };

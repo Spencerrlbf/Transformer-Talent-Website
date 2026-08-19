@@ -1,8 +1,9 @@
 "use client";
-// A sourcing run's workspace (Option A, state 3): progress while active,
-// then the ranked table with screening tags streaming in. Drives the run
-// forward by calling /advance in a sequential loop while the page is open —
-// the engine is resumable, so closing the tab only pauses the run.
+// A sourcing run's workspace: progress while active, ranked table with
+// review tags streaming in. Review-all: every imported candidate gets
+// reviewed. Drives the run via /advance in a sequential loop — the engine's
+// lease makes concurrent drivers harmless, and the run resumes from any
+// device (or the scheduled resumer) if this tab closes.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
@@ -22,13 +23,14 @@ export default function RunView({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<"all" | "strong" | "shortlisted">("all");
-  const [reviewingMore, setReviewingMore] = useState(false);
+  const [rereviewing, setRereviewing] = useState(false);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
   const auth = { Authorization: `Bearer ${token}` };
 
   const loadRun = useCallback(async (): Promise<RunSummary | null> => {
+    // Transient failures return null — callers RETRY, never give up.
     const res = await fetch(`/api/dashboard/sourcing/runs/${runId}`, { headers: auth }).catch(() => null);
     if (!res?.ok) return null;
     const d = await res.json();
@@ -48,32 +50,35 @@ export default function RunView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, token, page, filter]);
 
-  // Advance loop: sequential, only while the run is active. The server's
-  // heartbeat lock makes a second open tab harmlessly observe instead.
+  // Advance loop: strictly sequential; a busy response (another driver, or
+  // a persisted pacing pause) waits it out; transient blips retry.
   useEffect(() => {
     let stopped = false;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     (async () => {
-      let current = await loadRun();
+      let current: RunSummary | null = null;
+      for (let i = 0; i < 5 && !current; i++) {
+        current = await loadRun();
+        if (!current) await sleep(3000);
+      }
       await loadRows(1, filter);
       while (!stopped && alive.current && current && ACTIVE.has(current.status)) {
         try {
           const res = await fetch(`/api/dashboard/sourcing/runs/${runId}/advance`, { method: "POST", headers: auth });
           const d = res.ok ? await res.json() : { busy: true };
-          if (d.busy) await new Promise((r) => setTimeout(r, 5000));
+          if (d.busy) await sleep(Math.min(d.retryAfterMs ?? 5000, 60_000));
         } catch {
-          await new Promise((r) => setTimeout(r, 5000));
+          await sleep(8000);
         }
-        current = await loadRun();
+        current = (await loadRun()) ?? current; // a failed poll never kills the driver
         await loadRows(page, filter);
       }
     })();
     return () => { stopped = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, reviewingMore]);
+  }, [runId, rereviewing]);
 
-  // Live counters: an advance call can hold the connection for up to 40s
-  // while the engine works, so poll status/rows independently — progress
-  // ticks and screening chips flip in near-real-time.
+  // Live counters, independent of the (long-blocking) advance calls.
   useEffect(() => {
     if (!run || !ACTIVE.has(run.status)) return;
     const t = setInterval(() => { loadRun(); loadRows(page, filter); }, 4000);
@@ -92,9 +97,9 @@ export default function RunView({
     if (patch.hidden) loadRows(page, filter);
   }
 
-  async function reviewMore() {
-    const res = await fetch(`/api/dashboard/sourcing/runs/${runId}/screen-more`, { method: "POST", headers: auth }).catch(() => null);
-    if (res?.ok) setReviewingMore((x) => !x); // re-arms the advance loop
+  async function rereviewFailed() {
+    const res = await fetch(`/api/dashboard/sourcing/runs/${runId}/rereview`, { method: "POST", headers: auth }).catch(() => null);
+    if (res?.ok) setRereviewing((x) => !x); // re-arms the advance loop
   }
 
   if (!run) return <p className="dash-muted">Loading run…</p>;
@@ -102,20 +107,22 @@ export default function RunView({
   const active = ACTIVE.has(run.status);
   const totalToImport = run.match_estimate ?? 0;
   const importedSoFar = run.imported_count + run.duplicate_count;
+  const reviewTotal = run.screen_target || importedSoFar;
   const stage =
     run.status === "importing" || run.status === "previewed"
       ? `Importing candidates… ${importedSoFar.toLocaleString()} of ~${totalToImport.toLocaleString()}`
       : run.status === "ranking"
         ? `Ranking ${importedSoFar.toLocaleString()} candidates…`
         : run.status === "screening"
-          ? `Reviewing top candidates… ${run.screened_count} of ${run.screen_target}`
+          ? `Reviewing every candidate… ${run.screened_count.toLocaleString()} of ${reviewTotal.toLocaleString()}`
           : null;
   const pct =
     run.status === "screening"
-      ? run.screen_target ? Math.round((run.screened_count / run.screen_target) * 100) : 0
+      ? reviewTotal ? Math.round((run.screened_count / reviewTotal) * 100) : 0
       : totalToImport ? Math.min(100, Math.round((importedSoFar / totalToImport) * 100)) : 0;
 
   const pages = Math.max(1, Math.ceil(total / 25));
+  const unreviewable = run.unreviewable ?? 0;
 
   return (
     <div>
@@ -142,6 +149,16 @@ export default function RunView({
             </span>
           </div>
           <div className="dash-src-bar"><i style={{ width: `${pct}%` }} /></div>
+        </div>
+      )}
+
+      {run.status === "done" && unreviewable > 0 && (
+        <div className="dash-src-preview broad">
+          <b>{unreviewable} candidate{unreviewable === 1 ? "" : "s"} couldn&apos;t be reviewed</b>
+          <p>
+            Usually a temporary AI hiccup or an empty LinkedIn profile.{" "}
+            <button className="dash-btn dash-btn-2" onClick={rereviewFailed}>Retry review</button>
+          </p>
         </div>
       )}
 
@@ -182,7 +199,9 @@ export default function RunView({
                           <span className={`dash-tag ${TAG_UI[r.tag].cls}`}>{TAG_UI[r.tag].label}</span>
                           {r.reason && <div className="dash-src-reason">{r.reason}</div>}
                         </>
-                      ) : r.screenStatus === "pending" || (active && r.rank != null && r.rank <= run.screen_target) ? (
+                      ) : r.screenStatus === "failed" && !active ? (
+                        <span className="dash-src-unreviewed">couldn&apos;t review</span>
+                      ) : active ? (
                         <span className="dash-tag t-pending">Reviewing…</span>
                       ) : (
                         <span className="dash-src-unreviewed">—</span>
@@ -214,9 +233,6 @@ export default function RunView({
             <span className="dash-src-pager">
               {page > 1 && <button className="dash-btn dash-btn-2" onClick={() => setPage(page - 1)}>← Prev</button>}
               {page < pages && <button className="dash-btn dash-btn-2" onClick={() => setPage(page + 1)}>Next →</button>}
-              {run.status === "done" && run.screened_count >= run.screen_target && total > run.screen_target && (
-                <button className="dash-btn dash-btn-2" onClick={reviewMore}>Review 50 more</button>
-              )}
             </span>
           </div>
         </>
