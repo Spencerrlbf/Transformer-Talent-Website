@@ -83,7 +83,9 @@ export type UnifiedListParams = {
   jobId?: string; // org_roles.external_id
   fit?: string; // key of FIT_GROUPS, or "pending"
   q?: string;
-  includeNotNow?: boolean;
+  // "Not now" is a per-role judgment, not a judgment on the person: the
+  // role-scoped job view hides them by default; the pool view shows everyone.
+  hideNotNow?: boolean;
   sort?: "fit" | "added" | "name" | "years";
   dir?: "asc" | "desc";
   page?: number;
@@ -486,7 +488,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     notNow: notNow.length,
   };
 
-  let filtered = params.includeNotNow ? visible : actionable;
+  let filtered = params.hideNotNow ? actionable : visible;
   if (params.source) filtered = filtered.filter((r) => r.source === params.source);
   if (params.fit) {
     if (params.fit === "pending") filtered = filtered.filter((r) => r.bestTag == null);

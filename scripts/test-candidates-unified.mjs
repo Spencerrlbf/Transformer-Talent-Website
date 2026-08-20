@@ -48,20 +48,20 @@ for (const r of list.items) {
 }
 check("list returns rows", list.items.length > 0);
 check("counts add up", list.counts.all === list.counts.applied + list.counts.sourced);
-check("default view hides not_now", !list.items.some((r) => r.bestTag === "not_now"));
+check("pool view shows everyone", list.total === list.counts.all + list.counts.notNow);
 const ranks = { strong_yes: 0, strong: 0, yes: 1, possible: 2, worth_message: 3, stretch: 4, not_now: 5 };
 const rk = (t) => (t ? (ranks[t] ?? 6) : 6);
 const sorted = list.items.every((r, i, a) => i === 0 || rk(a[i - 1].bestTag) <= rk(r.bestTag));
 check("fit-sorted", sorted);
 check("sourced snapshots filled", list.items.filter((r) => r.source === "sourced").every((r) => r.snapshot.length > 0));
 
-/* ---- 2. includeNotNow + filters + pagination ---- */
-const all = await listUnifiedCandidates({ orgId: org.id, includeNotNow: true, pageSize: 100 });
-check("includeNotNow adds rows", all.total === list.counts.all + list.counts.notNow, `${all.total} vs ${list.counts.all}+${list.counts.notNow}`);
+/* ---- 2. hideNotNow + filters + pagination ---- */
+const hidden = await listUnifiedCandidates({ orgId: org.id, hideNotNow: true, pageSize: 100 });
+check("hideNotNow filters (job view)", hidden.total === list.counts.all && !hidden.items.some((r) => r.bestTag === "not_now"), `${hidden.total} vs all=${list.counts.all}`);
 const appliedOnly = await listUnifiedCandidates({ orgId: org.id, source: "applied" });
 check("source filter", appliedOnly.items.every((r) => r.source === "applied"), `${appliedOnly.total} applied`);
-const p1 = await listUnifiedCandidates({ orgId: org.id, includeNotNow: true, pageSize: 5, page: 1 });
-const p2 = await listUnifiedCandidates({ orgId: org.id, includeNotNow: true, pageSize: 5, page: 2 });
+const p1 = await listUnifiedCandidates({ orgId: org.id, pageSize: 5, page: 1 });
+const p2 = await listUnifiedCandidates({ orgId: org.id, pageSize: 5, page: 2 });
 check("pagination distinct", !p2.items.some((r) => p1.items.find((x) => x.key === r.key)) && p1.items.length === 5);
 const strong = await listUnifiedCandidates({ orgId: org.id, fit: "strong" });
 check("fit filter strong", strong.items.every((r) => ["strong", "strong_yes"].includes(r.bestTag)), `${strong.total} strong`);

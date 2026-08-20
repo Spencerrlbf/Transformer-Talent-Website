@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     jobId: q.get("job") || undefined,
     fit: q.get("fit") || undefined,
     q: q.get("q") || undefined,
-    includeNotNow: q.get("includeNotNow") === "1",
+    hideNotNow: q.get("hideNotNow") === "1",
     sort: sort === "added" || sort === "name" || sort === "years" ? sort : "fit",
     dir: q.get("dir") === "asc" ? "asc" : "desc",
     page: Number(q.get("page")) || 1,
