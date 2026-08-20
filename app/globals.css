@@ -1361,3 +1361,51 @@ body:has(.board-app) {
 
 /* 5-second candidate snapshot: years · trajectory · skills */
 .dash-src-snapshot { font-size: 11.5px; color: #8a919c; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* ===== Candidates v2: unified table ===== */
+.dash-tag.t-msg { background: #fdf3e2; color: #9a6206; }
+.dash-tag.t-notnow { background: #f1f3f6; color: #6b7280; }
+
+.cv2-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.cv2-seg { display: inline-flex; background: #f1f3f6; border-radius: 9px; padding: 3px; }
+.cv2-seg button { font: inherit; font-size: 12.5px; font-weight: 600; color: #8a919c; padding: 5px 13px; border-radius: 7px; border: 0; background: transparent; cursor: pointer; white-space: nowrap; }
+.cv2-seg button.on { background: #fff; color: #111418; box-shadow: 0 1px 2px rgba(28,32,39,0.1); }
+.cv2-filters select { border: 1px solid #d3d7dd; border-radius: 7px; padding: 7px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; }
+.cv2-search { border: 1px solid #d3d7dd; border-radius: 7px; padding: 7px 11px; font: inherit; font-size: 13px; color: #111418; min-width: 200px; }
+.cv2-search::placeholder { color: #a2a8b3; }
+.cv2-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #6b7280; margin-left: auto; cursor: pointer; user-select: none; white-space: nowrap; }
+
+.cv2-scroll { overflow-x: auto; border: 1px solid #e6e8ec; border-radius: 10px; background: #fff; }
+.cv2-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.cv2-table.cv2-loading { opacity: 0.55; }
+.cv2-table th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a2a8b3; padding: 10px 14px; border-bottom: 1px solid #e6e8ec; white-space: nowrap; cursor: pointer; user-select: none; }
+.cv2-table th.cv2-sorted { color: #111418; }
+.cv2-table td { padding: 11px 14px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; white-space: nowrap; font-size: 13px; color: #3d434c; }
+.cv2-table tbody tr:last-child td { border-bottom: 0; }
+.cv2-table tr.cv2-click { cursor: pointer; }
+.cv2-table tr.cv2-click:hover td { background: #fafbfd; }
+
+.cv2-cand { display: flex; align-items: center; gap: 11px; }
+.cv2-avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.cv2-name { font-weight: 650; color: #111418; font-size: 13.5px; line-height: 1.3; display: block; }
+.cv2-cand small { display: block; color: #8a919c; font-size: 11.5px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+.cv2-tt { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: #c2410c; background: #fff0e9; border-radius: 5px; padding: 2px 7px; margin-left: 7px; vertical-align: 1px; white-space: nowrap; }
+
+.cv2-src { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 650; padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+.cv2-src i { width: 6px; height: 6px; border-radius: 50%; }
+.cv2-src-applied { background: #f4f6f9; color: #4a5160; border: 1px solid #e6e8ec; }
+.cv2-src-applied i { background: #4a5160; }
+.cv2-src-sourced { background: #eef2fd; color: #2a5bd7; }
+.cv2-src-sourced i { background: #2a5bd7; }
+
+.cv2-role { font-size: 12.5px; font-weight: 550; color: #3d434c; }
+.cv2-role em { font-style: normal; color: #a2a8b3; font-weight: 450; }
+.cv2-more { color: #2a5bd7; font-weight: 650; font-size: 11.5px; margin-left: 5px; }
+.cv2-snap { font-size: 12px; color: #8a919c; font-variant-numeric: tabular-nums; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+.cv2-added { font-size: 12px; color: #a2a8b3; font-variant-numeric: tabular-nums; }
+.cv2-dim { color: #a2a8b3; }
+
+.cv2-foot { display: flex; align-items: center; justify-content: space-between; padding: 13px 4px 0; font-size: 12px; color: #8a919c; }
+.cv2-pager { display: inline-flex; align-items: center; gap: 10px; }
+.cv2-pager button { font: inherit; font-size: 13px; border: 1px solid #d3d7dd; border-radius: 6px; background: #fff; color: #3d434c; padding: 3px 11px; cursor: pointer; }
+.cv2-pager button:disabled { color: #c9cdd6; cursor: default; }
