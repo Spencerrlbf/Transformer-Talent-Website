@@ -266,7 +266,10 @@ export interface CompanyHit {
 
 /** Name → LinkedIn companies, for the ideal-companies typeahead. */
 export async function searchCompanies(search: string, limit = 8): Promise<CompanyHit[]> {
-  if (providerMode() === "mock") return mockCompanies(search, limit);
+  // Company-name lookup is metadata-only — no imports, no credits — so use
+  // the real provider whenever a key exists, even where runs are mocked
+  // (preview deploys): picks must be real companies with real logos.
+  if (providerMode() === "mock" && !process.env.HARVEST_API_KEY) return mockCompanies(search, limit);
   const payload = await harvestGet(
     "/linkedin/company-search",
     new URLSearchParams({ search: search.trim(), page: "1" })

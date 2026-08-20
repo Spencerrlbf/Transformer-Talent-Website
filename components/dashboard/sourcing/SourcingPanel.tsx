@@ -7,12 +7,10 @@ import SearchBuilder from "@/components/dashboard/sourcing/SearchBuilder";
 import RunView from "@/components/dashboard/sourcing/RunView";
 import {
   draftFromParams,
-  emptyQuery,
   summarizeParams,
   type QueryDraft,
   type RunSummary,
 } from "@/components/dashboard/sourcing/types";
-import type { TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
 
 type View = { kind: "list" } | { kind: "builder"; initial: QueryDraft | null } | { kind: "run"; runId: string };
 
@@ -26,25 +24,11 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-export default function SourcingPanel({
-  jobId, jobTitle, targetCompanies = [],
-}: { jobId: string; jobTitle: string; targetCompanies?: TargetCompany[] }) {
+export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobTitle: string }) {
   const { token } = useDash();
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const [view, setView] = useState<View>({ kind: "list" });
-
-  // A fresh search starts pre-filled with the role's ideal companies (only
-  // those picked from LinkedIn — the picker stores company URLs).
-  function newDraft(): QueryDraft | null {
-    const withUrls = targetCompanies.filter((t) => t.linkedinUrl);
-    if (!withUrls.length) return null;
-    return {
-      ...emptyQuery(jobTitle),
-      currentCompanies: withUrls.map((t) => t.linkedinUrl as string),
-      companyLabels: Object.fromEntries(withUrls.map((t) => [t.linkedinUrl as string, t.name])),
-    };
-  }
 
   const loadRuns = useCallback(() => {
     fetch(`/api/dashboard/sourcing/runs?jobId=${encodeURIComponent(jobId)}`, {
@@ -79,7 +63,7 @@ export default function SourcingPanel({
             {credits !== null && (
               <span className="dash-src-credits">Credits: <b>{credits.toLocaleString()}</b></span>
             )}
-            <button className="dash-btn" onClick={() => setView({ kind: "builder", initial: newDraft() })}>
+            <button className="dash-btn" onClick={() => setView({ kind: "builder", initial: null })}>
               New search
             </button>
           </div>
@@ -90,7 +74,7 @@ export default function SourcingPanel({
                 Describe who you&apos;re looking for — titles, locations, ideal companies — and we&apos;ll import
                 everyone on LinkedIn who matches, rank them against this job, and review the best ones.
               </p>
-              <button className="dash-btn" onClick={() => setView({ kind: "builder", initial: newDraft() })}>
+              <button className="dash-btn" onClick={() => setView({ kind: "builder", initial: null })}>
                 Start your first search
               </button>
             </div>

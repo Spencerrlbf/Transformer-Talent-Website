@@ -241,9 +241,7 @@ function JobWorkspace({ id }: { id: string }) {
         <CandidatesTable jobId={job.id} defaultHideNotNow onCounts={setCounts} onOpen={setOpenKey} />
       </div>
 
-      {tab === "sourcing" && (
-        <SourcingPanel jobId={job.id} jobTitle={job.title} targetCompanies={job.targetCompanies} />
-      )}
+      {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} />}
 
       {tab === "past" && (
         <div className="jobws-past-empty">

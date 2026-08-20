@@ -168,7 +168,7 @@ export function IdealCompanies({
       </div>
       <p className="jobws-hint">
         Companies whose engineers would be a great fit. The AI review treats experience at these
-        companies as strong evidence, and new sourcing searches start pre-filled with them.
+        companies as strong evidence when judging candidates for this role.
       </p>
     </>
   );
