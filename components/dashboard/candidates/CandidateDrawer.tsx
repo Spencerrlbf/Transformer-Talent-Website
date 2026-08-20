@@ -6,6 +6,7 @@
 // arrives with the resume task); Notes is a placeholder.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
+import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 
 type PipelineEntry = {
   jobId: string;
@@ -18,6 +19,7 @@ type PipelineEntry = {
   tagLabel: string | null;
   reason: string | null;
   addedAt: string;
+  stage: string;
 };
 
 type Detail = {
@@ -175,10 +177,14 @@ function PipelineRows({
   entry,
   expanded,
   onToggle,
+  onStage,
+  stageBusy,
 }: {
   entry: PipelineEntry;
   expanded: boolean;
   onToggle: () => void;
+  onStage: (jobId: string, stage: string) => void;
+  stageBusy: boolean;
 }) {
   return (
     <>
@@ -206,8 +212,12 @@ function PipelineRows({
             <span className="dash-tag t-pending">Screening…</span>
           )}
         </td>
-        <td>
-          <span className="cv2d-stage">New</span>
+        <td onClick={(e) => e.stopPropagation()}>
+          <StageSelect
+            value={entry.stage || "new"}
+            busy={stageBusy}
+            onChange={(s) => onStage(entry.jobId, s)}
+          />
         </td>
         <td className="cv2d-pcar">{expanded ? "▾" : "▸"}</td>
       </tr>
@@ -246,6 +256,7 @@ export default function CandidateDrawer({
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
+  const [stageSaving, setStageSaving] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
   const [cEmail, setCEmail] = useState("");
   const [cPhone, setCPhone] = useState("");
@@ -279,6 +290,29 @@ export default function CandidateDrawer({
       })
       .catch(() => setError(true));
   }, [candKey, token, roleContext]);
+
+  // Save one role's stage from the pipeline table; optimistic with rollback.
+  async function changeStage(jobId: string, stage: string) {
+    if (!candKey || !detail) return;
+    const prev = detail.pipeline.find((p) => p.jobId === jobId)?.stage ?? "new";
+    setStageSaving(jobId);
+    setDetail({
+      ...detail,
+      pipeline: detail.pipeline.map((p) => (p.jobId === jobId ? { ...p, stage } : p)),
+    });
+    const res = await fetch(`/api/dashboard/candidates/v2/${candKey}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jobId, status: stage }),
+    }).catch(() => null);
+    setStageSaving(null);
+    if (!res?.ok)
+      setDetail((d) =>
+        d
+          ? { ...d, pipeline: d.pipeline.map((p) => (p.jobId === jobId ? { ...p, stage: prev } : p)) }
+          : d
+      );
+  }
 
   const escClose = useCallback(
     (e: KeyboardEvent) => {
@@ -586,6 +620,8 @@ export default function CandidateDrawer({
                               entry={p}
                               expanded={expanded === p.jobId}
                               onToggle={() => setExpanded(expanded === p.jobId ? null : p.jobId)}
+                              onStage={changeStage}
+                              stageBusy={stageSaving === p.jobId}
                             />
                           ))}
                         </tbody>

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     fit: q.get("fit") || undefined,
     q: q.get("q") || undefined,
     hideNotNow: q.get("hideNotNow") === "1",
+    past: q.get("past") === "1",
     sort: sort === "added" || sort === "name" || sort === "years" ? sort : "fit",
     dir: q.get("dir") === "asc" ? "asc" : "desc",
     page: Number(q.get("page")) || 1,
