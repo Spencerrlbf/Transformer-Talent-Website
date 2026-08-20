@@ -32,15 +32,54 @@ export type Cv2Row = {
   bestTagLabel: string | null;
   yearsExperience: number | null;
   addedAt: string;
+  stage: string | null;
 };
 
 type Cv2List = {
   items: Cv2Row[];
   total: number;
-  counts: { all: number; applied: number; sourced: number; notNow: number };
+  counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
   page: number;
   pageSize: number;
 };
+
+export const STAGE_OPTIONS: [string, string][] = [
+  ["new", "New"],
+  ["contacted", "Contacted"],
+  ["replied", "Replied"],
+  ["interviewing", "Interviewing"],
+  ["offer", "Offer"],
+  ["hired", "Hired"],
+  ["rejected", "Rejected"],
+];
+
+// Stage dropdown styled as a chip. The human pipeline status — separate from
+// the AI fit tag; picking Rejected moves the candidate to the job's Past tab.
+export function StageSelect({
+  value,
+  onChange,
+  busy,
+}: {
+  value: string;
+  onChange: (stage: string) => void;
+  busy?: boolean;
+}) {
+  return (
+    <select
+      className={`cv2-stagesel st-${value}`}
+      value={value}
+      disabled={busy}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {STAGE_OPTIONS.map(([v, label]) => (
+        <option key={v} value={v}>
+          {label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 const TAG_CLASS: Record<string, string> = {
   strong_yes: "t-strong",
@@ -185,6 +224,8 @@ export default function CandidatesTable({
   const [sort, setSort] = useState<SortKey>("fit");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  const [bump, setBump] = useState(0); // refetch trigger (stage → rejected)
+  const [savingStage, setSavingStage] = useState<string | null>(null);
 
   const [roles, setRoles] = useState<[string, string][]>([]);
 
@@ -242,7 +283,31 @@ export default function CandidatesTable({
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page]);
+  }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump]);
+
+  // Save a row's stage; Rejected refetches so the row moves to Past.
+  async function changeStage(key: string, stage: string) {
+    if (!jobId || !data) return;
+    const prev = data.items.find((r) => r.key === key)?.stage ?? "new";
+    setSavingStage(key);
+    setData({
+      ...data,
+      items: data.items.map((r) => (r.key === key ? { ...r, stage } : r)),
+    });
+    const res = await fetch(`/api/dashboard/candidates/v2/${key}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jobId, status: stage }),
+    }).catch(() => null);
+    setSavingStage(null);
+    if (!res?.ok) {
+      setData((d) =>
+        d ? { ...d, items: d.items.map((r) => (r.key === key ? { ...r, stage: prev } : r)) } : d
+      );
+      return;
+    }
+    if (stage === "rejected") setBump((b) => b + 1);
+  }
 
   // Any filter change goes back to page 1.
   useEffect(() => {
@@ -343,6 +408,7 @@ export default function CandidatesTable({
                 {header("name", "Candidate")}
                 <th>Source</th>
                 {header("fit", "Fit")}
+                {jobId && <th>Stage</th>}
                 <th>Current role</th>
                 <th>Company</th>
                 <th>Location</th>
@@ -382,6 +448,15 @@ export default function CandidatesTable({
                       <span className="dash-tag t-pending">Screening…</span>
                     )}
                   </td>
+                  {jobId && (
+                    <td className="cv2-stagecell" onClick={(e) => e.stopPropagation()}>
+                      <StageSelect
+                        value={r.stage || "new"}
+                        busy={savingStage === r.key}
+                        onChange={(s) => changeStage(r.key, s)}
+                      />
+                    </td>
+                  )}
                   <td className="cv2-title">{r.currentTitle || <span className="cv2-dim">—</span>}</td>
                   <td className="cv2-company">{r.currentCompany || <span className="cv2-dim">—</span>}</td>
                   <td className="cv2-loc">{r.location || <span className="cv2-dim">—</span>}</td>

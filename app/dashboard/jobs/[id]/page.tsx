@@ -56,6 +56,7 @@ function JobWorkspace({ id }: { id: string }) {
     applied: number;
     sourced: number;
     notNow: number;
+    rejected: number;
   } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
 
@@ -232,6 +233,11 @@ function JobWorkspace({ id }: { id: string }) {
                 <b>{counts.notNow}</b>&ldquo;Not now&rdquo; hidden
               </span>
             )}
+            {counts.rejected > 0 && (
+              <span className="c dim">
+                <b>{counts.rejected}</b>rejected → Past
+              </span>
+            )}
             <span className="spacer" />
             <button className="link jobws-linkbtn" onClick={() => switchTab("sourcing")}>
               View sourcing runs →
@@ -245,11 +251,26 @@ function JobWorkspace({ id }: { id: string }) {
 
       {tab === "past" && (
         <div className="jobws-past-empty">
-          <b>No past candidates yet.</b>
-          <p>
-            When you reject a candidate from the pipeline, they&apos;ll move here so your active list
-            stays clean — with their profile and the reason kept for reference.
-          </p>
+          {counts && counts.rejected > 0 ? (
+            <>
+              <b>
+                {counts.rejected} rejected candidate{counts.rejected === 1 ? "" : "s"}.
+              </b>
+              <p>
+                The full Past list — profiles, rejection context, and a restore button — arrives with
+                the next update. Rejected candidates are already out of your active Pipeline.
+              </p>
+            </>
+          ) : (
+            <>
+              <b>No past candidates yet.</b>
+              <p>
+                Set a candidate&apos;s stage to &ldquo;Rejected&rdquo; in the Pipeline tab and
+                they&apos;ll move here so your active list stays clean — with their profile and the
+                reason kept for reference.
+              </p>
+            </>
+          )}
         </div>
       )}
 

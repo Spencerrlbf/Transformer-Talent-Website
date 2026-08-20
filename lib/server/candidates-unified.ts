@@ -78,6 +78,22 @@ export type UnifiedRow = {
   bestTagLabel: string | null;
   yearsExperience: number | null;
   addedAt: string;
+  /** Human pipeline status for params.jobId ("new" default); null in pool view. */
+  stage: string | null;
+};
+
+// Human pipeline statuses — distinct from the AI fit tag. "rejected" moves a
+// candidate from the job's Pipeline list to its Past tab.
+export const STAGES = ["new", "contacted", "replied", "interviewing", "offer", "hired", "rejected"] as const;
+export type Stage = (typeof STAGES)[number];
+export const STAGE_LABEL: Record<Stage, string> = {
+  new: "New",
+  contacted: "Contacted",
+  replied: "Replied",
+  interviewing: "Interviewing",
+  offer: "Offer",
+  hired: "Hired",
+  rejected: "Rejected",
 };
 
 export type UnifiedListParams = {
@@ -89,6 +105,8 @@ export type UnifiedListParams = {
   // "Not now" is a per-role judgment, not a judgment on the person: the
   // role-scoped job view hides them by default; the pool view shows everyone.
   hideNotNow?: boolean;
+  /** With jobId: return ONLY rejected candidates (the Past tab). */
+  past?: boolean;
   sort?: "fit" | "added" | "name" | "years";
   dir?: "asc" | "desc";
   page?: number;
@@ -98,7 +116,7 @@ export type UnifiedListParams = {
 export type UnifiedList = {
   items: UnifiedRow[];
   total: number; // rows matching filters (after Not-now handling)
-  counts: { all: number; applied: number; sourced: number; notNow: number };
+  counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
   page: number;
   pageSize: number;
 };
@@ -146,6 +164,7 @@ export type UnifiedDetail = {
     tagLabel: string | null;
     reason: string | null;
     addedAt: string;
+    stage: string;
   }[];
   experience: ExperienceGroup[];
   education: {
@@ -418,6 +437,61 @@ const dateText = (v: ExpEntry["startDate"]): string | null =>
 /* The unified list                                                    */
 /* ------------------------------------------------------------------ */
 
+/** candidate_key -> status for one job (only keys with an explicit row). */
+async function jobStageMap(orgId: string, jobId: string): Promise<Map<string, string>> {
+  const res = await sbRest(
+    `candidate_role_statuses?organization_id=eq.${orgId}&job_id=eq.${encodeURIComponent(jobId)}` +
+      `&select=candidate_key,status`
+  );
+  const rows: { candidate_key: string; status: string }[] = res.ok ? await res.json() : [];
+  return new Map(rows.map((r) => [r.candidate_key, r.status]));
+}
+
+/** Overwrite pipeline entries' stages with this candidate's stored statuses. */
+async function attachStages(
+  orgId: string,
+  key: string,
+  pipeline: UnifiedDetail["pipeline"]
+): Promise<void> {
+  if (!pipeline.length) return;
+  const res = await sbRest(
+    `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${encodeURIComponent(key)}` +
+      `&select=job_id,status`
+  );
+  const rows: { job_id: string; status: string }[] = res.ok ? await res.json() : [];
+  const byJob = new Map(rows.map((r) => [r.job_id, r.status]));
+  for (const entry of pipeline) entry.stage = byJob.get(entry.jobId) || "new";
+}
+
+export async function saveUnifiedStatus(
+  orgId: string,
+  key: string,
+  jobId: string,
+  status: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(STAGES as readonly string[]).includes(status)) return { ok: false, error: "bad_status" };
+  const roleRes = await sbRest(
+    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=id&limit=1`
+  );
+  if (!roleRes.ok || ((await roleRes.json()) as unknown[]).length === 0)
+    return { ok: false, error: "job_not_found" };
+  const res = await sbRest(
+    `candidate_role_statuses?on_conflict=organization_id,candidate_key,job_id`,
+    {
+      method: "POST",
+      prefer: "resolution=merge-duplicates,return=minimal",
+      body: JSON.stringify({
+        organization_id: orgId,
+        candidate_key: key,
+        job_id: jobId,
+        status,
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+  return res.ok ? { ok: true } : { ok: false, error: "save_failed" };
+}
+
 export async function listUnifiedCandidates(params: UnifiedListParams): Promise<UnifiedList> {
   const { orgId } = params;
   const page = Math.max(1, params.page ?? 1);
@@ -475,6 +549,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       bestTagLabel: labelOf(best.tag),
       yearsExperience: null,
       addedAt: a.created_at,
+      stage: null,
     });
   }
 
@@ -507,12 +582,23 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       bestTagLabel: labelOf(best.tag),
       yearsExperience: p.years_experience,
       addedAt: ms[ms.length - 1]?.created_at || p.created_at,
+      stage: null,
     });
   }
 
   // ---- filters ----
   let visible = rows;
-  if (params.jobId) visible = visible.filter((r) => r.roles.some((x) => x.jobId === params.jobId));
+  let rejectedCount = 0;
+  if (params.jobId) {
+    visible = visible.filter((r) => r.roles.some((x) => x.jobId === params.jobId));
+    // Human statuses: attach this job's stage; "rejected" leaves the active
+    // Pipeline list for the Past tab (params.past flips the split).
+    const stages = await jobStageMap(orgId, params.jobId);
+    for (const r of visible) r.stage = stages.get(r.key) || "new";
+    const rejected = visible.filter((r) => r.stage === "rejected");
+    rejectedCount = rejected.length;
+    visible = params.past ? rejected : visible.filter((r) => r.stage !== "rejected");
+  }
   if (params.q) {
     const q = params.q.toLowerCase();
     visible = visible.filter((r) =>
@@ -528,6 +614,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     applied: actionable.filter((r) => r.source === "applied").length,
     sourced: actionable.filter((r) => r.source === "sourced").length,
     notNow: notNow.length,
+    rejected: rejectedCount,
   };
 
   let filtered = params.hideNotNow ? actionable : visible;
@@ -696,6 +783,7 @@ async function sourcedPipeline(
       tagLabel: labelOf(m.tag),
       reason: m.reason,
       addedAt: m.created_at,
+      stage: "new",
     });
   }
   return out;
@@ -721,6 +809,7 @@ function applicantPipeline(
       tagLabel: tag ? TAG_LABEL[tag] : null,
       reason: sc ? clientReason(sc) : null,
       addedAt: a.created_at,
+      stage: "new",
     };
   });
 }
@@ -755,6 +844,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         if (!covered.has(entry.jobId)) pipeline.unshift(entry);
     }
 
+    await attachStages(orgId, key, pipeline);
     const bits = profileBits(p.profile);
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
     const resumePath = app?.resume_path || p.resume_path;
@@ -816,6 +906,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         if (!covered.has(entry.jobId)) pipeline.push(entry);
     }
 
+    await attachStages(orgId, key, pipeline);
     const bits = profileBits(sourced?.profile || (a.harvest_profile as HarvestProfile | null));
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
     const resumePath = a.resume_path || sourced?.resume_path || null;
