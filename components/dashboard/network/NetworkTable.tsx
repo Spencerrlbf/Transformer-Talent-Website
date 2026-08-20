@@ -18,6 +18,7 @@ export type NetMatch = {
   reason: string;
   addedAt: string;
   sentAt: string | null;
+  sendsTo: string | null;
 };
 
 export type NetPerson = {
@@ -282,8 +283,10 @@ export default function NetworkTable({
               Send {confirm.person.name.split(" ")[0]} to {confirm.match.title}?
             </h3>
             <p>
-              This creates an application on <b>{confirm.match.title} (#{confirm.match.jobId})</b> —
-              visible in that job&apos;s Pipeline like any applicant.
+              This creates an application on <b>{confirm.match.title} (#{confirm.match.jobId})</b>
+              {confirm.match.sendsTo
+                ? <> — delivered straight into <b>{confirm.match.sendsTo}&apos;s</b> pipeline.</>
+                : <> — visible in that job&apos;s Pipeline like any applicant.</>}
             </p>
             <div className="nw-modal-who">
               <Avatar photoUrl={confirm.person.photoUrl} name={confirm.person.name} />
@@ -397,6 +400,7 @@ function PersonRows({
                       {m.company && ` · ${m.company}`}
                       {m.salary && ` · ${m.salary}`}
                     </small>
+                    {m.sendsTo && <small className="nw-sendsto">→ delivers to {m.sendsTo}</small>}
                     <span className={`dash-tag ${TAG_CLASS[m.tag]}`}>{m.tagLabel}</span>
                   </span>
                   <span className="nw-rv-body">{m.reason}</span>

@@ -23,6 +23,8 @@ export type NetworkMatch = {
   reason: string;
   addedAt: string;
   sentAt: string | null; // already sent to this job via the send button
+  /** Client org name a send delivers to (linked roles); null = our own pipeline. */
+  sendsTo: string | null;
 };
 
 export type NetworkPerson = {
@@ -86,15 +88,28 @@ async function fetchAll<T>(pathFor: (limit: number, offset: number) => string): 
   return out;
 }
 
-type RoleInfo = { jobId: string; title: string; company: string | null; salary: string | null; location: string | null };
+type LinkedRole = { orgId: string; jobId: string };
+type RoleInfo = {
+  jobId: string; title: string; company: string | null; salary: string | null;
+  location: string | null; linked: LinkedRole | null;
+};
+
+function parseLinked(v: unknown): LinkedRole | null {
+  if (!v || typeof v !== "object") return null;
+  const { orgId, jobId } = v as Record<string, unknown>;
+  return typeof orgId === "string" && typeof jobId === "string" && orgId && jobId
+    ? { orgId, jobId }
+    : null;
+}
 
 async function roleIndex(orgId: string): Promise<Map<string, RoleInfo>> {
   const res = await sbRest(
-    `org_roles?organization_id=eq.${orgId}&select=id,external_id,title,company_name,salary,locations,workplace`
+    `org_roles?organization_id=eq.${orgId}&select=id,external_id,title,company_name,salary,locations,workplace,linked_org_role`
   );
   const rows: {
     id: string; external_id: string; title: string; company_name: string | null;
     salary: string | null; locations: string[] | null; workplace: string | null;
+    linked_org_role: unknown;
   }[] = res.ok ? await res.json() : [];
   const byId = new Map<string, RoleInfo>();
   for (const r of rows)
@@ -104,22 +119,26 @@ async function roleIndex(orgId: string): Promise<Map<string, RoleInfo>> {
       company: str(r.company_name),
       salary: str(r.salary),
       location: [(r.locations || []).join(", ") || null, str(r.workplace)].filter(Boolean).join(" · ") || null,
+      linked: parseLinked(r.linked_org_role),
     });
   return byId;
 }
 
-/** (candidateId|jobId) -> sent date, from via-TT applications. */
-async function sentIndex(orgId: string): Promise<Map<string, string>> {
-  const rows = await fetchAll<{ candidate_id: string | null; role_ids: string[] | null; created_at: string }>(
+/** (candidateId|orgId|jobId) -> sent date, from via-TT applications in ANY
+ *  org — linked roles file their applications in the client's org. */
+async function sentIndex(): Promise<Map<string, string>> {
+  const rows = await fetchAll<{
+    organization_id: string; candidate_id: string | null; role_ids: string[] | null; created_at: string;
+  }>(
     (limit, offset) =>
-      `website_applications?organization_id=eq.${orgId}&source=eq.transformer_talent` +
-      `&select=candidate_id,role_ids,created_at&limit=${limit}&offset=${offset}`
+      `website_applications?source=eq.transformer_talent` +
+      `&select=organization_id,candidate_id,role_ids,created_at&limit=${limit}&offset=${offset}`
   );
   const map = new Map<string, string>();
   for (const r of rows)
     for (const jobId of r.role_ids || [])
-      if (r.candidate_id && !map.has(`${r.candidate_id}|${jobId}`))
-        map.set(`${r.candidate_id}|${jobId}`, r.created_at);
+      if (r.candidate_id && !map.has(`${r.candidate_id}|${r.organization_id}|${jobId}`))
+        map.set(`${r.candidate_id}|${r.organization_id}|${jobId}`, r.created_at);
   return map;
 }
 
@@ -135,8 +154,16 @@ export async function listNetworkMatches(
         `&order=created_at.desc&limit=${limit}&offset=${offset}`
     ),
     roleIndex(orgId),
-    sentIndex(orgId),
+    sentIndex(),
   ]);
+
+  // Linked roles deliver to a client org — resolve names for the UI.
+  const orgNames = new Map<string, string>();
+  {
+    const res = await sbRest(`organizations?select=id,name`);
+    for (const o of (res.ok ? await res.json() : []) as { id: string; name: string }[])
+      orgNames.set(o.id, o.name);
+  }
 
   // Newest verdict per (person, role); only scorecard-bearing rows render.
   const seen = new Set<string>();
@@ -151,6 +178,9 @@ export async function listNetworkMatches(
     seen.add(key);
     const tag = clientTag(sc);
     const list = byPerson.get(v.candidate_id) || [];
+    // Sent detection follows the link: a linked role's application lives in
+    // the client org under the client's job id.
+    const target = role.linked ?? { orgId, jobId: role.jobId };
     list.push({
       jobId: role.jobId,
       title: role.title,
@@ -161,7 +191,8 @@ export async function listNetworkMatches(
       tagLabel: TAG_LABEL[tag],
       reason: clientReason(sc),
       addedAt: v.created_at,
-      sentAt: sent.get(key) ?? null,
+      sentAt: sent.get(`${v.candidate_id}|${target.orgId}|${target.jobId}`) ?? null,
+      sendsTo: role.linked ? orgNames.get(role.linked.orgId) || "the client" : null,
     });
     byPerson.set(v.candidate_id, list);
     if (!latest.has(v.candidate_id) || v.created_at > latest.get(v.candidate_id)!)
@@ -218,19 +249,36 @@ export async function sendNetworkCandidate(
   jobId: string
 ): Promise<{ ok: true; applicationId: string } | { ok: false; error: string }> {
   const roleRes = await sbRest(
-    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=id,title&limit=1`
+    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}` +
+      `&select=id,title,linked_org_role&limit=1`
   );
-  const [role] = (roleRes.ok ? await roleRes.json() : []) as { id: string; title: string }[];
+  const [role] = (roleRes.ok ? await roleRes.json() : []) as {
+    id: string; title: string; linked_org_role: unknown;
+  }[];
   if (!role) return { ok: false, error: "job_not_found" };
+
+  // The wire: a linked role files the application in the CLIENT org, on the
+  // client's copy of the job. Unlinked roles file into our own pipeline.
+  const linked = parseLinked(role.linked_org_role);
+  let target = { orgId, jobId, title: role.title, roleUuid: role.id };
+  if (linked) {
+    const clientRes = await sbRest(
+      `org_roles?organization_id=eq.${linked.orgId}&external_id=eq.${encodeURIComponent(linked.jobId)}` +
+        `&select=id,title&limit=1`
+    );
+    const [client] = (clientRes.ok ? await clientRes.json() : []) as { id: string; title: string }[];
+    if (!client) return { ok: false, error: "linked_role_missing" };
+    target = { orgId: linked.orgId, jobId: linked.jobId, title: client.title, roleUuid: client.id };
+  }
 
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
   const [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
   if (!cand) return { ok: false, error: "candidate_not_found" };
 
-  // One send per (person, job) — the pipeline should never grow duplicates.
+  // One send per (person, target job) — pipelines never grow duplicates.
   const dupRes = await sbRest(
-    `website_applications?organization_id=eq.${orgId}&candidate_id=eq.${candidateId}` +
-      `&role_ids=cs.{"${jobId}"}&select=id&limit=1`
+    `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
+      `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
   );
   if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
     return { ok: false, error: "already_sent" };
@@ -243,24 +291,28 @@ export async function sendNetworkCandidate(
   );
   const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
 
-  // Their verdict for THIS role rides along in the apply-flow screening shape,
-  // so the pipeline's fit tag + review render exactly like an applicant's.
+  // Their verdict for the MATCHED role rides along in the apply-flow
+  // screening shape, so the pipeline's fit tag + review render exactly like
+  // an applicant's.
   const vRes = await sbRest(
     `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${candidateId}` +
-      `&org_role_id=eq.${role.id}&select=verdict&order=created_at.desc&limit=1`
+      `&org_role_id=eq.${role.id}&select=verdict,candidate_hash,role_hash,model&order=created_at.desc&limit=1`
   );
-  const [v] = (vRes.ok ? await vRes.json() : []) as { verdict: Record<string, unknown> | null }[];
+  const [v] = (vRes.ok ? await vRes.json() : []) as {
+    verdict: Record<string, unknown> | null;
+    candidate_hash: string; role_hash: string; model: string | null;
+  }[];
 
   const inserted = await sbInsert<{ id: string }>(
     "website_applications",
     {
-      organization_id: orgId,
+      organization_id: target.orgId,
       name: cand.full_name || "Candidate",
       email: cand.email || "",
       linkedin_url: cand.linkedin_url,
       linkedin_username: cand.linkedin_username,
-      role_ids: [jobId],
-      role_titles: [`${role.title} (#${jobId})`],
+      role_ids: [target.jobId],
+      role_titles: [`${target.title} (#${target.jobId})`],
       status: "processed",
       source: "transformer_talent",
       candidate_id: candidateId,
@@ -270,7 +322,7 @@ export async function sendNetworkCandidate(
         location: str(cand.location),
       },
       harvest_profile: enr?.raw_payload ?? null,
-      screening: v?.verdict ? [{ ...v.verdict, job_id: jobId }] : null,
+      screening: v?.verdict ? [{ ...v.verdict, job_id: target.jobId }] : null,
       contact: str(cand.email) || str(cand.phone) ? { email: str(cand.email), phone: str(cand.phone) } : null,
     },
     true
@@ -279,5 +331,30 @@ export async function sendNetworkCandidate(
     return null;
   });
   if (!inserted?.id) return { ok: false, error: "insert_failed" };
+
+  // Cross-org send: mirror the verdict onto the client's role so their
+  // pipeline (which reads org-scoped match_verdicts) shows the fit tag and
+  // review immediately — not "Screening…" forever.
+  if (target.orgId !== orgId && v?.verdict) {
+    const existing = await sbRest(
+      `match_verdicts?candidate_id=eq.${candidateId}&org_role_id=eq.${target.roleUuid}&select=id&limit=1`
+    );
+    if (existing.ok && ((await existing.json()) as unknown[]).length === 0) {
+      await sbInsert(
+        "match_verdicts",
+        {
+          organization_id: target.orgId,
+          candidate_id: candidateId,
+          org_role_id: target.roleUuid,
+          candidate_hash: v.candidate_hash,
+          role_hash: v.role_hash,
+          verdict: { ...v.verdict, job_id: target.jobId },
+          model: v.model,
+          source: "referral",
+        },
+        false
+      ).catch((e) => console.error("verdict mirror failed", e));
+    }
+  }
   return { ok: true, applicationId: inserted.id };
 }
