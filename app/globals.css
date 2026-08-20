@@ -1698,3 +1698,23 @@ body:has(.board-app) {
 .jdw-title { font-size: 19px; font-weight: 750; margin: 0 0 4px; }
 .jdw-sub { font-size: 12.5px; color: #6b7280; margin: 0 0 6px; }
 .jdw-open { font-size: 12px; font-weight: 600; color: #2a5bd7; text-decoration: none; }
+
+/* Network table, second pass: FIXED layout — the table can never grow wider
+   than the page, chips wrap inside their column, reviews wrap fully. */
+.cv2-table.nw-tight { table-layout: fixed; width: 100%; }
+.cv2-table.nw-tight th:nth-child(1) { width: 17%; }
+.cv2-table.nw-tight th:nth-child(2) { width: 13%; }
+.cv2-table.nw-tight th:nth-child(3) { width: 10%; }
+.cv2-table.nw-tight th:nth-child(4) { width: 10%; }
+.cv2-table.nw-tight th:nth-child(5) { width: 34%; }
+.cv2-table.nw-tight th:nth-child(6) { width: 6%; }
+.cv2-table.nw-tight th:nth-child(7) { width: 6%; }
+.cv2-table.nw-tight th:nth-child(8) { width: 4%; }
+.cv2-table.nw-tight .cv2-title, .cv2-table.nw-tight .cv2-company, .cv2-table.nw-tight .cv2-loc {
+  max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cv2-table.nw-tight .cv2-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-rv-role { width: 200px; overflow-wrap: anywhere; }
+.nw-rv-body { overflow-wrap: anywhere; min-width: 0; }
+/* The base .cv2-table td nowrap must not leak into review rows — reviews wrap. */
+.cv2-table .nw-review-row td { white-space: normal; }
