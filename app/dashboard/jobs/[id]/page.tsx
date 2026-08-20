@@ -10,6 +10,7 @@ import type { SkillChip } from "@/components/dashboard/JobForm";
 import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
 import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
+import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
 
 type Job = {
   id: string;
@@ -25,6 +26,8 @@ type Job = {
   skills: SkillChip[];
   source: string;
   applicants: number;
+  targetCompanies: TargetCompany[];
+  companyName: string;
 };
 
 const TABS = [
@@ -177,6 +180,16 @@ function JobWorkspace({ id }: { id: string }) {
             )}
           </section>
           <aside>
+            <CompanyNameField
+              jobId={job.id}
+              initial={job.companyName}
+              onSaved={(companyName) => setJob({ ...job, companyName })}
+            />
+            <IdealCompanies
+              jobId={job.id}
+              initial={job.targetCompanies}
+              onSaved={(targetCompanies) => setJob({ ...job, targetCompanies })}
+            />
             {job.skills.length > 0 && (
               <>
                 <div className="dash-sec">Skills</div>
@@ -228,7 +241,9 @@ function JobWorkspace({ id }: { id: string }) {
         <CandidatesTable jobId={job.id} defaultHideNotNow onCounts={setCounts} onOpen={setOpenKey} />
       </div>
 
-      {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} />}
+      {tab === "sourcing" && (
+        <SourcingPanel jobId={job.id} jobTitle={job.title} targetCompanies={job.targetCompanies} />
+      )}
 
       {tab === "past" && (
         <div className="jobws-past-empty">

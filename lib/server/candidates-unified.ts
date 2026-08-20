@@ -138,6 +138,7 @@ export type UnifiedDetail = {
   pipeline: {
     jobId: string;
     title: string;
+    company: string | null;
     salary: string | null;
     location: string | null;
     via: "applied" | "sourced";
@@ -315,19 +316,20 @@ async function fetchSourcedPeople(orgId: string, ids?: string[]): Promise<Map<st
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-type RoleInfo = { jobId: string; title: string; salary: string | null; location: string | null };
+type RoleInfo = { jobId: string; title: string; company: string | null; salary: string | null; location: string | null };
 
 async function orgRoleIndex(orgId: string): Promise<{
   byId: Map<string, RoleInfo>;
   byExternal: Map<string, RoleInfo>;
 }> {
   const res = await sbRest(
-    `org_roles?organization_id=eq.${orgId}&select=id,external_id,title,salary,locations,workplace`
+    `org_roles?organization_id=eq.${orgId}&select=id,external_id,title,company_name,salary,locations,workplace`
   );
   const rows: {
     id: string;
     external_id: string;
     title: string;
+    company_name: string | null;
     salary: string | null;
     locations: string[] | null;
     workplace: string | null;
@@ -338,6 +340,7 @@ async function orgRoleIndex(orgId: string): Promise<{
     const info: RoleInfo = {
       jobId: r.external_id,
       title: r.title,
+      company: str(r.company_name),
       salary: str(r.salary),
       location:
         [(r.locations || []).join(", ") || null, str(r.workplace)].filter(Boolean).join(" · ") || null,
@@ -685,6 +688,7 @@ async function sourcedPipeline(
     out.push({
       jobId: role.jobId,
       title: role.title,
+      company: role.company,
       salary: role.salary,
       location: role.location,
       via: "sourced",
@@ -709,6 +713,7 @@ function applicantPipeline(
     return {
       jobId,
       title: appRoleTitle(a, jobId, i),
+      company: info?.company ?? null,
       salary: info?.salary ?? null,
       location: info?.location ?? null,
       via: "applied" as const,

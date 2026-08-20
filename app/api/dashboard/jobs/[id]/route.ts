@@ -11,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 async function loadJob(orgId: string, externalId: string) {
   const res = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(externalId)}` +
-      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at&limit=1`
+      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name&limit=1`
   );
   if (!res.ok) return null;
   const [row] = await res.json();
@@ -46,8 +46,30 @@ export async function GET(req: NextRequest, { params }: Params) {
       source: job.source,
       updatedAt: job.updated_at,
       applicants,
+      targetCompanies: Array.isArray(job.target_companies) ? job.target_companies : [],
+      companyName: job.company_name || "",
     },
   });
+}
+
+// --- Dashboard-owned fields: ideal companies + hiring company name. ---
+// These never come from the role sync chain, so editing them is safe (and
+// allowed) for synced roles too — unlike the JD fields below.
+type TargetCompany = { name: string; linkedinUrl: string | null; logo: string | null };
+
+function sanitizeTargets(v: unknown): TargetCompany[] | null {
+  if (!Array.isArray(v) || v.length > 20) return null;
+  const out: TargetCompany[] = [];
+  for (const t of v) {
+    if (!t || typeof t !== "object") return null;
+    const { name, linkedinUrl, logo } = t as Record<string, unknown>;
+    if (typeof name !== "string" || !name.trim() || name.length > 120) return null;
+    const url = typeof linkedinUrl === "string" && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\//i.test(linkedinUrl) ? linkedinUrl.slice(0, 300) : null;
+    const logoUrl = typeof logo === "string" && /^https:\/\//i.test(logo) ? logo.slice(0, 500) : null;
+    if (!out.some((x) => x.name.toLowerCase() === name.trim().toLowerCase()))
+      out.push({ name: name.trim(), linkedinUrl: url, logo: logoUrl });
+  }
+  return out;
 }
 
 // Edit (full fields -> regenerate profile + embeddings) or status-only
@@ -65,6 +87,28 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad_json" }, { status: 400 });
+  }
+
+  // Dashboard-owned fields first — no sync-chain gate (see above).
+  if (body.targetCompanies !== undefined || body.companyName !== undefined) {
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.targetCompanies !== undefined) {
+      const targets = sanitizeTargets(body.targetCompanies);
+      if (!targets) return NextResponse.json({ error: "bad_target_companies" }, { status: 400 });
+      patch.target_companies = targets;
+    }
+    if (body.companyName !== undefined) {
+      if (typeof body.companyName !== "string" || body.companyName.length > 120)
+        return NextResponse.json({ error: "bad_company_name" }, { status: 400 });
+      patch.company_name = body.companyName.trim() || null;
+    }
+    const up = await sbRest(`org_roles?id=eq.${job.id}`, {
+      method: "PATCH",
+      prefer: "return=minimal",
+      body: JSON.stringify(patch),
+    });
+    if (!up.ok) return NextResponse.json({ error: "update_failed" }, { status: 502 });
+    return NextResponse.json({ id: job.external_id });
   }
 
   // Notion-synced roles are owned by the sync chain: edits would be

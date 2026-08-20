@@ -10,6 +10,7 @@ import { useDash } from "@/components/dashboard/DashShell";
 type PipelineEntry = {
   jobId: string;
   title: string;
+  company: string | null;
   salary: string | null;
   location: string | null;
   via: "applied" | "sourced";
@@ -194,6 +195,7 @@ function PipelineRows({
           </a>
           <small>{entry.via === "applied" ? "applied" : "via sourcing run"}</small>
         </td>
+        <td className="cv2d-ploc">{entry.company || "—"}</td>
         <td className="cv2d-pnum">{entry.salary || "—"}</td>
         <td className="cv2d-ploc">{entry.location || "—"}</td>
         <td className="cv2d-pnum">{fmtDay(entry.addedAt)}</td>
@@ -211,7 +213,7 @@ function PipelineRows({
       </tr>
       {expanded && (
         <tr className="cv2d-preview-row">
-          <td colSpan={7}>
+          <td colSpan={8}>
             <div className="cv2d-pipe-detail">
               <FitReview entry={entry} />
             </div>
@@ -568,6 +570,7 @@ export default function CandidateDrawer({
                         <thead>
                           <tr>
                             <th>Role</th>
+                            <th>Company</th>
                             <th>Salary</th>
                             <th>Location</th>
                             <th>Added</th>
