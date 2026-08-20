@@ -202,13 +202,21 @@ type SortKey = "fit" | "added" | "name";
 export default function CandidatesTable({
   jobId,
   defaultHideNotNow = false,
+  past = false,
+  refreshKey = 0,
   onOpen,
   onCounts,
+  onRestored,
 }: {
   jobId?: string;
   defaultHideNotNow?: boolean;
+  /** With jobId: show ONLY rejected candidates (the Past tab) + a Restore action. */
+  past?: boolean;
+  /** Bump to force a refetch (e.g. a restore happened in the Past tab). */
+  refreshKey?: number;
   onOpen?: (key: string) => void;
   onCounts?: (counts: Cv2List["counts"]) => void;
+  onRestored?: () => void;
 }) {
   const { token } = useDash();
   const [data, setData] = useState<Cv2List | null>(null);
@@ -259,7 +267,8 @@ export default function CandidatesTable({
     if (effectiveJob) params.set("job", effectiveJob);
     if (fit) params.set("fit", fit);
     if (debouncedQ) params.set("q", debouncedQ);
-    if (hideNotNow) params.set("hideNotNow", "1");
+    if (hideNotNow && !past) params.set("hideNotNow", "1");
+    if (past) params.set("past", "1");
     params.set("sort", sort);
     params.set("dir", dir);
     params.set("page", String(page));
@@ -283,7 +292,23 @@ export default function CandidatesTable({
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump]);
+  }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
+
+  // Past tab: put a rejected candidate back into the active pipeline.
+  async function restore(key: string) {
+    if (!jobId) return;
+    setSavingStage(key);
+    const res = await fetch(`/api/dashboard/candidates/v2/${key}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jobId, status: "new" }),
+    }).catch(() => null);
+    setSavingStage(null);
+    if (res?.ok) {
+      setBump((b) => b + 1);
+      onRestored?.();
+    }
+  }
 
   // Save a row's stage; Rejected refetches so the row moves to Past.
   async function changeStage(key: string, stage: string) {
@@ -379,7 +404,7 @@ export default function CandidatesTable({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {counts != null && counts.notNow > 0 && !fit && (
+        {counts != null && counts.notNow > 0 && !fit && !past && (
           <label className="cv2-toggle">
             <input
               type="checkbox"
@@ -395,8 +420,9 @@ export default function CandidatesTable({
 
       {!error && data && data.total === 0 && !loading && (
         <div className="dash-empty">
-          No candidates match. Applicants appear the moment someone applies on your board; sourced
-          people arrive when a sourcing run finishes.
+          {past
+            ? "No past candidates. Set someone's stage to “Rejected” in the Pipeline tab and they move here — profile and reviews kept."
+            : "No candidates match. Applicants appear the moment someone applies on your board; sourced people arrive when a sourcing run finishes."}
         </div>
       )}
 
@@ -408,7 +434,7 @@ export default function CandidatesTable({
                 {header("name", "Candidate")}
                 <th>Source</th>
                 {header("fit", "Fit")}
-                {jobId && <th>Stage</th>}
+                {jobId && <th>{past ? "" : "Stage"}</th>}
                 <th>Current role</th>
                 <th>Company</th>
                 <th>Location</th>
@@ -450,11 +476,22 @@ export default function CandidatesTable({
                   </td>
                   {jobId && (
                     <td className="cv2-stagecell" onClick={(e) => e.stopPropagation()}>
-                      <StageSelect
-                        value={r.stage || "new"}
-                        busy={savingStage === r.key}
-                        onChange={(s) => changeStage(r.key, s)}
-                      />
+                      {past ? (
+                        <button
+                          className="cv2-restore"
+                          disabled={savingStage === r.key}
+                          title="Move back to the active pipeline (stage: New)"
+                          onClick={() => restore(r.key)}
+                        >
+                          {savingStage === r.key ? "Restoring…" : "↩ Restore"}
+                        </button>
+                      ) : (
+                        <StageSelect
+                          value={r.stage || "new"}
+                          busy={savingStage === r.key}
+                          onChange={(s) => changeStage(r.key, s)}
+                        />
+                      )}
                     </td>
                   )}
                   <td className="cv2-title">{r.currentTitle || <span className="cv2-dim">—</span>}</td>

@@ -59,6 +59,8 @@ function JobWorkspace({ id }: { id: string }) {
     rejected: number;
   } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Bumped when a Past-tab restore happens so the (mounted) Pipeline table refetches.
+  const [pipelineRefresh, setPipelineRefresh] = useState(0);
 
   const load = useCallback(() => {
     fetch(`/api/dashboard/jobs/${id}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -145,6 +147,9 @@ function JobWorkspace({ id }: { id: string }) {
           >
             {t.label}
             {t.id === "pipeline" && counts !== null && <span className="n">{counts.all}</span>}
+            {t.id === "past" && counts !== null && counts.rejected > 0 && (
+              <span className="n">{counts.rejected}</span>
+            )}
           </button>
         ))}
       </nav>
@@ -244,34 +249,30 @@ function JobWorkspace({ id }: { id: string }) {
             </button>
           </div>
         )}
-        <CandidatesTable jobId={job.id} defaultHideNotNow onCounts={setCounts} onOpen={setOpenKey} />
+        <CandidatesTable
+          jobId={job.id}
+          defaultHideNotNow
+          refreshKey={pipelineRefresh}
+          onCounts={setCounts}
+          onOpen={setOpenKey}
+        />
       </div>
 
       {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} />}
 
       {tab === "past" && (
-        <div className="jobws-past-empty">
-          {counts && counts.rejected > 0 ? (
-            <>
-              <b>
-                {counts.rejected} rejected candidate{counts.rejected === 1 ? "" : "s"}.
-              </b>
-              <p>
-                The full Past list — profiles, rejection context, and a restore button — arrives with
-                the next update. Rejected candidates are already out of your active Pipeline.
-              </p>
-            </>
-          ) : (
-            <>
-              <b>No past candidates yet.</b>
-              <p>
-                Set a candidate&apos;s stage to &ldquo;Rejected&rdquo; in the Pipeline tab and
-                they&apos;ll move here so your active list stays clean — with their profile and the
-                reason kept for reference.
-              </p>
-            </>
-          )}
-        </div>
+        <>
+          <p className="dash-sub jobws-past-lead">
+            Candidates you rejected on this role. Profiles and reviews are kept — restore anyone to
+            put them back in the active pipeline.
+          </p>
+          <CandidatesTable
+            jobId={job.id}
+            past
+            onOpen={setOpenKey}
+            onRestored={() => setPipelineRefresh((n) => n + 1)}
+          />
+        </>
       )}
 
       <CandidateDrawer candKey={openKey} roleContext={job.id} onClose={() => setOpenKey(null)} />
