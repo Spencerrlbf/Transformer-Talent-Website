@@ -64,15 +64,18 @@ export type UnifiedRole = {
 export type UnifiedRow = {
   key: string; // "app_<id>" | "src_<id>"
   name: string;
-  headline: string | null;
+  photoUrl: string | null;
+  currentTitle: string | null;
+  currentCompany: string | null;
   location: string | null;
+  linkedinUrl: string | null;
+  contact: { email: string | null; phone: string | null };
   source: "applied" | "sourced";
   viaTT: boolean; // future referral badge slot
   alsoSourced: boolean; // applicant who also appears in a sourcing run
-  roles: UnifiedRole[];
+  roles: UnifiedRole[]; // drives job filtering; rendered in the drawer's Pipeline tab
   bestTag: string | null;
   bestTagLabel: string | null;
-  snapshot: string;
   yearsExperience: number | null;
   addedAt: string;
 };
@@ -102,7 +105,7 @@ export type UnifiedList = {
 
 export type ExperienceGroup = {
   company: string;
-  logoUrl: string | null;
+  logoUrl: string | null; // LinkedIn CDN logo (may expire; UI falls back to a letter tile)
   companyLinkedinUrl: string | null;
   span: string | null;
   roles: {
@@ -135,6 +138,8 @@ export type UnifiedDetail = {
   pipeline: {
     jobId: string;
     title: string;
+    salary: string | null;
+    location: string | null;
     via: "applied" | "sourced";
     tag: string | null;
     tagLabel: string | null;
@@ -142,12 +147,27 @@ export type UnifiedDetail = {
     addedAt: string;
   }[];
   experience: ExperienceGroup[];
-  education: { school: string; logoUrl: string | null; degree: string | null; field: string | null; period: string | null }[];
+  education: {
+    school: string;
+    logoUrl: string | null;
+    linkedinUrl: string | null;
+    degree: string | null;
+    field: string | null;
+    period: string | null;
+  }[];
   skills: string[];
   resumeUrl: string | null;
+  resumeName: string | null;
   hasResume: boolean;
   addedAt: string;
 };
+
+// "2026-08-20/<uuid>-Peter-Wang-Resume.pdf" -> "Peter-Wang-Resume.pdf"
+export function resumeNameFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const base = path.split("/").pop() || path;
+  return base.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i, "") || base;
+}
 
 /* ------------------------------------------------------------------ */
 /* Raw-row helpers                                                     */
@@ -295,10 +315,37 @@ async function fetchSourcedPeople(orgId: string, ids?: string[]): Promise<Map<st
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-async function orgRoleIndex(orgId: string): Promise<Map<string, { jobId: string; title: string }>> {
-  const res = await sbRest(`org_roles?organization_id=eq.${orgId}&select=id,external_id,title`);
-  const rows: { id: string; external_id: string; title: string }[] = res.ok ? await res.json() : [];
-  return new Map(rows.map((r) => [r.id, { jobId: r.external_id, title: r.title }]));
+type RoleInfo = { jobId: string; title: string; salary: string | null; location: string | null };
+
+async function orgRoleIndex(orgId: string): Promise<{
+  byId: Map<string, RoleInfo>;
+  byExternal: Map<string, RoleInfo>;
+}> {
+  const res = await sbRest(
+    `org_roles?organization_id=eq.${orgId}&select=id,external_id,title,salary,locations,workplace`
+  );
+  const rows: {
+    id: string;
+    external_id: string;
+    title: string;
+    salary: string | null;
+    locations: string[] | null;
+    workplace: string | null;
+  }[] = res.ok ? await res.json() : [];
+  const byId = new Map<string, RoleInfo>();
+  const byExternal = new Map<string, RoleInfo>();
+  for (const r of rows) {
+    const info: RoleInfo = {
+      jobId: r.external_id,
+      title: r.title,
+      salary: str(r.salary),
+      location:
+        [(r.locations || []).join(", ") || null, str(r.workplace)].filter(Boolean).join(" · ") || null,
+    };
+    byId.set(r.id, info);
+    byExternal.set(r.external_id, info);
+  }
+  return { byId, byExternal };
 }
 
 // Newest membership per (person, role) — older runs' verdicts are history.
@@ -332,13 +379,26 @@ const bestOf = (roles: UnifiedRole[]): { tag: string | null; rank: number } => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Snapshot lines                                                      */
+/* Harvest profile fragments                                           */
 /* ------------------------------------------------------------------ */
+
+// LinkedIn media fields arrive either as a bare URL string or as an object
+// {url, sizes:[{url,width,...}]}. Prefer a small variant for 40px tiles.
+type LinkedinImage = string | { url?: string; sizes?: { url?: string; width?: number }[] } | null;
+
+function logoFrom(v: LinkedinImage | undefined): string | null {
+  if (!v) return null;
+  if (typeof v === "string") return str(v);
+  const small = (v.sizes || [])
+    .filter((s) => s.url && (s.width ?? 0) >= 100)
+    .sort((a, b) => (a.width ?? 0) - (b.width ?? 0))[0];
+  return str(small?.url) || str(v.url);
+}
 
 type ExpEntry = {
   position?: string;
   companyName?: string;
-  companyLogo?: string;
+  companyLogo?: LinkedinImage;
   companyLinkedinUrl?: string;
   startDate?: { text?: string } | string;
   endDate?: { text?: string } | string;
@@ -351,34 +411,6 @@ type ExpEntry = {
 const dateText = (v: ExpEntry["startDate"]): string | null =>
   typeof v === "string" ? str(v) : str(v?.text);
 
-function prevCompanies(exp: ExpEntry[]): string[] {
-  const names: string[] = [];
-  for (const e of exp) {
-    const n = str(e.companyName);
-    if (n && !names.includes(n)) names.push(n);
-  }
-  return names.slice(1, 3); // skip current employer
-}
-
-function sourcedSnapshot(person: SrcPerson, exp: ExpEntry[] | null): string {
-  const parts: string[] = [];
-  if (person.years_experience != null) parts.push(`${person.years_experience} yrs`);
-  const prev = exp ? prevCompanies(exp) : [];
-  if (prev.length) parts.push(`prev: ${prev.join(", ")}`);
-  const skills = person.skills || [];
-  if (skills.length)
-    parts.push(`${skills.slice(0, 2).join(", ")}${skills.length > 2 ? ` +${skills.length - 2}` : ""}`);
-  return parts.join(" · ");
-}
-
-function applicantSnapshot(a: AppRow): string {
-  const parts: string[] = [];
-  const loc = str(a.parsed_profile?.location);
-  if (loc) parts.push(loc);
-  if (a.resume_path) parts.push("resume on file");
-  return parts.join(" · ");
-}
-
 /* ------------------------------------------------------------------ */
 /* The unified list                                                    */
 /* ------------------------------------------------------------------ */
@@ -388,12 +420,13 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
 
-  const [apps, pairings, memberships, roleIdx] = await Promise.all([
+  const [apps, pairings, memberships, roleIndex] = await Promise.all([
     fetchApplicants(orgId),
     orgVerdictPairings(orgId),
     fetchMemberships(orgId),
     orgRoleIndex(orgId),
   ]);
+  const roleIdx = roleIndex.byId;
   const byPerson = newestPerPersonRole(memberships);
   const people = await fetchSourcedPeople(orgId, [...byPerson.keys()]);
 
@@ -415,25 +448,28 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       for (const m of byPerson.get(sourcedId) || []) {
         const role = roleIdx.get(m.sourcing_runs!.org_role_id);
         if (!role || covered.has(role.jobId)) continue;
-        roles.push({ ...role, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
+        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
       }
     }
     const best = bestOf(roles);
     rows.push({
       key: `app_${a.id}`,
       name: a.name,
-      headline:
-        [str(a.parsed_profile?.current_title), str(a.parsed_profile?.current_company)]
-          .filter(Boolean)
-          .join(" @ ") || null,
+      photoUrl: null,
+      currentTitle: str(a.parsed_profile?.current_title),
+      currentCompany: str(a.parsed_profile?.current_company),
       location: str(a.parsed_profile?.location),
+      linkedinUrl: a.linkedin_url,
+      contact: {
+        email: str(a.contact?.email) ?? str(a.email),
+        phone: str(a.contact?.phone),
+      },
       source: "applied",
       viaTT: a.source === "transformer_talent",
       alsoSourced: !!sourcedId,
       roles,
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
-      snapshot: applicantSnapshot(a),
       yearsExperience: null,
       addedAt: a.created_at,
     });
@@ -446,24 +482,26 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     const roles: UnifiedRole[] = [];
     for (const m of ms) {
       const role = roleIdx.get(m.sourcing_runs!.org_role_id);
-      if (role) roles.push({ ...role, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
+      if (role)
+        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
     }
     if (!roles.length) continue;
     const best = bestOf(roles);
     rows.push({
       key: `src_${p.id}`,
       name: p.full_name || "Candidate",
-      headline:
-        [str(p.current_title), str(p.current_company)].filter(Boolean).join(" @ ") ||
-        str(p.headline),
+      photoUrl: null,
+      currentTitle: str(p.current_title) || str(p.headline),
+      currentCompany: str(p.current_company),
       location: p.location,
+      linkedinUrl: p.linkedin_url,
+      contact: { email: str(p.contact?.email), phone: str(p.contact?.phone) },
       source: "sourced",
       viaTT: false,
       alsoSourced: false,
       roles,
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
-      snapshot: "", // filled for the returned page only (needs profile JSON)
       yearsExperience: p.years_experience,
       addedAt: ms[ms.length - 1]?.created_at || p.created_at,
     });
@@ -474,8 +512,9 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   if (params.jobId) visible = visible.filter((r) => r.roles.some((x) => x.jobId === params.jobId));
   if (params.q) {
     const q = params.q.toLowerCase();
-    visible = visible.filter(
-      (r) => r.name.toLowerCase().includes(q) || (r.headline || "").toLowerCase().includes(q)
+    visible = visible.filter((r) =>
+      [r.name, r.currentTitle, r.currentCompany]
+        .some((v) => (v || "").toLowerCase().includes(q))
     );
   }
 
@@ -517,23 +556,29 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
 
   const items = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  // ---- snapshot enrichment for this page's sourced rows only ----
+  // ---- photo enrichment for this page only (profile JSON is heavy) ----
   const srcIds = items.filter((r) => r.key.startsWith("src_")).map((r) => r.key.slice(4));
-  if (srcIds.length) {
-    const res = await sbRest(
-      `sourced_candidates?id=in.(${srcIds.map((i) => `"${i}"`).join(",")})&select=id,experience:profile->experience`
-    );
-    const exps = new Map<string, ExpEntry[]>(
-      (res.ok ? ((await res.json()) as { id: string; experience: ExpEntry[] | null }[]) : []).map(
-        (r) => [r.id, Array.isArray(r.experience) ? r.experience : []]
-      )
-    );
-    for (const item of items) {
-      if (!item.key.startsWith("src_")) continue;
-      const p = people.get(item.key.slice(4));
-      if (p) item.snapshot = sourcedSnapshot(p, exps.get(p.id) ?? null);
-    }
-  }
+  const appIds = items.filter((r) => r.key.startsWith("app_")).map((r) => r.key.slice(4));
+  const photos = new Map<string, string | null>();
+  await Promise.all([
+    (async () => {
+      if (!srcIds.length) return;
+      const res = await sbRest(
+        `sourced_candidates?id=in.(${srcIds.map((i) => `"${i}"`).join(",")})&select=id,photo:profile->photo`
+      );
+      for (const r of (res.ok ? await res.json() : []) as { id: string; photo: LinkedinImage }[])
+        photos.set(`src_${r.id}`, logoFrom(r.photo));
+    })(),
+    (async () => {
+      if (!appIds.length) return;
+      const res = await sbRest(
+        `website_applications?id=in.(${appIds.map((i) => `"${i}"`).join(",")})&select=id,photo:harvest_profile->photo`
+      );
+      for (const r of (res.ok ? await res.json() : []) as { id: string; photo: LinkedinImage }[])
+        photos.set(`app_${r.id}`, logoFrom(r.photo));
+    })(),
+  ]);
+  for (const item of items) item.photoUrl = photos.get(item.key) ?? null;
 
   return { items, total: filtered.length, counts, page, pageSize };
 }
@@ -562,7 +607,7 @@ function groupExperience(exp: ExpEntry[]): ExperienceGroup[] {
     } else {
       groups.push({
         company,
-        logoUrl: str(e.companyLogo),
+        logoUrl: logoFrom(e.companyLogo),
         companyLinkedinUrl: str(e.companyLinkedinUrl),
         span: null,
         roles: [role],
@@ -583,14 +628,15 @@ function groupExperience(exp: ExpEntry[]): ExperienceGroup[] {
 
 type EduEntry = {
   schoolName?: string;
-  schoolLogo?: string;
+  schoolLogo?: LinkedinImage;
+  schoolLinkedinUrl?: string;
   degree?: string;
   fieldOfStudy?: string;
   period?: string;
 };
 
 type HarvestProfile = {
-  photo?: string;
+  photo?: LinkedinImage;
   about?: string;
   linkedinUrl?: string;
   experience?: ExpEntry[];
@@ -604,12 +650,13 @@ function profileBits(profile: HarvestProfile | null | undefined) {
     .map((s) => (typeof s === "string" ? s : str(s?.name)))
     .filter((s): s is string => !!s);
   return {
-    photoUrl: str(p.photo),
+    photoUrl: logoFrom(p.photo),
     about: str(p.about),
     experience: groupExperience(Array.isArray(p.experience) ? p.experience : []),
     education: (Array.isArray(p.education) ? p.education : []).map((e) => ({
       school: str(e.schoolName) || "—",
-      logoUrl: str(e.schoolLogo),
+      logoUrl: logoFrom(e.schoolLogo),
+      linkedinUrl: str(e.schoolLinkedinUrl),
       degree: str(e.degree),
       field: str(e.fieldOfStudy),
       period: str(e.period),
@@ -621,7 +668,7 @@ function profileBits(profile: HarvestProfile | null | undefined) {
 async function sourcedPipeline(
   orgId: string,
   personId: string,
-  roleIdx: Map<string, { jobId: string; title: string }>
+  roleIdx: Map<string, RoleInfo>
 ): Promise<UnifiedDetail["pipeline"]> {
   const memberships = await fetchAllPages<SrcMembership>(
     (limit, offset) =>
@@ -636,7 +683,10 @@ async function sourcedPipeline(
     if (!role || seen.has(role.jobId)) continue;
     seen.add(role.jobId);
     out.push({
-      ...role,
+      jobId: role.jobId,
+      title: role.title,
+      salary: role.salary,
+      location: role.location,
       via: "sourced",
       tag: m.tag,
       tagLabel: labelOf(m.tag),
@@ -647,13 +697,20 @@ async function sourcedPipeline(
   return out;
 }
 
-function applicantPipeline(a: AppRow, pairings: Map<string, VerdictRow>): UnifiedDetail["pipeline"] {
+function applicantPipeline(
+  a: AppRow,
+  pairings: Map<string, VerdictRow>,
+  byExternal?: Map<string, RoleInfo>
+): UnifiedDetail["pipeline"] {
   return (a.role_ids || []).map((jobId, i) => {
     const sc = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict?.scorecard : undefined;
     const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const info = byExternal?.get(jobId);
     return {
       jobId,
       title: appRoleTitle(a, jobId, i),
+      salary: info?.salary ?? null,
+      location: info?.location ?? null,
       via: "applied" as const,
       tag,
       tagLabel: tag ? TAG_LABEL[tag] : null,
@@ -667,7 +724,7 @@ const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export async function unifiedCandidateDetail(orgId: string, key: string): Promise<UnifiedDetail | null> {
-  const roleIdx = await orgRoleIndex(orgId);
+  const { byId: roleIdx, byExternal } = await orgRoleIndex(orgId);
 
   if (key.startsWith("src_")) {
     const id = key.slice(4);
@@ -689,7 +746,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     if (app) {
       const pairings = await orgVerdictPairings(orgId);
       const covered = new Set(pipeline.map((x) => x.jobId));
-      for (const entry of applicantPipeline(app, pairings))
+      for (const entry of applicantPipeline(app, pairings, byExternal))
         if (!covered.has(entry.jobId)) pipeline.unshift(entry);
     }
 
@@ -719,6 +776,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       education: bits.education,
       skills: bits.skills.length ? bits.skills : p.skills || [],
       resumeUrl: resumePath ? await signResumeUrl(resumePath) : null,
+      resumeName: resumeNameFromPath(resumePath ?? null),
       hasResume: !!resumePath,
       addedAt: p.created_at,
     };
@@ -733,7 +791,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     if (!a) return null;
 
     const pairings = await orgVerdictPairings(orgId);
-    const pipeline = applicantPipeline(a, pairings);
+    const pipeline = applicantPipeline(a, pairings, byExternal);
 
     // Fold in sourcing-run appearances (and the richer profile) if we also
     // imported this person through a run.
@@ -779,6 +837,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       education: bits.education,
       skills: bits.skills,
       resumeUrl: resumePath ? await signResumeUrl(resumePath) : null,
+      resumeName: resumeNameFromPath(resumePath ?? null),
       hasResume: !!resumePath,
       addedAt: a.created_at,
     };
@@ -831,4 +890,28 @@ export async function saveUnifiedContact(
   const rows = (await res.json()) as { contact: UnifiedContact }[];
   if (!rows.length) return { error: "not_found" };
   return { contact: rows[0].contact };
+}
+
+/* ------------------------------------------------------------------ */
+/* Resume pointer save (upload itself lives in the route)              */
+/* ------------------------------------------------------------------ */
+
+export async function saveUnifiedResumePath(
+  orgId: string,
+  key: string,
+  path: string
+): Promise<boolean> {
+  const target = key.startsWith("src_")
+    ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
+    : key.startsWith("app_")
+      ? `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
+      : null;
+  if (!target) return false;
+  const res = await sbRest(target, {
+    method: "PATCH",
+    body: JSON.stringify({ resume_path: path }),
+    prefer: "return=representation",
+  });
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0;
 }

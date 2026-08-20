@@ -934,7 +934,9 @@ body:has(.dash-app) {
 }
 .dash-side-foot em { font-style: normal; }
 /* Main */
-.dash-main { padding: 28px 40px; max-width: 1060px; width: 100%; }
+/* Wide enough for the candidates table; content sections carry their own
+   narrower max-widths so text-heavy pages don't sprawl. */
+.dash-main { padding: 28px 40px; max-width: 1560px; width: 100%; }
 .dash-h1 {
   font-size: 21px;
   letter-spacing: -0.02em;
@@ -1361,3 +1363,198 @@ body:has(.board-app) {
 
 /* 5-second candidate snapshot: years · trajectory · skills */
 .dash-src-snapshot { font-size: 11.5px; color: #8a919c; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* ===== Candidates v2: unified table ===== */
+.dash-tag.t-msg { background: #fdf3e2; color: #9a6206; }
+.dash-tag.t-notnow { background: #f1f3f6; color: #6b7280; }
+
+.cv2-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.cv2-seg { display: inline-flex; background: #f1f3f6; border-radius: 9px; padding: 3px; }
+.cv2-seg button { font: inherit; font-size: 12.5px; font-weight: 600; color: #8a919c; padding: 5px 13px; border-radius: 7px; border: 0; background: transparent; cursor: pointer; white-space: nowrap; }
+.cv2-seg button.on { background: #fff; color: #111418; box-shadow: 0 1px 2px rgba(28,32,39,0.1); }
+.cv2-filters select { border: 1px solid #d3d7dd; border-radius: 7px; padding: 7px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; }
+.cv2-search { border: 1px solid #d3d7dd; border-radius: 7px; padding: 7px 11px; font: inherit; font-size: 13px; color: #111418; min-width: 200px; }
+.cv2-search::placeholder { color: #a2a8b3; }
+.cv2-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #6b7280; margin-left: auto; cursor: pointer; user-select: none; white-space: nowrap; }
+
+.cv2-scroll { overflow-x: auto; border: 1px solid #e6e8ec; border-radius: 10px; background: #fff; }
+.cv2-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.cv2-table.cv2-loading { opacity: 0.55; }
+.cv2-table th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a2a8b3; padding: 10px 14px; border-bottom: 1px solid #e6e8ec; white-space: nowrap; cursor: pointer; user-select: none; }
+.cv2-table th.cv2-sorted { color: #111418; }
+.cv2-table td { padding: 11px 14px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; white-space: nowrap; font-size: 13px; color: #3d434c; }
+.cv2-table tbody tr:last-child td { border-bottom: 0; }
+.cv2-table tr.cv2-click { cursor: pointer; }
+.cv2-table tr.cv2-click:hover td { background: #fafbfd; }
+
+.cv2-cand { display: flex; align-items: center; gap: 11px; }
+.cv2-avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.cv2-name { font-weight: 650; color: #111418; font-size: 13.5px; line-height: 1.3; display: block; }
+.cv2-cand small { display: block; color: #8a919c; font-size: 11.5px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+.cv2-tt { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: #c2410c; background: #fff0e9; border-radius: 5px; padding: 2px 7px; margin-left: 7px; vertical-align: 1px; white-space: nowrap; }
+
+.cv2-src { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 650; padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+.cv2-src i { width: 6px; height: 6px; border-radius: 50%; }
+.cv2-src-applied { background: #f4f6f9; color: #4a5160; border: 1px solid #e6e8ec; }
+.cv2-src-applied i { background: #4a5160; }
+.cv2-src-sourced { background: #eef2fd; color: #2a5bd7; }
+.cv2-src-sourced i { background: #2a5bd7; }
+
+.cv2-role { font-size: 12.5px; font-weight: 550; color: #3d434c; }
+.cv2-role em { font-style: normal; color: #a2a8b3; font-weight: 450; }
+.cv2-more { color: #2a5bd7; font-weight: 650; font-size: 11.5px; margin-left: 5px; }
+.cv2-snap { font-size: 12px; color: #8a919c; font-variant-numeric: tabular-nums; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+.cv2-added { font-size: 12px; color: #a2a8b3; font-variant-numeric: tabular-nums; }
+.cv2-dim { color: #a2a8b3; }
+
+.cv2-foot { display: flex; align-items: center; justify-content: space-between; padding: 13px 4px 0; font-size: 12px; color: #8a919c; }
+.cv2-pager { display: inline-flex; align-items: center; gap: 10px; }
+.cv2-pager button { font: inherit; font-size: 13px; border: 1px solid #d3d7dd; border-radius: 6px; background: #fff; color: #3d434c; padding: 3px 11px; cursor: pointer; }
+.cv2-pager button:disabled { color: #c9cdd6; cursor: default; }
+
+/* ===== Candidates v2: profile drawer ===== */
+.cv2d-overlay { position: fixed; inset: 0; background: rgba(20, 24, 32, 0.42); z-index: 60; display: flex; justify-content: flex-end; }
+.cv2d { width: 680px; max-width: 94vw; height: 100%; background: #fff; box-shadow: -18px 0 44px rgba(20,24,32,0.28); overflow-y: auto; position: relative; animation: cv2d-in 0.18s ease-out; }
+@keyframes cv2d-in { from { transform: translateX(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cv2d { animation: none; } }
+.cv2d-close { position: absolute; top: 14px; left: 16px; border: 0; background: transparent; color: #a2a8b3; font-size: 15px; cursor: pointer; z-index: 2; }
+.cv2d-loading { padding: 60px 28px; color: #8a919c; font-size: 13.5px; }
+
+.cv2d-head { display: flex; gap: 16px; padding: 42px 28px 0; }
+.cv2d-avatar { width: 62px; height: 62px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.cv2d-avatar-fallback { background: #5b7fdb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 21px; font-weight: 700; }
+.cv2d-id { flex: 1; min-width: 0; }
+.cv2d-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cv2d-name h3 { color: #111418; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+.cv2d-headline { color: #3d434c; font-size: 13.5px; margin-top: 2px; }
+.cv2d-meta { color: #8a919c; font-size: 12.5px; margin-top: 2px; }
+.cv2d-links { display: flex; align-items: center; gap: 12px; margin-top: 9px; font-size: 12.5px; flex-wrap: wrap; }
+.cv2d-links a { color: #2a5bd7; text-decoration: none; font-weight: 600; }
+.cv2d-dim { color: #a2a8b3; font-size: 12px; }
+
+.cv2d-contact { display: flex; align-items: center; gap: 14px; margin-top: 8px; font-size: 12.5px; color: #3d434c; flex-wrap: wrap; }
+.cv2d-contact a { color: #2a5bd7; text-decoration: none; }
+.cv2d-add { border: 0; background: transparent; color: #a2a8b3; font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
+.cv2d-add:hover { color: #2a5bd7; }
+.cv2d-edit { border: 0; background: transparent; color: #2a5bd7; font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 0; }
+.cv2d-contact-edit { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.cv2d-contact-edit input { border: 1px solid #d3d7dd; border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 12.5px; width: 170px; }
+.cv2d-save { border: 0; border-radius: 7px; background: #111418; color: #fff; font: inherit; font-size: 12px; font-weight: 600; padding: 7px 14px; cursor: pointer; }
+.cv2d-save:disabled { opacity: 0.6; }
+.cv2d-cancel { border: 0; background: transparent; color: #8a919c; font: inherit; font-size: 12px; cursor: pointer; }
+.cv2d-err { color: #b3261e; font-size: 12px; }
+
+.cv2d-provenance { margin: 16px 28px 0; font-size: 12px; color: #2a5bd7; background: #eef2fd; border-radius: 8px; padding: 8px 13px; }
+.cv2d-provenance.applied { color: #4a5160; background: #f4f6f9; }
+
+.cv2d-tabs { display: flex; gap: 2px; padding: 18px 28px 0; border-bottom: 1px solid #e6e8ec; position: sticky; top: 0; background: #fff; z-index: 1; }
+.cv2d-tabs button { font: inherit; font-size: 13px; font-weight: 600; color: #8a919c; padding: 8px 14px 10px; border: 0; background: transparent; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.cv2d-tabs button.on { color: #111418; border-bottom-color: #111418; }
+.cv2d-n { font-size: 10.5px; font-weight: 700; background: #f1f3f6; color: #8a919c; border-radius: 99px; padding: 1px 7px; }
+
+.cv2d-body { padding: 22px 28px 40px; }
+.cv2d-sec { font-size: 15px; font-weight: 700; color: #111418; margin: 0 0 13px; }
+.cv2d-about { font-size: 13px; color: #3d434c; margin: 0 0 24px; white-space: pre-line; }
+
+.cv2d-xp { display: flex; gap: 13px; padding: 13px 0; border-top: 1px solid #f0f2f5; }
+.cv2d-xp:first-of-type { border-top: 0; padding-top: 0; }
+.cv2d-xp-logo { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.cv2d-xp-logo-fb { background: #4a5160; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; }
+.cv2d-xp-main { flex: 1; min-width: 0; }
+.cv2d-xp-co { font-weight: 650; color: #111418; font-size: 13.5px; }
+.cv2d-xp-span { color: #8a919c; font-size: 12px; font-variant-numeric: tabular-nums; }
+.cv2d-xp-roles { margin-top: 8px; border-left: 2px solid #e6e8ec; padding-left: 15px; display: flex; flex-direction: column; gap: 11px; }
+.cv2d-xp-role { position: relative; }
+.cv2d-xp-role::before { content: ""; position: absolute; left: -19.5px; top: 5px; width: 7px; height: 7px; border-radius: 50%; background: #c4cad4; }
+.cv2d-xp-title { font-weight: 600; color: #111418; font-size: 13px; }
+.cv2d-xp-dates { color: #8a919c; font-size: 12px; font-variant-numeric: tabular-nums; }
+.cv2d-xp-desc { color: #3d434c; font-size: 12.5px; margin-top: 3px; white-space: pre-line; }
+
+.cv2d-edu { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-top: 1px solid #f0f2f5; font-size: 13px; }
+.cv2d-edu:first-of-type { border-top: 0; padding-top: 0; }
+.cv2d-edu-school { font-weight: 600; color: #111418; }
+.cv2d-edu-deg { color: #8a919c; font-size: 12.5px; }
+.cv2d-edu-yr { color: #a2a8b3; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.cv2d-skills { display: flex; flex-wrap: wrap; gap: 7px; }
+.cv2d-skills span { font-size: 11.5px; font-weight: 550; color: #3d434c; background: #f4f6f9; border: 1px solid #e6e8ec; border-radius: 99px; padding: 3px 11px; }
+
+.cv2d-pipe { border: 1px solid #e6e8ec; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.cv2d-pipe-top { display: flex; align-items: center; gap: 12px; padding: 12px 15px; width: 100%; border: 0; background: #fff; font: inherit; text-align: left; cursor: pointer; }
+.cv2d-pipe-role { font-weight: 650; color: #111418; font-size: 13.5px; flex: 1; min-width: 0; }
+.cv2d-pipe-role em { font-style: normal; color: #a2a8b3; font-weight: 450; font-size: 12px; }
+.cv2d-pipe-via { font-size: 11.5px; color: #8a919c; white-space: nowrap; }
+.cv2d-pipe-car { color: #a2a8b3; font-size: 11px; }
+.cv2d-pipe-detail { border-top: 1px solid #f0f2f5; background: #fafbfd; padding: 13px 16px; }
+.cv2d-why { font-size: 13px; color: #3d434c; margin: 0 0 10px; }
+.cv2d-probe { font-size: 12.5px; color: #3d434c; }
+.cv2d-probe b { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #9a6206; display: block; margin-bottom: 3px; }
+.cv2d-probe ul { margin: 0; padding-left: 17px; }
+.cv2d-probe li { margin-bottom: 2px; }
+.cv2d-route { margin: 10px 0 0; font-size: 12.5px; color: #6b4e9e; background: #f5f1fb; border-radius: 7px; padding: 7px 11px; }
+
+.cv2d-resume { width: 100%; height: 78vh; border: 1px solid #e6e8ec; border-radius: 10px; }
+.cv2d-notes textarea { width: 100%; height: 90px; border: 1px solid #e6e8ec; border-radius: 8px; background: #f1f3f6; color: #a2a8b3; font: inherit; font-size: 13px; padding: 10px 12px; resize: none; box-sizing: border-box; }
+.cv2d-notes p { font-size: 12px; color: #a2a8b3; margin-top: 9px; }
+
+/* Candidates v2: icon columns + clickable org logos */
+.cv2-th-icon { cursor: default !important; }
+.cv2-icons { white-space: nowrap; }
+.cv2-icons a, .cv2-icons span, .cv2-ic-off { display: inline-flex; align-items: center; vertical-align: middle; margin-right: 8px; }
+.cv2-ic-off { opacity: 0.35; filter: grayscale(1); }
+.cv2-title, .cv2-company { font-size: 12.5px; font-weight: 550; color: #3d434c; max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
+.cv2-loc { font-size: 12px; color: #8a919c; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.cv2d-xp-logolink { flex-shrink: 0; }
+.cv2d-xp-colink { color: inherit; text-decoration: none; }
+.cv2d-xp-colink:hover { color: #2a5bd7; text-decoration: underline; }
+.cv2d-edu-main { display: flex; gap: 11px; align-items: flex-start; }
+.cv2d-edu-main .cv2d-xp-logo { width: 34px; height: 34px; }
+
+/* Contact icons: instant tooltip + click-to-copy feedback */
+.cv2-ic { position: relative; display: inline-flex; align-items: center; border: 0; background: transparent; padding: 2px; margin-right: 6px; cursor: pointer; }
+.cv2-ic-empty { cursor: default; }
+.cv2-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1c2027; color: #fff; font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 6px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.1s; z-index: 5; }
+.cv2-ic:hover .cv2-tip, .cv2-tip-ok { opacity: 1; }
+.cv2-tip-ok { background: #0a7a3d; }
+
+/* Candidates v2: resume upload */
+.cv2d-dropzone { border: 1.5px dashed #c9cfda; border-radius: 12px; padding: 42px 24px; text-align: center; color: #8a919c; font-size: 13px; background: #fafbfc; cursor: pointer; }
+.cv2d-dropzone.over { border-color: #2a5bd7; background: #eef2fd; }
+.cv2d-dropzone b { color: #2a5bd7; font-weight: 650; }
+.cv2d-dropzone small { display: block; margin-top: 5px; color: #a2a8b3; font-size: 11.5px; }
+.cv2d-rz-ic { font-size: 22px; margin-bottom: 8px; }
+.cv2d-rz-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cv2d-rz-file { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 650; color: #111418; }
+.cv2d-rz-pdf { background: #fbedeb; color: #c0392b; border: 1px solid #f2d9d5; border-radius: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 6px; }
+.cv2d-rz-btn { font: inherit; font-size: 12px; font-weight: 650; border: 1px solid #d3d7dd; border-radius: 7px; background: #fff; color: #3d434c; padding: 6px 13px; cursor: pointer; }
+.cv2d-rz-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Candidates v2: job-page count strip */
+.cv2-countstrip { display: flex; gap: 24px; align-items: center; border: 1px solid #e6e8ec; border-radius: 10px; padding: 13px 18px; margin: 14px 0 18px; background: #fff; }
+.cv2-countstrip .c { font-size: 12.5px; color: #8a919c; }
+.cv2-countstrip .c b { display: block; font-size: 19px; font-weight: 700; color: #111418; font-variant-numeric: tabular-nums; }
+.cv2-countstrip .c.dim b { color: #a2a8b3; }
+.cv2-countstrip .spacer { flex: 1; }
+.cv2-countstrip .link { font-size: 12.5px; color: #2a5bd7; font-weight: 600; text-decoration: none; }
+
+/* Candidates v2: wider drawer, photo avatars, pipeline table */
+.cv2d { width: 1020px; }
+.cv2-avatar-img { object-fit: cover; }
+.cv2d-resume { height: 82vh; }
+.cv2d-ptable-wrap { overflow-x: auto; border: 1px solid #e6e8ec; border-radius: 10px; }
+.cv2d-ptable { width: 100%; border-collapse: collapse; min-width: 760px; }
+.cv2d-ptable th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a2a8b3; padding: 9px 13px; border-bottom: 1px solid #e6e8ec; white-space: nowrap; }
+.cv2d-ptable td { padding: 11px 13px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; font-size: 12.5px; color: #3d434c; }
+.cv2d-ptable tbody tr:last-child td { border-bottom: 0; }
+.cv2d-prow { cursor: pointer; }
+.cv2d-prow:hover td { background: #fafbfd; }
+.cv2d-prole a { font-weight: 650; color: #111418; font-size: 13px; text-decoration: none; white-space: nowrap; }
+.cv2d-prole a:hover { color: #2a5bd7; }
+.cv2d-prole a em { font-style: normal; color: #a2a8b3; font-weight: 450; font-size: 11.5px; }
+.cv2d-prole small { display: block; color: #a2a8b3; font-size: 11px; margin-top: 1px; }
+.cv2d-pnum { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cv2d-ploc { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv2d-stage { display: inline-block; font-size: 11px; font-weight: 650; color: #6b7280; background: #f1f3f6; border-radius: 6px; padding: 3px 9px; }
+.cv2d-pcar { color: #a2a8b3; font-size: 11px; }
+.cv2d-preview-row td { background: #fafbfd; padding: 0; }
+.cv2d-preview-row .cv2d-pipe-detail { border-top: 0; }
