@@ -1,10 +1,15 @@
 "use client";
-import { use, useCallback, useEffect, useState } from "react";
+// Job workspace: one page with horizontal tabs — Overview (job details),
+// Pipeline (unified candidates table + drawer), Sourcing (runs/builder),
+// Past (placeholder until rejection statuses land). Deep-linkable via ?tab=.
+import { Suspense, use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
 import type { SkillChip } from "@/components/dashboard/JobForm";
 import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
 import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
+import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
 
 type Job = {
   id: string;
@@ -22,11 +27,27 @@ type Job = {
   applicants: number;
 };
 
-export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "pipeline", label: "Pipeline" },
+  { id: "sourcing", label: "Sourcing" },
+  { id: "past", label: "Past" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+function isTab(v: string | null): v is TabId {
+  return TABS.some((t) => t.id === v);
+}
+
+function JobWorkspace({ id }: { id: string }) {
   const { token } = useDash();
+  const search = useSearchParams();
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<TabId>(() => {
+    const t = search.get("tab");
+    return isTab(t) ? t : "overview";
+  });
   const [counts, setCounts] = useState<{
     all: number;
     applied: number;
@@ -42,6 +63,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       .catch(() => setJob(null));
   }, [id, token]);
   useEffect(load, [load]);
+
+  function switchTab(next: TabId) {
+    setTab(next);
+    const url = next === "overview" ? `/dashboard/jobs/${id}` : `/dashboard/jobs/${id}?tab=${next}`;
+    window.history.replaceState(null, "", url);
+  }
 
   async function setStatus(status: "open" | "closed") {
     setBusy(true);
@@ -84,9 +111,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
         <div className="dash-jobactions">
-          <Link className="dash-btn" href={`/dashboard/jobs/${job.id}/sourcing`}>
-            Source candidates
-          </Link>
           {editable && (
             <Link className="dash-btn dash-btn-2" href={`/dashboard/jobs/${job.id}/edit`}>
               Edit
@@ -108,83 +132,124 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      <div className="dash-jobgrid">
-        <section>
-          {job.jd?.about && (
-            <>
-              <div className="dash-sec">About</div>
-              <p className="dash-body">{job.jd.about}</p>
-            </>
-          )}
-          {(job.jd?.doing?.length ?? 0) > 0 && (
-            <>
-              <div className="dash-sec">Responsibilities</div>
-              <ul className="dash-list">{job.jd!.doing!.map((d, i) => <li key={i}>{d}</li>)}</ul>
-            </>
-          )}
-          {(job.jd?.needs?.length ?? 0) > 0 && (
-            <>
-              <div className="dash-sec">Requirements</div>
-              <ul className="dash-list">{job.jd!.needs!.map((d, i) => <li key={i}>{d}</li>)}</ul>
-            </>
-          )}
-          {(job.jd?.bonus?.length ?? 0) > 0 && (
-            <>
-              <div className="dash-sec">Nice to have</div>
-              <ul className="dash-list">{job.jd!.bonus!.map((d, i) => <li key={i}>{d}</li>)}</ul>
-            </>
-          )}
-        </section>
-        <aside>
-          {job.skills.length > 0 && (
-            <>
-              <div className="dash-sec">Skills</div>
-              <div className="dash-skilltags">
-                {job.skills.map((s, i) => (
-                  <span key={i} className={`dash-skilltag ${s.must_have ? "must" : ""}`} title={s.alternates.length ? `or: ${s.alternates.join(", ")}` : undefined}>
-                    {s.skill}
-                    {s.alternates.length > 0 && <small> +{s.alternates.length} alt</small>}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-          {job.visa && (
-            <>
-              <div className="dash-sec">Visa</div>
-              <p className="dash-body">{job.visa}</p>
-            </>
-          )}
-        </aside>
-      </div>
+      <nav className="jobws-tabs" aria-label="Job sections">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`jobws-tab ${tab === t.id ? "on" : ""}`}
+            onClick={() => switchTab(t.id)}
+          >
+            {t.label}
+            {t.id === "pipeline" && counts !== null && <span className="n">{counts.all}</span>}
+          </button>
+        ))}
+      </nav>
 
-      <div className="dash-sec" style={{ marginTop: 34 }}>
-        Candidates
-      </div>
-      {counts && (
-        <div className="cv2-countstrip">
-          <span className="c">
-            <b>{counts.all}</b>candidates
-          </span>
-          <span className="c">
-            <b>{counts.applied}</b>applied
-          </span>
-          <span className="c">
-            <b>{counts.sourced}</b>sourced
-          </span>
-          {counts.notNow > 0 && (
-            <span className="c dim">
-              <b>{counts.notNow}</b>&ldquo;Not now&rdquo; hidden
-            </span>
-          )}
-          <span className="spacer" />
-          <Link className="link" href={`/dashboard/jobs/${job.id}/sourcing`}>
-            View sourcing runs →
-          </Link>
+      {tab === "overview" && (
+        <div className="dash-jobgrid">
+          <section>
+            {job.jd?.about && (
+              <>
+                <div className="dash-sec">About</div>
+                <p className="dash-body">{job.jd.about}</p>
+              </>
+            )}
+            {(job.jd?.doing?.length ?? 0) > 0 && (
+              <>
+                <div className="dash-sec">Responsibilities</div>
+                <ul className="dash-list">{job.jd!.doing!.map((d, i) => <li key={i}>{d}</li>)}</ul>
+              </>
+            )}
+            {(job.jd?.needs?.length ?? 0) > 0 && (
+              <>
+                <div className="dash-sec">Requirements</div>
+                <ul className="dash-list">{job.jd!.needs!.map((d, i) => <li key={i}>{d}</li>)}</ul>
+              </>
+            )}
+            {(job.jd?.bonus?.length ?? 0) > 0 && (
+              <>
+                <div className="dash-sec">Nice to have</div>
+                <ul className="dash-list">{job.jd!.bonus!.map((d, i) => <li key={i}>{d}</li>)}</ul>
+              </>
+            )}
+            {!job.jd?.about && (job.jd?.doing?.length ?? 0) === 0 && (job.jd?.needs?.length ?? 0) === 0 && (
+              <p className="dash-muted">No job description on file yet.</p>
+            )}
+          </section>
+          <aside>
+            {job.skills.length > 0 && (
+              <>
+                <div className="dash-sec">Skills</div>
+                <div className="dash-skilltags">
+                  {job.skills.map((s, i) => (
+                    <span key={i} className={`dash-skilltag ${s.must_have ? "must" : ""}`} title={s.alternates.length ? `or: ${s.alternates.join(", ")}` : undefined}>
+                      {s.skill}
+                      {s.alternates.length > 0 && <small> +{s.alternates.length} alt</small>}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+            {job.visa && (
+              <>
+                <div className="dash-sec">Visa</div>
+                <p className="dash-body">{job.visa}</p>
+              </>
+            )}
+          </aside>
         </div>
       )}
-      <CandidatesTable jobId={job.id} defaultHideNotNow onCounts={setCounts} onOpen={setOpenKey} />
+
+      {/* Pipeline stays mounted across tab switches so filters, the open
+          drawer, and the tab-badge count survive; hidden via CSS. */}
+      <div style={{ display: tab === "pipeline" ? undefined : "none" }}>
+        {counts && (
+          <div className="cv2-countstrip">
+            <span className="c">
+              <b>{counts.all}</b>candidates
+            </span>
+            <span className="c">
+              <b>{counts.applied}</b>applied
+            </span>
+            <span className="c">
+              <b>{counts.sourced}</b>sourced
+            </span>
+            {counts.notNow > 0 && (
+              <span className="c dim">
+                <b>{counts.notNow}</b>&ldquo;Not now&rdquo; hidden
+              </span>
+            )}
+            <span className="spacer" />
+            <button className="link jobws-linkbtn" onClick={() => switchTab("sourcing")}>
+              View sourcing runs →
+            </button>
+          </div>
+        )}
+        <CandidatesTable jobId={job.id} defaultHideNotNow onCounts={setCounts} onOpen={setOpenKey} />
+      </div>
+
+      {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} />}
+
+      {tab === "past" && (
+        <div className="jobws-past-empty">
+          <b>No past candidates yet.</b>
+          <p>
+            When you reject a candidate from the pipeline, they&apos;ll move here so your active list
+            stays clean — with their profile and the reason kept for reference.
+          </p>
+        </div>
+      )}
+
       <CandidateDrawer candKey={openKey} roleContext={job.id} onClose={() => setOpenKey(null)} />
     </>
+  );
+}
+
+export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <Suspense fallback={<p className="dash-muted">Loading…</p>}>
+      <JobWorkspace id={id} />
+    </Suspense>
   );
 }

@@ -25,7 +25,10 @@ export default function RunView({
   const [filter, setFilter] = useState<"all" | "strong" | "yes" | "message" | "shortlisted">("all");
   const [rereviewing, setRereviewing] = useState(false);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => {
+    alive.current = true; // StrictMode remounts reuse the ref — re-arm it
+    return () => { alive.current = false; };
+  }, []);
 
   const auth = { Authorization: `Bearer ${token}` };
 
