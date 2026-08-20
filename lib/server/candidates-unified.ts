@@ -64,6 +64,7 @@ export type UnifiedRole = {
 export type UnifiedRow = {
   key: string; // "app_<id>" | "src_<id>"
   name: string;
+  photoUrl: string | null;
   currentTitle: string | null;
   currentCompany: string | null;
   location: string | null;
@@ -137,6 +138,8 @@ export type UnifiedDetail = {
   pipeline: {
     jobId: string;
     title: string;
+    salary: string | null;
+    location: string | null;
     via: "applied" | "sourced";
     tag: string | null;
     tagLabel: string | null;
@@ -312,10 +315,37 @@ async function fetchSourcedPeople(orgId: string, ids?: string[]): Promise<Map<st
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-async function orgRoleIndex(orgId: string): Promise<Map<string, { jobId: string; title: string }>> {
-  const res = await sbRest(`org_roles?organization_id=eq.${orgId}&select=id,external_id,title`);
-  const rows: { id: string; external_id: string; title: string }[] = res.ok ? await res.json() : [];
-  return new Map(rows.map((r) => [r.id, { jobId: r.external_id, title: r.title }]));
+type RoleInfo = { jobId: string; title: string; salary: string | null; location: string | null };
+
+async function orgRoleIndex(orgId: string): Promise<{
+  byId: Map<string, RoleInfo>;
+  byExternal: Map<string, RoleInfo>;
+}> {
+  const res = await sbRest(
+    `org_roles?organization_id=eq.${orgId}&select=id,external_id,title,salary,locations,workplace`
+  );
+  const rows: {
+    id: string;
+    external_id: string;
+    title: string;
+    salary: string | null;
+    locations: string[] | null;
+    workplace: string | null;
+  }[] = res.ok ? await res.json() : [];
+  const byId = new Map<string, RoleInfo>();
+  const byExternal = new Map<string, RoleInfo>();
+  for (const r of rows) {
+    const info: RoleInfo = {
+      jobId: r.external_id,
+      title: r.title,
+      salary: str(r.salary),
+      location:
+        [(r.locations || []).join(", ") || null, str(r.workplace)].filter(Boolean).join(" · ") || null,
+    };
+    byId.set(r.id, info);
+    byExternal.set(r.external_id, info);
+  }
+  return { byId, byExternal };
 }
 
 // Newest membership per (person, role) — older runs' verdicts are history.
@@ -390,12 +420,13 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
 
-  const [apps, pairings, memberships, roleIdx] = await Promise.all([
+  const [apps, pairings, memberships, roleIndex] = await Promise.all([
     fetchApplicants(orgId),
     orgVerdictPairings(orgId),
     fetchMemberships(orgId),
     orgRoleIndex(orgId),
   ]);
+  const roleIdx = roleIndex.byId;
   const byPerson = newestPerPersonRole(memberships);
   const people = await fetchSourcedPeople(orgId, [...byPerson.keys()]);
 
@@ -417,13 +448,14 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       for (const m of byPerson.get(sourcedId) || []) {
         const role = roleIdx.get(m.sourcing_runs!.org_role_id);
         if (!role || covered.has(role.jobId)) continue;
-        roles.push({ ...role, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
+        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
       }
     }
     const best = bestOf(roles);
     rows.push({
       key: `app_${a.id}`,
       name: a.name,
+      photoUrl: null,
       currentTitle: str(a.parsed_profile?.current_title),
       currentCompany: str(a.parsed_profile?.current_company),
       location: str(a.parsed_profile?.location),
@@ -450,13 +482,15 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     const roles: UnifiedRole[] = [];
     for (const m of ms) {
       const role = roleIdx.get(m.sourcing_runs!.org_role_id);
-      if (role) roles.push({ ...role, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
+      if (role)
+        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
     }
     if (!roles.length) continue;
     const best = bestOf(roles);
     rows.push({
       key: `src_${p.id}`,
       name: p.full_name || "Candidate",
+      photoUrl: null,
       currentTitle: str(p.current_title) || str(p.headline),
       currentCompany: str(p.current_company),
       location: p.location,
@@ -521,6 +555,31 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   });
 
   const items = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  // ---- photo enrichment for this page only (profile JSON is heavy) ----
+  const srcIds = items.filter((r) => r.key.startsWith("src_")).map((r) => r.key.slice(4));
+  const appIds = items.filter((r) => r.key.startsWith("app_")).map((r) => r.key.slice(4));
+  const photos = new Map<string, string | null>();
+  await Promise.all([
+    (async () => {
+      if (!srcIds.length) return;
+      const res = await sbRest(
+        `sourced_candidates?id=in.(${srcIds.map((i) => `"${i}"`).join(",")})&select=id,photo:profile->photo`
+      );
+      for (const r of (res.ok ? await res.json() : []) as { id: string; photo: LinkedinImage }[])
+        photos.set(`src_${r.id}`, logoFrom(r.photo));
+    })(),
+    (async () => {
+      if (!appIds.length) return;
+      const res = await sbRest(
+        `website_applications?id=in.(${appIds.map((i) => `"${i}"`).join(",")})&select=id,photo:harvest_profile->photo`
+      );
+      for (const r of (res.ok ? await res.json() : []) as { id: string; photo: LinkedinImage }[])
+        photos.set(`app_${r.id}`, logoFrom(r.photo));
+    })(),
+  ]);
+  for (const item of items) item.photoUrl = photos.get(item.key) ?? null;
+
   return { items, total: filtered.length, counts, page, pageSize };
 }
 
@@ -609,7 +668,7 @@ function profileBits(profile: HarvestProfile | null | undefined) {
 async function sourcedPipeline(
   orgId: string,
   personId: string,
-  roleIdx: Map<string, { jobId: string; title: string }>
+  roleIdx: Map<string, RoleInfo>
 ): Promise<UnifiedDetail["pipeline"]> {
   const memberships = await fetchAllPages<SrcMembership>(
     (limit, offset) =>
@@ -624,7 +683,10 @@ async function sourcedPipeline(
     if (!role || seen.has(role.jobId)) continue;
     seen.add(role.jobId);
     out.push({
-      ...role,
+      jobId: role.jobId,
+      title: role.title,
+      salary: role.salary,
+      location: role.location,
       via: "sourced",
       tag: m.tag,
       tagLabel: labelOf(m.tag),
@@ -635,13 +697,20 @@ async function sourcedPipeline(
   return out;
 }
 
-function applicantPipeline(a: AppRow, pairings: Map<string, VerdictRow>): UnifiedDetail["pipeline"] {
+function applicantPipeline(
+  a: AppRow,
+  pairings: Map<string, VerdictRow>,
+  byExternal?: Map<string, RoleInfo>
+): UnifiedDetail["pipeline"] {
   return (a.role_ids || []).map((jobId, i) => {
     const sc = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict?.scorecard : undefined;
     const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const info = byExternal?.get(jobId);
     return {
       jobId,
       title: appRoleTitle(a, jobId, i),
+      salary: info?.salary ?? null,
+      location: info?.location ?? null,
       via: "applied" as const,
       tag,
       tagLabel: tag ? TAG_LABEL[tag] : null,
@@ -655,7 +724,7 @@ const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export async function unifiedCandidateDetail(orgId: string, key: string): Promise<UnifiedDetail | null> {
-  const roleIdx = await orgRoleIndex(orgId);
+  const { byId: roleIdx, byExternal } = await orgRoleIndex(orgId);
 
   if (key.startsWith("src_")) {
     const id = key.slice(4);
@@ -677,7 +746,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     if (app) {
       const pairings = await orgVerdictPairings(orgId);
       const covered = new Set(pipeline.map((x) => x.jobId));
-      for (const entry of applicantPipeline(app, pairings))
+      for (const entry of applicantPipeline(app, pairings, byExternal))
         if (!covered.has(entry.jobId)) pipeline.unshift(entry);
     }
 
@@ -722,7 +791,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     if (!a) return null;
 
     const pairings = await orgVerdictPairings(orgId);
-    const pipeline = applicantPipeline(a, pairings);
+    const pipeline = applicantPipeline(a, pairings, byExternal);
 
     // Fold in sourcing-run appearances (and the richer profile) if we also
     // imported this person through a run.

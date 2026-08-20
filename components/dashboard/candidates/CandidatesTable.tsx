@@ -18,6 +18,7 @@ export type Cv2Role = {
 export type Cv2Row = {
   key: string;
   name: string;
+  photoUrl: string | null;
   currentTitle: string | null;
   currentCompany: string | null;
   location: string | null;
@@ -77,6 +78,26 @@ const initials = (name: string) =>
 
 const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+function RowAvatar({ photoUrl, name }: { photoUrl: string | null; name: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!photoUrl || broken)
+    return (
+      <span className="cv2-avatar" style={{ background: avColor(name) }}>
+        {initials(name)}
+      </span>
+    );
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="cv2-avatar cv2-avatar-img"
+      src={photoUrl}
+      alt=""
+      referrerPolicy="no-referrer"
+      onError={() => setBroken(true)}
+    />
+  );
+}
 
 /* Small inline icons so nothing external is loaded. */
 const InIcon = () => (
@@ -339,9 +360,7 @@ export default function CandidatesTable({
                 >
                   <td>
                     <span className="cv2-cand">
-                      <span className="cv2-avatar" style={{ background: avColor(r.name) }}>
-                        {initials(r.name)}
-                      </span>
+                      <RowAvatar photoUrl={r.photoUrl} name={r.name} />
                       <span className="cv2-name">
                         {r.name}
                         {r.viaTT && <span className="cv2-tt">⚡ Via Transformer Talent</span>}

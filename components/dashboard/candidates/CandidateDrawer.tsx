@@ -10,6 +10,8 @@ import { useDash } from "@/components/dashboard/DashShell";
 type PipelineEntry = {
   jobId: string;
   title: string;
+  salary: string | null;
+  location: string | null;
   via: "applied" | "sourced";
   tag: string | null;
   tagLabel: string | null;
@@ -74,6 +76,16 @@ const TAG_CLASS: Record<string, string> = {
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+function HeadAvatar({ photoUrl, name }: { photoUrl: string | null; name: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!photoUrl || broken)
+    return <div className="cv2d-avatar cv2d-avatar-fallback">{initials(name)}</div>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img className="cv2d-avatar" src={photoUrl} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+  );
+}
 
 // Company/school tile: real logo when the (expiring) LinkedIn CDN URL still
 // works, letter tile otherwise. Clickable through to the LinkedIn page.
@@ -154,6 +166,58 @@ function FitReview({ entry }: { entry: PipelineEntry }) {
         </div>
       )}
       {route && <div className="cv2d-route">↪ {route}</div>}
+    </>
+  );
+}
+
+function PipelineRows({
+  entry,
+  expanded,
+  onToggle,
+}: {
+  entry: PipelineEntry;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <tr className="cv2d-prow" onClick={onToggle}>
+        <td className="cv2d-prole">
+          <a
+            href={`/dashboard/jobs/${entry.jobId}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open this job in a new tab"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {entry.title} <em>#{entry.jobId}</em> ↗
+          </a>
+          <small>{entry.via === "applied" ? "applied" : "via sourcing run"}</small>
+        </td>
+        <td className="cv2d-pnum">{entry.salary || "—"}</td>
+        <td className="cv2d-ploc">{entry.location || "—"}</td>
+        <td className="cv2d-pnum">{fmtDay(entry.addedAt)}</td>
+        <td>
+          {entry.tag ? (
+            <span className={`dash-tag ${TAG_CLASS[entry.tag] || "t-pending"}`}>{entry.tagLabel}</span>
+          ) : (
+            <span className="dash-tag t-pending">Screening…</span>
+          )}
+        </td>
+        <td>
+          <span className="cv2d-stage">New</span>
+        </td>
+        <td className="cv2d-pcar">{expanded ? "▾" : "▸"}</td>
+      </tr>
+      {expanded && (
+        <tr className="cv2d-preview-row">
+          <td colSpan={7}>
+            <div className="cv2d-pipe-detail">
+              <FitReview entry={entry} />
+            </div>
+          </td>
+        </tr>
+      )}
     </>
   );
 }
@@ -294,12 +358,7 @@ export default function CandidateDrawer({
         {detail && (
           <>
             <div className="cv2d-head">
-              {detail.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="cv2d-avatar" src={detail.photoUrl} alt="" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="cv2d-avatar cv2d-avatar-fallback">{initials(detail.name)}</div>
-              )}
+              <HeadAvatar photoUrl={detail.photoUrl} name={detail.name} />
               <div className="cv2d-id">
                 <div className="cv2d-name">
                   <h3>{detail.name}</h3>
@@ -503,32 +562,33 @@ export default function CandidateDrawer({
                   {detail.pipeline.length === 0 && (
                     <p className="cv2d-dim">Not attached to any role yet.</p>
                   )}
-                  {detail.pipeline.map((p) => (
-                    <div className="cv2d-pipe" key={p.jobId}>
-                      <button
-                        className="cv2d-pipe-top"
-                        onClick={() => setExpanded(expanded === p.jobId ? null : p.jobId)}
-                      >
-                        <span className="cv2d-pipe-role">
-                          {p.title} <em>#{p.jobId}</em>
-                        </span>
-                        <span className="cv2d-pipe-via">
-                          {p.via === "applied" ? "applied" : "via sourcing run"} · {fmtDay(p.addedAt)}
-                        </span>
-                        {p.tag ? (
-                          <span className={`dash-tag ${TAG_CLASS[p.tag] || "t-pending"}`}>{p.tagLabel}</span>
-                        ) : (
-                          <span className="dash-tag t-pending">Screening…</span>
-                        )}
-                        <span className="cv2d-pipe-car">{expanded === p.jobId ? "▾" : "▸"}</span>
-                      </button>
-                      {expanded === p.jobId && (
-                        <div className="cv2d-pipe-detail">
-                          <FitReview entry={p} />
-                        </div>
-                      )}
+                  {detail.pipeline.length > 0 && (
+                    <div className="cv2d-ptable-wrap">
+                      <table className="cv2d-ptable">
+                        <thead>
+                          <tr>
+                            <th>Role</th>
+                            <th>Salary</th>
+                            <th>Location</th>
+                            <th>Added</th>
+                            <th>Fit</th>
+                            <th>Stage</th>
+                            <th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detail.pipeline.map((p) => (
+                            <PipelineRows
+                              key={p.jobId}
+                              entry={p}
+                              expanded={expanded === p.jobId}
+                              onToggle={() => setExpanded(expanded === p.jobId ? null : p.jobId)}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
+                  )}
                 </>
               )}
 
@@ -561,7 +621,7 @@ export default function CandidateDrawer({
                         </button>
                       </div>
                       {uploadErr && <p className="cv2d-err" style={{ marginBottom: 10 }}>{uploadErr}</p>}
-                      <iframe className="cv2d-resume" src={detail.resumeUrl} title="Resume" />
+                      <iframe className="cv2d-resume" src={`${detail.resumeUrl}#toolbar=0&navpanes=0&view=FitH`} title="Resume" />
                     </>
                   ) : (
                     <div
