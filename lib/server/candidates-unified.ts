@@ -154,9 +154,17 @@ export type UnifiedDetail = {
   }[];
   skills: string[];
   resumeUrl: string | null;
+  resumeName: string | null;
   hasResume: boolean;
   addedAt: string;
 };
+
+// "2026-08-20/<uuid>-Peter-Wang-Resume.pdf" -> "Peter-Wang-Resume.pdf"
+export function resumeNameFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const base = path.split("/").pop() || path;
+  return base.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i, "") || base;
+}
 
 /* ------------------------------------------------------------------ */
 /* Raw-row helpers                                                     */
@@ -699,6 +707,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       education: bits.education,
       skills: bits.skills.length ? bits.skills : p.skills || [],
       resumeUrl: resumePath ? await signResumeUrl(resumePath) : null,
+      resumeName: resumeNameFromPath(resumePath ?? null),
       hasResume: !!resumePath,
       addedAt: p.created_at,
     };
@@ -759,6 +768,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       education: bits.education,
       skills: bits.skills,
       resumeUrl: resumePath ? await signResumeUrl(resumePath) : null,
+      resumeName: resumeNameFromPath(resumePath ?? null),
       hasResume: !!resumePath,
       addedAt: a.created_at,
     };
@@ -811,4 +821,28 @@ export async function saveUnifiedContact(
   const rows = (await res.json()) as { contact: UnifiedContact }[];
   if (!rows.length) return { error: "not_found" };
   return { contact: rows[0].contact };
+}
+
+/* ------------------------------------------------------------------ */
+/* Resume pointer save (upload itself lives in the route)              */
+/* ------------------------------------------------------------------ */
+
+export async function saveUnifiedResumePath(
+  orgId: string,
+  key: string,
+  path: string
+): Promise<boolean> {
+  const target = key.startsWith("src_")
+    ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
+    : key.startsWith("app_")
+      ? `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
+      : null;
+  if (!target) return false;
+  const res = await sbRest(target, {
+    method: "PATCH",
+    body: JSON.stringify({ resume_path: path }),
+    prefer: "return=representation",
+  });
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0;
 }

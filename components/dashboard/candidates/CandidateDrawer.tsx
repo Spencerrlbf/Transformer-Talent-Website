@@ -4,7 +4,7 @@
 // by employer, education, skills); fit reviews live ONLY in the Pipeline tab,
 // one expandable row per role. Resume renders inline when on file (upload
 // arrives with the resume task); Notes is a placeholder.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 
 type PipelineEntry = {
@@ -57,6 +57,7 @@ type Detail = {
   }[];
   skills: string[];
   resumeUrl: string | null;
+  resumeName: string | null;
   hasResume: boolean;
   addedAt: string;
 };
@@ -174,6 +175,11 @@ export default function CandidateDrawer({
   const [tab, setTab] = useState<Tab>("profile");
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+
   const [editingContact, setEditingContact] = useState(false);
   const [cEmail, setCEmail] = useState("");
   const [cPhone, setCPhone] = useState("");
@@ -221,6 +227,33 @@ export default function CandidateDrawer({
   }, [candKey, escClose]);
 
   if (!candKey) return null;
+
+  const uploadResume = async (file: File) => {
+    setUploadErr("");
+    if (file.type && file.type !== "application/pdf") {
+      setUploadErr("PDF files only.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setUploadErr("That file is over 8MB.");
+      return;
+    }
+    setUploading(true);
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch(`/api/dashboard/candidates/v2/${candKey}/resume`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+    }).catch(() => null);
+    setUploading(false);
+    if (!res || !res.ok) {
+      setUploadErr("Upload failed — try again.");
+      return;
+    }
+    const r = (await res.json()) as { resumeUrl: string | null; resumeName: string | null };
+    if (detail) setDetail({ ...detail, resumeUrl: r.resumeUrl, resumeName: r.resumeName, hasResume: true });
+  };
 
   const saveContact = async () => {
     setSaving(true);
@@ -501,11 +534,61 @@ export default function CandidateDrawer({
 
               {tab === "resume" && (
                 <>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept="application/pdf"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadResume(f);
+                      e.target.value = "";
+                    }}
+                  />
                   {detail.resumeUrl ? (
-                    <iframe className="cv2d-resume" src={detail.resumeUrl} title="Resume" />
+                    <>
+                      <div className="cv2d-rz-bar">
+                        <span className="cv2d-rz-file">
+                          <span className="cv2d-rz-pdf">PDF</span>
+                          {detail.resumeName || "Resume.pdf"}
+                        </span>
+                        <button
+                          className="cv2d-rz-btn"
+                          disabled={uploading}
+                          onClick={() => fileInput.current?.click()}
+                        >
+                          {uploading ? "Uploading…" : "Re-upload"}
+                        </button>
+                      </div>
+                      {uploadErr && <p className="cv2d-err" style={{ marginBottom: 10 }}>{uploadErr}</p>}
+                      <iframe className="cv2d-resume" src={detail.resumeUrl} title="Resume" />
+                    </>
                   ) : (
-                    <div className="dash-empty">
-                      No resume on file yet — uploads are coming in the next update.
+                    <div
+                      className={`cv2d-dropzone${dragOver ? " over" : ""}`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOver(true);
+                      }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOver(false);
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) uploadResume(f);
+                      }}
+                      onClick={() => fileInput.current?.click()}
+                    >
+                      <div className="cv2d-rz-ic">⇪</div>
+                      {uploading ? (
+                        "Uploading…"
+                      ) : (
+                        <>
+                          Drag a resume here, or <b>browse files</b>
+                          <small>PDF · up to 8 MB</small>
+                        </>
+                      )}
+                      {uploadErr && <p className="cv2d-err">{uploadErr}</p>}
                     </div>
                   )}
                 </>
