@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
+import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 
 type PipelineEntry = {
   jobId: string;
@@ -180,6 +181,7 @@ function PipelineRows({
   onStage,
   stageBusy,
   stageEditable = true,
+  onOpenJob,
 }: {
   entry: PipelineEntry;
   expanded: boolean;
@@ -187,20 +189,23 @@ function PipelineRows({
   onStage: (jobId: string, stage: string) => void;
   stageBusy: boolean;
   stageEditable?: boolean;
+  onOpenJob: (jobId: string) => void;
 }) {
   return (
     <>
       <tr className="cv2d-prow" onClick={onToggle}>
         <td className="cv2d-prole">
-          <a
-            href={`/dashboard/jobs/${entry.jobId}`}
-            target="_blank"
-            rel="noreferrer"
-            title="Open this job in a new tab"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            className="cv2d-rolebtn"
+            title="View this job"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenJob(entry.jobId);
+            }}
           >
-            {entry.title} <em>#{entry.jobId}</em> ↗
-          </a>
+            {entry.title} <em>#{entry.jobId}</em>
+          </button>
           <small>{entry.via === "applied" ? "applied" : "via sourcing run"}</small>
         </td>
         <td className="cv2d-ploc">{entry.company || "—"}</td>
@@ -264,6 +269,7 @@ export default function CandidateDrawer({
 
   const [stageSaving, setStageSaving] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
+  const [openJob, setOpenJob] = useState<string | null>(null);
   // Pool person opened from the internal Network page: read-only extras
   // (no stage edits, no contact edit, no resume upload).
   const isNet = !!candKey?.startsWith("net_");
@@ -279,6 +285,7 @@ export default function CandidateDrawer({
     setTab("profile");
     setEditingContact(false);
     setContactErr("");
+    setOpenJob(null);
     if (!candKey) return;
     fetch(`/api/dashboard/candidates/v2/${candKey}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -325,7 +332,8 @@ export default function CandidateDrawer({
 
   const escClose = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // Esc peels the top layer: job panel first, then the drawer itself.
+      if (e.key === "Escape") setOpenJob((j) => (j ? null : (onClose(), null)));
     },
     [onClose]
   );
@@ -392,6 +400,7 @@ export default function CandidateDrawer({
 
   return (
     <div className="cv2d-overlay" onClick={onClose}>
+      <JobDrawer jobId={openJob} onClose={() => setOpenJob(null)} />
       <aside className="cv2d" onClick={(e) => e.stopPropagation()}>
         <button className="cv2d-close" onClick={onClose} aria-label="Close">
           ✕
@@ -637,6 +646,7 @@ export default function CandidateDrawer({
                               onStage={changeStage}
                               stageBusy={stageSaving === p.jobId}
                               stageEditable={!isNet}
+                              onOpenJob={setOpenJob}
                             />
                           ))}
                         </tbody>

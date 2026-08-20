@@ -1677,3 +1677,24 @@ body:has(.board-app) {
 .nw-modal-nm small { display: block; font-weight: 450; color: #a2a8b3; font-size: 11.5px; }
 .nw-modal-acts { display: flex; gap: 10px; justify-content: flex-end; }
 .nw-strip-link { font-size: 12.5px; color: #8a5ec2 !important; font-weight: 600; text-decoration: none; }
+
+/* Task E review round: denser network table + job side panel */
+.cv2-table.nw-tight th { padding: 7px 8px; }
+.cv2-table.nw-tight td { padding: 8px 8px; font-size: 12.5px; }
+.cv2-table.nw-tight .cv2-avatar { width: 28px; height: 28px; font-size: 10.5px; }
+.cv2-table.nw-tight .cv2-cand { gap: 8px; }
+.cv2-table.nw-tight .cv2-title, .cv2-table.nw-tight .cv2-company { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv2-table.nw-tight .cv2-loc { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv2-table.nw-tight .nw-chips { max-width: none; }
+.cv2-table.nw-tight .nw-rc { font-size: 10.8px; padding: 2px 7px; }
+.nw-rc-more { color: #2a5bd7; border-style: dashed; cursor: pointer; }
+.cv2d-rolebtn { appearance: none; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 650; color: #2a5bd7; text-align: left; }
+.cv2d-rolebtn:hover { text-decoration: underline; }
+.cv2d-rolebtn em { font-style: normal; color: #a2a8b3; font-weight: 500; font-size: 11.5px; }
+.jdw-overlay { position: fixed; inset: 0; background: rgba(20, 24, 32, 0.35); z-index: 70; display: flex; justify-content: flex-end; }
+.jdw { width: 620px; max-width: 92vw; height: 100%; background: #fff; box-shadow: -12px 0 40px rgba(10, 20, 40, 0.18); overflow-y: auto; position: relative; animation: jdw-in 0.16s ease-out; }
+@keyframes jdw-in { from { transform: translateX(30px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.jdw-pad { padding: 46px 30px 40px; }
+.jdw-title { font-size: 19px; font-weight: 750; margin: 0 0 4px; }
+.jdw-sub { font-size: 12.5px; color: #6b7280; margin: 0 0 6px; }
+.jdw-open { font-size: 12px; font-weight: 600; color: #2a5bd7; text-decoration: none; }

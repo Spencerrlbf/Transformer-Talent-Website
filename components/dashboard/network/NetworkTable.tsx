@@ -5,6 +5,7 @@
 // through 96 jobs. Rendered only for the Transformer Talent org.
 import { useEffect, useMemo, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
+import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 
 export type NetMatch = {
   jobId: string;
@@ -96,6 +97,7 @@ export default function NetworkTable({
   const [newOnly, setNewOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ person: NetPerson; match: NetMatch } | null>(null);
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState("");
 
@@ -235,14 +237,13 @@ export default function NetworkTable({
 
       {filtered.length > 0 && (
         <div className="cv2-scroll">
-          <table className="cv2-table">
+          <table className="cv2-table nw-tight">
             <thead>
               <tr>
                 <th>Candidate</th>
                 <th>Current role</th>
                 <th>Company</th>
                 <th>Location</th>
-                <th>Yrs</th>
                 <th>Matched roles</th>
                 <th>Latest</th>
                 <th className="cv2-th-icon">LinkedIn</th>
@@ -264,12 +265,15 @@ export default function NetworkTable({
                     setSendErr("");
                     setConfirm({ person: p, match });
                   }}
+                  onOpenJob={setOpenJobId}
                 />
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <JobDrawer jobId={openJobId} onClose={() => setOpenJobId(null)} />
 
       {confirm && (
         <div className="nw-modal-back" onClick={() => !sending && setConfirm(null)}>
@@ -322,6 +326,7 @@ function PersonRows({
   onToggle,
   onOpen,
   onSend,
+  onOpenJob,
 }: {
   person: NetPerson;
   expanded: boolean;
@@ -329,6 +334,7 @@ function PersonRows({
   onToggle: () => void;
   onOpen?: (key: string) => void;
   onSend: (match: NetMatch) => void;
+  onOpenJob: (jobId: string) => void;
 }) {
   return (
     <>
@@ -345,10 +351,9 @@ function PersonRows({
         <td className="cv2-title">{person.currentTitle || <span className="cv2-dim">—</span>}</td>
         <td className="cv2-company">{person.currentCompany || <span className="cv2-dim">—</span>}</td>
         <td className="cv2-loc">{person.location || <span className="cv2-dim">—</span>}</td>
-        <td>{person.years ?? <span className="cv2-dim">—</span>}</td>
         <td onClick={(e) => { e.stopPropagation(); onToggle(); }}>
           <span className="nw-chips">
-            {person.matches.map((m) =>
+            {(expanded ? person.matches : person.matches.slice(0, 3)).map((m) =>
               m.sentAt ? (
                 <span key={m.jobId} className="nw-rc nw-rc-sent" title={`Sent ${fmtDay(m.sentAt)} — in that job's pipeline`}>
                   ✓ {m.title} <small>#{m.jobId}</small>
@@ -359,6 +364,9 @@ function PersonRows({
                   {m.title} <small>#{m.jobId}</small>
                 </span>
               )
+            )}
+            {!expanded && person.matches.length > 3 && (
+              <span className="nw-rc nw-rc-more">+{person.matches.length - 3} more</span>
             )}
           </span>
         </td>
@@ -378,7 +386,7 @@ function PersonRows({
       </tr>
       {expanded && (
         <tr className="nw-review-row">
-          <td colSpan={9}>
+          <td colSpan={8}>
             <div className="nw-reviews">
               {person.matches.map((m) => (
                 <div key={m.jobId} className={`nw-rv${m.tag === "strong" ? " best" : ""}`}>
@@ -402,9 +410,9 @@ function PersonRows({
                         Send to job
                       </button>
                     )}
-                    <a className="nw-openjob" href={`/dashboard/jobs/${m.jobId}`} target="_blank" rel="noreferrer">
-                      Open job ↗
-                    </a>
+                    <button type="button" className="nw-openjob" onClick={() => onOpenJob(m.jobId)}>
+                      View job
+                    </button>
                   </span>
                 </div>
               ))}
