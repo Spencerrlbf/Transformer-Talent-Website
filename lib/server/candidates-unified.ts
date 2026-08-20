@@ -64,15 +64,17 @@ export type UnifiedRole = {
 export type UnifiedRow = {
   key: string; // "app_<id>" | "src_<id>"
   name: string;
-  headline: string | null;
+  currentTitle: string | null;
+  currentCompany: string | null;
   location: string | null;
+  linkedinUrl: string | null;
+  contact: { email: string | null; phone: string | null };
   source: "applied" | "sourced";
   viaTT: boolean; // future referral badge slot
   alsoSourced: boolean; // applicant who also appears in a sourcing run
-  roles: UnifiedRole[];
+  roles: UnifiedRole[]; // drives job filtering; rendered in the drawer's Pipeline tab
   bestTag: string | null;
   bestTagLabel: string | null;
-  snapshot: string;
   yearsExperience: number | null;
   addedAt: string;
 };
@@ -102,7 +104,7 @@ export type UnifiedList = {
 
 export type ExperienceGroup = {
   company: string;
-  logoUrl: string | null;
+  logoUrl: string | null; // LinkedIn CDN logo (may expire; UI falls back to a letter tile)
   companyLinkedinUrl: string | null;
   span: string | null;
   roles: {
@@ -142,7 +144,14 @@ export type UnifiedDetail = {
     addedAt: string;
   }[];
   experience: ExperienceGroup[];
-  education: { school: string; logoUrl: string | null; degree: string | null; field: string | null; period: string | null }[];
+  education: {
+    school: string;
+    logoUrl: string | null;
+    linkedinUrl: string | null;
+    degree: string | null;
+    field: string | null;
+    period: string | null;
+  }[];
   skills: string[];
   resumeUrl: string | null;
   hasResume: boolean;
@@ -332,13 +341,26 @@ const bestOf = (roles: UnifiedRole[]): { tag: string | null; rank: number } => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Snapshot lines                                                      */
+/* Harvest profile fragments                                           */
 /* ------------------------------------------------------------------ */
+
+// LinkedIn media fields arrive either as a bare URL string or as an object
+// {url, sizes:[{url,width,...}]}. Prefer a small variant for 40px tiles.
+type LinkedinImage = string | { url?: string; sizes?: { url?: string; width?: number }[] } | null;
+
+function logoFrom(v: LinkedinImage | undefined): string | null {
+  if (!v) return null;
+  if (typeof v === "string") return str(v);
+  const small = (v.sizes || [])
+    .filter((s) => s.url && (s.width ?? 0) >= 100)
+    .sort((a, b) => (a.width ?? 0) - (b.width ?? 0))[0];
+  return str(small?.url) || str(v.url);
+}
 
 type ExpEntry = {
   position?: string;
   companyName?: string;
-  companyLogo?: string;
+  companyLogo?: LinkedinImage;
   companyLinkedinUrl?: string;
   startDate?: { text?: string } | string;
   endDate?: { text?: string } | string;
@@ -350,34 +372,6 @@ type ExpEntry = {
 
 const dateText = (v: ExpEntry["startDate"]): string | null =>
   typeof v === "string" ? str(v) : str(v?.text);
-
-function prevCompanies(exp: ExpEntry[]): string[] {
-  const names: string[] = [];
-  for (const e of exp) {
-    const n = str(e.companyName);
-    if (n && !names.includes(n)) names.push(n);
-  }
-  return names.slice(1, 3); // skip current employer
-}
-
-function sourcedSnapshot(person: SrcPerson, exp: ExpEntry[] | null): string {
-  const parts: string[] = [];
-  if (person.years_experience != null) parts.push(`${person.years_experience} yrs`);
-  const prev = exp ? prevCompanies(exp) : [];
-  if (prev.length) parts.push(`prev: ${prev.join(", ")}`);
-  const skills = person.skills || [];
-  if (skills.length)
-    parts.push(`${skills.slice(0, 2).join(", ")}${skills.length > 2 ? ` +${skills.length - 2}` : ""}`);
-  return parts.join(" · ");
-}
-
-function applicantSnapshot(a: AppRow): string {
-  const parts: string[] = [];
-  const loc = str(a.parsed_profile?.location);
-  if (loc) parts.push(loc);
-  if (a.resume_path) parts.push("resume on file");
-  return parts.join(" · ");
-}
 
 /* ------------------------------------------------------------------ */
 /* The unified list                                                    */
@@ -422,18 +416,20 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     rows.push({
       key: `app_${a.id}`,
       name: a.name,
-      headline:
-        [str(a.parsed_profile?.current_title), str(a.parsed_profile?.current_company)]
-          .filter(Boolean)
-          .join(" @ ") || null,
+      currentTitle: str(a.parsed_profile?.current_title),
+      currentCompany: str(a.parsed_profile?.current_company),
       location: str(a.parsed_profile?.location),
+      linkedinUrl: a.linkedin_url,
+      contact: {
+        email: str(a.contact?.email) ?? str(a.email),
+        phone: str(a.contact?.phone),
+      },
       source: "applied",
       viaTT: a.source === "transformer_talent",
       alsoSourced: !!sourcedId,
       roles,
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
-      snapshot: applicantSnapshot(a),
       yearsExperience: null,
       addedAt: a.created_at,
     });
@@ -453,17 +449,17 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     rows.push({
       key: `src_${p.id}`,
       name: p.full_name || "Candidate",
-      headline:
-        [str(p.current_title), str(p.current_company)].filter(Boolean).join(" @ ") ||
-        str(p.headline),
+      currentTitle: str(p.current_title) || str(p.headline),
+      currentCompany: str(p.current_company),
       location: p.location,
+      linkedinUrl: p.linkedin_url,
+      contact: { email: str(p.contact?.email), phone: str(p.contact?.phone) },
       source: "sourced",
       viaTT: false,
       alsoSourced: false,
       roles,
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
-      snapshot: "", // filled for the returned page only (needs profile JSON)
       yearsExperience: p.years_experience,
       addedAt: ms[ms.length - 1]?.created_at || p.created_at,
     });
@@ -474,8 +470,9 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   if (params.jobId) visible = visible.filter((r) => r.roles.some((x) => x.jobId === params.jobId));
   if (params.q) {
     const q = params.q.toLowerCase();
-    visible = visible.filter(
-      (r) => r.name.toLowerCase().includes(q) || (r.headline || "").toLowerCase().includes(q)
+    visible = visible.filter((r) =>
+      [r.name, r.currentTitle, r.currentCompany]
+        .some((v) => (v || "").toLowerCase().includes(q))
     );
   }
 
@@ -516,25 +513,6 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   });
 
   const items = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  // ---- snapshot enrichment for this page's sourced rows only ----
-  const srcIds = items.filter((r) => r.key.startsWith("src_")).map((r) => r.key.slice(4));
-  if (srcIds.length) {
-    const res = await sbRest(
-      `sourced_candidates?id=in.(${srcIds.map((i) => `"${i}"`).join(",")})&select=id,experience:profile->experience`
-    );
-    const exps = new Map<string, ExpEntry[]>(
-      (res.ok ? ((await res.json()) as { id: string; experience: ExpEntry[] | null }[]) : []).map(
-        (r) => [r.id, Array.isArray(r.experience) ? r.experience : []]
-      )
-    );
-    for (const item of items) {
-      if (!item.key.startsWith("src_")) continue;
-      const p = people.get(item.key.slice(4));
-      if (p) item.snapshot = sourcedSnapshot(p, exps.get(p.id) ?? null);
-    }
-  }
-
   return { items, total: filtered.length, counts, page, pageSize };
 }
 
@@ -562,7 +540,7 @@ function groupExperience(exp: ExpEntry[]): ExperienceGroup[] {
     } else {
       groups.push({
         company,
-        logoUrl: str(e.companyLogo),
+        logoUrl: logoFrom(e.companyLogo),
         companyLinkedinUrl: str(e.companyLinkedinUrl),
         span: null,
         roles: [role],
@@ -583,14 +561,15 @@ function groupExperience(exp: ExpEntry[]): ExperienceGroup[] {
 
 type EduEntry = {
   schoolName?: string;
-  schoolLogo?: string;
+  schoolLogo?: LinkedinImage;
+  schoolLinkedinUrl?: string;
   degree?: string;
   fieldOfStudy?: string;
   period?: string;
 };
 
 type HarvestProfile = {
-  photo?: string;
+  photo?: LinkedinImage;
   about?: string;
   linkedinUrl?: string;
   experience?: ExpEntry[];
@@ -604,12 +583,13 @@ function profileBits(profile: HarvestProfile | null | undefined) {
     .map((s) => (typeof s === "string" ? s : str(s?.name)))
     .filter((s): s is string => !!s);
   return {
-    photoUrl: str(p.photo),
+    photoUrl: logoFrom(p.photo),
     about: str(p.about),
     experience: groupExperience(Array.isArray(p.experience) ? p.experience : []),
     education: (Array.isArray(p.education) ? p.education : []).map((e) => ({
       school: str(e.schoolName) || "—",
-      logoUrl: str(e.schoolLogo),
+      logoUrl: logoFrom(e.schoolLogo),
+      linkedinUrl: str(e.schoolLinkedinUrl),
       degree: str(e.degree),
       field: str(e.fieldOfStudy),
       period: str(e.period),

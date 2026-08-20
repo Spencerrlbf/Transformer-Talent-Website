@@ -2,8 +2,9 @@
 // Candidates v2 unified table: applicants + sourced people in one sortable,
 // filterable, paginated view. Shared by the Candidates page (pool view,
 // everyone visible) and the job page (role-scoped, "Not now" hidden by
-// default). Rows open the profile drawer via onOpen.
-import { useEffect, useMemo, useRef, useState } from "react";
+// default). Role attachments live in the drawer's Pipeline tab, not here —
+// a person can be on many roles. Rows open the profile drawer via onOpen.
+import { useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 
 export type Cv2Role = {
@@ -17,15 +18,17 @@ export type Cv2Role = {
 export type Cv2Row = {
   key: string;
   name: string;
-  headline: string | null;
+  currentTitle: string | null;
+  currentCompany: string | null;
   location: string | null;
+  linkedinUrl: string | null;
+  contact: { email: string | null; phone: string | null };
   source: "applied" | "sourced";
   viaTT: boolean;
   alsoSourced: boolean;
   roles: Cv2Role[];
   bestTag: string | null;
   bestTagLabel: string | null;
-  snapshot: string;
   yearsExperience: number | null;
   addedAt: string;
 };
@@ -75,17 +78,37 @@ const initials = (name: string) =>
 const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-type SortKey = "fit" | "added" | "name" | "years";
+/* Small inline icons so nothing external is loaded. */
+const InIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+    <rect width="24" height="24" rx="4" fill="#0A66C2" />
+    <path
+      fill="#fff"
+      d="M7.1 9.4H4.9V19h2.2V9.4Zm-1.1-1c.7 0 1.3-.6 1.3-1.3 0-.7-.6-1.3-1.3-1.3-.7 0-1.3.6-1.3 1.3 0 .7.6 1.3 1.3 1.3Zm4.3 1h-2.1V19h2.2v-4.7c0-2 2.6-2.2 2.6 0V19h2.2v-5.5c0-3.4-3.7-3.3-4.9-1.6v-1.5Z"
+    />
+  </svg>
+);
+const MailIcon = ({ active }: { active: boolean }) => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={active ? "#4a5160" : "#d3d7dd"} strokeWidth="1.8" aria-hidden>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="m3 7 9 6 9-6" />
+  </svg>
+);
+const PhoneIcon = ({ active }: { active: boolean }) => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={active ? "#4a5160" : "#d3d7dd"} strokeWidth="1.8" aria-hidden>
+    <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z" />
+  </svg>
+);
+
+type SortKey = "fit" | "added" | "name";
 
 export default function CandidatesTable({
   jobId,
-  showRoleColumn = true,
   defaultHideNotNow = false,
   onOpen,
   onCounts,
 }: {
   jobId?: string;
-  showRoleColumn?: boolean;
   defaultHideNotNow?: boolean;
   onOpen?: (key: string) => void;
   onCounts?: (counts: Cv2List["counts"]) => void;
@@ -114,14 +137,14 @@ export default function CandidatesTable({
 
   // Role dropdown (pool view only) from the org's jobs.
   useEffect(() => {
-    if (jobId || !showRoleColumn) return;
+    if (jobId) return;
     fetch("/api/dashboard/jobs", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((j: { jobs?: { id: string; title: string }[] } | null) => {
         setRoles((j?.jobs || []).map((r) => [r.id, r.title]));
       })
       .catch(() => {});
-  }, [token, jobId, showRoleColumn]);
+  }, [token, jobId]);
 
   const effectiveJob = jobId || roleFilter;
   const abortRef = useRef<AbortController | null>(null);
@@ -189,18 +212,7 @@ export default function CandidatesTable({
   const from = data && data.total > 0 ? (data.page - 1) * data.pageSize + 1 : 0;
   const to = data ? Math.min(data.total, data.page * data.pageSize) : 0;
 
-  const pool = !jobId; // pool view shows the seg chips + role dropdown
-
-  const roleCell = (r: Cv2Row) => {
-    const first = r.roles[0];
-    if (!first) return <span className="cv2-dim">—</span>;
-    return (
-      <>
-        {first.title} <em>#{first.jobId}</em>
-        {r.roles.length > 1 && <span className="cv2-more">+{r.roles.length - 1}</span>}
-      </>
-    );
-  };
+  const pool = !jobId;
 
   return (
     <div className="cv2">
@@ -240,7 +252,7 @@ export default function CandidatesTable({
         </select>
         <input
           className="cv2-search"
-          placeholder="Search name or company…"
+          placeholder="Search name, title or company…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -272,9 +284,12 @@ export default function CandidatesTable({
               <tr>
                 {header("name", "Candidate")}
                 <th>Source</th>
-                {showRoleColumn && <th>Role</th>}
                 {header("fit", "Fit")}
-                <th>Snapshot</th>
+                <th>Current role</th>
+                <th>Company</th>
+                <th>Location</th>
+                <th className="cv2-th-icon">LinkedIn</th>
+                <th className="cv2-th-icon">Contact</th>
                 {header("added", "Added")}
               </tr>
             </thead>
@@ -290,12 +305,9 @@ export default function CandidatesTable({
                       <span className="cv2-avatar" style={{ background: avColor(r.name) }}>
                         {initials(r.name)}
                       </span>
-                      <span>
-                        <span className="cv2-name">
-                          {r.name}
-                          {r.viaTT && <span className="cv2-tt">⚡ Via Transformer Talent</span>}
-                        </span>
-                        <small>{r.headline || r.location || ""}</small>
+                      <span className="cv2-name">
+                        {r.name}
+                        {r.viaTT && <span className="cv2-tt">⚡ Via Transformer Talent</span>}
                       </span>
                     </span>
                   </td>
@@ -305,7 +317,6 @@ export default function CandidatesTable({
                       {r.source === "applied" ? "Applied" : "Sourced"}
                     </span>
                   </td>
-                  {showRoleColumn && <td className="cv2-role">{roleCell(r)}</td>}
                   <td>
                     {r.bestTag ? (
                       <span className={`dash-tag ${TAG_CLASS[r.bestTag] || "t-pending"}`}>
@@ -315,7 +326,54 @@ export default function CandidatesTable({
                       <span className="dash-tag t-pending">Screening…</span>
                     )}
                   </td>
-                  <td className="cv2-snap">{r.snapshot}</td>
+                  <td className="cv2-title">{r.currentTitle || <span className="cv2-dim">—</span>}</td>
+                  <td className="cv2-company">{r.currentCompany || <span className="cv2-dim">—</span>}</td>
+                  <td className="cv2-loc">{r.location || <span className="cv2-dim">—</span>}</td>
+                  <td className="cv2-icons">
+                    {r.linkedinUrl ? (
+                      <a
+                        href={r.linkedinUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Open LinkedIn profile"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <InIcon />
+                      </a>
+                    ) : (
+                      <span className="cv2-ic-off" title="No LinkedIn on file">
+                        <InIcon />
+                      </span>
+                    )}
+                  </td>
+                  <td className="cv2-icons">
+                    {r.contact.email ? (
+                      <a
+                        href={`mailto:${r.contact.email}`}
+                        title={r.contact.email}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MailIcon active />
+                      </a>
+                    ) : (
+                      <span title="No email — add it in the profile">
+                        <MailIcon active={false} />
+                      </span>
+                    )}
+                    {r.contact.phone ? (
+                      <a
+                        href={`tel:${r.contact.phone.replace(/[^\d+]/g, "")}`}
+                        title={r.contact.phone}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <PhoneIcon active />
+                      </a>
+                    ) : (
+                      <span title="No phone — add it in the profile">
+                        <PhoneIcon active={false} />
+                      </span>
+                    )}
+                  </td>
                   <td className="cv2-added">{fmtDay(r.addedAt)}</td>
                 </tr>
               ))}

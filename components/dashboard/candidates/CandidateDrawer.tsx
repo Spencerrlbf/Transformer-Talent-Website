@@ -47,7 +47,14 @@ type Detail = {
       description: string | null;
     }[];
   }[];
-  education: { school: string; logoUrl: string | null; degree: string | null; field: string | null; period: string | null }[];
+  education: {
+    school: string;
+    logoUrl: string | null;
+    linkedinUrl: string | null;
+    degree: string | null;
+    field: string | null;
+    period: string | null;
+  }[];
   skills: string[];
   resumeUrl: string | null;
   hasResume: boolean;
@@ -66,6 +73,46 @@ const TAG_CLASS: Record<string, string> = {
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+// Company/school tile: real logo when the (expiring) LinkedIn CDN URL still
+// works, letter tile otherwise. Clickable through to the LinkedIn page.
+function OrgLogo({
+  logoUrl,
+  linkedinUrl,
+  label,
+}: {
+  logoUrl: string | null;
+  linkedinUrl: string | null;
+  label: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const tile =
+    logoUrl && !broken ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className="cv2d-xp-logo"
+        src={logoUrl}
+        alt=""
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(true)}
+      />
+    ) : (
+      <div className="cv2d-xp-logo cv2d-xp-logo-fb">{label[0]}</div>
+    );
+  return linkedinUrl ? (
+    <a
+      href={linkedinUrl}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open ${label} on LinkedIn`}
+      className="cv2d-xp-logolink"
+    >
+      {tile}
+    </a>
+  ) : (
+    tile
+  );
+}
 
 const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -350,14 +397,15 @@ export default function CandidateDrawer({
                   )}
                   {detail.experience.map((g, gi) => (
                     <div className="cv2d-xp" key={gi}>
-                      {g.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img className="cv2d-xp-logo" src={g.logoUrl} alt="" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="cv2d-xp-logo cv2d-xp-logo-fb">{g.company[0]}</div>
-                      )}
+                      <OrgLogo logoUrl={g.logoUrl} linkedinUrl={g.companyLinkedinUrl} label={g.company} />
                       <div className="cv2d-xp-main">
-                        <span className="cv2d-xp-co">{g.company}</span>
+                        {g.companyLinkedinUrl ? (
+                          <a className="cv2d-xp-co cv2d-xp-colink" href={g.companyLinkedinUrl} target="_blank" rel="noreferrer">
+                            {g.company}
+                          </a>
+                        ) : (
+                          <span className="cv2d-xp-co">{g.company}</span>
+                        )}
                         {g.span && <span className="cv2d-xp-span"> · {g.span}</span>}
                         <div className="cv2d-xp-roles">
                           {g.roles.map((r, ri) => (
@@ -381,10 +429,19 @@ export default function CandidateDrawer({
                       </h4>
                       {detail.education.map((e, i) => (
                         <div className="cv2d-edu" key={i}>
-                          <span>
-                            <span className="cv2d-edu-school">{e.school}</span>
-                            <br />
-                            <span className="cv2d-edu-deg">{[e.degree, e.field].filter(Boolean).join(", ")}</span>
+                          <span className="cv2d-edu-main">
+                            <OrgLogo logoUrl={e.logoUrl} linkedinUrl={e.linkedinUrl} label={e.school} />
+                            <span>
+                              {e.linkedinUrl ? (
+                                <a className="cv2d-edu-school cv2d-xp-colink" href={e.linkedinUrl} target="_blank" rel="noreferrer">
+                                  {e.school}
+                                </a>
+                              ) : (
+                                <span className="cv2d-edu-school">{e.school}</span>
+                              )}
+                              <br />
+                              <span className="cv2d-edu-deg">{[e.degree, e.field].filter(Boolean).join(", ")}</span>
+                            </span>
                           </span>
                           {e.period && <span className="cv2d-edu-yr">{e.period}</span>}
                         </div>

@@ -42,8 +42,9 @@ const list = await listUnifiedCandidates({ orgId: org.id });
 console.log(`counts: all=${list.counts.all} applied=${list.counts.applied} sourced=${list.counts.sourced} notNow=${list.counts.notNow} · total=${list.total}\n`);
 for (const r of list.items) {
   console.log(
-    `${(r.bestTagLabel || "Screening…").padEnd(16)} ${r.source.padEnd(8)} ${r.name.padEnd(28)} ` +
-    `${(r.roles.map((x) => `#${x.jobId}`).join(",") || "-").padEnd(10)} ${r.snapshot}`
+    `${(r.bestTagLabel || "Screening…").padEnd(16)} ${r.source.padEnd(8)} ${r.name.padEnd(26)} ` +
+    `${((r.currentTitle || "?") + " @ " + (r.currentCompany || "?")).padEnd(52).slice(0, 52)} ` +
+    `${(r.location || "").slice(0, 22).padEnd(22)} ${r.contact.email ? "✉" : "·"}${r.contact.phone ? "☎" : "·"} ${r.linkedinUrl ? "in" : "--"}`
   );
 }
 check("list returns rows", list.items.length > 0);
@@ -53,7 +54,8 @@ const ranks = { strong_yes: 0, strong: 0, yes: 1, possible: 2, worth_message: 3,
 const rk = (t) => (t ? (ranks[t] ?? 6) : 6);
 const sorted = list.items.every((r, i, a) => i === 0 || rk(a[i - 1].bestTag) <= rk(r.bestTag));
 check("fit-sorted", sorted);
-check("sourced snapshots filled", list.items.filter((r) => r.source === "sourced").every((r) => r.snapshot.length > 0));
+check("sourced rows carry title+company+linkedin", list.items.filter((r) => r.source === "sourced").every((r) => r.currentTitle && r.currentCompany && r.linkedinUrl));
+check("applicant email prefilled", list.items.some((r) => r.source === "applied" && r.contact.email));
 
 /* ---- 2. hideNotNow + filters + pagination ---- */
 const hidden = await listUnifiedCandidates({ orgId: org.id, hideNotNow: true, pageSize: 100 });
@@ -66,7 +68,7 @@ check("pagination distinct", !p2.items.some((r) => p1.items.find((x) => x.key ==
 const strong = await listUnifiedCandidates({ orgId: org.id, fit: "strong" });
 check("fit filter strong", strong.items.every((r) => ["strong", "strong_yes"].includes(r.bestTag)), `${strong.total} strong`);
 const search = await listUnifiedCandidates({ orgId: org.id, q: "wang" });
-check("search q=wang", search.items.length > 0 && search.items.every((r) => r.name.toLowerCase().includes("wang") || (r.headline || "").toLowerCase().includes("wang")), `${search.total} hits`);
+check("search q=wang", search.items.length > 0 && search.items.every((r) => [r.name, r.currentTitle, r.currentCompany].some((v) => (v || "").toLowerCase().includes("wang"))), `${search.total} hits`);
 
 /* ---- 3. job-scoped list ---- */
 const srcRow = list.items.find((r) => r.source === "sourced");
@@ -82,7 +84,9 @@ if (srcRow) {
   console.log(`\ndetail(${srcRow.key.slice(0, 12)}…) ${d.name}`);
   console.log(`  provenance: ${d.provenance}`);
   console.log(`  pipeline: ${d.pipeline.map((x) => `#${x.jobId} ${x.tagLabel} (${x.via})`).join(" · ")}`);
-  console.log(`  experience groups: ${d.experience.map((g) => `${g.company} ×${g.roles.length}`).join(", ")}`);
+  console.log(`  experience groups: ${d.experience.map((g) => `${g.company} ×${g.roles.length}${g.logoUrl ? " [logo]" : ""}${g.companyLinkedinUrl ? " [link]" : ""}`).join(", ")}`);
+  check("company logos resolve", d.experience.some((g) => g.logoUrl));
+  check("company links resolve", d.experience.some((g) => g.companyLinkedinUrl));
   console.log(`  education: ${d.education.map((e) => e.school).join(", ")}`);
   console.log(`  skills: ${d.skills.slice(0, 6).join(", ")} (+${Math.max(0, d.skills.length - 6)})`);
   console.log(`  photo: ${d.photoUrl ? "yes" : "no"} · resume: ${d.hasResume ? "yes" : "no"} · contact: ${JSON.stringify(d.contact)}`);
