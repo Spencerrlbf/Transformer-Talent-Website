@@ -820,6 +820,93 @@ const fmtDate = (iso: string): string =>
 export async function unifiedCandidateDetail(orgId: string, key: string): Promise<UnifiedDetail | null> {
   const { byId: roleIdx, byExternal } = await orgRoleIndex(orgId);
 
+  // Pool person from the internal Network page. Profile comes from the
+  // newest raw Harvest full_profile in the enrichment ledger; the pipeline
+  // section shows their nightly network matches (display-only — no stages).
+  if (key.startsWith("net_")) {
+    const id = key.slice(4);
+    const res = await sbRest(
+      `candidates?id=eq.${id}&select=id,full_name,headline,location,linkedin_url,linkedin_username,` +
+        `email,phone,profile_picture_url,current_title,current_company,created_at&limit=1`
+    );
+    const [p] = (res.ok ? await res.json() : []) as {
+      id: string; full_name: string | null; headline: string | null; location: string | null;
+      linkedin_url: string | null; linkedin_username: string | null; email: string | null;
+      phone: string | null; profile_picture_url: string | null; current_title: string | null;
+      current_company: string | null; created_at: string;
+    }[];
+    if (!p) return null;
+
+    const [enrRes, vRes] = await Promise.all([
+      sbRest(
+        `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
+          `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
+      ),
+      sbRest(
+        `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
+          `&select=org_role_id,created_at,verdict&order=created_at.desc`
+      ),
+    ]);
+    const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null }[];
+    const verdicts = (vRes.ok ? await vRes.json() : []) as {
+      org_role_id: string; created_at: string;
+      verdict: { scorecard?: Scorecard } | null;
+    }[];
+
+    const seenJobs = new Set<string>();
+    const pipeline: UnifiedDetail["pipeline"] = [];
+    for (const v of verdicts) {
+      const role = roleIdx.get(v.org_role_id);
+      const sc = v.verdict?.scorecard;
+      if (!role || !sc || seenJobs.has(role.jobId)) continue;
+      seenJobs.add(role.jobId);
+      const tag = clientTag(sc);
+      pipeline.push({
+        jobId: role.jobId,
+        title: role.title,
+        company: role.company,
+        salary: role.salary,
+        location: role.location,
+        via: "sourced",
+        tag,
+        tagLabel: TAG_LABEL[tag],
+        reason: clientReason(sc),
+        addedAt: v.created_at,
+        stage: "new",
+      });
+    }
+
+    const bits = profileBits(enr?.raw_payload ?? null);
+    const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
+    return {
+      key,
+      name: p.full_name || "Candidate",
+      headline:
+        str(p.headline) ||
+        [str(p.current_title), str(p.current_company)].filter(Boolean).join(" @ ") ||
+        null,
+      location: str(p.location),
+      linkedinUrl: str(p.linkedin_url) || (enr?.raw_payload?.linkedinUrl as string | undefined) || null,
+      photoUrl: bits.photoUrl || str(p.profile_picture_url),
+      about: bits.about,
+      source: "sourced",
+      viaTT: false,
+      alsoSourced: false,
+      provenance: `Matched from your talent pool by the nightly runs`,
+      contact: { email: str(p.email), phone: str(p.phone) },
+      bestTag: best.tag,
+      bestTagLabel: labelOf(best.tag),
+      pipeline,
+      experience: bits.experience,
+      education: bits.education,
+      skills: bits.skills,
+      resumeUrl: null,
+      resumeName: null,
+      hasResume: false,
+      addedAt: p.created_at,
+    };
+  }
+
   if (key.startsWith("src_")) {
     const id = key.slice(4);
     const res = await sbRest(

@@ -179,12 +179,14 @@ function PipelineRows({
   onToggle,
   onStage,
   stageBusy,
+  stageEditable = true,
 }: {
   entry: PipelineEntry;
   expanded: boolean;
   onToggle: () => void;
   onStage: (jobId: string, stage: string) => void;
   stageBusy: boolean;
+  stageEditable?: boolean;
 }) {
   return (
     <>
@@ -213,11 +215,15 @@ function PipelineRows({
           )}
         </td>
         <td onClick={(e) => e.stopPropagation()}>
-          <StageSelect
-            value={entry.stage || "new"}
-            busy={stageBusy}
-            onChange={(s) => onStage(entry.jobId, s)}
-          />
+          {stageEditable ? (
+            <StageSelect
+              value={entry.stage || "new"}
+              busy={stageBusy}
+              onChange={(s) => onStage(entry.jobId, s)}
+            />
+          ) : (
+            <span className="cv2d-stage">Match</span>
+          )}
         </td>
         <td className="cv2d-pcar">{expanded ? "▾" : "▸"}</td>
       </tr>
@@ -258,6 +264,9 @@ export default function CandidateDrawer({
 
   const [stageSaving, setStageSaving] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
+  // Pool person opened from the internal Network page: read-only extras
+  // (no stage edits, no contact edit, no resume upload).
+  const isNet = !!candKey?.startsWith("net_");
   const [cEmail, setCEmail] = useState("");
   const [cPhone, setCPhone] = useState("");
   const [cGithub, setCGithub] = useState("");
@@ -438,7 +447,10 @@ export default function CandidateDrawer({
                         ["phone", detail.contact.phone, "Add phone"],
                         ["github", detail.contact.github, "Add GitHub"],
                       ] as const
-                    ).map(([field, value, addLabel]) =>
+                    )
+                      // Pool people: show what's on file, no inline editing.
+                      .filter(([, value]) => !isNet || value)
+                      .map(([field, value, addLabel]) =>
                       value ? (
                         field === "github" ? (
                           <a
@@ -458,9 +470,11 @@ export default function CandidateDrawer({
                         </button>
                       )
                     )}
-                    <button className="cv2d-edit" onClick={() => setEditingContact(true)}>
-                      Edit
-                    </button>
+                    {!isNet && (
+                      <button className="cv2d-edit" onClick={() => setEditingContact(true)}>
+                        Edit
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="cv2d-contact-edit">
@@ -622,6 +636,7 @@ export default function CandidateDrawer({
                               onToggle={() => setExpanded(expanded === p.jobId ? null : p.jobId)}
                               onStage={changeStage}
                               stageBusy={stageSaving === p.jobId}
+                              stageEditable={!isNet}
                             />
                           ))}
                         </tbody>
@@ -631,7 +646,13 @@ export default function CandidateDrawer({
                 </>
               )}
 
-              {tab === "resume" && (
+              {tab === "resume" && isNet && (
+                <p className="cv2d-dim" style={{ marginTop: 6 }}>
+                  No resume on file — pool profiles come from LinkedIn. One can be attached after
+                  they&apos;re sent to a job.
+                </p>
+              )}
+              {tab === "resume" && !isNet && (
                 <>
                   <input
                     ref={fileInput}

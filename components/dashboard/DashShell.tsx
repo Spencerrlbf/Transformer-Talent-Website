@@ -102,13 +102,22 @@ export default function DashShell({ children }: { children: ReactNode }) {
           </div>
           <nav className="dash-nav">
             {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={pathname === item.href ? "on" : ""}
-              >
-                {item.label}
-              </Link>
+              <span key={item.href} style={{ display: "contents" }}>
+                <Link href={item.href} className={pathname === item.href ? "on" : ""}>
+                  {item.label}
+                </Link>
+                {/* Internal-only, right after Candidates: the pool's nightly
+                    matches. TT org only — the API 404s everyone else even if
+                    they guess the URL. */}
+                {item.href === "/dashboard/candidates" && me.org.slug === "transformer-talent" && (
+                  <Link
+                    href="/dashboard/network"
+                    className={pathname === "/dashboard/network" ? "on" : ""}
+                  >
+                    Network <span className="nw-navlock">TT</span>
+                  </Link>
+                )}
+              </span>
             ))}
           </nav>
           <div className="dash-side-foot">

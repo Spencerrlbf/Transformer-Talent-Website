@@ -43,7 +43,7 @@ function isTab(v: string | null): v is TabId {
 }
 
 function JobWorkspace({ id }: { id: string }) {
-  const { token } = useDash();
+  const { token, org } = useDash();
   const search = useSearchParams();
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -61,6 +61,18 @@ function JobWorkspace({ id }: { id: string }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Bumped when a Past-tab restore happens so the (mounted) Pipeline table refetches.
   const [pipelineRefresh, setPipelineRefresh] = useState(0);
+  // TT-only shortcut: how many nightly pool matches exist for this role.
+  const [netCount, setNetCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (org.slug !== "transformer-talent") return;
+    fetch(`/api/dashboard/network?job=${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((d) => setNetCount(d?.total ?? 0))
+      .catch(() => {});
+  }, [id, token, org.slug]);
 
   const load = useCallback(() => {
     fetch(`/api/dashboard/jobs/${id}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -244,6 +256,11 @@ function JobWorkspace({ id }: { id: string }) {
               </span>
             )}
             <span className="spacer" />
+            {netCount > 0 && (
+              <Link className="link nw-strip-link" href={`/dashboard/network?job=${job.id}`}>
+                {netCount} network match{netCount === 1 ? "" : "es"} →
+              </Link>
+            )}
             <button className="link jobws-linkbtn" onClick={() => switchTab("sourcing")}>
               View sourcing runs →
             </button>
