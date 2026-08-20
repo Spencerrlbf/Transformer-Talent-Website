@@ -35,7 +35,8 @@ export type NetworkPerson = {
   currentCompany: string | null;
   location: string | null;
   linkedinUrl: string | null;
-  email: string | null;
+  email: string | null; // best usable address
+  emails: RankedEmail[]; // all usable addresses, best first
   phone: string | null;
   years: number | null;
   latestMatchAt: string; // newest verdict — drives the "new" markers
@@ -74,6 +75,79 @@ type PoolRow = {
 const POOL_COLS =
   "id,full_name,current_title,current_company,headline,location,linkedin_url," +
   "linkedin_username,email,phone,profile_picture_url,calculated_experience_years,total_experience_years";
+
+/* ---- pool email resolver -------------------------------------------- */
+// Emails live in three places: candidates.email (our own engaged-contact
+// data — most trusted), plus the enrichment tables candidate_emails /
+// candidate_emails_v2 which carry verification results. Verified-invalid
+// addresses NEVER surface; the rest rank: known contact > verified-good
+// personal > verified-good business > risky/catch-all (passive candidates'
+// work addresses go stale, so personal wins).
+
+export type RankedEmail = { email: string; verified: boolean };
+
+type EmailRow = {
+  candidate_id: string;
+  email: string | null;
+  email_type: string | null;
+  is_primary: boolean | null;
+  quality: string | null;
+  result: string | null;
+};
+
+function emailScore(r: EmailRow): number {
+  const goodOk = r.quality === "good" && r.result === "ok";
+  return (goodOk ? 0 : 10) + (r.email_type === "personal" ? 0 : 2) + (r.is_primary ? 0 : 1);
+}
+
+/** candidateId -> usable emails, best first. knownEmail (candidates.email) leads. */
+export async function poolEmails(
+  candidateIds: string[],
+  knownEmails: Map<string, string | null>
+): Promise<Map<string, RankedEmail[]>> {
+  const rows: EmailRow[] = [];
+  for (let i = 0; i < candidateIds.length; i += 100) {
+    const chunk = candidateIds.slice(i, i + 100).map((x) => `"${x}"`).join(",");
+    const [a, b] = await Promise.all([
+      sbRest(
+        `candidate_emails?candidate_id=in.(${chunk})&select=candidate_id,email:email_address,email_type,is_primary,quality,result`
+      ),
+      sbRest(
+        `candidate_emails_v2?candidate_id=in.(${chunk})&select=candidate_id,email:email_normalized,email_type,is_primary,quality,result`
+      ),
+    ]);
+    if (a.ok) rows.push(...((await a.json()) as EmailRow[]));
+    if (b.ok) rows.push(...((await b.json()) as EmailRow[]));
+  }
+
+  const byCand = new Map<string, EmailRow[]>();
+  for (const r of rows) {
+    if (!str(r.email)) continue;
+    if (r.quality === "bad" || r.result === "invalid") continue; // verified-dead: never surface
+    const list = byCand.get(r.candidate_id) || [];
+    list.push(r);
+    byCand.set(r.candidate_id, list);
+  }
+
+  const out = new Map<string, RankedEmail[]>();
+  for (const id of candidateIds) {
+    const seenEmails = new Set<string>();
+    const ranked: RankedEmail[] = [];
+    const known = str(knownEmails.get(id) ?? null);
+    if (known) {
+      seenEmails.add(known.toLowerCase());
+      ranked.push({ email: known, verified: true });
+    }
+    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y))) {
+      const e = str(r.email)!;
+      if (seenEmails.has(e.toLowerCase())) continue;
+      seenEmails.add(e.toLowerCase());
+      ranked.push({ email: e, verified: r.quality === "good" && r.result === "ok" });
+    }
+    if (ranked.length) out.set(id, ranked);
+  }
+  return out;
+}
 
 async function fetchAll<T>(pathFor: (limit: number, offset: number) => string): Promise<T[]> {
   const LIMIT = 1000;
@@ -210,10 +284,16 @@ export async function listNetworkMatches(
     for (const r of (res.ok ? await res.json() : []) as PoolRow[]) pool.set(r.id, r);
   }
 
+  const emailMap = await poolEmails(
+    ids,
+    new Map(ids.map((id) => [id, pool.get(id)?.email ?? null]))
+  );
+
   let people: NetworkPerson[] = [];
   for (const [candidateId, matches] of byPerson) {
     const p = pool.get(candidateId);
     if (!p) continue;
+    const emails = emailMap.get(candidateId) || [];
     matches.sort(
       (a, b) => TAG_RANK[a.tag] - TAG_RANK[b.tag] || b.addedAt.localeCompare(a.addedAt)
     );
@@ -225,7 +305,8 @@ export async function listNetworkMatches(
       currentCompany: str(p.current_company),
       location: str(p.location),
       linkedinUrl: str(p.linkedin_url),
-      email: str(p.email),
+      email: emails[0]?.email ?? null,
+      emails,
       phone: str(p.phone),
       years: p.calculated_experience_years ?? p.total_experience_years ?? null,
       latestMatchAt: latest.get(candidateId) || matches[0].addedAt,
@@ -274,6 +355,9 @@ export async function sendNetworkCandidate(
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
   const [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
   if (!cand) return { ok: false, error: "candidate_not_found" };
+  const bestEmail =
+    (await poolEmails([candidateId], new Map([[candidateId, cand.email]]))).get(candidateId)?.[0]
+      ?.email ?? null;
 
   // One send per (person, target job) — pipelines never grow duplicates.
   const dupRes = await sbRest(
@@ -308,7 +392,7 @@ export async function sendNetworkCandidate(
     {
       organization_id: target.orgId,
       name: cand.full_name || "Candidate",
-      email: cand.email || "",
+      email: bestEmail || "",
       linkedin_url: cand.linkedin_url,
       linkedin_username: cand.linkedin_username,
       role_ids: [target.jobId],
@@ -323,7 +407,7 @@ export async function sendNetworkCandidate(
       },
       harvest_profile: enr?.raw_payload ?? null,
       screening: v?.verdict ? [{ ...v.verdict, job_id: target.jobId }] : null,
-      contact: str(cand.email) || str(cand.phone) ? { email: str(cand.email), phone: str(cand.phone) } : null,
+      contact: bestEmail || str(cand.phone) ? { email: bestEmail, phone: str(cand.phone) } : null,
     },
     true
   ).catch((e) => {

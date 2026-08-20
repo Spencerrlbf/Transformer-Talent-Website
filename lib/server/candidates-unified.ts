@@ -7,6 +7,7 @@
 import { sbRest } from "./supabase";
 import { signResumeUrl } from "./applicants";
 import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
+import { poolEmails } from "./network";
 import type { Scorecard } from "./scorecard";
 
 /* ------------------------------------------------------------------ */
@@ -837,7 +838,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     }[];
     if (!p) return null;
 
-    const [enrRes, vRes] = await Promise.all([
+    const [enrRes, vRes, emailMap] = await Promise.all([
       sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
           `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
@@ -846,6 +847,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
+      poolEmails([id], new Map([[id, p.email]])),
     ]);
     const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
@@ -893,7 +895,15 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       viaTT: false,
       alsoSourced: false,
       provenance: `Matched from your talent pool by the nightly runs`,
-      contact: { email: str(p.email), phone: str(p.phone) },
+      // All usable addresses, best first ("~" marks unverified) — internal
+      // view only; a send carries just the best one to the client.
+      contact: {
+        email:
+          (emailMap.get(id) || [])
+            .map((e) => (e.verified ? e.email : `${e.email} (unverified)`))
+            .join(" · ") || null,
+        phone: str(p.phone),
+      },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       pipeline,
