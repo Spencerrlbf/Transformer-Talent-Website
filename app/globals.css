@@ -934,7 +934,9 @@ body:has(.dash-app) {
 }
 .dash-side-foot em { font-style: normal; }
 /* Main */
-.dash-main { padding: 28px 40px; max-width: 1060px; width: 100%; }
+/* Wide enough for the candidates table; content sections carry their own
+   narrower max-widths so text-heavy pages don't sprawl. */
+.dash-main { padding: 28px 40px; max-width: 1560px; width: 100%; }
 .dash-h1 {
   font-size: 21px;
   letter-spacing: -0.02em;
