@@ -152,6 +152,20 @@ export function sanitizeLeadQuery(body: Record<string, unknown>): LeadSearchQuer
   if (typeof body.salesNavUrl === "string" && body.salesNavUrl.trim()) query.salesNavUrl = body.salesNavUrl.trim().slice(0, 2000);
   if (body.recentlyChangedJobs === true) query.recentlyChangedJobs = true;
   if (body.postedOnLinkedin === true) query.postedOnLinkedin = true;
+  // Display names for picked companies (url -> name). Not a Harvest param —
+  // stored with the search for run summaries and the judge's context.
+  if (body.companyLabels && typeof body.companyLabels === "object" && !Array.isArray(body.companyLabels)) {
+    const labels: Record<string, string> = {};
+    const companyUrls = new Set([
+      ...(query.currentCompanies || []), ...(query.pastCompanies || []), ...(query.excludeCurrentCompanies || []),
+    ]);
+    for (const [url, name] of Object.entries(body.companyLabels as Record<string, unknown>)) {
+      if (companyUrls.has(url) && typeof name === "string" && name.trim()) {
+        labels[url] = name.trim().slice(0, 120);
+      }
+    }
+    if (Object.keys(labels).length) (query as LeadSearchQuery & { companyLabels?: Record<string, string> }).companyLabels = labels;
+  }
   return query;
 }
 

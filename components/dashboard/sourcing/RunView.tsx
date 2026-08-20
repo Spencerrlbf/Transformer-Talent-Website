@@ -22,7 +22,7 @@ export default function RunView({
   const [rows, setRows] = useState<CandidateRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState<"all" | "strong" | "shortlisted">("all");
+  const [filter, setFilter] = useState<"all" | "strong" | "yes" | "message" | "shortlisted">("all");
   const [rereviewing, setRereviewing] = useState(false);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
@@ -165,13 +165,17 @@ export default function RunView({
       {(run.status === "done" || run.status === "screening" || run.status === "ranking") && (
         <>
           <div className="dash-src-filters">
-            {(["all", "strong", "shortlisted"] as const).map((f) => (
+            {(["all", "strong", "yes", "message", "shortlisted"] as const).map((f) => (
               <button
                 key={f}
                 className={`dash-src-fchip ${filter === f ? "on" : ""}`}
                 onClick={() => { setFilter(f); setPage(1); }}
               >
-                {f === "all" ? `All ${total || importedSoFar}` : f === "strong" ? "Strong fit" : "Shortlisted ★"}
+                {f === "all" ? `All ${total || importedSoFar}`
+                  : f === "strong" ? "Strong yes"
+                  : f === "yes" ? "Yes"
+                  : f === "message" ? "Worth a message"
+                  : "Shortlisted ★"}
               </button>
             ))}
           </div>
@@ -192,6 +196,17 @@ export default function RunView({
                     <td>
                       <span className="nm">{r.name}</span>
                       <div className="sub">{[r.title, r.company, r.location].filter(Boolean).join(" · ")}</div>
+                      {(r.years != null || r.priorCompanies.length > 0 || r.topSkills.length > 0) && (
+                        <div className="dash-src-snapshot">
+                          {[
+                            r.years != null ? `${r.years} yrs` : null,
+                            r.priorCompanies.length ? `prev: ${r.priorCompanies.join(", ")}` : null,
+                            r.topSkills.length
+                              ? r.topSkills.join(", ") + (r.skillCount > r.topSkills.length ? ` +${r.skillCount - r.topSkills.length}` : "")
+                              : null,
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
                     </td>
                     <td>
                       {r.tag ? (

@@ -22,11 +22,12 @@ import { sbRest, sbRpc } from "../supabase";
 import { embedTexts } from "../roles-pipeline";
 import { computeFacts, formatFacts } from "../facts";
 import { harvestToExperiences, linkedinProfileText } from "../spine";
-import { screenRolesWithCache } from "../screening";
 import { splitStack } from "../scorecard";
-import { clientTag, clientReason, TAG_LABEL } from "../client-reason";
+import { TAG_LABEL } from "../client-reason";
 import { searchLeadsPage, previewLeadCount, getFullProfile, providerMode, type Lead, type LeadSearchQuery } from "./harvest";
 import { profileToFields, sourcedEmbedText } from "./import";
+import { judgeSourcedCandidate, judgeReason, type JudgeSkill } from "./judge";
+import { getCompanyContexts, companyContextLine, companySlugFromUrl } from "./company-context";
 
 export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
 const PAGE_SIZE = 25;
@@ -283,6 +284,20 @@ async function importOnePage(
       ),
       prefer: "resolution=ignore-duplicates,return=minimal",
     });
+
+    // Build the global company-context cache as we go: each new candidate's
+    // current employer is fetched once ever ($0.004) and shared across every
+    // run and tenant — the judge needs it to weigh no-name employers fairly.
+    const employerSlugs = importable
+      .map((f) => {
+        const exp = Array.isArray(f.profile!.experience) ? (f.profile!.experience as Record<string, unknown>[]) : [];
+        const current = exp.find((e) => /present/i.test(String((e.endDate as Record<string, unknown>)?.text ?? ""))) || exp[0];
+        return companySlugFromUrl(
+          (current?.companyLinkedinUrl as string) || (current?.companyLink as string) || f.lead.currentCompanyLinkedinUrl
+        );
+      })
+      .filter((x): x is string => !!x);
+    await getCompanyContexts(employerSlugs).catch(() => new Map());
   }
 
   // Billable imports for this page, from ground truth (covers partial-page
@@ -385,7 +400,13 @@ const jitter = (baseMs: number) => baseMs + Math.floor(Math.random() * baseMs * 
 
 async function screenOneRow(
   row: ClaimedRow,
-  role: { external_id: string; tech_stack: string | null },
+  ctx: {
+    role: { external_id: string; tech_stack: string | null; title: string };
+    jdText: string;
+    judgeSkills: JudgeSkill[];
+    targetedCompanies: string[];
+    minYears: number | null;
+  },
   run: SourcingRun,
   leaseId: string
 ): Promise<{ outcome: RowOutcome; retryAfterMs?: number }> {
@@ -403,34 +424,39 @@ async function screenOneRow(
       return { outcome: "junk" };
     }
     const skills = cand?.skills || [];
-    const stackTerms = splitStack(role.tech_stack).slice(0, 20);
+    const stackTerms = splitStack(ctx.role.tech_stack).slice(0, 20);
     const expRows = harvestToExperiences(profile);
     const facts = computeFacts(expRows, stackTerms, skills, (profile as Record<string, unknown>).education ?? null);
-    const evidence = [
-      linkedinProfileText(profile).slice(0, 4000),
-      `FACTS (computed from dated position history):\n${formatFacts(facts)}`,
-    ].join("\n\n");
 
-    const [verdict] = await screenRolesWithCache({
-      candidateId: null,
-      evidence,
-      cacheKeyText: JSON.stringify(profile),
-      jobIds: [role.external_id],
-      facts,
-      source: "precompute",
-      profileSkills: skills,
-      organizationId: run.organization_id,
-      llmTimeoutMs: SCREEN_LLM_TIMEOUT_MS,
-      onLLMError: (info) => { llmErr = info; },
+    // Cached employer context (import prefetched it; cache-only in practice).
+    const exp = Array.isArray(profile.experience) ? (profile.experience as Record<string, unknown>[]) : [];
+    const current = exp.find((e) => /present/i.test(String((e.endDate as Record<string, unknown>)?.text ?? ""))) || exp[0];
+    const employerSlug = companySlugFromUrl(
+      (current?.companyLinkedinUrl as string) || (current?.companyLink as string) || null
+    );
+    const ctxMap = employerSlug ? await getCompanyContexts([employerSlug]).catch(() => new Map()) : new Map();
+    const employerLine = employerSlug ? companyContextLine(ctxMap.get(employerSlug)) : null;
+
+    const verdict = await judgeSourcedCandidate({
+      roleTitle: ctx.role.title,
+      jdText: ctx.jdText,
+      skills: ctx.judgeSkills,
+      minYears: ctx.minYears,
+      profileText: linkedinProfileText(profile).slice(0, 5000),
+      factsBlock: formatFacts(facts),
+      careerYears: facts.careerYears,
+      targetedCompanies: ctx.targetedCompanies,
+      currentEmployerContext: employerLine,
+      timeoutMs: SCREEN_LLM_TIMEOUT_MS,
+      onError: (info) => { llmErr = info; },
     });
 
     if (verdict) {
-      const sc = verdict.scorecard;
       const landed = await fencedRowPatch(row.id, leaseId, {
         screen_status: "done",
         verdict,
-        tag: sc ? clientTag(sc) : null,
-        reason: sc ? clientReason(sc) : null,
+        tag: verdict.tag,
+        reason: judgeReason(verdict),
         screened_at: new Date().toISOString(),
         screen_claim_id: null,
       });
@@ -591,10 +617,35 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
       // Heal rows orphaned by dead drivers (fenced: never touches our claims).
       await sbRpc<number>("heal_orphan_rows", { p_run_id: run.id, p_lease_id: leaseId });
 
-      const [role] = await rest<{ external_id: string; tech_stack: string | null }[]>(
-        `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack`
+      const [role] = await rest<{
+        external_id: string; tech_stack: string | null; title: string;
+        jd: { about?: string; doing?: string[]; needs?: string[]; bonus?: string[] } | null;
+        skills: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
+        matching_profile: { must_haves?: string[]; min_years?: number | null } | null;
+      }[]>(
+        `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack,title,jd,skills,matching_profile`
       );
       if (!role) throw new RunFailure("role vanished");
+      const jd = role.jd || {};
+      const jdText = [
+        jd.about,
+        jd.doing?.length ? `Responsibilities:\n- ${jd.doing.join("\n- ")}` : null,
+        jd.needs?.length ? `Requirements:\n- ${jd.needs.join("\n- ")}` : null,
+        jd.bonus?.length ? `Nice to have:\n- ${jd.bonus.join("\n- ")}` : null,
+      ].filter(Boolean).join("\n\n") || (role.matching_profile?.must_haves || []).join("; ");
+      const judgeSkills: JudgeSkill[] = (role.skills || []).map((sk) => ({
+        skill: sk.skill, must_have: !!sk.must_have, alternates: sk.alternates || [],
+      }));
+      // Targeted companies: prefer the display names saved with the search,
+      // fall back to the URL slug.
+      const params = run.search_params as LeadSearchQuery & { companyLabels?: Record<string, string> };
+      const targetedCompanies = [
+        ...(params.currentCompanies || []), ...(params.pastCompanies || []),
+      ].map((u) => params.companyLabels?.[u] || companySlugFromUrl(u) || u).filter(Boolean);
+      const roleCtx = {
+        role, jdText, judgeSkills, targetedCompanies,
+        minYears: role.matching_profile?.min_years ?? null,
+      };
 
       // The FIRST wave always runs regardless of budget — a caller with a
       // budget smaller than a wave must make progress, not silently no-op
@@ -631,7 +682,7 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         }
 
         const outcomes = await mapLimit(rows, SCREEN_CONCURRENCY, (row) =>
-          screenOneRow(row, role, run, leaseId)
+          screenOneRow(row, roleCtx, run, leaseId)
         );
         const ok = outcomes.filter((o) => o.outcome === "ok").length;
         const transient = outcomes.filter((o) => o.outcome === "transient").length;

@@ -44,6 +44,13 @@ export function queryFromDraft(d: QueryDraft): Record<string, unknown> {
   put("companyHeadcount", d.companyHeadcount);
   put("excludeCurrentCompanies", d.excludeCurrentCompanies);
   put("excludeLocations", d.excludeLocations);
+  // Display names for picked companies ride along with the search: run
+  // summaries and the judge's "targeted companies" context both read them.
+  const labels: Record<string, string> = {};
+  for (const url of [...d.currentCompanies, ...d.pastCompanies, ...d.excludeCurrentCompanies]) {
+    if (d.companyLabels[url]) labels[url] = d.companyLabels[url];
+  }
+  if (Object.keys(labels).length) body.companyLabels = labels;
   return body;
 }
 
@@ -54,7 +61,7 @@ export function draftFromParams(p: Record<string, unknown>): QueryDraft {
     currentJobTitles: list(p.currentJobTitles),
     locations: list(p.locations),
     currentCompanies: list(p.currentCompanies),
-    companyLabels: {},
+    companyLabels: (p.companyLabels && typeof p.companyLabels === "object" ? p.companyLabels : {}) as Record<string, string>,
     pastCompanies: list(p.pastCompanies),
     search: typeof p.search === "string" ? p.search : "",
     schools: list(p.schools),
@@ -86,7 +93,7 @@ export type RunSummary = {
 export type CandidateRow = {
   membershipId: string;
   rank: number | null;
-  tag: "strong" | "possible" | "stretch" | null;
+  tag: "strong" | "possible" | "stretch" | "strong_yes" | "yes" | "worth_message" | "not_now" | null;
   reason: string | null;
   screenStatus: string;
   shortlisted: boolean;
@@ -96,9 +103,19 @@ export type CandidateRow = {
   company: string | null;
   location: string | null;
   linkedinUrl: string | null;
+  years: number | null;
+  priorCompanies: string[];
+  topSkills: string[];
+  skillCount: number;
 };
 
 export const TAG_UI: Record<string, { label: string; cls: string }> = {
+  // 4-tier outreach scale (EM judge)
+  strong_yes: { label: "Strong yes", cls: "t-strong" },
+  yes: { label: "Yes", cls: "t-yes" },
+  worth_message: { label: "Worth a message", cls: "t-possible" },
+  not_now: { label: "Not now", cls: "t-stretch" },
+  // legacy 3-tier (older runs keep rendering)
   strong: { label: "Strong fit", cls: "t-strong" },
   possible: { label: "Worth a look", cls: "t-possible" },
   stretch: { label: "Likely a stretch", cls: "t-stretch" },
@@ -107,8 +124,9 @@ export const TAG_UI: Record<string, { label: string; cls: string }> = {
 /** One-line human summary of a run's search, for the runs list. */
 export function summarizeParams(p: Record<string, unknown>): string {
   const list = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
+  const labels = (p.companyLabels && typeof p.companyLabels === "object" ? p.companyLabels : {}) as Record<string, string>;
   const companyName = (url: string) =>
-    url.replace(/\/$/, "").split("/").pop()?.replace(/-/g, " ") || url;
+    labels[url] || url.replace(/\/$/, "").split("/").pop()?.replace(/-/g, " ") || url;
   const parts = [
     list(p.currentJobTitles).slice(0, 3).join(", "),
     list(p.locations).slice(0, 2).join(", "),
