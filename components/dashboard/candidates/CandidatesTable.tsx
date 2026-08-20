@@ -100,6 +100,43 @@ const PhoneIcon = ({ active }: { active: boolean }) => (
   </svg>
 );
 
+// Contact icon: instant tooltip with the value on hover; click copies it to
+// the clipboard and confirms. Greyed (no tooltip target) when nothing's on file.
+function ContactIcon({
+  value,
+  emptyHint,
+  children,
+}: {
+  value: string | null;
+  emptyHint: string;
+  children: React.ReactNode;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!value)
+    return (
+      <span className="cv2-ic cv2-ic-empty">
+        {children}
+        <span className="cv2-tip">{emptyHint}</span>
+      </span>
+    );
+  return (
+    <button
+      className="cv2-ic"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(value).catch(() => {});
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1400);
+      }}
+    >
+      {children}
+      <span className={`cv2-tip${copied ? " cv2-tip-ok" : ""}`}>
+        {copied ? "Copied ✓" : `${value} — click to copy`}
+      </span>
+    </button>
+  );
+}
+
 type SortKey = "fit" | "added" | "name";
 
 export default function CandidatesTable({
@@ -347,32 +384,12 @@ export default function CandidatesTable({
                     )}
                   </td>
                   <td className="cv2-icons">
-                    {r.contact.email ? (
-                      <a
-                        href={`mailto:${r.contact.email}`}
-                        title={r.contact.email}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MailIcon active />
-                      </a>
-                    ) : (
-                      <span title="No email — add it in the profile">
-                        <MailIcon active={false} />
-                      </span>
-                    )}
-                    {r.contact.phone ? (
-                      <a
-                        href={`tel:${r.contact.phone.replace(/[^\d+]/g, "")}`}
-                        title={r.contact.phone}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <PhoneIcon active />
-                      </a>
-                    ) : (
-                      <span title="No phone — add it in the profile">
-                        <PhoneIcon active={false} />
-                      </span>
-                    )}
+                    <ContactIcon value={r.contact.email} emptyHint="No email — add it in the profile">
+                      <MailIcon active={!!r.contact.email} />
+                    </ContactIcon>
+                    <ContactIcon value={r.contact.phone} emptyHint="No phone — add it in the profile">
+                      <PhoneIcon active={!!r.contact.phone} />
+                    </ContactIcon>
                   </td>
                   <td className="cv2-added">{fmtDay(r.addedAt)}</td>
                 </tr>
