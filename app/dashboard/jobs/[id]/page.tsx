@@ -3,12 +3,8 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useDash } from "@/components/dashboard/DashShell";
 import type { SkillChip } from "@/components/dashboard/JobForm";
-import {
-  CandidateCards,
-  SourcedCards,
-  type CandidateView,
-  type SourcedView,
-} from "@/components/dashboard/CandidateList";
+import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
+import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 
 type Job = {
   id: string;
@@ -31,17 +27,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const { token } = useDash();
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
-  const [cands, setCands] = useState<{ applicants: CandidateView[]; sourced: SourcedView[] } | null>(null);
+  const [counts, setCounts] = useState<{
+    all: number;
+    applied: number;
+    sourced: number;
+    notNow: number;
+  } | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/dashboard/jobs/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => (r.ok ? r.json() : null))
       .then((d) => setJob(d ? d.job : null))
       .catch(() => setJob(null));
-    fetch(`/api/dashboard/jobs/${id}/candidates`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(async (r) => (r.ok ? r.json() : null))
-      .then((d) => setCands(d || { applicants: [], sourced: [] }))
-      .catch(() => setCands({ applicants: [], sourced: [] }));
   }, [id, token]);
   useEffect(load, [load]);
 
@@ -161,18 +159,32 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       </div>
 
       <div className="dash-sec" style={{ marginTop: 34 }}>
-        Applicants{cands ? ` — ${cands.applicants.length}` : ""}
+        Candidates
       </div>
-      {cands ? (
-        <>
-          <CandidateCards candidates={cands.applicants} showRoleTitles={false} />
-          <div style={{ marginTop: 24 }}>
-            <SourcedCards sourced={cands.sourced} />
-          </div>
-        </>
-      ) : (
-        <p className="dash-muted">Loading…</p>
+      {counts && (
+        <div className="cv2-countstrip">
+          <span className="c">
+            <b>{counts.all}</b>candidates
+          </span>
+          <span className="c">
+            <b>{counts.applied}</b>applied
+          </span>
+          <span className="c">
+            <b>{counts.sourced}</b>sourced
+          </span>
+          {counts.notNow > 0 && (
+            <span className="c dim">
+              <b>{counts.notNow}</b>&ldquo;Not now&rdquo; hidden
+            </span>
+          )}
+          <span className="spacer" />
+          <Link className="link" href={`/dashboard/jobs/${job.id}/sourcing`}>
+            View sourcing runs →
+          </Link>
+        </div>
       )}
+      <CandidatesTable jobId={job.id} defaultHideNotNow onCounts={setCounts} onOpen={setOpenKey} />
+      <CandidateDrawer candKey={openKey} roleContext={job.id} onClose={() => setOpenKey(null)} />
     </>
   );
 }

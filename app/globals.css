@@ -1528,3 +1528,11 @@ body:has(.board-app) {
 .cv2d-rz-pdf { background: #fbedeb; color: #c0392b; border: 1px solid #f2d9d5; border-radius: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 6px; }
 .cv2d-rz-btn { font: inherit; font-size: 12px; font-weight: 650; border: 1px solid #d3d7dd; border-radius: 7px; background: #fff; color: #3d434c; padding: 6px 13px; cursor: pointer; }
 .cv2d-rz-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Candidates v2: job-page count strip */
+.cv2-countstrip { display: flex; gap: 24px; align-items: center; border: 1px solid #e6e8ec; border-radius: 10px; padding: 13px 18px; margin: 14px 0 18px; background: #fff; }
+.cv2-countstrip .c { font-size: 12.5px; color: #8a919c; }
+.cv2-countstrip .c b { display: block; font-size: 19px; font-weight: 700; color: #111418; font-variant-numeric: tabular-nums; }
+.cv2-countstrip .c.dim b { color: #a2a8b3; }
+.cv2-countstrip .spacer { flex: 1; }
+.cv2-countstrip .link { font-size: 12.5px; color: #2a5bd7; font-weight: 600; text-decoration: none; }
