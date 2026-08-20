@@ -17,7 +17,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
   if (key.startsWith("net_") && member.org.slug !== TT_ORG_SLUG)
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  let body: { email?: string; phone?: string; github?: string };
+  let body: { email?: string; phone?: string; github?: string; otherEmails?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -28,6 +28,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
     email: body.email ?? null,
     phone: body.phone ?? null,
     github: body.github ?? null,
+    otherEmails: Array.isArray(body.otherEmails)
+      ? body.otherEmails.filter((e): e is string => typeof e === "string")
+      : [],
   });
   if (result.error)
     return NextResponse.json({ error: result.error }, { status: result.error === "not_found" ? 404 : 400 });

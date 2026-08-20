@@ -1720,3 +1720,11 @@ body:has(.board-app) {
 .cv2-table .nw-review-row td { white-space: normal; }
 .nw-sendsto { color: #8a5ec2 !important; font-weight: 600; }
 .cv2d-otheremails { font-size: 11.5px; color: #a2a8b3; margin-top: 4px; }
+/* Other emails: actionable list under the contact block */
+.cv2d-otheremails { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 11.8px; color: #6b7280; }
+.cv2d-oe { display: inline-flex; align-items: center; gap: 7px; }
+.cv2d-oe button { border: 0; background: none; cursor: pointer; font-size: 10.8px; font-weight: 650; color: #2a5bd7; padding: 0; }
+.cv2d-oe button:last-child { color: #a2a8b3; font-size: 11px; }
+.cv2d-oe button:hover { text-decoration: underline; }
+.cv2d-oe button:disabled { opacity: 0.5; cursor: wait; }
+.cv2d-ce-other { min-width: 260px; }

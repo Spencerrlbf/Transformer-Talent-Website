@@ -35,8 +35,7 @@ type Detail = {
   viaTT: boolean;
   alsoSourced: boolean;
   provenance: string;
-  contact: { email?: string | null; phone?: string | null; github?: string | null };
-  otherEmails?: string[];
+  contact: { email?: string | null; phone?: string | null; github?: string | null; otherEmails?: string[] | null };
   bestTag: string | null;
   bestTagLabel: string | null;
   pipeline: PipelineEntry[];
@@ -277,6 +276,7 @@ export default function CandidateDrawer({
   const [cEmail, setCEmail] = useState("");
   const [cPhone, setCPhone] = useState("");
   const [cGithub, setCGithub] = useState("");
+  const [cOther, setCOther] = useState("");
   const [contactErr, setContactErr] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -300,6 +300,7 @@ export default function CandidateDrawer({
         setCEmail(d.contact.email || "");
         setCPhone(d.contact.phone || "");
         setCGithub(d.contact.github || "");
+        setCOther((d.contact.otherEmails || []).join(", "));
         // Opened from a job page: that role's review is what they came for.
         const ctx = roleContext && d.pipeline.find((p) => p.jobId === roleContext);
         setExpanded(ctx ? ctx.jobId : d.pipeline[0]?.jobId ?? null);
@@ -373,27 +374,65 @@ export default function CandidateDrawer({
     if (detail) setDetail({ ...detail, resumeUrl: r.resumeUrl, resumeName: r.resumeName, hasResume: true });
   };
 
-  const saveContact = async () => {
+  const putContact = async (payload: {
+    email: string; phone: string; github: string; otherEmails: string[];
+  }): Promise<boolean> => {
     setSaving(true);
     setContactErr("");
     const res = await fetch(`/api/dashboard/candidates/v2/${candKey}/contact`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ email: cEmail, phone: cPhone, github: cGithub }),
+      body: JSON.stringify(payload),
     }).catch(() => null);
     setSaving(false);
     if (!res || !res.ok) {
       const err = res ? ((await res.json()) as { error?: string }).error : null;
       setContactErr(
-        err === "invalid_email" ? "That email doesn't look right."
+        err === "invalid_email" ? "One of those emails doesn't look right."
         : err === "invalid_phone" ? "That phone number doesn't look right."
         : "Couldn't save — try again."
       );
-      return;
+      return false;
     }
     const { contact } = (await res.json()) as { contact: Detail["contact"] };
-    if (detail) setDetail({ ...detail, contact });
-    setEditingContact(false);
+    setDetail((d) => (d ? { ...d, contact } : d));
+    setCEmail(contact.email || "");
+    setCPhone(contact.phone || "");
+    setCGithub(contact.github || "");
+    setCOther((contact.otherEmails || []).join(", "));
+    return true;
+  };
+
+  const saveContact = async () => {
+    const ok = await putContact({
+      email: cEmail,
+      phone: cPhone,
+      github: cGithub,
+      otherEmails: cOther.split(/[,\n;]+/).map((e) => e.trim()).filter(Boolean),
+    });
+    if (ok) setEditingContact(false);
+  };
+
+  // One-click actions on the other-emails list (display mode).
+  const makePrimary = (email: string) => {
+    const d = detail!;
+    const others = (d.contact.otherEmails || []).filter((e) => e !== email);
+    if (d.contact.email) others.unshift(d.contact.email);
+    putContact({
+      email,
+      phone: d.contact.phone || "",
+      github: d.contact.github || "",
+      otherEmails: others,
+    });
+  };
+  const removeOther = (email: string) => {
+    const d = detail!;
+    putContact({
+      email: d.contact.email || "",
+      phone: d.contact.phone || "",
+      github: d.contact.github || "",
+      otherEmails: (d.contact.otherEmails || []).filter((e) => e !== email),
+    });
   };
 
   const currentRole = detail?.experience[0]?.roles[0];
@@ -486,6 +525,12 @@ export default function CandidateDrawer({
                     <input placeholder="Email" value={cEmail} onChange={(e) => setCEmail(e.target.value)} />
                     <input placeholder="Phone" value={cPhone} onChange={(e) => setCPhone(e.target.value)} />
                     <input placeholder="GitHub URL or handle" value={cGithub} onChange={(e) => setCGithub(e.target.value)} />
+                    <input
+                      className="cv2d-ce-other"
+                      placeholder="Other emails (comma-separated)"
+                      value={cOther}
+                      onChange={(e) => setCOther(e.target.value)}
+                    />
                     <button className="cv2d-save" onClick={saveContact} disabled={saving}>
                       {saving ? "Saving…" : "Save"}
                     </button>
@@ -497,6 +542,7 @@ export default function CandidateDrawer({
                         setCEmail(detail.contact.email || "");
                         setCPhone(detail.contact.phone || "");
                         setCGithub(detail.contact.github || "");
+                        setCOther((detail.contact.otherEmails || []).join(", "));
                       }}
                     >
                       Cancel
@@ -504,9 +550,19 @@ export default function CandidateDrawer({
                     {contactErr && <span className="cv2d-err">{contactErr}</span>}
                   </div>
                 )}
-                {(detail.otherEmails?.length ?? 0) > 0 && (
+                {!editingContact && (detail.contact.otherEmails?.length ?? 0) > 0 && (
                   <div className="cv2d-otheremails">
-                    Also on file: {detail.otherEmails!.join(" · ")}
+                    {detail.contact.otherEmails!.map((e) => (
+                      <span key={e} className="cv2d-oe">
+                        {e}
+                        <button type="button" disabled={saving} title="Use this as the primary email" onClick={() => makePrimary(e)}>
+                          Make primary
+                        </button>
+                        <button type="button" disabled={saving} title="Remove this address" onClick={() => removeOther(e)}>
+                          ✕
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>

@@ -137,7 +137,12 @@ export type ExperienceGroup = {
   }[];
 };
 
-export type UnifiedContact = { email?: string | null; phone?: string | null; github?: string | null };
+export type UnifiedContact = {
+  email?: string | null; // primary — what sends and list rows use
+  phone?: string | null;
+  github?: string | null;
+  otherEmails?: string[] | null; // additional addresses, user-manageable
+};
 
 export type UnifiedDetail = {
   key: string;
@@ -152,8 +157,6 @@ export type UnifiedDetail = {
   alsoSourced: boolean;
   provenance: string;
   contact: UnifiedContact;
-  /** Pool people: additional on-file addresses beyond the primary. */
-  otherEmails?: string[];
   bestTag: string | null;
   bestTagLabel: string | null;
   pipeline: {
@@ -898,17 +901,20 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       alsoSourced: false,
       provenance: `Matched from your talent pool by the nightly runs`,
       // Same contact shape as every other candidate (edit writes the pool's
-      // contact overlay); extra on-file addresses ride in otherEmails.
-      contact: {
-        email: str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null,
-        phone: str(p.contact?.phone) ?? str(p.phone),
-        github: str(p.contact?.github),
-      },
-      otherEmails: (() => {
-        const shown = (str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? "").toLowerCase();
-        return (emailMap.get(id) || [])
-          .filter((e) => e.email.toLowerCase() !== shown)
-          .map((e) => (e.verified ? e.email : `${e.email} (unverified)`));
+      // contact overlay). otherEmails: user-curated list once saved; until
+      // then, the verification tables' addresses minus the primary.
+      contact: (() => {
+        const primary = str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null;
+        const curated = Array.isArray(p.contact?.otherEmails) ? p.contact!.otherEmails! : null;
+        const fallback = (emailMap.get(id) || [])
+          .map((e) => e.email)
+          .filter((e) => e.toLowerCase() !== (primary || "").toLowerCase());
+        return {
+          email: primary,
+          phone: str(p.contact?.phone) ?? str(p.phone),
+          github: str(p.contact?.github),
+          otherEmails: curated ?? fallback,
+        };
       })(),
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
@@ -1062,6 +1068,18 @@ const cleanContact = (c: UnifiedContact): UnifiedContact | { error: string } => 
   out.email = email || null;
   out.phone = phone || null;
   out.github = github || null;
+  const seen = new Set<string>([(email || "").toLowerCase()]);
+  const others: string[] = [];
+  for (const raw of c.otherEmails || []) {
+    const e = str(raw);
+    if (!e) continue;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 160) return { error: "invalid_email" };
+    if (seen.has(e.toLowerCase())) continue;
+    seen.add(e.toLowerCase());
+    others.push(e);
+    if (others.length >= 8) break;
+  }
+  out.otherEmails = others; // always an array on save — the list becomes curated
   return out;
 };
 
