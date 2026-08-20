@@ -1581,3 +1581,34 @@ body:has(.board-app) {
 .dash-src-panelbar { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
 .dash-src-panelbar .spacer { flex: 1; }
 .dash-src-panelbar .dash-muted { font-size: 12.5px; }
+
+/* Job workspace Task B: Overview ideal-companies editor + company name */
+.jobws-copicker { position: relative; }
+.jobws-cochips {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border: 1px solid #e6e8ec; border-radius: 8px; padding: 7px 9px; background: #fff;
+}
+.jobws-cochips:focus-within { border-color: #9aa2af; }
+.jobws-cochips input { border: 0; outline: 0; flex: 1; min-width: 120px; font: inherit; font-size: 12.5px; padding: 2px; }
+.jobws-cochip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid #e6e8ec; border-radius: 99px; padding: 3px 6px 3px 4px;
+  font-size: 12.5px; background: #fafbfd;
+}
+.jobws-cochip img { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; background: #f6f7f9; }
+.jobws-cologo-fallback {
+  width: 18px; height: 18px; border-radius: 4px; background: #f1f3f6; color: #a2a8b3;
+  font-weight: 700; font-size: 10px; display: inline-flex; align-items: center; justify-content: center;
+}
+.jobws-cochip button { border: 0; background: none; cursor: pointer; color: #a2a8b3; font-size: 13px; line-height: 1; padding: 0 3px; }
+.jobws-cochip button:hover { color: #111418; }
+.jobws-conamerow { display: flex; align-items: center; gap: 10px; }
+.jobws-conameinput {
+  border: 1px solid #e6e8ec; border-radius: 8px; padding: 8px 10px; font: inherit;
+  font-size: 12.5px; background: #fff; width: 100%; max-width: 260px;
+}
+.jobws-conameinput:focus { border-color: #9aa2af; outline: none; }
+.jobws-savenote { font-size: 11.5px; color: #a2a8b3; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.jobws-savenote.ok { color: #1d8a4b; }
+.jobws-savenote.err { color: #c2402a; }
+.jobws-hint { font-size: 11.5px; color: #a2a8b3; margin: 7px 0 0; line-height: 1.45; }

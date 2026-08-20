@@ -622,8 +622,9 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         jd: { about?: string; doing?: string[]; needs?: string[]; bonus?: string[] } | null;
         skills: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
         matching_profile: { must_haves?: string[]; min_years?: number | null } | null;
+        target_companies: { name?: string }[] | null;
       }[]>(
-        `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack,title,jd,skills,matching_profile`
+        `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack,title,jd,skills,matching_profile,target_companies`
       );
       if (!role) throw new RunFailure("role vanished");
       const jd = role.jd || {};
@@ -636,12 +637,21 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
       const judgeSkills: JudgeSkill[] = (role.skills || []).map((sk) => ({
         skill: sk.skill, must_have: !!sk.must_have, alternates: sk.alternates || [],
       }));
-      // Targeted companies: prefer the display names saved with the search,
-      // fall back to the URL slug.
+      // Targeted companies: the role's ideal-companies list unioned with the
+      // companies this particular search targeted. Search names prefer the
+      // display names saved with the search, falling back to the URL slug.
       const params = run.search_params as LeadSearchQuery & { companyLabels?: Record<string, string> };
-      const targetedCompanies = [
+      const searchTargets = [
         ...(params.currentCompanies || []), ...(params.pastCompanies || []),
       ].map((u) => params.companyLabels?.[u] || companySlugFromUrl(u) || u).filter(Boolean);
+      const roleTargets = (role.target_companies || []).map((t) => t?.name || "").filter(Boolean);
+      const seenCo = new Set<string>();
+      const targetedCompanies = [...roleTargets, ...searchTargets].filter((n) => {
+        const k = n.toLowerCase();
+        if (seenCo.has(k)) return false;
+        seenCo.add(k);
+        return true;
+      });
       const roleCtx = {
         role, jdText, judgeSkills, targetedCompanies,
         minYears: role.matching_profile?.min_years ?? null,
