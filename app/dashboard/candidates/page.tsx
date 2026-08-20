@@ -4,6 +4,7 @@
 // judgment isn't a judgment on the person); the job page hides them.
 import { useState } from "react";
 import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
+import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 
 export default function CandidatesPage() {
   const [counts, setCounts] = useState<{
@@ -12,6 +13,7 @@ export default function CandidatesPage() {
     sourced: number;
     notNow: number;
   } | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   return (
     <>
@@ -23,7 +25,8 @@ export default function CandidatesPage() {
             } sourced${counts.notNow ? ` · ${counts.notNow} tagged "Not now"` : ""}`
           : "Everyone in your pipeline — applicants and sourced candidates."}
       </p>
-      <CandidatesTable onCounts={setCounts} />
+      <CandidatesTable onCounts={setCounts} onOpen={setOpenKey} />
+      <CandidateDrawer candKey={openKey} onClose={() => setOpenKey(null)} />
     </>
   );
 }
