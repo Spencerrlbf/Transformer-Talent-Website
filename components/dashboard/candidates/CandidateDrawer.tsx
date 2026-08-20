@@ -36,6 +36,7 @@ type Detail = {
   alsoSourced: boolean;
   provenance: string;
   contact: { email?: string | null; phone?: string | null; github?: string | null };
+  otherEmails?: string[];
   bestTag: string | null;
   bestTagLabel: string | null;
   pipeline: PipelineEntry[];
@@ -456,10 +457,7 @@ export default function CandidateDrawer({
                         ["phone", detail.contact.phone, "Add phone"],
                         ["github", detail.contact.github, "Add GitHub"],
                       ] as const
-                    )
-                      // Pool people: show what's on file, no inline editing.
-                      .filter(([, value]) => !isNet || value)
-                      .map(([field, value, addLabel]) =>
+                    ).map(([field, value, addLabel]) =>
                       value ? (
                         field === "github" ? (
                           <a
@@ -479,11 +477,9 @@ export default function CandidateDrawer({
                         </button>
                       )
                     )}
-                    {!isNet && (
-                      <button className="cv2d-edit" onClick={() => setEditingContact(true)}>
-                        Edit
-                      </button>
-                    )}
+                    <button className="cv2d-edit" onClick={() => setEditingContact(true)}>
+                      Edit
+                    </button>
                   </div>
                 ) : (
                   <div className="cv2d-contact-edit">
@@ -506,6 +502,11 @@ export default function CandidateDrawer({
                       Cancel
                     </button>
                     {contactErr && <span className="cv2d-err">{contactErr}</span>}
+                  </div>
+                )}
+                {(detail.otherEmails?.length ?? 0) > 0 && (
+                  <div className="cv2d-otheremails">
+                    Also on file: {detail.otherEmails!.join(" · ")}
                   </div>
                 )}
               </div>

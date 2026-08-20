@@ -152,6 +152,8 @@ export type UnifiedDetail = {
   alsoSourced: boolean;
   provenance: string;
   contact: UnifiedContact;
+  /** Pool people: additional on-file addresses beyond the primary. */
+  otherEmails?: string[];
   bestTag: string | null;
   bestTagLabel: string | null;
   pipeline: {
@@ -828,13 +830,13 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     const id = key.slice(4);
     const res = await sbRest(
       `candidates?id=eq.${id}&select=id,full_name,headline,location,linkedin_url,linkedin_username,` +
-        `email,phone,profile_picture_url,current_title,current_company,created_at&limit=1`
+        `email,phone,contact,profile_picture_url,current_title,current_company,created_at&limit=1`
     );
     const [p] = (res.ok ? await res.json() : []) as {
       id: string; full_name: string | null; headline: string | null; location: string | null;
       linkedin_url: string | null; linkedin_username: string | null; email: string | null;
-      phone: string | null; profile_picture_url: string | null; current_title: string | null;
-      current_company: string | null; created_at: string;
+      phone: string | null; contact: UnifiedContact | null; profile_picture_url: string | null;
+      current_title: string | null; current_company: string | null; created_at: string;
     }[];
     if (!p) return null;
 
@@ -847,7 +849,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      poolEmails([id], new Map([[id, p.email]])),
+      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]])),
     ]);
     const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
@@ -895,15 +897,19 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       viaTT: false,
       alsoSourced: false,
       provenance: `Matched from your talent pool by the nightly runs`,
-      // All usable addresses, best first ("~" marks unverified) — internal
-      // view only; a send carries just the best one to the client.
+      // Same contact shape as every other candidate (edit writes the pool's
+      // contact overlay); extra on-file addresses ride in otherEmails.
       contact: {
-        email:
-          (emailMap.get(id) || [])
-            .map((e) => (e.verified ? e.email : `${e.email} (unverified)`))
-            .join(" · ") || null,
-        phone: str(p.phone),
+        email: str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null,
+        phone: str(p.contact?.phone) ?? str(p.phone),
+        github: str(p.contact?.github),
       },
+      otherEmails: (() => {
+        const shown = (str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? "").toLowerCase();
+        return (emailMap.get(id) || [])
+          .filter((e) => e.email.toLowerCase() !== shown)
+          .map((e) => (e.verified ? e.email : `${e.email} (unverified)`));
+      })(),
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       pipeline,
@@ -1067,11 +1073,14 @@ export async function saveUnifiedContact(
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
 
+  // net_ = pool candidate (TT-internal; the API route gates org access).
   const target = key.startsWith("src_")
     ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
     : key.startsWith("app_")
       ? `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
-      : null;
+      : key.startsWith("net_")
+        ? `candidates?id=eq.${key.slice(4)}`
+        : null;
   if (!target) return { error: "bad_key" };
 
   const res = await sbRest(target, {

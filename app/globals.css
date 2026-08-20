@@ -1719,3 +1719,4 @@ body:has(.board-app) {
 /* The base .cv2-table td nowrap must not leak into review rows — reviews wrap. */
 .cv2-table .nw-review-row td { white-space: normal; }
 .nw-sendsto { color: #8a5ec2 !important; font-weight: 600; }
+.cv2d-otheremails { font-size: 11.5px; color: #a2a8b3; margin-top: 4px; }

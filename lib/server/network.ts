@@ -67,6 +67,7 @@ type PoolRow = {
   linkedin_username: string | null;
   email: string | null;
   phone: string | null;
+  contact: { email?: string | null; phone?: string | null; github?: string | null } | null;
   profile_picture_url: string | null;
   calculated_experience_years: number | null;
   total_experience_years: number | null;
@@ -74,7 +75,7 @@ type PoolRow = {
 
 const POOL_COLS =
   "id,full_name,current_title,current_company,headline,location,linkedin_url," +
-  "linkedin_username,email,phone,profile_picture_url,calculated_experience_years,total_experience_years";
+  "linkedin_username,email,phone,contact,profile_picture_url,calculated_experience_years,total_experience_years";
 
 /* ---- pool email resolver -------------------------------------------- */
 // Emails live in three places: candidates.email (our own engaged-contact
@@ -286,7 +287,7 @@ export async function listNetworkMatches(
 
   const emailMap = await poolEmails(
     ids,
-    new Map(ids.map((id) => [id, pool.get(id)?.email ?? null]))
+    new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null]))
   );
 
   let people: NetworkPerson[] = [];
@@ -307,7 +308,7 @@ export async function listNetworkMatches(
       linkedinUrl: str(p.linkedin_url),
       email: emails[0]?.email ?? null,
       emails,
-      phone: str(p.phone),
+      phone: str(p.contact?.phone) ?? str(p.phone),
       years: p.calculated_experience_years ?? p.total_experience_years ?? null,
       latestMatchAt: latest.get(candidateId) || matches[0].addedAt,
       matches,
@@ -356,8 +357,9 @@ export async function sendNetworkCandidate(
   const [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
   if (!cand) return { ok: false, error: "candidate_not_found" };
   const bestEmail =
-    (await poolEmails([candidateId], new Map([[candidateId, cand.email]]))).get(candidateId)?.[0]
-      ?.email ?? null;
+    (
+      await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]))
+    ).get(candidateId)?.[0]?.email ?? null;
 
   // One send per (person, target job) — pipelines never grow duplicates.
   const dupRes = await sbRest(
@@ -407,7 +409,10 @@ export async function sendNetworkCandidate(
       },
       harvest_profile: enr?.raw_payload ?? null,
       screening: v?.verdict ? [{ ...v.verdict, job_id: target.jobId }] : null,
-      contact: bestEmail || str(cand.phone) ? { email: bestEmail, phone: str(cand.phone) } : null,
+      contact:
+        bestEmail || str(cand.contact?.phone) || str(cand.phone)
+          ? { email: bestEmail, phone: str(cand.contact?.phone) ?? str(cand.phone) }
+          : null,
     },
     true
   ).catch((e) => {
