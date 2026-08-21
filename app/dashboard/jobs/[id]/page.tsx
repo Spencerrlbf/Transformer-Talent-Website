@@ -11,6 +11,7 @@ import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
 import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
 import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
+import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
 
 type Job = {
   id: string;
@@ -208,6 +209,7 @@ function JobWorkspace({ id }: { id: string }) {
               initial={job.targetCompanies}
               onSaved={(targetCompanies) => setJob({ ...job, targetCompanies })}
             />
+            <InterviewStagesCard jobId={job.id} />
             {job.skills.length > 0 && (
               <>
                 <div className="dash-sec">Skills</div>
