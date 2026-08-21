@@ -1728,3 +1728,39 @@ body:has(.board-app) {
 .cv2d-oe button:hover { text-decoration: underline; }
 .cv2d-oe button:disabled { opacity: 0.5; cursor: wait; }
 .cv2d-ce-other { min-width: 260px; }
+
+/* ---------- My page (recruiter page settings) ---------- */
+.dash-nav-nudge {
+  display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #b54708;
+  background: #fffaeb; border: 1px solid #fedf89; border-radius: 999px; padding: 1px 7px;
+  vertical-align: 1px;
+}
+.dash-mypage-photo { display: flex; gap: 18px; align-items: center; margin-bottom: 22px; }
+.dash-mypage-photo img {
+  width: 84px; height: 84px; border-radius: 50%; object-fit: cover;
+  border: 1px solid #e6e8ec; flex: none;
+}
+.dash-mypage-initials {
+  width: 84px; height: 84px; border-radius: 50%; background: #eef2fb; color: #2a5bd7;
+  font-weight: 800; font-size: 26px; display: flex; align-items: center;
+  justify-content: center; flex: none;
+}
+.dash-mypage-photo small { display: block; color: #8a919c; font-size: 12px; margin-top: 6px; }
+.dash-mypage-slug { display: flex; align-items: center; }
+.dash-mypage-slug span {
+  border: 1px solid #d3d7dd; border-right: 0; border-radius: 7px 0 0 7px;
+  padding: 9px 0 9px 12px; background: #f6f7f9; color: #6b7280; font-size: 13.5px;
+  white-space: nowrap;
+}
+.dash-mypage-slug input {
+  border-radius: 0 7px 7px 0 !important; border-left: 0 !important; padding-left: 2px !important;
+  flex: 1; min-width: 0;
+}
+.dash-mypage-live { color: #067647; font-weight: 650; font-size: 13.5px; }
+.dash-saved { color: #067647; font-size: 13px; }
+.dash-mypage-web { display: flex; gap: 8px; }
+.dash-mypage-web input {
+  border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit;
+  font-size: 13.5px; color: #111418; background: #fff; flex: 1; min-width: 0; max-width: 340px;
+}
