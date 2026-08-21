@@ -86,6 +86,8 @@ export type RecruiterHead = {
   linkedinUrl: string;
   website: string;
   bio: string;
+  /** Bounty in dollars; null hides the referral block. */
+  referralAmount: number | null;
 };
 
 export default function BoardClient({
@@ -676,6 +678,10 @@ export default function BoardClient({
         )}
       </div>
 
+      {recruiter && recruiter.referralAmount != null && (
+        <ReferralBlock recruiterId={recruiter.id} amount={recruiter.referralAmount} />
+      )}
+
       {/* Narrow screens: rail stacks under the table; bar jumps to it. */}
       {selected.length > 0 && status.kind === "idle" && (
         <div className="board-selbar">
@@ -692,5 +698,91 @@ export default function BoardClient({
         </a>
       </footer>
     </div>
+  );
+}
+
+// The referral offer at the bottom of a recruiter page. Self-contained:
+// four fields to /api/referral, generic thank-you either way (the response
+// never reveals whether we already know the person).
+function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: number }) {
+  const [state, setState] = useState<"idle" | "sending" | "ok" | "error">("idle");
+  const [error, setError] = useState("");
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    const data = new FormData(e.currentTarget);
+    setState("sending");
+    try {
+      const res = await fetch("/api/referral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recruiter: recruiterId,
+          referrerName: data.get("referrerName"),
+          referrerEmail: data.get("referrerEmail"),
+          candidateLinkedin: data.get("candidateLinkedin"),
+          candidateEmail: data.get("candidateEmail"),
+          website: data.get("website"),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) setState("ok");
+      else {
+        setError(json.error || "Something went wrong — please try again.");
+        setState("error");
+      }
+    } catch {
+      setError("Network error — please try again.");
+      setState("error");
+    }
+  }
+
+  const money = `$${amount.toLocaleString()}`;
+  return (
+    <section className="board-referral" id="refer">
+      <h2>Not looking right now? Refer an engineer.</h2>
+      <p className="board-referral-sub">
+        If we place someone you refer, you receive <b>{money}</b>. Paid when
+        the placement completes.
+      </p>
+      {state === "ok" ? (
+        <p className="board-referral-thanks">
+          Thank you. We will review and be in touch.
+        </p>
+      ) : (
+        <form className="board-referral-form" onSubmit={onSubmit}>
+          <label>
+            Your name
+            <input name="referrerName" required maxLength={120} autoComplete="name" />
+          </label>
+          <label>
+            Your email
+            <input name="referrerEmail" type="email" required maxLength={254} autoComplete="email" />
+          </label>
+          <label>
+            Their LinkedIn URL
+            <input name="candidateLinkedin" type="url" required placeholder="https://linkedin.com/in/…" maxLength={300} />
+          </label>
+          <label>
+            Their email
+            <input name="candidateEmail" type="email" required maxLength={254} />
+          </label>
+          <input
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            style={{ position: "absolute", left: "-9999px" }}
+            aria-hidden="true"
+          />
+          <div className="board-referral-foot">
+            <button type="submit" className="board-btn" disabled={state === "sending"}>
+              {state === "sending" ? "SENDING…" : `REFER THEM FOR ${money} →`}
+            </button>
+            {state === "error" && <span className="board-error" style={{ margin: 0 }}>{error}</span>}
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

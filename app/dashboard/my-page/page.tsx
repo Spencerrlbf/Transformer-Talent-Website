@@ -13,13 +13,14 @@ type ProfileView = {
   linkedinUrl: string;
   bio: string;
   showAllRoles: boolean;
+  showReferral: boolean;
   published: boolean;
 };
 
 type PageData = {
   profile: ProfileView | null;
   suggestedSlug: string;
-  org: { website: string; canEditWebsite: boolean };
+  org: { website: string; referralAmount: number; canEditWebsite: boolean };
 };
 
 const ERRORS: Record<string, string> = {
@@ -41,6 +42,7 @@ export default function MyPagePage() {
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [bio, setBio] = useState("");
   const [showAllRoles, setShowAllRoles] = useState(true);
+  const [showReferral, setShowReferral] = useState(true);
   const [published, setPublished] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
@@ -54,6 +56,9 @@ export default function MyPagePage() {
   const [website, setWebsite] = useState("");
   const [websiteSaving, setWebsiteSaving] = useState(false);
   const [websiteSaved, setWebsiteSaved] = useState(false);
+  const [referralAmount, setReferralAmount] = useState(5000);
+  const [amountSaving, setAmountSaving] = useState(false);
+  const [amountSaved, setAmountSaved] = useState(false);
 
   useEffect(() => {
     fetch("/api/dashboard/my-page", { headers: { Authorization: `Bearer ${token}` } })
@@ -67,9 +72,11 @@ export default function MyPagePage() {
         setLinkedinUrl(p?.linkedinUrl || "");
         setBio(p?.bio || "");
         setShowAllRoles(p ? p.showAllRoles : true);
+        setShowReferral(p ? p.showReferral : true);
         setPublished(p?.published || false);
         setPhotoUrl(p?.photoUrl || null);
         setWebsite(d.org.website);
+        setReferralAmount(d.org.referralAmount);
       })
       .catch(() => {});
   }, [token]);
@@ -88,6 +95,7 @@ export default function MyPagePage() {
           linkedinUrl,
           bio,
           showAllRoles,
+          showReferral,
           published: wantPublished,
         }),
       });
@@ -137,6 +145,20 @@ export default function MyPagePage() {
       setPhotoNote("Upload failed — please try again.");
     }
     setUploading(false);
+  }
+
+  async function saveAmount() {
+    setAmountSaving(true);
+    setAmountSaved(false);
+    try {
+      const res = await fetch("/api/dashboard/org", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ referralAmount }),
+      });
+      if (res.ok) setAmountSaved(true);
+    } catch {}
+    setAmountSaving(false);
   }
 
   async function saveWebsite() {
@@ -258,15 +280,29 @@ export default function MyPagePage() {
           />
         </div>
 
-        <div className="dash-field" style={{ marginTop: 14 }}>
-          <label>Roles on your page</label>
-          <select
-            value={showAllRoles ? "all" : "mine"}
-            onChange={(e) => setShowAllRoles(e.target.value === "all")}
-          >
-            <option value="all">All of {org.name}&apos;s open roles</option>
-            <option value="mine">Only roles I created</option>
-          </select>
+        <div className="dash-formgrid" style={{ marginTop: 14 }}>
+          <div className="dash-field">
+            <label>Roles on your page</label>
+            <select
+              value={showAllRoles ? "all" : "mine"}
+              onChange={(e) => setShowAllRoles(e.target.value === "all")}
+            >
+              <option value="all">All of {org.name}&apos;s open roles</option>
+              <option value="mine">Only roles I created</option>
+            </select>
+          </div>
+          <div className="dash-field">
+            <label>Referral offer</label>
+            <select
+              value={showReferral ? "show" : "hide"}
+              onChange={(e) => setShowReferral(e.target.value === "show")}
+            >
+              <option value="show">
+                Show: refer an engineer for ${referralAmount.toLocaleString()}
+              </option>
+              <option value="hide">Hide the referral block</option>
+            </select>
+          </div>
         </div>
 
         <div className="dash-formfoot">
@@ -345,6 +381,48 @@ export default function MyPagePage() {
             ) : (
               <>
                 <div>{website || "Not set"}</div>
+                <small>Set by your company&apos;s owner account.</small>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="dash-setting">
+          <label>Referral amount</label>
+          <div>
+            {data.org.canEditWebsite ? (
+              <>
+                <div className="dash-mypage-web">
+                  <div className="dash-mypage-amount">
+                    <span>$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1000000}
+                      step={500}
+                      value={referralAmount}
+                      onChange={(e) => {
+                        setReferralAmount(Math.max(0, Math.round(Number(e.target.value) || 0)));
+                        setAmountSaved(false);
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="dash-btn dash-btn-2"
+                    onClick={saveAmount}
+                    disabled={amountSaving}
+                  >
+                    {amountSaving ? "Saving…" : amountSaved ? "Saved ✓" : "Save"}
+                  </button>
+                </div>
+                <small>
+                  Paid to anyone whose referral leads to a placement. Shown on
+                  every {org.name} recruiter page with the referral block on.
+                </small>
+              </>
+            ) : (
+              <>
+                <div>${referralAmount.toLocaleString()}</div>
                 <small>Set by your company&apos;s owner account.</small>
               </>
             )}

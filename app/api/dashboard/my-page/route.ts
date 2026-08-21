@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
 
   const [profile, orgRes] = await Promise.all([
     loadProfile(member.org.id, member.userId),
-    sbRest(`organizations?id=eq.${member.org.id}&select=website`),
+    sbRest(`organizations?id=eq.${member.org.id}&select=website,referral_amount`),
   ]);
   const [orgRow] = orgRes.ok
-    ? ((await orgRes.json()) as { website: string | null }[])
+    ? ((await orgRes.json()) as { website: string | null; referral_amount: number | null }[])
     : [];
 
   const suggestedSlug = (member.email.split("@")[0] || "")
@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
     suggestedSlug,
     org: {
       website: orgRow?.website || "",
+      referralAmount: orgRow?.referral_amount ?? 5000,
       canEditWebsite: member.memberRole === "owner",
     },
   });
@@ -50,6 +51,7 @@ export async function PUT(req: NextRequest) {
     linkedinUrl?: string;
     bio?: string;
     showAllRoles?: boolean;
+    showReferral?: boolean;
     published?: boolean;
   };
   try {
@@ -63,6 +65,7 @@ export async function PUT(req: NextRequest) {
   const linkedinUrl = String(body.linkedinUrl || "").trim().slice(0, 300);
   const bio = String(body.bio || "").trim().slice(0, 1200);
   const showAllRoles = body.showAllRoles !== false;
+  const showReferral = body.showReferral !== false;
   const published = body.published === true;
 
   if (!SLUG_RE.test(slug))
@@ -82,6 +85,7 @@ export async function PUT(req: NextRequest) {
       linkedin_url: linkedinUrl || null,
       bio,
       show_all_roles: showAllRoles,
+      show_referral: showReferral,
       published,
       updated_at: new Date().toISOString(),
     }),
