@@ -271,6 +271,18 @@ export default function BoardClient({
             <div>
               <div className="co-name">{org.name}</div>
               {company.profile.tagline && <div className="co-tagline">{company.profile.tagline}</div>}
+              {(() => {
+                const p = company.profile;
+                const facts = [p.headcount, p.founded, p.stage, p.funding, p.offices, p.workEnv]
+                  .filter(Boolean);
+                return facts.length > 0 ? (
+                  <div className="co-facts">
+                    {facts.map((f, i) => (
+                      <span key={i} className="co-fact">{f}</span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
             {company.website && (
               <a className="co-site" href={company.website} target="_blank" rel="noreferrer">

@@ -1,11 +1,15 @@
 "use client";
 // Settings section: the company page editor (owner-only). Everything is
-// optional — sections render on the public About tab only when filled.
-// Interview steps come from the org's stage template; here the owner adds
-// optional per-step durations and the note.
+// optional — the public About tab renders only what's filled in. Interview
+// rounds are their own blocks (seeded once from the interview stages, then
+// free text — the public page no longer has to mirror the pipeline).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
-import type { CompanyFounder, CompanyProfile } from "@/lib/server/company-page";
+import type {
+  CompanyFounder,
+  CompanyProfile,
+  CompanyRound,
+} from "@/lib/server/company-page";
 import type { StageDef } from "@/components/dashboard/jobs/StageEditor";
 
 type PageData = {
@@ -18,6 +22,7 @@ type PageData = {
   boardUrl: string;
 };
 
+const rid = (prefix: string) => `${prefix}${Math.random().toString(36).slice(2, 8)}`;
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
@@ -42,7 +47,19 @@ export default function CompanyPageEditor() {
       .then((d) => {
         if (!d) return;
         setData(d);
-        setP(d.profile);
+        // Seed the rounds once from the interview stages so setup starts
+        // non-empty; after that they're free text.
+        const profile = { ...d.profile };
+        if (profile.rounds.length === 0 && d.stages.length > 0) {
+          profile.rounds = d.stages.map((s) => ({
+            id: rid("r"),
+            name: s.label,
+            duration: "",
+            hint: "",
+            detail: "",
+          }));
+        }
+        setP(profile);
         setLogoPath(d.logoPath);
         setLogoUrl(d.logoUrl);
         setPublished(d.published);
@@ -126,12 +143,19 @@ export default function CompanyPageEditor() {
     );
     setSaved(false);
   }
-  function setCard(i: number, patch: Partial<{ title: string; text: string }>) {
+  function setRound(id: string, patch: Partial<CompanyRound>) {
+    setP((cur) =>
+      cur ? { ...cur, rounds: cur.rounds.map((r) => (r.id === id ? { ...r, ...patch } : r)) } : cur
+    );
+    setSaved(false);
+  }
+  function setSection(i: number, patch: Partial<{ title: string; subtitle: string; body: string }>) {
     setP((cur) => {
       if (!cur) return cur;
-      const cards = [...cur.buildingCards];
-      cards[i] = { ...cards[i], ...patch };
-      return { ...cur, buildingCards: cards };
+      const sections = [...cur.sections];
+      const base = sections[i] ?? { title: "", subtitle: "", body: "" };
+      sections[i] = { ...base, ...patch };
+      return { ...cur, sections };
     });
     setSaved(false);
   }
@@ -193,53 +217,58 @@ export default function CompanyPageEditor() {
         <div className="dash-field"><label>Tagline (one line under your name)</label>
           <input value={p.tagline} maxLength={120} onChange={(e) => setField("tagline", e.target.value)} placeholder="What your company does, in one line" />
         </div>
+
+        <div className="cpe-sub">Facts (chips under your name; each optional)</div>
+        <div className="cpe-cardrow">
+          <input value={p.headcount} maxLength={40} placeholder="120 people" onChange={(e) => setField("headcount", e.target.value)} />
+          <input value={p.founded} maxLength={30} placeholder="Founded 2021" onChange={(e) => setField("founded", e.target.value)} />
+        </div>
+        <div className="cpe-cardrow">
+          <input value={p.stage} maxLength={40} placeholder="Series B" onChange={(e) => setField("stage", e.target.value)} />
+          <input value={p.funding} maxLength={40} placeholder="$40M raised" onChange={(e) => setField("funding", e.target.value)} />
+        </div>
+        <div className="cpe-cardrow">
+          <input value={p.offices} maxLength={60} placeholder="SF · NYC" onChange={(e) => setField("offices", e.target.value)} />
+          <input value={p.workEnv} maxLength={40} placeholder="Hybrid / Remote / On-site" onChange={(e) => setField("workEnv", e.target.value)} />
+        </div>
+
         <div className="dash-field"><label>Mission headline (the big statement)</label>
           <textarea value={p.missionHeadline} rows={2} maxLength={220} onChange={(e) => setField("missionHeadline", e.target.value)} />
         </div>
         <div className="dash-field"><label>Mission detail</label>
           <textarea value={p.missionDetail} rows={3} maxLength={1200} onChange={(e) => setField("missionDetail", e.target.value)} />
         </div>
-        <div className="dash-field"><label>What we&apos;re building: headline</label>
-          <input value={p.buildingHeadline} maxLength={160} onChange={(e) => setField("buildingHeadline", e.target.value)} />
-        </div>
-        <div className="dash-field"><label>What we&apos;re building: detail</label>
-          <textarea value={p.buildingDetail} rows={3} maxLength={1200} onChange={(e) => setField("buildingDetail", e.target.value)} />
-        </div>
 
-        <div className="cpe-sub">Highlight cards (up to 3, optional)</div>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="cpe-cardrow">
-            <input
-              value={p.buildingCards[i]?.title || ""}
-              maxLength={60}
-              placeholder={`Card ${i + 1} title`}
-              onChange={(e) => setCard(i, { title: e.target.value, text: p.buildingCards[i]?.text || "" })}
-            />
-            <input
-              value={p.buildingCards[i]?.text || ""}
-              maxLength={240}
-              placeholder="One or two sentences"
-              onChange={(e) => setCard(i, { text: e.target.value, title: p.buildingCards[i]?.title || "" })}
-            />
+        <div className="cpe-sub">Content sections (up to 6 — product, culture, tech, anything)</div>
+        {p.sections.map((sec, i) => (
+          <div key={i} className="cpe-block">
+            <div className="cpe-cardrow">
+              <input value={sec.title} maxLength={80} placeholder="Section title" onChange={(e) => setSection(i, { title: e.target.value })} />
+              <input value={sec.subtitle} maxLength={160} placeholder="Subtitle (optional)" onChange={(e) => setSection(i, { subtitle: e.target.value })} />
+            </div>
+            <textarea value={sec.body} rows={3} maxLength={2000} placeholder="Body text" onChange={(e) => setSection(i, { body: e.target.value })} />
+            <button type="button" className="cpe-x cpe-block-x" title="Remove section"
+              onClick={() => setP((cur) => (cur ? { ...cur, sections: cur.sections.filter((_, j) => j !== i) } : cur))}>
+              ✕ Remove section
+            </button>
           </div>
         ))}
+        {p.sections.length < 6 && (
+          <button type="button" className="cpe-add"
+            onClick={() => setP((cur) => (cur ? { ...cur, sections: [...cur.sections, { title: "", subtitle: "", body: "" }] } : cur))}>
+            + Add a section
+          </button>
+        )}
 
-        <div className="cpe-sub">Founders (up to 4)</div>
+        <div className="cpe-sub">Founders (up to 6; the grid sizes itself)</div>
         {p.founders.map((f) => (
           <div key={f.id} className="cpe-founder">
             {f.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img className="cpe-fphoto" src={f.photoUrl} alt={f.name} />
             ) : (
-              <button
-                type="button"
-                className="cpe-fphoto cpe-fphoto-fb"
-                title="Upload photo"
-                onClick={() => {
-                  founderTarget.current = f.id;
-                  founderRef.current?.click();
-                }}
-              >
+              <button type="button" className="cpe-fphoto cpe-fphoto-fb" title="Upload photo"
+                onClick={() => { founderTarget.current = f.id; founderRef.current?.click(); }}>
                 {f.name ? initials(f.name) : "+"}
               </button>
             )}
@@ -251,46 +280,21 @@ export default function CompanyPageEditor() {
               <textarea value={f.bio} rows={2} maxLength={600} placeholder="Short bio" onChange={(e) => setFounder(f.id, { bio: e.target.value })} />
               <div className="cpe-cardrow">
                 <input value={f.linkedin} maxLength={300} placeholder="LinkedIn URL" onChange={(e) => setFounder(f.id, { linkedin: e.target.value })} />
-                <button
-                  className="dash-btn dash-btn-2"
-                  disabled={uploading === f.id}
-                  onClick={() => {
-                    founderTarget.current = f.id;
-                    founderRef.current?.click();
-                  }}
-                >
+                <button className="dash-btn dash-btn-2" disabled={uploading === f.id}
+                  onClick={() => { founderTarget.current = f.id; founderRef.current?.click(); }}>
                   {uploading === f.id ? "Uploading…" : f.photoUrl ? "Change photo" : "Upload photo"}
                 </button>
               </div>
             </div>
-            <button
-              type="button"
-              className="cpe-x"
-              title="Remove founder"
-              onClick={() => setP((cur) => (cur ? { ...cur, founders: cur.founders.filter((x) => x.id !== f.id) } : cur))}
-            >
+            <button type="button" className="cpe-x" title="Remove founder"
+              onClick={() => setP((cur) => (cur ? { ...cur, founders: cur.founders.filter((x) => x.id !== f.id) } : cur))}>
               ✕
             </button>
           </div>
         ))}
-        {p.founders.length < 4 && (
-          <button
-            type="button"
-            className="cpe-add"
-            onClick={() =>
-              setP((cur) =>
-                cur
-                  ? {
-                      ...cur,
-                      founders: [
-                        ...cur.founders,
-                        { id: `f${Math.random().toString(36).slice(2, 8)}`, name: "", title: "", bio: "", linkedin: "", photoPath: null, photoUrl: null },
-                      ],
-                    }
-                  : cur
-              )
-            }
-          >
+        {p.founders.length < 6 && (
+          <button type="button" className="cpe-add"
+            onClick={() => setP((cur) => (cur ? { ...cur, founders: [...cur.founders, { id: rid("f"), name: "", title: "", bio: "", linkedin: "", photoPath: null, photoUrl: null }] } : cur))}>
             + Add a founder
           </button>
         )}
@@ -306,32 +310,29 @@ export default function CompanyPageEditor() {
           }}
         />
 
-        <div className="cpe-sub">Interview process (steps come from your interview stages above)</div>
-        {data.stages.map((s) => (
-          <div key={s.id} className="cpe-cardrow cpe-steprow">
-            <span>{s.label}</span>
-            <input
-              value={p.stepDurations[s.id] || ""}
-              maxLength={30}
-              placeholder="Duration (30 min, Half day…)"
-              onChange={(e) =>
-                setField("stepDurations", { ...p.stepDurations, [s.id]: e.target.value })
-              }
-            />
+        <div className="cpe-sub">Interview rounds (up to 8 — shown as rows with a click-down drawer)</div>
+        {p.rounds.map((r) => (
+          <div key={r.id} className="cpe-block">
+            <div className="cpe-cardrow">
+              <input value={r.name} maxLength={60} placeholder="Round name" onChange={(e) => setRound(r.id, { name: e.target.value })} />
+              <input value={r.duration} maxLength={30} placeholder="Duration (30 min, Half day…)" onChange={(e) => setRound(r.id, { duration: e.target.value })} />
+            </div>
+            <input value={r.hint} maxLength={120} placeholder="One-line hint shown in the row" onChange={(e) => setRound(r.id, { hint: e.target.value })} className="cpe-wide" />
+            <textarea value={r.detail} rows={2} maxLength={800} placeholder="Full detail shown when the row is opened" onChange={(e) => setRound(r.id, { detail: e.target.value })} />
+            <button type="button" className="cpe-x cpe-block-x" title="Remove round"
+              onClick={() => setP((cur) => (cur ? { ...cur, rounds: cur.rounds.filter((x) => x.id !== r.id) } : cur))}>
+              ✕ Remove round
+            </button>
           </div>
         ))}
-        <div className="dash-field"><label>Process note</label>
-          <input value={p.processNote} maxLength={300} placeholder="Typically two weeks end to end…" onChange={(e) => setField("processNote", e.target.value)} />
-        </div>
-
-        <div className="cpe-sub">Facts</div>
-        <div className="cpe-cardrow">
-          <input value={p.headcount} maxLength={40} placeholder="Headcount (120)" onChange={(e) => setField("headcount", e.target.value)} />
-          <input value={p.founded} maxLength={20} placeholder="Founded (2021)" onChange={(e) => setField("founded", e.target.value)} />
-        </div>
-        <div className="cpe-cardrow">
-          <input value={p.stage} maxLength={40} placeholder="Stage (Series B)" onChange={(e) => setField("stage", e.target.value)} />
-          <input value={p.offices} maxLength={60} placeholder="Offices (SF · NYC)" onChange={(e) => setField("offices", e.target.value)} />
+        {p.rounds.length < 8 && (
+          <button type="button" className="cpe-add"
+            onClick={() => setP((cur) => (cur ? { ...cur, rounds: [...cur.rounds, { id: rid("r"), name: "", duration: "", hint: "", detail: "" }] } : cur))}>
+            + Add a round
+          </button>
+        )}
+        <div className="dash-field"><label>Process note (closing line under the rounds)</label>
+          <input value={p.processNote} maxLength={300} placeholder="We give feedback after every round…" onChange={(e) => setField("processNote", e.target.value)} />
         </div>
 
         <div className="dash-formfoot" style={{ marginTop: 14 }}>

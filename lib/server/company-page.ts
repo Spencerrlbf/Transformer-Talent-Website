@@ -3,7 +3,6 @@
 // from the org's interview stage template; this doc only carries the
 // per-step durations and the note.
 import { sbRest } from "./supabase";
-import { DEFAULT_STAGES, sanitizeStages, type InterviewStage } from "./interview-stages";
 
 export type CompanyFounder = {
   id: string;
@@ -16,28 +15,41 @@ export type CompanyFounder = {
   photoUrl?: string | null;
 };
 
+export type CompanySection = { title: string; subtitle: string; body: string };
+
+export type CompanyRound = {
+  id: string;
+  name: string;
+  duration: string;
+  /** One line shown in the collapsed row. */
+  hint: string;
+  /** Full paragraph shown in the drawer. */
+  detail: string;
+};
+
 export type CompanyProfile = {
   tagline: string;
   missionHeadline: string;
   missionDetail: string;
-  buildingHeadline: string;
-  buildingDetail: string;
-  buildingCards: { title: string; text: string }[];
+  /** Free-form content sections: title / subtitle / body. */
+  sections: CompanySection[];
   founders: CompanyFounder[];
+  /** Interview rounds the company draws from (decoupled from pipeline stages). */
+  rounds: CompanyRound[];
   processNote: string;
-  /** stage id -> duration label ("30 min", "Half day") */
-  stepDurations: Record<string, string>;
+  /** Facts rendered as chips with the identity, exactly as typed. */
   headcount: string;
   founded: string;
   stage: string;
+  funding: string;
   offices: string;
+  workEnv: string;
 };
 
 export type CompanyPage = {
   profile: CompanyProfile;
   logoUrl: string | null;
   website: string;
-  stages: InterviewStage[];
 };
 
 const s = (v: unknown, max: number): string => String(v ?? "").trim().slice(0, max);
@@ -55,14 +67,18 @@ export function sanitizeProfile(input: unknown, orgId: string): CompanyProfile {
     const p = s(v, 300);
     return p && p.startsWith(`${orgId}/`) && !p.includes("..") ? p : null;
   };
+  const stableId = (v: unknown, prefix: string): string => {
+    const id = s(v, 24);
+    return /^[a-z0-9_-]{1,24}$/.test(id)
+      ? id
+      : `${prefix}${Math.random().toString(36).slice(2, 8)}`;
+  };
   const founders = (Array.isArray(o.founders) ? o.founders : [])
-    .slice(0, 4)
+    .slice(0, 6)
     .map((f) => {
       const r = (f ?? {}) as Record<string, unknown>;
-      let id = s(r.id, 24);
-      if (!/^[a-z0-9_-]{1,24}$/.test(id)) id = `f${Math.random().toString(36).slice(2, 8)}`;
       return {
-        id,
+        id: stableId(r.id, "f"),
         name: s(r.name, 120),
         title: s(r.title, 80),
         bio: s(r.bio, 600),
@@ -71,35 +87,40 @@ export function sanitizeProfile(input: unknown, orgId: string): CompanyProfile {
       };
     })
     .filter((f) => f.name);
-  const cards = (Array.isArray(o.buildingCards) ? o.buildingCards : [])
-    .slice(0, 3)
+  const sections = (Array.isArray(o.sections) ? o.sections : [])
+    .slice(0, 6)
     .map((c) => {
       const r = (c ?? {}) as Record<string, unknown>;
-      return { title: s(r.title, 60), text: s(r.text, 240) };
+      return { title: s(r.title, 80), subtitle: s(r.subtitle, 160), body: s(r.body, 2000) };
     })
-    .filter((c) => c.title);
-  const durations: Record<string, string> = {};
-  const d = (o.stepDurations ?? {}) as Record<string, unknown>;
-  for (const k of Object.keys(d).slice(0, 12)) {
-    if (/^[a-z0-9_-]{1,24}$/.test(k)) {
-      const v = s(d[k], 30);
-      if (v) durations[k] = v;
-    }
-  }
+    .filter((c) => c.title && c.body);
+  const rounds = (Array.isArray(o.rounds) ? o.rounds : [])
+    .slice(0, 8)
+    .map((c) => {
+      const r = (c ?? {}) as Record<string, unknown>;
+      return {
+        id: stableId(r.id, "r"),
+        name: s(r.name, 60),
+        duration: s(r.duration, 30),
+        hint: s(r.hint, 120),
+        detail: s(r.detail, 800),
+      };
+    })
+    .filter((c) => c.name);
   return {
     tagline: s(o.tagline, 120),
     missionHeadline: s(o.missionHeadline, 220),
     missionDetail: s(o.missionDetail, 1200),
-    buildingHeadline: s(o.buildingHeadline, 160),
-    buildingDetail: s(o.buildingDetail, 1200),
-    buildingCards: cards,
+    sections,
     founders,
+    rounds,
     processNote: s(o.processNote, 300),
-    stepDurations: durations,
     headcount: s(o.headcount, 40),
-    founded: s(o.founded, 20),
+    founded: s(o.founded, 30),
     stage: s(o.stage, 40),
+    funding: s(o.funding, 40),
     offices: s(o.offices, 60),
+    workEnv: s(o.workEnv, 40),
   };
 }
 
@@ -110,13 +131,12 @@ type OrgRow = {
   company_page_published: boolean;
   logo_path: string | null;
   website: string | null;
-  interview_stages: unknown;
 };
 
 /** Published company page for the public board; null when unpublished. */
 export async function loadCompanyPage(orgId: string): Promise<CompanyPage | null> {
   const res = await sbRest(
-    `organizations?id=eq.${orgId}&select=company_profile,company_page_published,logo_path,website,interview_stages`
+    `organizations?id=eq.${orgId}&select=company_profile,company_page_published,logo_path,website`
   );
   const [row] = res.ok ? ((await res.json()) as OrgRow[]) : [];
   if (!row || !row.company_page_published) return null;
@@ -129,6 +149,5 @@ export async function loadCompanyPage(orgId: string): Promise<CompanyPage | null
     profile,
     logoUrl: assetPublicUrl(row.logo_path),
     website: row.website || "",
-    stages: sanitizeStages(row.interview_stages) || DEFAULT_STAGES,
   };
 }

@@ -2042,3 +2042,34 @@ body:has(.board-app) {
 .cpe-x:hover { color: #b42318; }
 .cpe-add { border: 1px dashed #c9cfd8; border-radius: 10px; background: none; padding: 9px; color: #6b7280; font: inherit; font-size: 12.5px; cursor: pointer; margin-bottom: 8px; display: block; width: 100%; max-width: 560px; }
 .cpe-add:hover { border-color: #2a5bd7; color: #2a5bd7; }
+
+/* Company page revision: facts chips, section subtitles, round drawers */
+.co-facts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.co-fact { font-size: 11.5px; font-weight: 650; color: #3d434c; background: #f4f6f8; border: 1px solid #e6e8ec; border-radius: 999px; padding: 3px 10px; }
+.coab-subtitle { font-size: 14px; color: #6b7280; font-weight: 600; margin: 3px 0 10px; }
+.coab-hireintro { font-size: 13px; color: #6b7280; margin: 4px 0 0; max-width: 66ch; }
+.coab-pnote { margin-top: 14px; }
+.crd-list { margin-top: 14px; border: 1px solid #e6e8ec; border-radius: 12px; overflow: hidden; }
+.crd-row { border-bottom: 1px solid #eef0f3; }
+.crd-row:last-child { border-bottom: 0; }
+.crd-row summary { display: flex; align-items: center; gap: 12px; padding: 11px 16px; cursor: pointer; list-style: none; }
+.crd-row summary::-webkit-details-marker { display: none; }
+.crd-row summary:hover { background: #fafbfc; }
+.crd-num { width: 22px; height: 22px; border-radius: 50%; background: #f1f3f6; color: #4a5160; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.crd-row b { font-size: 13px; flex: none; min-width: 150px; }
+.crd-hint { font-size: 12px; color: #6b7280; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crd-dur { font-size: 11.5px; color: #8a919c; font-weight: 650; white-space: nowrap; margin-left: auto; }
+.crd-car { color: #a2a8b3; font-size: 11px; transition: transform 0.15s; flex: none; }
+.crd-row[open] .crd-car { transform: rotate(90deg); }
+.crd-row[open] summary { background: #fafbfc; }
+.crd-drawer { padding: 4px 16px 16px 50px; background: #fafbfc; border-top: 1px dashed #e6e8ec; }
+.crd-drawer p { font-size: 13px; color: #4a5160; line-height: 1.65; max-width: 62ch; padding-top: 10px; margin: 0; }
+.coab-founders { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+@media (max-width: 700px) {
+  .crd-row b { min-width: 0; }
+  .crd-hint { display: none; }
+}
+/* editor blocks */
+.cpe-block { border: 1px solid #e6e8ec; border-radius: 10px; padding: 12px; margin-bottom: 8px; max-width: 560px; display: flex; flex-direction: column; gap: 8px; }
+.cpe-block textarea, .cpe-wide { border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; width: 100%; }
+.cpe-block-x { align-self: flex-end; font-size: 11.5px; }

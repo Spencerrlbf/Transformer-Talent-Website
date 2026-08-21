@@ -1,8 +1,8 @@
 "use client";
 // The company page proper: the About tab on a tenant board. Every section
-// renders only when its content exists, so a half-filled profile still
-// reads as a finished page. Interview steps come from the org's stage
-// template; durations and the note are page content.
+// renders only when its content exists. Facts live in the identity strip
+// (BoardClient); this component is the story: mission, free-form sections,
+// founders, and the interview rounds with click-down drawers.
 import type { CompanyPage } from "@/lib/server/company-page";
 
 const initials = (name: string) =>
@@ -18,12 +18,6 @@ export default function CompanyAbout({
   onSeeRoles: () => void;
 }) {
   const p = company.profile;
-  const stats = [
-    p.headcount && { v: p.headcount, l: "People" },
-    p.founded && { v: p.founded, l: "Founded" },
-    p.stage && { v: p.stage, l: "Stage" },
-    p.offices && { v: p.offices, l: "Offices" },
-  ].filter(Boolean) as { v: string; l: string }[];
 
   return (
     <div className="coab">
@@ -35,38 +29,17 @@ export default function CompanyAbout({
         </div>
       )}
 
-      {stats.length > 0 && (
-        <div className="coab-stats" style={{ gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
-          {stats.map((st) => (
-            <div key={st.l} className="coab-stat">
-              <b>{st.v}</b>
-              <span>{st.l}</span>
-            </div>
-          ))}
+      {p.sections.map((sec, i) => (
+        <div key={i} className="coab-sec">
+          <h2>{sec.title}</h2>
+          {sec.subtitle && <div className="coab-subtitle">{sec.subtitle}</div>}
+          <p>{sec.body}</p>
         </div>
-      )}
-
-      {(p.buildingHeadline || p.buildingDetail || p.buildingCards.length > 0) && (
-        <div className="coab-sec">
-          <div className="coab-eyebrow">What we&apos;re building</div>
-          {p.buildingHeadline && <h2>{p.buildingHeadline}</h2>}
-          {p.buildingDetail && <p>{p.buildingDetail}</p>}
-          {p.buildingCards.length > 0 && (
-            <div className="coab-problems">
-              {p.buildingCards.map((c, i) => (
-                <div key={i} className="coab-problem">
-                  <b>{c.title}</b>
-                  <p>{c.text}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      ))}
 
       {p.founders.length > 0 && (
         <div className="coab-sec">
-          <div className="coab-eyebrow">Founders</div>
+          <h2>Founders</h2>
           <div className="coab-founders">
             {p.founders.map((f) => (
               <div key={f.id} className="coab-founder">
@@ -92,25 +65,33 @@ export default function CompanyAbout({
         </div>
       )}
 
-      {company.stages.length > 0 && (
+      {p.rounds.length > 0 && (
         <div className="coab-sec">
           <div className="coab-eyebrow">How we hire</div>
-          <h2>
-            {company.stages.length} step{company.stages.length === 1 ? "" : "s"} from first
-            conversation to offer.
-          </h2>
-          <div className="coab-process">
-            {company.stages.map((s, i) => (
-              <div key={s.id} className="coab-pstep">
-                <span className="coab-pdot">{i + 1}</span>
-                <div className="coab-pname">{s.label}</div>
-                {p.stepDurations[s.id] && (
-                  <div className="coab-psub">{p.stepDurations[s.id]}</div>
+          <h2>The rounds we draw from.</h2>
+          <p className="coab-hireintro">
+            The exact steps vary by role; your recruiter confirms the process up front. Click a
+            round for the full detail.
+          </p>
+          <div className="crd-list">
+            {p.rounds.map((r, i) => (
+              <details key={r.id} className="crd-row">
+                <summary>
+                  <span className="crd-num">{i + 1}</span>
+                  <b>{r.name}</b>
+                  {r.hint && <span className="crd-hint">{r.hint}</span>}
+                  {r.duration && <span className="crd-dur">{r.duration}</span>}
+                  <span className="crd-car">▶</span>
+                </summary>
+                {r.detail && (
+                  <div className="crd-drawer">
+                    <p>{r.detail}</p>
+                  </div>
                 )}
-              </div>
+              </details>
             ))}
           </div>
-          {p.processNote && <p className="coab-pnote">{p.processNote}</p>}
+          {p.processNote && <p className="coab-hireintro coab-pnote">{p.processNote}</p>}
         </div>
       )}
 
