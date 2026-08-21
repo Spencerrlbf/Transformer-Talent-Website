@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import StageEditor, { type StageDef } from "@/components/dashboard/jobs/StageEditor";
+import CompanyPageEditor from "@/components/dashboard/CompanyPageEditor";
 
 type CreditData = {
   summary: { granted: number; spent: number; held: number; balance: number; available: number };
@@ -108,6 +109,7 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+        <CompanyPageEditor />
         <div className="dash-setting">
           <label>Sourcing credits</label>
           <div>
