@@ -143,6 +143,17 @@ export default function TalentMatcher() {
         <input name="company" required maxLength={200} autoComplete="organization" />
       </label>
       <label>
+        your_linkedin
+        <input
+          name="linkedin"
+          type="url"
+          required
+          maxLength={300}
+          placeholder="https://www.linkedin.com/in/…"
+          autoComplete="url"
+        />
+      </label>
+      <label>
         job_description
         <textarea
           name="jdText"

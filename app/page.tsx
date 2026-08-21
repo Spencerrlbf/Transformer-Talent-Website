@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PLACEMENTS } from "@/data/placements";
-import SalaryChart from "@/components/SalaryChart";
 
 const heroGrid: React.CSSProperties = {
   display: "grid",
@@ -17,16 +16,20 @@ export default function Home() {
         <section style={heroGrid}>
           <div>
             <h1 className="h-display b1">
-              We find the
+              Top engineers.
               <br />
-              engineers who
+              The best-backed
               <br />
-              <span>build the future.</span>
+              <span>start-ups.</span>
             </h1>
             <p className="sub b2" style={{ marginTop: "1.8rem" }}>
-              Transformer Talent places <b>AI/ML and software engineers</b>{" "}
-              with startups backed by <b>Sequoia, 8VC, and Felicis</b> — from
-              first engineering hire to Chief Science Officer.
+              Transformer Talent specialises in placing <b>top AI/ML and
+              software engineers</b> at venture-backed start-ups, from first
+              engineering hire to Chief Science Officer.
+            </p>
+            <p className="b2" style={{ marginTop: "1.4rem", fontSize: "0.66rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fog-30)" }}>
+              Placements at companies backed by{" "}
+              <b style={{ color: "var(--fog-60)" }}>Sequoia · 8VC · Felicis · Y Combinator · a16z</b>
             </p>
             <div className="cta-row b3" style={{ marginTop: "2.4rem" }}>
               <Link className="btn hot" href="/talent">
@@ -70,9 +73,9 @@ export default function Home() {
         </section>
 
         <div className="sec-label">
-          <b>001</b> — placements --sample
+          <b>001</b> — placements --closed
         </div>
-        <Link href="/placements" className="marquee-wrap" style={{ display: "block", textDecoration: "none" }}>
+        <div className="marquee-wrap" style={{ display: "block" }}>
           <div className="marquee">
             {[...PLACEMENTS, ...PLACEMENTS, ...PLACEMENTS].map((p, i) => (
               <span key={i} style={{ display: "contents" }}>
@@ -85,49 +88,10 @@ export default function Home() {
               </span>
             ))}
           </div>
-        </Link>
-
-        <div className="sec-label">
-          <b>002</b> — team --info
-        </div>
-        <div className="grid2">
-          <div className="cell">
-            <SalaryChart compact />
-            <dl className="kv" style={{ marginTop: "1.4rem" }}>
-              <dt>FIRM</dt>
-              <dd>Transformer Talent</dd>
-              <dt>MODEL</dt>
-              <dd>Senior recruiters, end to end</dd>
-              <dt>BASE</dt>
-              <dd>SF · NYC · Seattle · DC</dd>
-              <dt>FOCUS</dt>
-              <dd>AI/ML &amp; software engineering</dd>
-            </dl>
-          </div>
-          <div className="cell">
-            <h3>
-              A search firm that
-              <br />
-              <span>works like a team.</span>
-            </h3>
-            <p>
-              Every search gets a senior recruiter who takes the brief, makes
-              the calls, and manages the close — backed by a team and tooling
-              that keep the pipeline moving while you sleep.
-            </p>
-            <p>
-              Clients get one accountable point of contact. Candidates get
-              recruiters who can actually explain the tech stack. Searches
-              close in weeks, not quarters.
-            </p>
-            <Link className="btn cold" href="/process" style={{ marginTop: "0.4rem" }}>
-              How a search works →
-            </Link>
-          </div>
         </div>
 
         <div className="sec-label">
-          <b>003</b> — match --try
+          <b>002</b> — match --try
         </div>
         <div className="bigcta">
           <h2>

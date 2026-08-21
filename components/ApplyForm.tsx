@@ -26,17 +26,10 @@ export interface ApplyRole {
   slug: string;
 }
 
-interface MatchedRole {
-  jobId: string;
-  title: string;
-  salary: string;
-  slug: string;
-}
-
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "ok"; matches: MatchedRole[]; applicationId: string | null; wasSpeculative: boolean }
+  | { kind: "ok"; roleTitles: string[]; wasSpeculative: boolean }
   | { kind: "error"; message: string };
 
 export default function ApplyForm({
@@ -50,8 +43,6 @@ export default function ApplyForm({
 }) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [selected, setSelected] = useState<string[]>([]);
-  const [added, setAdded] = useState<string[]>([]);
-  const [adding, setAdding] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
   // Selection is shared with the roles table via localStorage; ?role= merges in.
@@ -68,21 +59,6 @@ export default function ApplyForm({
   const selectedRoles = selected
     .map((id) => roles.find((r) => r.jobId === id))
     .filter((r): r is ApplyRole => Boolean(r));
-
-  async function addRole(applicationId: string, jobId: string) {
-    setAdding(jobId);
-    try {
-      const res = await fetch("/api/apply/add-role", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicationId, jobId }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok) setAdded((a) => [...a, jobId]);
-    } finally {
-      setAdding(null);
-    }
-  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -102,14 +78,12 @@ export default function ApplyForm({
       const res = await fetch("/api/apply", { method: "POST", body: data });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok) {
+        const roleTitles = roles
+          .filter((r) => selected.includes(r.jobId))
+          .map((r) => r.title);
         form.reset();
         clearSelection();
-        setStatus({
-          kind: "ok",
-          matches: json.matches || [],
-          applicationId: json.applicationId || null,
-          wasSpeculative: isSpeculative,
-        });
+        setStatus({ kind: "ok", roleTitles, wasSpeculative: isSpeculative });
       } else {
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
@@ -122,63 +96,16 @@ export default function ApplyForm({
   if (status.kind === "ok") {
     return (
       <div className="cart-panel">
-        <p className="form-status ok" style={{ marginBottom: "1.2rem" }}>
+        <p className="form-status ok" style={{ marginBottom: "0.6rem" }}>
           {status.wasSpeculative
-            ? "Resume received. We're matching you against every open role — and new ones as they arrive — and will contact you when there's a genuine fit."
-            : "Application received. We review every submission personally and will be in touch when there's a fit."}
+            ? "Thank you for your application."
+            : status.roleTitles.length > 0
+              ? `Thank you for applying to ${status.roleTitles.join(", ")}.`
+              : "Thank you for your application."}
         </p>
-        {status.matches.length > 0 && (
-          <>
-            <div className="sec-label" style={{ paddingTop: 0 }}>
-              <b>MATCH</b> — you also look like a fit for
-            </div>
-            <div className="logs" style={{ marginBottom: "1.2rem" }}>
-              {status.matches.map((m) => {
-                const isAdded = added.includes(m.jobId);
-                return (
-                  <div
-                    key={m.jobId}
-                    className="log"
-                    style={{ gridTemplateColumns: "1fr auto", alignItems: "center", gap: "0.6rem" }}
-                  >
-                    <span>
-                      <Link href={`/roles/${m.slug}`} target="_blank" rel="noreferrer" className="co" style={{ fontSize: "0.74rem" }}>
-                        {m.title} ↗
-                      </Link>
-                      <span style={{ display: "block", color: "var(--signal)", fontSize: "0.66rem" }}>{m.salary}</span>
-                    </span>
-                    {!status.wasSpeculative && status.applicationId && (
-                      <button
-                        type="button"
-                        onClick={() => !isAdded && addRole(status.applicationId!, m.jobId)}
-                        disabled={isAdded || adding === m.jobId}
-                        className="btn"
-                        style={{
-                          fontSize: "0.6rem",
-                          padding: "0.3rem 0.5rem",
-                          cursor: isAdded ? "default" : "pointer",
-                          color: isAdded ? "var(--ok)" : undefined,
-                        }}
-                      >
-                        {isAdded ? "☑ ADDED" : adding === m.jobId ? "ADDING…" : "☐ ADD"}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <p className="page-intro" style={{ fontSize: "0.72rem" }}>
-              {status.wasSpeculative
-                ? "These are your closest instant matches — we'll be in touch about them, no further action needed."
-                : (
-                  <>
-                    Open a role in a new tab to review it, then tick <b>add</b> to be considered
-                    for it too — no need to fill anything in again.
-                  </>
-                )}
-            </p>
-          </>
-        )}
+        <p className="page-intro" style={{ fontSize: "0.74rem" }}>
+          We will be in touch within 48 hours.
+        </p>
       </div>
     );
   }
@@ -222,10 +149,10 @@ export default function ApplyForm({
         ))}
         {isSpeculative ? (
           <div className="cart-empty" style={{ borderColor: "var(--fog-30)", color: "var(--fog-60)", padding: "0.9rem" }}>
-            <b style={{ color: "var(--fog)" }}>No role selected — we&apos;ll do the matching.</b>
+            <b style={{ color: "var(--fog)" }}>No role selected? No problem.</b>
             <br />
-            Your resume and profile run against all {roles.length} open roles (and new ones as
-            they arrive). We contact you when there&apos;s a genuine fit.
+            Send your resume and we will consider you for all {roles.length} open roles, and for
+            new ones as they arrive.
           </div>
         ) : selected.length === 0 ? (
           <div className="cart-empty">
@@ -248,7 +175,7 @@ export default function ApplyForm({
         </div>
         <p style={{ color: "var(--fog-60)", fontSize: "0.72rem", margin: "0 0 0.6rem", lineHeight: 1.5 }}>
           {isSpeculative
-            ? "Complete this form and attach your resume — we'll match you and be in touch."
+            ? "Complete this form and attach your resume. We will be in touch within 48 hours."
             : selected.length > 0
               ? `Complete this form to finish your application for the ${selected.length} selected role${selected.length > 1 ? "s" : ""} — one form covers them all.`
               : "Pick roles from the table, then complete this form to apply."}
@@ -312,12 +239,10 @@ export default function ApplyForm({
         />
         <button type="submit" className="btn hot" disabled={status.kind === "sending"} style={{ width: "100%" }}>
           {status.kind === "sending"
-            ? "SUBMITTING & MATCHING…"
-            : isSpeculative
-              ? "SUBMIT FOR MATCHING →"
-              : selected.length > 0
-                ? `SUBMIT — ${selected.length} ROLE${selected.length > 1 ? "S" : ""} →`
-                : "SUBMIT APPLICATION →"}
+            ? "SUBMITTING…"
+            : selected.length > 0
+              ? `SUBMIT (${selected.length} ROLE${selected.length > 1 ? "S" : ""}) →`
+              : "SUBMIT APPLICATION →"}
         </button>
         {(formError || status.kind === "error") && (
           <p className="form-status error">{formError || (status.kind === "error" ? status.message : "")}</p>
