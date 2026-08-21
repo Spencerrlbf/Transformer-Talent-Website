@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
+import StageEditor, { type StageDef } from "@/components/dashboard/jobs/StageEditor";
 
 type CreditData = {
   summary: { granted: number; spent: number; held: number; balance: number; available: number };
@@ -11,13 +12,48 @@ export default function SettingsPage() {
   const { org, email, token } = useDash();
   const boardUrl = `https://www.transformertalent.com/board/${org.slug}`;
   const [credits, setCredits] = useState<CreditData | null>(null);
+  const [stages, setStages] = useState<StageDef[] | null>(null);
+  const [canEditStages, setCanEditStages] = useState(false);
+  const [editingStages, setEditingStages] = useState(false);
+  const [stagesSaving, setStagesSaving] = useState(false);
+  const [stagesError, setStagesError] = useState("");
 
   useEffect(() => {
     fetch("/api/dashboard/credits", { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => (r.ok ? r.json() : null))
       .then(setCredits)
       .catch(() => {});
+    fetch("/api/dashboard/org", { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.interviewStages) {
+          setStages(d.interviewStages);
+          setCanEditStages(!!d.canEdit);
+        }
+      })
+      .catch(() => {});
   }, [token]);
+
+  async function saveStages(next: StageDef[]) {
+    setStagesSaving(true);
+    setStagesError("");
+    try {
+      const res = await fetch("/api/dashboard/org", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ interviewStages: next }),
+      });
+      if (res.ok) {
+        setStages(next);
+        setEditingStages(false);
+      } else {
+        setStagesError("Couldn't save — please try again.");
+      }
+    } catch {
+      setStagesError("Couldn't save — please try again.");
+    }
+    setStagesSaving(false);
+  }
 
   return (
     <>
@@ -43,6 +79,33 @@ export default function SettingsPage() {
               careers link here, or embed it on your own site with one line of
               code (coming with the board).
             </small>
+          </div>
+        </div>
+        <div className="dash-setting">
+          <label>Interview stages</label>
+          <div>
+            {stages ? (
+              <>
+                <ol className="stg-list">
+                  {stages.map((s) => (
+                    <li key={s.id}>{s.label}</li>
+                  ))}
+                </ol>
+                {canEditStages ? (
+                  <button className="stg-editbtn" onClick={() => setEditingStages(true)}>
+                    Edit stages
+                  </button>
+                ) : (
+                  <small>Set by your company&apos;s owner account.</small>
+                )}
+                <small>
+                  The default steps between Replied and Offer for new jobs.
+                  Each job can override its own on the job page.
+                </small>
+              </>
+            ) : (
+              <small>Loading…</small>
+            )}
           </div>
         </div>
         <div className="dash-setting">
@@ -76,6 +139,20 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      {editingStages && stages && (
+        <StageEditor
+          title={`Interview stages · ${org.name}`}
+          intro="The default steps between Replied and Offer. New jobs inherit these; existing jobs with their own custom stages keep them."
+          initial={stages}
+          saving={stagesSaving}
+          error={stagesError}
+          onSave={saveStages}
+          onClose={() => {
+            setEditingStages(false);
+            setStagesError("");
+          }}
+        />
+      )}
     </>
   );
 }

@@ -507,7 +507,8 @@ export async function saveUnifiedStatus(
   orgId: string,
   key: string,
   jobId: string,
-  status: string
+  status: string,
+  interviewStage?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!(STAGES as readonly string[]).includes(status)) return { ok: false, error: "bad_status" };
   const roleRes = await sbRest(
@@ -515,6 +516,11 @@ export async function saveUnifiedStatus(
   );
   if (!roleRes.ok || ((await roleRes.json()) as unknown[]).length === 0)
     return { ok: false, error: "job_not_found" };
+  // Sub-stage only rides along with "interviewing"; any other status clears it.
+  const stage =
+    status === "interviewing" && typeof interviewStage === "string" && interviewStage
+      ? interviewStage.slice(0, 24)
+      : null;
   const res = await sbRest(
     `candidate_role_statuses?on_conflict=organization_id,candidate_key,job_id`,
     {
@@ -525,6 +531,7 @@ export async function saveUnifiedStatus(
         candidate_key: key,
         job_id: jobId,
         status,
+        interview_stage: stage,
         updated_at: new Date().toISOString(),
       }),
     }
