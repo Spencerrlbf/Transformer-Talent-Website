@@ -4,6 +4,7 @@ import { sbInsert, sbRest } from "@/lib/server/supabase";
 import { linkedinUsername } from "@/lib/server/applicants";
 import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
+import { sendReferralConfirmation } from "@/lib/server/email";
 
 export const maxDuration = 60;
 
@@ -125,6 +126,16 @@ export async function POST(req: NextRequest) {
       amount,
       status: "duplicate",
     }).catch((e) => console.error("duplicate referral insert failed", e));
+    // Identical confirmation as the fresh path — the referrer must never be
+    // able to tell we already knew the person.
+    after(async () => {
+      await sendReferralConfirmation({
+        to: referrerEmail,
+        referrerName,
+        candidateLinkedin,
+        amount,
+      });
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -186,6 +197,12 @@ export async function POST(req: NextRequest) {
         })();
 
   after(async () => {
+    await sendReferralConfirmation({
+      to: referrerEmail,
+      referrerName,
+      candidateLinkedin,
+      amount,
+    });
     await runApplicantPipeline({
       submissionId: submission.id,
       name: "",
