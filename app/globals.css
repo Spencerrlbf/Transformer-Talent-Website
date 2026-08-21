@@ -1954,9 +1954,8 @@ body:has(.board-app) {
 .pb-nmtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pb-x {
   border: 0; background: none; color: #c3c9d2; font-size: 12px; cursor: pointer;
-  padding: 0 2px; flex: none; opacity: 0; transition: opacity 0.12s;
+  padding: 0 2px; flex: none;
 }
-.pb-card:hover .pb-x { opacity: 1; }
 .pb-x:hover { color: #b42318; }
 .pb-confirm { border-color: #f2b8b5; background: #fef3f2; cursor: default; }
 .pb-confirm-q { font-weight: 650; font-size: 12.5px; color: #b42318; }
@@ -1964,4 +1963,3 @@ body:has(.board-app) {
 .pb-confirm-yes { border: 0; background: #b42318; color: #fff; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 700; padding: 5px 12px; cursor: pointer; }
 .pb-confirm-no { border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 650; padding: 5px 12px; cursor: pointer; }
 .pb-confirm-note { font-size: 10.5px; color: #8a919c; }
-@media (hover: none) { .pb-x { opacity: 1; } }
