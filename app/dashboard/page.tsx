@@ -13,6 +13,7 @@ type Job = {
   workplace: string;
   yoe: string;
   applicants: number;
+  linked?: boolean;
 };
 
 export default function JobsPage() {
@@ -76,7 +77,14 @@ export default function JobsPage() {
                 onClick={() => router.push(`/dashboard/jobs/${j.id}`)}
               >
                 <td>
-                  <span className="dash-name">{j.title}</span>
+                  <span className="dash-name">
+                    {j.title}
+                    {j.linked && (
+                      <span className="dash-linkchip" title="Linked to a client company — network sends land in their pipeline">
+                        ⚡ linked
+                      </span>
+                    )}
+                  </span>
                   <small>
                     #{j.id}
                     {j.workplace ? ` · ${j.workplace}` : ""}

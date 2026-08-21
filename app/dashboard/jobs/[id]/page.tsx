@@ -13,6 +13,7 @@ import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
 import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
 import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
+import ClientLinkCard from "@/components/dashboard/jobs/ClientLinkCard";
 
 type Job = {
   id: string;
@@ -30,6 +31,7 @@ type Job = {
   applicants: number;
   targetCompanies: TargetCompany[];
   companyName: string;
+  linkedOrgRole: { orgId: string; jobId: string } | null;
 };
 
 const TABS = [
@@ -215,6 +217,13 @@ function JobWorkspace({ id }: { id: string }) {
               onSaved={(targetCompanies) => setJob({ ...job, targetCompanies })}
             />
             <InterviewStagesCard jobId={job.id} />
+            {org.slug === "transformer-talent" && (
+              <ClientLinkCard
+                jobId={job.id}
+                initial={job.linkedOrgRole}
+                onSaved={(linkedOrgRole) => setJob({ ...job, linkedOrgRole })}
+              />
+            )}
             {job.skills.length > 0 && (
               <>
                 <div className="dash-sec">Skills</div>
