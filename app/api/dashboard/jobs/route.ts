@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const [rolesRes, appsRes] = await Promise.all([
     sbRest(
-      `org_roles?organization_id=eq.${member.org.id}&select=external_id,title,status,salary,locations,workplace,yoe,updated_at&order=status.asc,title.asc`
+      `org_roles?organization_id=eq.${member.org.id}&select=external_id,title,status,salary,locations,workplace,yoe,updated_at,linked_org_role&order=status.asc,title.asc`
     ),
     sbRest(`website_applications?organization_id=eq.${member.org.id}&select=role_ids`),
   ]);
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     workplace: string | null;
     yoe: string | null;
     updated_at: string;
+    linked_org_role: unknown;
   }[];
   const apps = appsRes.ok ? ((await appsRes.json()) as { role_ids: string[] | null }[]) : [];
 
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
       workplace: r.workplace || "",
       yoe: r.yoe || "",
       applicants: counts.get(r.external_id) || 0,
+      linked: !!r.linked_org_role,
     })),
   });
 }

@@ -11,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 async function loadJob(orgId: string, externalId: string) {
   const res = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(externalId)}` +
-      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name&limit=1`
+      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role&limit=1`
   );
   if (!res.ok) return null;
   const [row] = await res.json();
@@ -48,6 +48,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       applicants,
       targetCompanies: Array.isArray(job.target_companies) ? job.target_companies : [],
       companyName: job.company_name || "",
+      linkedOrgRole: job.linked_org_role || null,
     },
   });
 }
@@ -90,8 +91,32 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   // Dashboard-owned fields first — no sync-chain gate (see above).
-  if (body.targetCompanies !== undefined || body.companyName !== undefined) {
+  if (
+    body.targetCompanies !== undefined ||
+    body.companyName !== undefined ||
+    body.linkedOrgRole !== undefined
+  ) {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.linkedOrgRole !== undefined) {
+      // Cross-org send bridge target: TT wires its jobs to client jobs.
+      if (member.org.slug !== "transformer-talent")
+        return NextResponse.json({ error: "not_available" }, { status: 404 });
+      if (body.linkedOrgRole === null) {
+        patch.linked_org_role = null;
+      } else {
+        const l = body.linkedOrgRole as { orgId?: unknown; jobId?: unknown };
+        const orgId = String(l?.orgId ?? "");
+        const jobId = String(l?.jobId ?? "").slice(0, 40);
+        if (!/^[0-9a-f-]{36}$/.test(orgId) || !jobId || orgId === member.org.id)
+          return NextResponse.json({ error: "bad_link" }, { status: 400 });
+        const tRes = await sbRest(
+          `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=id&limit=1`
+        );
+        if (!tRes.ok || ((await tRes.json()) as unknown[]).length === 0)
+          return NextResponse.json({ error: "target_job_not_found" }, { status: 400 });
+        patch.linked_org_role = { orgId, jobId };
+      }
+    }
     if (body.targetCompanies !== undefined) {
       const targets = sanitizeTargets(body.targetCompanies);
       if (!targets) return NextResponse.json({ error: "bad_target_companies" }, { status: 400 });
