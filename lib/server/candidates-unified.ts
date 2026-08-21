@@ -57,7 +57,7 @@ const FIT_GROUPS: Record<string, string[]> = {
 export type UnifiedRole = {
   jobId: string;
   title: string;
-  via: "applied" | "sourced";
+  via: "applied" | "sourced" | "matched";
   tag: string | null;
   tagLabel: string | null;
 };
@@ -165,7 +165,7 @@ export type UnifiedDetail = {
     company: string | null;
     salary: string | null;
     location: string | null;
-    via: "applied" | "sourced";
+    via: "applied" | "sourced" | "matched";
     tag: string | null;
     tagLabel: string | null;
     reason: string | null;
@@ -259,14 +259,42 @@ function appRoleTitle(a: AppRow, jobId: string, i: number): string {
   );
 }
 
+// Matched-role verdicts straight from the pairings map — the judgments for
+// people who never picked a role (speculative drops and referrals). Without
+// this they'd sit on "Screening…" forever even though screening finished.
+function matchedVerdicts(
+  pairings: Map<string, VerdictRow>,
+  candidateId: string | null
+): { jobId: string; row: VerdictRow }[] {
+  if (!candidateId) return [];
+  const prefix = `${candidateId}|`;
+  const out: { jobId: string; row: VerdictRow }[] = [];
+  for (const [key, row] of pairings) {
+    if (key.startsWith(prefix)) out.push({ jobId: key.slice(prefix.length), row });
+  }
+  return out.slice(0, 6);
+}
+
 function appRoles(a: AppRow, pairings: Map<string, VerdictRow>): UnifiedRole[] {
-  return (a.role_ids || []).map((jobId, i) => {
+  const applied = (a.role_ids || []).map((jobId, i) => {
     const sc = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict?.scorecard : undefined;
     const tag: ClientTag | null = sc ? clientTag(sc) : null;
     return {
       jobId,
       title: appRoleTitle(a, jobId, i),
       via: "applied" as const,
+      tag,
+      tagLabel: tag ? TAG_LABEL[tag] : null,
+    };
+  });
+  if (applied.length > 0) return applied;
+  return matchedVerdicts(pairings, a.candidate_id).map(({ jobId, row }) => {
+    const sc = row.verdict?.scorecard;
+    const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    return {
+      jobId,
+      title: row.org_roles?.title || `Role #${jobId}`,
+      via: "matched" as const,
       tag,
       tagLabel: tag ? TAG_LABEL[tag] : null,
     };
@@ -800,7 +828,7 @@ function applicantPipeline(
   pairings: Map<string, VerdictRow>,
   byExternal?: Map<string, RoleInfo>
 ): UnifiedDetail["pipeline"] {
-  return (a.role_ids || []).map((jobId, i) => {
+  const applied = (a.role_ids || []).map((jobId, i) => {
     const sc = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict?.scorecard : undefined;
     const tag: ClientTag | null = sc ? clientTag(sc) : null;
     const info = byExternal?.get(jobId);
@@ -815,6 +843,26 @@ function applicantPipeline(
       tagLabel: tag ? TAG_LABEL[tag] : null,
       reason: sc ? clientReason(sc) : null,
       addedAt: a.created_at,
+      stage: "new",
+    };
+  });
+  if (applied.length > 0) return applied;
+  // No chosen roles (speculative/referral): show the matched-role verdicts.
+  return matchedVerdicts(pairings, a.candidate_id).map(({ jobId, row }) => {
+    const sc = row.verdict?.scorecard;
+    const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const info = byExternal?.get(jobId);
+    return {
+      jobId,
+      title: row.org_roles?.title || `Role #${jobId}`,
+      company: info?.company ?? null,
+      salary: info?.salary ?? null,
+      location: info?.location ?? null,
+      via: "matched" as const,
+      tag,
+      tagLabel: tag ? TAG_LABEL[tag] : null,
+      reason: sc ? clientReason(sc) : null,
+      addedAt: row.created_at || a.created_at,
       stage: "new",
     };
   });
@@ -1033,7 +1081,13 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       source: "applied",
       viaTT: a.source === "transformer_talent",
       alsoSourced: !!sourced,
-      provenance: `Applied via your board · ${fmtDate(a.created_at)}`,
+      provenance: (() => {
+        // "referral: by NAME <EMAIL>" — credit the referrer in the drawer.
+        const m = (a.source || "").match(/^referral: by (.+) <([^>]+)>/);
+        return m
+          ? `Referred by ${m[1]} (${m[2]}) · ${fmtDate(a.created_at)}`
+          : `Applied via your board · ${fmtDate(a.created_at)}`;
+      })(),
       contact: { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),

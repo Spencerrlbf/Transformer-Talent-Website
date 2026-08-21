@@ -15,7 +15,7 @@ type PipelineEntry = {
   company: string | null;
   salary: string | null;
   location: string | null;
-  via: "applied" | "sourced";
+  via: "applied" | "sourced" | "matched";
   tag: string | null;
   tagLabel: string | null;
   reason: string | null;
@@ -206,7 +206,13 @@ function PipelineRows({
           >
             {entry.title} <em>#{entry.jobId}</em>
           </button>
-          <small>{entry.via === "applied" ? "applied" : "via sourcing run"}</small>
+          <small>
+            {entry.via === "applied"
+              ? "applied"
+              : entry.via === "matched"
+                ? "matched"
+                : "via sourcing run"}
+          </small>
         </td>
         <td className="cv2d-ploc">{entry.company || "—"}</td>
         <td className="cv2d-pnum">{entry.salary || "—"}</td>

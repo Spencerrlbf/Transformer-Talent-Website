@@ -73,10 +73,11 @@ function nameFromProfile(
   fallback: string
 ): string {
   if (!harvest) return fallback;
-  const full = clean(harvest.full_name ?? harvest.name, 120);
+  // Harvest uses camelCase (firstName/lastName); tolerate snake_case too.
+  const full = clean(harvest.fullName ?? harvest.full_name ?? harvest.name, 120);
   if (full) return full;
-  const first = clean(harvest.first_name, 60);
-  const last = clean(harvest.last_name, 60);
+  const first = clean(harvest.firstName ?? harvest.first_name, 60);
+  const last = clean(harvest.lastName ?? harvest.last_name, 60);
   return [first, last].filter(Boolean).join(" ") || fallback;
 }
 

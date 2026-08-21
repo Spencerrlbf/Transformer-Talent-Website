@@ -1846,3 +1846,18 @@ body:has(.board-app) {
 .dash-mypage-amount { display: flex; align-items: center; border: 1px solid #d3d7dd; border-radius: 7px; background: #fff; padding-left: 10px; }
 .dash-mypage-amount span { color: #6b7280; font-size: 13.5px; }
 .dash-mypage-amount input { border: 0 !important; border-radius: 7px; padding: 8px 11px 8px 4px; font: inherit; font-size: 13.5px; width: 110px; outline: none; }
+
+/* Top-of-page referral strip on recruiter pages */
+.board-refstrip {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; border: 1px solid #a6f4c5; background: #f3fdf7; border-radius: 10px;
+  padding: 11px 18px; margin-bottom: 16px;
+}
+.board-refstrip p { margin: 0; color: #3d434c; font-size: 13.5px; }
+.board-refstrip b { color: #067647; }
+.board-refstrip-btn {
+  background: none; border: 1px solid #067647; color: #067647; border-radius: 8px;
+  padding: 8px 14px; font: inherit; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.03em; cursor: pointer; white-space: nowrap;
+}
+.board-refstrip-btn:hover { background: #ecfdf3; }

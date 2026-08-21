@@ -10,7 +10,7 @@ import { useDash } from "@/components/dashboard/DashShell";
 export type Cv2Role = {
   jobId: string;
   title: string;
-  via: "applied" | "sourced";
+  via: "applied" | "sourced" | "matched";
   tag: string | null;
   tagLabel: string | null;
 };

@@ -314,6 +314,26 @@ export default function BoardClient({
         </div>
       )}
 
+      {/* Someone not job-hunting won't scroll past 96 roles — surface the
+          referral offer up top and jump them to the form. */}
+      {recruiter && recruiter.referralAmount != null && !railVisible && (
+        <div className="board-refstrip">
+          <p>
+            <b>Know someone great?</b> Refer them and receive $
+            {recruiter.referralAmount.toLocaleString()} if we place them.
+          </p>
+          <button
+            type="button"
+            className="board-refstrip-btn"
+            onClick={() =>
+              document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+          >
+            REFER AN ENGINEER →
+          </button>
+        </div>
+      )}
+
       <div className="board-filters">
         <input
           value={q}
@@ -747,9 +767,20 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
         the placement completes.
       </p>
       {state === "ok" ? (
-        <p className="board-referral-thanks">
-          Thank you. We will review and be in touch.
-        </p>
+        <div>
+          <p className="board-referral-thanks">
+            Thank you. We will review and be in touch.
+          </p>
+          <p style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="board-linkbtn"
+              onClick={() => setState("idle")}
+            >
+              Refer somebody else
+            </button>
+          </p>
+        </div>
       ) : (
         <form className="board-referral-form" onSubmit={onSubmit}>
           <label>
