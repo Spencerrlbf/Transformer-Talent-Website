@@ -33,6 +33,7 @@ export type Cv2Row = {
   yearsExperience: number | null;
   addedAt: string;
   stage: string | null;
+  screeningPending?: boolean;
 };
 
 type Cv2List = {
@@ -471,7 +472,9 @@ export default function CandidatesTable({
                         {r.bestTagLabel}
                       </span>
                     ) : (
-                      <span className="dash-tag t-pending">Screening…</span>
+                      <span className="dash-tag t-pending">
+                        {r.screeningPending === false ? "Not screened" : "Screening…"}
+                      </span>
                     )}
                   </td>
                   {jobId && (

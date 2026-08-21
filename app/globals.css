@@ -1861,3 +1861,8 @@ body:has(.board-app) {
   letter-spacing: 0.03em; cursor: pointer; white-space: nowrap;
 }
 .board-refstrip-btn:hover { background: #ecfdf3; }
+
+/* Banner row: resume + referral share the width; either alone fills it. */
+.board-banners { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.board-banners .board-spec { flex: 1 1 380px; margin-bottom: 0; align-content: flex-start; }
+.board-banners .board-refstrip { flex: 1 1 380px; margin-bottom: 0; }

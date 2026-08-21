@@ -81,6 +81,9 @@ export type UnifiedRow = {
   addedAt: string;
   /** Human pipeline status for params.jobId ("new" default); null in pool view. */
   stage: string | null;
+  /** When bestTag is null: true = screening still running ("Screening…"),
+   *  false = finished with nothing to show ("Not screened"). */
+  screeningPending: boolean;
 };
 
 // Human pipeline statuses — distinct from the AI fit tag. "rejected" moves a
@@ -159,6 +162,8 @@ export type UnifiedDetail = {
   contact: UnifiedContact;
   bestTag: string | null;
   bestTagLabel: string | null;
+  /** False once screening finished with nothing to show ("Not screened"). */
+  screeningPending: boolean;
   pipeline: {
     jobId: string;
     title: string;
@@ -221,11 +226,12 @@ type AppRow = {
   resume_path: string | null;
   contact: UnifiedContact | null;
   source: string | null;
+  status: string | null;
   created_at: string;
 };
 
 const APP_COLS =
-  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,created_at";
+  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at";
 
 type VerdictRow = {
   candidate_id: string;
@@ -584,6 +590,9 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       yearsExperience: null,
       addedAt: a.created_at,
       stage: null,
+      // "processing" = pipeline still running; anything else means screening
+      // finished — no verdict then reads "Not screened", not "Screening…".
+      screeningPending: a.status === "processing",
     });
   }
 
@@ -617,6 +626,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       yearsExperience: p.years_experience,
       addedAt: ms[ms.length - 1]?.created_at || p.created_at,
       stage: null,
+      screeningPending: true, // sourced judgments arrive asynchronously
     });
   }
 
@@ -966,6 +976,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       })(),
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
+      screeningPending: true,
       pipeline,
       experience: bits.experience,
       education: bits.education,
@@ -1023,6 +1034,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       contact: { ...(p.contact || {}), ...(app?.contact || {}), email: app?.contact?.email ?? p.contact?.email ?? app?.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
+      screeningPending: true,
       pipeline,
       experience: bits.experience,
       education: bits.education,
@@ -1091,6 +1103,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       contact: { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
+      screeningPending: a.status === "processing",
       pipeline,
       experience: bits.experience,
       education: bits.education,

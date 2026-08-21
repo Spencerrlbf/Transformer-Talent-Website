@@ -38,6 +38,7 @@ type Detail = {
   contact: { email?: string | null; phone?: string | null; github?: string | null; otherEmails?: string[] | null };
   bestTag: string | null;
   bestTagLabel: string | null;
+  screeningPending?: boolean;
   pipeline: PipelineEntry[];
   experience: {
     company: string;
@@ -181,6 +182,7 @@ function PipelineRows({
   onStage,
   stageBusy,
   stageEditable = true,
+  screeningPending = true,
   onOpenJob,
 }: {
   entry: PipelineEntry;
@@ -189,6 +191,7 @@ function PipelineRows({
   onStage: (jobId: string, stage: string) => void;
   stageBusy: boolean;
   stageEditable?: boolean;
+  screeningPending?: boolean;
   onOpenJob: (jobId: string) => void;
 }) {
   return (
@@ -222,7 +225,9 @@ function PipelineRows({
           {entry.tag ? (
             <span className={`dash-tag ${TAG_CLASS[entry.tag] || "t-pending"}`}>{entry.tagLabel}</span>
           ) : (
-            <span className="dash-tag t-pending">Screening…</span>
+            <span className="dash-tag t-pending">
+              {screeningPending ? "Screening…" : "Not screened"}
+            </span>
           )}
         </td>
         <td onClick={(e) => e.stopPropagation()}>
@@ -709,6 +714,7 @@ export default function CandidateDrawer({
                               onStage={changeStage}
                               stageBusy={stageSaving === p.jobId}
                               stageEditable={!isNet}
+                              screeningPending={detail.screeningPending !== false}
                               onOpenJob={setOpenJob}
                             />
                           ))}

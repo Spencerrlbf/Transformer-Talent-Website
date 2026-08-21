@@ -288,49 +288,53 @@ export default function BoardClient({
         </header>
       )}
 
+      {/* Resume banner + referral strip share one row when both are on;
+          either alone takes the full width. */}
       {!railVisible && (
-        <div className="board-spec">
-          <p>
-            {recruiter ? (
-              <>
-                <b>If it is easier, upload your resume</b> and we will match you
-                against our roles and reach out if we have suitable matches.
-              </>
-            ) : (
-              <>
-                <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
-                {org.name}&apos;s open roles and reach out when the right one arrives.
-              </>
-            )}
-          </p>
-          <button
-            className="board-btn"
-            onClick={() => {
-              setSpeculative(true);
-            }}
-          >
-            UPLOAD RESUME →
-          </button>
-        </div>
-      )}
+        <div className="board-banners">
+          <div className="board-spec">
+            <p>
+              {recruiter ? (
+                <>
+                  <b>If it is easier, upload your resume</b> and we will match you
+                  against our roles and reach out if we have suitable matches.
+                </>
+              ) : (
+                <>
+                  <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
+                  {org.name}&apos;s open roles and reach out when the right one arrives.
+                </>
+              )}
+            </p>
+            <button
+              className="board-btn"
+              onClick={() => {
+                setSpeculative(true);
+              }}
+            >
+              UPLOAD RESUME →
+            </button>
+          </div>
 
-      {/* Someone not job-hunting won't scroll past 96 roles — surface the
-          referral offer up top and jump them to the form. */}
-      {recruiter && recruiter.referralAmount != null && !railVisible && (
-        <div className="board-refstrip">
-          <p>
-            <b>Know someone great?</b> Refer them and receive $
-            {recruiter.referralAmount.toLocaleString()} if we place them.
-          </p>
-          <button
-            type="button"
-            className="board-refstrip-btn"
-            onClick={() =>
-              document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
-          >
-            REFER AN ENGINEER →
-          </button>
+          {/* Someone not job-hunting won't scroll past 96 roles — surface the
+              referral offer up top and jump them to the form. */}
+          {recruiter && recruiter.referralAmount != null && (
+            <div className="board-refstrip">
+              <p>
+                <b>Know someone great?</b> Refer them and receive $
+                {recruiter.referralAmount.toLocaleString()} if we place them.
+              </p>
+              <button
+                type="button"
+                className="board-refstrip-btn"
+                onClick={() =>
+                  document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                REFER AN ENGINEER →
+              </button>
+            </div>
+          )}
         </div>
       )}
 
