@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { loadOrgBySlug, loadOrgRoles } from "@/lib/server/org-board";
+import { loadCompanyPage } from "@/lib/server/company-page";
 import BoardClient from "@/components/board/BoardClient";
 
 export const revalidate = 300; // roles change via dashboard; 5 min is fresh enough
 
-type Params = { params: Promise<{ slug: string }> };
+type Params = { params: Promise<{ slug: string }>; searchParams: Promise<{ tab?: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
@@ -18,14 +19,17 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-export default async function BoardPage({ params }: Params) {
+export default async function BoardPage({ params, searchParams }: Params) {
   const { slug } = await params;
+  const { tab } = await searchParams;
   const org = await loadOrgBySlug(slug);
   if (!org || org.slug === "transformer-talent") notFound();
-  const roles = await loadOrgRoles(org.id);
+  const [roles, company] = await Promise.all([loadOrgRoles(org.id), loadCompanyPage(org.id)]);
   return (
     <BoardClient
       org={{ slug: org.slug, name: org.name }}
+      company={company ?? undefined}
+      initialTab={company && tab === "about" ? "about" : "jobs"}
       roles={roles.map((r) => ({
         jobId: r.jobId,
         title: r.title,

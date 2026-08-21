@@ -9,6 +9,8 @@
 // with the board slug; suggestions come back scoped to this company only.
 // When embedded via widget.js it reports its height for iframe auto-resize.
 import { useEffect, useMemo, useRef, useState } from "react";
+import CompanyAbout from "@/components/board/CompanyAbout";
+import type { CompanyPage } from "@/lib/server/company-page";
 
 const MAX_ROLES = 3;
 const PAGE_SIZE = 25;
@@ -94,11 +96,27 @@ export default function BoardClient({
   org,
   roles,
   recruiter,
+  company,
+  initialTab = "jobs",
 }: {
   org: { slug: string; name: string };
   roles: BoardRoleView[];
   recruiter?: RecruiterHead;
+  /** Published company page content; undefined = plain board (as ever). */
+  company?: CompanyPage;
+  initialTab?: "jobs" | "about";
 }) {
+  const [coTab, setCoTab] = useState<"jobs" | "about">(company ? initialTab : "jobs");
+
+  function switchCoTab(t: "jobs" | "about") {
+    setCoTab(t);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (t === "about") url.searchParams.set("tab", "about");
+      else url.searchParams.delete("tab");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
   const [q, setQ] = useState("");
   const [loc, setLoc] = useState("");
   const [office, setOffice] = useState("");
@@ -241,6 +259,70 @@ export default function BoardClient({
 
   return (
     <div className="board-app">
+      {company && (
+        <>
+          <div className="co-strip">
+            {company.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="co-logo co-logo-img" src={company.logoUrl} alt={org.name} />
+            ) : (
+              <div className="co-logo">{org.name[0]?.toUpperCase()}</div>
+            )}
+            <div>
+              <div className="co-name">{org.name}</div>
+              {company.profile.tagline && <div className="co-tagline">{company.profile.tagline}</div>}
+              {(() => {
+                const p = company.profile;
+                const facts = [p.headcount, p.founded, p.stage, p.funding, p.offices, p.workEnv]
+                  .filter(Boolean);
+                return facts.length > 0 ? (
+                  <div className="co-facts">
+                    {facts.map((f, i) => (
+                      <span key={i} className="co-fact">{f}</span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+            </div>
+            {company.website && (
+              <a className="co-site" href={company.website} target="_blank" rel="noreferrer">
+                {company.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")} ↗
+              </a>
+            )}
+          </div>
+          <div className="co-tabs">
+            <button
+              type="button"
+              className={coTab === "jobs" ? "on" : ""}
+              onClick={() => switchCoTab("jobs")}
+            >
+              Jobs<span className="n">{roles.length}</span>
+            </button>
+            <button
+              type="button"
+              className={coTab === "about" ? "on" : ""}
+              onClick={() => switchCoTab("about")}
+            >
+              About
+            </button>
+          </div>
+        </>
+      )}
+      {company && coTab === "about" ? (
+        <>
+          <CompanyAbout
+            company={company}
+            rolesCount={roles.length}
+            onSeeRoles={() => switchCoTab("jobs")}
+          />
+          <footer className="board-foot">
+            <a href="https://www.transformertalent.com" target="_blank" rel="noreferrer">
+              Powered by Transformer Talent
+            </a>
+          </footer>
+        </>
+      ) : (
+        <>
       {recruiter ? (
         <header className="rp-head">
           {recruiter.photoUrl ? (
@@ -281,7 +363,7 @@ export default function BoardClient({
             </span>
           </div>
         </header>
-      ) : (
+      ) : company ? null : (
         <header className="board-head">
           <h1>{org.name}</h1>
           <p>Open roles</p>
@@ -721,6 +803,8 @@ export default function BoardClient({
           Powered by Transformer Talent
         </a>
       </footer>
+        </>
+      )}
     </div>
   );
 }

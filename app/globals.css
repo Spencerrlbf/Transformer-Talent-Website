@@ -1963,3 +1963,113 @@ body:has(.board-app) {
 .pb-confirm-yes { border: 0; background: #b42318; color: #fff; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 700; padding: 5px 12px; cursor: pointer; }
 .pb-confirm-no { border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 650; padding: 5px 12px; cursor: pointer; }
 .pb-confirm-note { font-size: 10.5px; color: #8a919c; }
+
+/* ---------- Company page (tenant board: strip, tabs, About) ---------- */
+.co-strip { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.co-logo { width: 46px; height: 46px; border-radius: 11px; background: #111418; color: #fff; font-weight: 800; font-size: 17px; display: flex; align-items: center; justify-content: center; flex: none; }
+.co-logo-img { object-fit: cover; background: #fff; border: 1px solid #e6e8ec; }
+.co-name { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.co-tagline { font-size: 13px; color: #6b7280; margin-top: 1px; }
+.co-site { margin-left: auto; border: 1px solid #d3d7dd; border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 650; color: #111418; text-decoration: none; white-space: nowrap; }
+.co-site:hover { border-color: #111418; }
+.co-tabs { display: flex; gap: 4px; border-bottom: 1px solid #e6e8ec; margin: 16px 0 18px; }
+.co-tabs button { border: 0; background: none; padding: 8px 14px; font: inherit; font-size: 13px; color: #6b7280; border-bottom: 2px solid transparent; cursor: pointer; }
+.co-tabs button.on { color: #111418; font-weight: 650; border-bottom-color: #111418; }
+.co-tabs .n { font-size: 11px; background: #f1f3f6; border-radius: 999px; padding: 1px 7px; margin-left: 5px; color: #4a5160; }
+
+.coab { flex: 1; }
+.coab-eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: #2a5bd7; margin-bottom: 10px; }
+.coab-mission { padding: 26px 0 34px; max-width: 760px; }
+.coab-lead { font-size: 23px; line-height: 1.4; font-weight: 700; letter-spacing: -0.015em; color: #111418; text-wrap: balance; margin: 0; }
+.coab-sub { font-size: 14.5px; color: #4a5160; line-height: 1.7; margin: 16px 0 0; max-width: 62ch; }
+.coab-stats { display: grid; border-top: 1px solid #e6e8ec; border-bottom: 1px solid #e6e8ec; }
+.coab-stat { padding: 22px 10px; text-align: center; }
+.coab-stat + .coab-stat { border-left: 1px solid #eef0f3; }
+.coab-stat b { display: block; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.coab-stat span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #8a919c; }
+.coab-sec { padding: 36px 0 4px; }
+.coab-sec h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.015em; margin: 0 0 10px; text-transform: none; font-family: inherit; }
+.coab-sec > p { font-size: 14px; color: #4a5160; line-height: 1.7; max-width: 66ch; margin: 0; }
+.coab-problems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+.coab-problem { border: 1px solid #e6e8ec; border-radius: 12px; padding: 16px 17px; }
+.coab-problem b { font-size: 13.5px; display: block; margin-bottom: 5px; }
+.coab-problem p { font-size: 12.5px; color: #6b7280; line-height: 1.55; margin: 0; }
+.coab-founders { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+.coab-founder { border: 1px solid #e6e8ec; border-radius: 14px; padding: 20px; display: flex; gap: 16px; align-items: flex-start; }
+.coab-fphoto { width: 76px; height: 76px; border-radius: 12px; flex: none; object-fit: cover; }
+.coab-fphoto-fb { background: linear-gradient(140deg, #1b222b, #3b4553); color: #fff; font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; }
+.coab-fname { font-size: 15px; font-weight: 750; }
+.coab-ftitle { font-size: 12px; color: #8a919c; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin: 2px 0 8px; }
+.coab-fbio { font-size: 12.5px; color: #4a5160; line-height: 1.6; margin: 0; }
+.coab-fln { display: inline-block; margin-top: 8px; font-size: 11.5px; font-weight: 700; color: #0A66C2; text-decoration: none; }
+.coab-process { margin-top: 22px; display: flex; align-items: flex-start; }
+.coab-pstep { flex: 1; text-align: center; position: relative; padding: 0 8px; }
+.coab-pstep::before { content: ''; position: absolute; top: 15px; left: -50%; width: 100%; height: 1px; background: #e6e8ec; z-index: 0; }
+.coab-pstep:first-child::before { display: none; }
+.coab-pdot { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; background: #111418; color: #fff; font-size: 12.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+.coab-pname { font-size: 13px; font-weight: 700; margin-top: 9px; }
+.coab-psub { font-size: 11px; color: #8a919c; margin-top: 2px; }
+.coab-pnote { text-align: center; font-size: 12.5px; color: #6b7280; margin-top: 18px; }
+.coab-cta { margin: 40px 0 20px; border: 1px solid #e6e8ec; border-radius: 14px; padding: 26px 30px; display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; background: #fafbfc; }
+.coab-cta h3 { font-size: 18px; font-weight: 800; letter-spacing: -0.015em; margin: 0; }
+.coab-cta p { font-size: 13px; color: #6b7280; margin: 3px 0 0; }
+.coab-cta button { background: #111418; color: #fff; border: 0; border-radius: 9px; padding: 12px 20px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+@media (max-width: 820px) {
+  .coab-problems, .coab-founders { grid-template-columns: 1fr; }
+  .coab-process { flex-wrap: wrap; }
+  .coab-pstep { flex: 1 1 40%; margin-bottom: 14px; }
+  .coab-pstep::before { display: none; }
+}
+
+/* Company page editor (Settings) */
+.cpe .dash-field { margin-bottom: 10px; max-width: 560px; }
+.cpe-logo-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.cpe-logo { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; border: 1px solid #e6e8ec; }
+.cpe-logo-fb { background: #111418; color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; border: 0; }
+.cpe-sub { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #8a919c; font-weight: 700; margin: 16px 0 8px; }
+.cpe-cardrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; max-width: 560px; }
+.cpe-cardrow input, .cpe-founder textarea {
+  border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; width: 100%;
+}
+.cpe-steprow { grid-template-columns: 180px 1fr; align-items: center; }
+.cpe-steprow span { font-size: 13px; font-weight: 650; }
+.cpe-founder { display: flex; gap: 12px; border: 1px solid #e6e8ec; border-radius: 10px; padding: 12px; margin-bottom: 8px; align-items: flex-start; max-width: 560px; }
+.cpe-fphoto { width: 44px; height: 44px; border-radius: 9px; object-fit: cover; flex: none; }
+.cpe-fphoto-fb { background: linear-gradient(140deg, #1b222b, #3b4553); color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; border: 0; cursor: pointer; }
+.cpe-fcols { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.cpe-fcols .cpe-cardrow { margin-bottom: 0; }
+.cpe-x { border: 0; background: none; color: #a2a8b3; cursor: pointer; font-size: 13px; padding: 0 2px; }
+.cpe-x:hover { color: #b42318; }
+.cpe-add { border: 1px dashed #c9cfd8; border-radius: 10px; background: none; padding: 9px; color: #6b7280; font: inherit; font-size: 12.5px; cursor: pointer; margin-bottom: 8px; display: block; width: 100%; max-width: 560px; }
+.cpe-add:hover { border-color: #2a5bd7; color: #2a5bd7; }
+
+/* Company page revision: facts chips, section subtitles, round drawers */
+.co-facts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.co-fact { font-size: 11.5px; font-weight: 650; color: #3d434c; background: #f4f6f8; border: 1px solid #e6e8ec; border-radius: 999px; padding: 3px 10px; }
+.coab-subtitle { font-size: 14px; color: #6b7280; font-weight: 600; margin: 3px 0 10px; }
+.coab-hireintro { font-size: 13px; color: #6b7280; margin: 4px 0 0; max-width: 66ch; }
+.coab-pnote { margin-top: 14px; }
+.crd-list { margin-top: 14px; border: 1px solid #e6e8ec; border-radius: 12px; overflow: hidden; }
+.crd-row { border-bottom: 1px solid #eef0f3; }
+.crd-row:last-child { border-bottom: 0; }
+.crd-row summary { display: flex; align-items: center; gap: 12px; padding: 11px 16px; cursor: pointer; list-style: none; }
+.crd-row summary::-webkit-details-marker { display: none; }
+.crd-row summary:hover { background: #fafbfc; }
+.crd-num { width: 22px; height: 22px; border-radius: 50%; background: #f1f3f6; color: #4a5160; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.crd-row b { font-size: 13px; flex: none; min-width: 150px; }
+.crd-hint { font-size: 12px; color: #6b7280; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crd-dur { font-size: 11.5px; color: #8a919c; font-weight: 650; white-space: nowrap; margin-left: auto; }
+.crd-car { color: #a2a8b3; font-size: 11px; transition: transform 0.15s; flex: none; }
+.crd-row[open] .crd-car { transform: rotate(90deg); }
+.crd-row[open] summary { background: #fafbfc; }
+.crd-drawer { padding: 4px 16px 16px 50px; background: #fafbfc; border-top: 1px dashed #e6e8ec; }
+.crd-drawer p { font-size: 13px; color: #4a5160; line-height: 1.65; max-width: 62ch; padding-top: 10px; margin: 0; }
+.coab-founders { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+@media (max-width: 700px) {
+  .crd-row b { min-width: 0; }
+  .crd-hint { display: none; }
+}
+/* editor blocks */
+.cpe-block { border: 1px solid #e6e8ec; border-radius: 10px; padding: 12px; margin-bottom: 8px; max-width: 560px; display: flex; flex-direction: column; gap: 8px; }
+.cpe-block textarea, .cpe-wide { border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; width: 100%; }
+.cpe-block-x { align-self: flex-end; font-size: 11.5px; }
