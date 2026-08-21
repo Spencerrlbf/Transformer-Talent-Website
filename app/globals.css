@@ -1085,6 +1085,10 @@ body:has(.board-app) {
   background: #fff;
 }
 .board-app {
+  /* body is a flex container; without these the table's min-content width
+     blows the page out sideways on phones. */
+  min-width: 0;
+  width: 100%;
   background: #fff;
   color: #111418;
   font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
@@ -1763,4 +1767,36 @@ body:has(.board-app) {
 .dash-mypage-web input {
   border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit;
   font-size: 13.5px; color: #111418; background: #fff; flex: 1; min-width: 0; max-width: 340px;
+}
+
+/* ---------- Recruiter page header (board in recruiter mode) ---------- */
+.rp-head {
+  display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+  padding-bottom: 20px; margin-bottom: 18px; border-bottom: 1px solid #e6e8ec;
+}
+.rp-photo { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; border: 1px solid #e6e8ec; flex: none; }
+.rp-initials {
+  width: 76px; height: 76px; border-radius: 50%; background: #eef2fb; color: #2a5bd7;
+  font-weight: 800; font-size: 24px; display: flex; align-items: center; justify-content: center; flex: none;
+}
+.rp-id { min-width: 0; flex: 1 1 320px; }
+.rp-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; text-transform: none; font-family: inherit; }
+.rp-sub { color: #6b7280; font-size: 13px; margin: 2px 0 0; }
+.rp-sub b { color: #111418; }
+.rp-bio { color: #3d434c; font-size: 13.5px; margin: 8px 0 0; max-width: 46rem; }
+.rp-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; margin-left: auto; }
+.rp-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-links a {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid #d3d7dd;
+  border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 650;
+  color: #111418; text-decoration: none; white-space: nowrap;
+}
+.rp-links a b { color: #0A66C2; }
+.rp-links a:hover { border-color: #111418; }
+.rp-open {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; color: #067647;
+  background: #ecfdf3; border: 1px solid #a6f4c5; border-radius: 999px; padding: 4px 10px;
+}
+@media (max-width: 700px) {
+  .rp-side { margin-left: 0; align-items: flex-start; }
 }
