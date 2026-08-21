@@ -56,6 +56,7 @@ export default function PipelineBoard({
   const [custom, setCustom] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
@@ -260,44 +261,83 @@ export default function PipelineBoard({
                   <span>{items.length}</span>
                 </div>
                 <div className="pb-cards">
-                  {items.map((r) => (
-                    <div
-                      key={r.key}
-                      className={`pb-card${dragKey === r.key ? " dragging" : ""}`}
-                      draggable
-                      onDragStart={(e) => {
-                        dragRow.current = r;
-                        setDragKey(r.key);
-                        e.dataTransfer.effectAllowed = "move";
-                      }}
-                      onDragEnd={() => {
-                        setDragKey(null);
-                        setOverCol(null);
-                        dragRow.current = null;
-                      }}
-                      onClick={() => onOpen(r.key)}
-                    >
-                      <div className="pb-nm">
-                        <span className="pb-av">{initials(r.name || "?")}</span>
-                        {r.name}
+                  {items.map((r) =>
+                    confirmKey === r.key ? (
+                      <div key={r.key} className="pb-card pb-confirm">
+                        <div className="pb-confirm-q">Reject {r.name}?</div>
+                        <div className="pb-confirm-btns">
+                          <button
+                            className="pb-confirm-yes"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmKey(null);
+                              reject(r);
+                            }}
+                          >
+                            Reject
+                          </button>
+                          <button
+                            className="pb-confirm-no"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmKey(null);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <div className="pb-confirm-note">Moves to the Past tab, restorable.</div>
                       </div>
-                      <div className="pb-tt">
-                        {[r.currentTitle, r.currentCompany].filter(Boolean).join(" @ ") || "—"}
+                    ) : (
+                      <div
+                        key={r.key}
+                        className={`pb-card${dragKey === r.key ? " dragging" : ""}`}
+                        draggable
+                        onDragStart={(e) => {
+                          dragRow.current = r;
+                          setDragKey(r.key);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          setDragKey(null);
+                          setOverCol(null);
+                          dragRow.current = null;
+                        }}
+                        onClick={() => onOpen(r.key)}
+                      >
+                        <div className="pb-nm">
+                          <span className="pb-av">{initials(r.name || "?")}</span>
+                          <span className="pb-nmtext">{r.name}</span>
+                          <button
+                            type="button"
+                            className="pb-x"
+                            title="Reject candidate"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmKey(r.key);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="pb-tt">
+                          {[r.currentTitle, r.currentCompany].filter(Boolean).join(" @ ") || "—"}
+                        </div>
+                        <div className="pb-ft">
+                          {r.bestTag ? (
+                            <span className={`dash-tag ${TAG_CLASS[r.bestTag] || "t-pending"}`}>
+                              {r.bestTagLabel}
+                            </span>
+                          ) : (
+                            <span className="dash-tag t-pending">
+                              {r.screeningPending === false ? "Not screened" : "Screening…"}
+                            </span>
+                          )}
+                          <span className="pb-days">{daysIn(r)}</span>
+                        </div>
                       </div>
-                      <div className="pb-ft">
-                        {r.bestTag ? (
-                          <span className={`dash-tag ${TAG_CLASS[r.bestTag] || "t-pending"}`}>
-                            {r.bestTagLabel}
-                          </span>
-                        ) : (
-                          <span className="dash-tag t-pending">
-                            {r.screeningPending === false ? "Not screened" : "Screening…"}
-                          </span>
-                        )}
-                        <span className="pb-days">{daysIn(r)}</span>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                   {items.length === 0 && <div className="pb-empty">No one here yet</div>}
                 </div>
               </div>
