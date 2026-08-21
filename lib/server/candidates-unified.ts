@@ -81,6 +81,10 @@ export type UnifiedRow = {
   addedAt: string;
   /** Human pipeline status for params.jobId ("new" default); null in pool view. */
   stage: string | null;
+  /** Interview sub-stage id (template id) when stage = "interviewing". */
+  interviewStage?: string | null;
+  /** When the stage was last changed (drives days-in-stage on the board). */
+  stageUpdatedAt?: string | null;
   /** When bestTag is null: true = screening still running ("Screening…"),
    *  false = finished with nothing to show ("Not screened"). */
   screeningPending: boolean;
@@ -478,13 +482,25 @@ const dateText = (v: ExpEntry["startDate"]): string | null =>
 /* ------------------------------------------------------------------ */
 
 /** candidate_key -> status for one job (only keys with an explicit row). */
-async function jobStageMap(orgId: string, jobId: string): Promise<Map<string, string>> {
+type JobStageInfo = { status: string; interviewStage: string | null; updatedAt: string | null };
+
+async function jobStageMap(orgId: string, jobId: string): Promise<Map<string, JobStageInfo>> {
   const res = await sbRest(
     `candidate_role_statuses?organization_id=eq.${orgId}&job_id=eq.${encodeURIComponent(jobId)}` +
-      `&select=candidate_key,status`
+      `&select=candidate_key,status,interview_stage,updated_at`
   );
-  const rows: { candidate_key: string; status: string }[] = res.ok ? await res.json() : [];
-  return new Map(rows.map((r) => [r.candidate_key, r.status]));
+  const rows: {
+    candidate_key: string;
+    status: string;
+    interview_stage: string | null;
+    updated_at: string | null;
+  }[] = res.ok ? await res.json() : [];
+  return new Map(
+    rows.map((r) => [
+      r.candidate_key,
+      { status: r.status, interviewStage: r.interview_stage, updatedAt: r.updated_at },
+    ])
+  );
 }
 
 /** Overwrite pipeline entries' stages with this candidate's stored statuses. */
@@ -521,6 +537,16 @@ export async function saveUnifiedStatus(
     status === "interviewing" && typeof interviewStage === "string" && interviewStage
       ? interviewStage.slice(0, 24)
       : null;
+
+  // Current position, so the history log records the transition (and no-op
+  // saves don't spam it).
+  const curRes = await sbRest(
+    `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${encodeURIComponent(key)}&job_id=eq.${encodeURIComponent(jobId)}&select=status,interview_stage&limit=1`
+  );
+  const [cur] = curRes.ok
+    ? ((await curRes.json()) as { status: string; interview_stage: string | null }[])
+    : [];
+
   const res = await sbRest(
     `candidate_role_statuses?on_conflict=organization_id,candidate_key,job_id`,
     {
@@ -536,7 +562,26 @@ export async function saveUnifiedStatus(
       }),
     }
   );
-  return res.ok ? { ok: true } : { ok: false, error: "save_failed" };
+  if (!res.ok) return { ok: false, error: "save_failed" };
+
+  // The journey, not just the position: append the transition. Best effort —
+  // history must never fail a stage change.
+  if (cur?.status !== status || (cur?.interview_stage ?? null) !== stage) {
+    await sbRest("stage_events", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: JSON.stringify({
+        organization_id: orgId,
+        candidate_key: key,
+        job_id: jobId,
+        from_status: cur?.status ?? null,
+        from_interview_stage: cur?.interview_stage ?? null,
+        to_status: status,
+        to_interview_stage: stage,
+      }),
+    }).catch(() => {});
+  }
+  return { ok: true };
 }
 
 export async function listUnifiedCandidates(params: UnifiedListParams): Promise<UnifiedList> {
@@ -645,7 +690,12 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     // Human statuses: attach this job's stage; "rejected" leaves the active
     // Pipeline list for the Past tab (params.past flips the split).
     const stages = await jobStageMap(orgId, params.jobId);
-    for (const r of visible) r.stage = stages.get(r.key) || "new";
+    for (const r of visible) {
+      const info = stages.get(r.key);
+      r.stage = info?.status || "new";
+      r.interviewStage = info?.interviewStage ?? null;
+      r.stageUpdatedAt = info?.updatedAt ?? null;
+    }
     const rejected = visible.filter((r) => r.stage === "rejected");
     rejectedCount = rejected.length;
     visible = params.past ? rejected : visible.filter((r) => r.stage !== "rejected");
