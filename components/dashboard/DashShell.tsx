@@ -12,6 +12,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabaseBrowser } from "./supabaseBrowser";
 
 type Org = { id: string; slug: string; name: string };
+type MyPage = { published: boolean; slug: string } | null;
 type DashContext = { token: string; org: Org; email: string };
 
 const Ctx = createContext<DashContext | null>(null);
@@ -24,6 +25,7 @@ export function useDash(): DashContext {
 const NAV = [
   { href: "/dashboard", label: "Jobs" },
   { href: "/dashboard/candidates", label: "Candidates" },
+  { href: "/dashboard/my-page", label: "My page" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
@@ -31,7 +33,7 @@ export default function DashShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // undefined = still resolving; null = signed out
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [me, setMe] = useState<{ org: Org; email: string } | null | undefined>(undefined);
+  const [me, setMe] = useState<{ org: Org; email: string; myPage?: MyPage } | null | undefined>(undefined);
 
   useEffect(() => {
     const supabase = supabaseBrowser();
@@ -105,6 +107,10 @@ export default function DashShell({ children }: { children: ReactNode }) {
               <span key={item.href} style={{ display: "contents" }}>
                 <Link href={item.href} className={pathname === item.href ? "on" : ""}>
                   {item.label}
+                  {/* Nudge until the user publishes their recruiter page. */}
+                  {item.href === "/dashboard/my-page" && !me.myPage?.published && (
+                    <span className="dash-nav-nudge">set up</span>
+                  )}
                 </Link>
                 {/* Internal-only, right after Candidates: the pool's nightly
                     matches. TT org only — the API 404s everyone else even if

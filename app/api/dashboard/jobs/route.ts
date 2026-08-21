@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   const externalId = await nextExternalId(member.org.id);
   const role = { ...parsed.role, jobId: externalId };
   try {
-    await publishOrgRole(member.org.id, role, skills, "dashboard");
+    await publishOrgRole(member.org.id, role, skills, "dashboard", member.userId);
   } catch (e) {
     console.error("publish role failed", e);
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });

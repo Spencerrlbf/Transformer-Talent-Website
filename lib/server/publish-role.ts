@@ -41,11 +41,18 @@ export async function publishOrgRole(
   organizationId: string,
   role: RoleInput,
   skills: SkillSpec[],
-  source: string
+  source: string,
+  createdBy?: string
 ): Promise<{ orgRoleId: string; profile: MatchingProfile }> {
   const profile = await generateMatchingProfile(role);
 
-  const row = { ...orgRoleRow(organizationId, role, profile, source), skills };
+  // created_by only on create — the edit path omits it, and merge-duplicates
+  // keeps the original creator on upsert.
+  const row = {
+    ...orgRoleRow(organizationId, role, profile, source),
+    skills,
+    ...(createdBy ? { created_by: createdBy } : {}),
+  };
   const up = await sbRest("org_roles?on_conflict=organization_id,external_id", {
     method: "POST",
     body: JSON.stringify(row),
