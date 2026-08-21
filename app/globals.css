@@ -1818,3 +1818,51 @@ body:has(.board-app) {
 @media (max-width: 700px) {
   .rp-side { margin-left: 0; align-items: flex-start; }
 }
+
+/* ---------- Referral block (recruiter pages) ---------- */
+.board-referral {
+  border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 12px;
+  padding: 22px 24px; margin: 26px 0 8px;
+}
+.board-referral h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; margin: 0; text-transform: none; font-family: inherit; }
+.board-referral-sub { color: #3d434c; font-size: 13.5px; margin: 6px 0 0; }
+.board-referral-sub b { color: #067647; }
+.board-referral-thanks { color: #067647; font-weight: 650; font-size: 14px; margin-top: 12px; }
+.board-referral-form {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; margin-top: 16px; max-width: 720px;
+}
+.board-referral-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4a5160; }
+.board-referral-form input {
+  border: 1px solid #d3d7dd; border-radius: 7px; padding: 9px 12px; font: inherit;
+  font-weight: 400; color: #111418; background: #fff;
+}
+.board-referral-form input:focus { outline: 2px solid #2a5bd7; outline-offset: -1px; border-color: #2a5bd7; }
+.board-referral-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .board-referral-form { grid-template-columns: 1fr; }
+}
+
+/* My page referral amount input */
+.dash-mypage-amount { display: flex; align-items: center; border: 1px solid #d3d7dd; border-radius: 7px; background: #fff; padding-left: 10px; }
+.dash-mypage-amount span { color: #6b7280; font-size: 13.5px; }
+.dash-mypage-amount input { border: 0 !important; border-radius: 7px; padding: 8px 11px 8px 4px; font: inherit; font-size: 13.5px; width: 110px; outline: none; }
+
+/* Top-of-page referral strip on recruiter pages */
+.board-refstrip {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; border: 1px solid #a6f4c5; background: #f3fdf7; border-radius: 10px;
+  padding: 11px 18px; margin-bottom: 16px;
+}
+.board-refstrip p { margin: 0; color: #3d434c; font-size: 13.5px; }
+.board-refstrip b { color: #067647; }
+.board-refstrip-btn {
+  background: none; border: 1px solid #067647; color: #067647; border-radius: 8px;
+  padding: 8px 14px; font: inherit; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.03em; cursor: pointer; white-space: nowrap;
+}
+.board-refstrip-btn:hover { background: #ecfdf3; }
+
+/* Banner row: resume + referral share the width; either alone fills it. */
+.board-banners { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.board-banners .board-spec { flex: 1 1 380px; margin-bottom: 0; align-content: flex-start; }
+.board-banners .board-refstrip { flex: 1 1 380px; margin-bottom: 0; }

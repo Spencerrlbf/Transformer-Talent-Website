@@ -367,7 +367,7 @@ export async function mirrorApplicationToAirtable(args: {
   resumePath?: string | null;
   appliedRoleIds?: string[];
   matchedRoleIds?: string[];
-  applicationType?: "Applied" | "Speculative";
+  applicationType?: "Applied" | "Speculative" | "Referral";
   screenedSummary?: string; // e.g. "5 screened (1 qualified)"
   preferredLocations?: string[];
   applicationFit?: string; // rendered scorecards for the APPLIED roles
@@ -430,6 +430,9 @@ export async function mirrorApplicationToAirtable(args: {
             },
           },
         ],
+        // Lets Airtable create new select options (e.g. Application Type:
+        // Referral) instead of silently rejecting the record.
+        typecast: true,
       }),
     });
   } catch {

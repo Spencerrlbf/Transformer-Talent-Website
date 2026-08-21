@@ -13,6 +13,7 @@ export type RecruiterProfileRow = {
   linkedin_url: string | null;
   bio: string;
   show_all_roles: boolean;
+  show_referral: boolean;
   published: boolean;
   updated_at: string;
 };
@@ -46,6 +47,7 @@ export function profileView(row: RecruiterProfileRow) {
     linkedinUrl: row.linkedin_url || "",
     bio: row.bio,
     showAllRoles: row.show_all_roles,
+    showReferral: row.show_referral !== false,
     published: row.published,
   };
 }

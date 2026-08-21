@@ -16,6 +16,8 @@ export type RecruiterPage = {
   };
   org: { id: string; slug: string; name: string; website: string };
   roles: BoardRole[];
+  /** Bounty in dollars, or null when the recruiter hides the referral block. */
+  referralAmount: number | null;
 };
 
 export async function loadRecruiterPage(slug: string): Promise<RecruiterPage | null> {
@@ -27,11 +29,11 @@ export async function loadRecruiterPage(slug: string): Promise<RecruiterPage | n
   if (!profile) return null;
 
   const ores = await sbRest(
-    `organizations?id=eq.${profile.organization_id}&select=id,slug,name,website`
+    `organizations?id=eq.${profile.organization_id}&select=id,slug,name,website,referral_amount`
   );
   if (!ores.ok) return null;
   const [org] = (await ores.json()) as
-    { id: string; slug: string; name: string; website: string | null }[];
+    { id: string; slug: string; name: string; website: string | null; referral_amount: number | null }[];
   if (!org) return null;
 
   let roles = await loadOrgRoles(org.id);
@@ -55,5 +57,6 @@ export async function loadRecruiterPage(slug: string): Promise<RecruiterPage | n
     },
     org: { id: org.id, slug: org.slug, name: org.name, website: org.website || "" },
     roles,
+    referralAmount: profile.show_referral !== false ? org.referral_amount ?? 5000 : null,
   };
 }
