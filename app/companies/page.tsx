@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-// The old /companies page's content now lives on /process (how we work,
-// FAQ, fees) and /talent (instant match). Preserve inbound links.
+// The old /companies content now lives on /about (how we work) and
+// /talent (instant match). Preserve inbound links.
 export default function CompaniesPage() {
-  redirect("/process");
+  redirect("/about");
 }

@@ -22,6 +22,13 @@ export const PLACEMENTS: Placement[] = [
     tag: "EXEC",
   },
   {
+    company: "Virtualitics",
+    url: "https://www.virtualitics.com/",
+    role: "ML Engineer",
+    line: "Machine learning for AI-driven analytics.",
+    tag: "ML",
+  },
+  {
     company: "Adaptive",
     url: "https://www.adaptive.co/",
     role: "Product Engineer",

@@ -59,8 +59,7 @@ export default function RootLayout({
                 Transformer<b>_</b>Talent
               </Link>
               <nav>
-                <Link href="/placements">/placements</Link>
-                <Link href="/process">/process</Link>
+                <Link href="/about">/about</Link>
                 <Link href="/market-index">/market-index</Link>
                 <Link href="/roles">/roles</Link>
                 <Link href="/talent" className="run">

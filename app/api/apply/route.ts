@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
 import {
@@ -137,23 +137,16 @@ export async function POST(req: NextRequest) {
     );
   }
   let resumePath: string | null = null;
-  let resumeText: string | null = null;
-  let resumeParser: "llamaparse" | "pdf-parse" | null = null;
+  let resumeBuf: Buffer | null = null;
+  let resumeSafeName = "resume.pdf";
   if (file instanceof File && file.size > 0) {
     if (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf")) {
       return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
     }
-    const buf = Buffer.from(await file.arrayBuffer());
-    const safeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-    const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
-    if (await uploadResume(path, buf)) resumePath = path;
-    resumeText = await llamaParsePdf(buf, safeName);
-    if (resumeText) {
-      resumeParser = "llamaparse";
-    } else {
-      resumeText = (await extractPdfText(buf)) || null;
-      if (resumeText) resumeParser = "pdf-parse";
-    }
+    resumeBuf = Buffer.from(await file.arrayBuffer());
+    resumeSafeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+    const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${resumeSafeName}`;
+    if (await uploadResume(path, resumeBuf)) resumePath = path;
   }
 
   // Tenant boards: roles come from that org's org_roles rows, shaped like
@@ -177,7 +170,7 @@ export async function POST(req: NextRequest) {
       role_ids: applied.map((r) => r.jobId),
       role_titles: roleTitles,
       resume_path: resumePath,
-      resume_text: resumeText,
+      resume_text: null,
       status: "processing",
       source: [speculative ? "speculative" : null, note ? `note: ${note}` : null]
         .filter(Boolean)
@@ -191,7 +184,42 @@ export async function POST(req: NextRequest) {
     return null;
   });
 
-  // Enrichment pipeline — best-effort; the application is already saved.
+  if (!submission) {
+    return NextResponse.json(
+      { error: "Something went wrong saving your application. Please try again." },
+      { status: 502 }
+    );
+  }
+
+  // Everything slow (resume parsing, profile enrichment, screening, the
+  // Airtable mirrors) happens AFTER the response — the applicant gets an
+  // instant thank-you; nothing backend-shaped ever reaches them.
+  after(async () => {
+    await runApplicantPipeline();
+  });
+  return NextResponse.json({ ok: true, applicationId: submission.id });
+
+  async function runApplicantPipeline() {
+  // Resume text: parse now that the response is out the door.
+  let resumeText: string | null = null;
+  let resumeParser: "llamaparse" | "pdf-parse" | null = null;
+  if (resumeBuf) {
+    resumeText = await llamaParsePdf(resumeBuf, resumeSafeName);
+    if (resumeText) {
+      resumeParser = "llamaparse";
+    } else {
+      resumeText = (await extractPdfText(resumeBuf)) || null;
+      if (resumeText) resumeParser = "pdf-parse";
+    }
+    if (resumeText && submission) {
+      await sbRest(`website_applications?id=eq.${submission.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ resume_text: resumeText }),
+        prefer: "return=minimal",
+      }).catch(() => {});
+    }
+  }
+
   let matches: { jobId: string; title: string; salary: string; slug: string }[] = [];
   let screenedSummary: string | undefined;
   let applicationFit: string | undefined;
@@ -422,6 +450,5 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // applicationId lets the thank-you page add suggested roles for 1 hour.
-  return NextResponse.json({ ok: true, matches, applicationId: submission?.id ?? null });
+  }
 }

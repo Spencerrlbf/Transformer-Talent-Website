@@ -21,7 +21,7 @@ const DISPOSABLE = new Set([
 const MAX_JD_PDF_BYTES = 8 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
-  let body: { email?: string; company?: string; jdText?: string; website?: string };
+  let body: { email?: string; company?: string; linkedin?: string; jdText?: string; website?: string };
   let jdFile: File | null = null;
   const contentType = req.headers.get("content-type") || "";
   try {
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       body = {
         email: String(form.get("email") ?? ""),
         company: String(form.get("company") ?? ""),
+        linkedin: String(form.get("linkedin") ?? ""),
         jdText: String(form.get("jdText") ?? ""),
         website: String(form.get("website") ?? ""),
       };
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
 
   const email = (body.email || "").trim().toLowerCase().slice(0, 254);
   const company = (body.company || "").trim().slice(0, 200);
+  const linkedin = (body.linkedin || "").trim().slice(0, 300);
   // PDF copy-paste often carries NUL/control chars Postgres text rejects.
   let jdText = (body.jdText || "")
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
@@ -61,6 +63,12 @@ export async function POST(req: NextRequest) {
   }
   if (!company) {
     return NextResponse.json({ error: "Please tell us your company name." }, { status: 400 });
+  }
+  if (!/^https?:\/\/([a-z0-9-]+\.)?linkedin\.com\/in\/[^\s]+$/i.test(linkedin)) {
+    return NextResponse.json(
+      { error: "Please add your LinkedIn profile URL (linkedin.com/in/…)." },
+      { status: 400 }
+    );
   }
   if (jdText.length < 200 && !jdFile) {
     return NextResponse.json(
@@ -125,6 +133,7 @@ export async function POST(req: NextRequest) {
     {
       email,
       company_name: company,
+      linkedin_url: linkedin,
       jd_text: jdText,
       ip: ip === "unknown" ? null : ip,
       user_agent: (req.headers.get("user-agent") || "").slice(0, 500),
