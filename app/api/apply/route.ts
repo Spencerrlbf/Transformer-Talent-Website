@@ -118,6 +118,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Same person again within 14 days (same org, matched by email OR LinkedIn
+  // username): no duplicate row, no pipeline — their existing application is
+  // already being reviewed against every role. Friendly response instead.
+  const orgId = boardOrg?.id ?? (await getOrgId());
+  const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+  const dupUsername = linkedinUsername(linkedin) || "";
+  const [dupByEmail, dupByLinkedin] = await Promise.all([
+    sbRest(
+      `website_applications?organization_id=eq.${orgId}&email=eq.${encodeURIComponent(email)}&created_at=gte.${dupSince}&select=id&limit=1`
+    ),
+    sbRest(
+      `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(dupUsername)}&created_at=gte.${dupSince}&select=id&limit=1`
+    ),
+  ]);
+  const dupRows = [
+    ...(dupByEmail.ok ? ((await dupByEmail.json()) as { id: string }[]) : []),
+    ...(dupByLinkedin.ok ? ((await dupByLinkedin.json()) as { id: string }[]) : []),
+  ];
+  if (dupRows.length > 0) {
+    return NextResponse.json({ ok: true, alreadyApplied: true });
+  }
+
   const ip =
     req.headers.get("x-real-ip") ||
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
@@ -160,8 +182,6 @@ export async function POST(req: NextRequest) {
   const roles = boardRoles ?? (await getRoles());
   const applied = roles.filter((r) => roleIds.includes(r.jobId));
   const roleTitles = applied.map((r) => `${r.title} (#${r.jobId})`);
-
-  const orgId = boardOrg?.id ?? (await getOrgId());
 
   // Attribution only when the profile is real, published, and belongs to the
   // org being applied to — anything else is silently dropped, never a block.

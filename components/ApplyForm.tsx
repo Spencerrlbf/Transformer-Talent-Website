@@ -29,7 +29,7 @@ export interface ApplyRole {
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "ok"; roleTitles: string[]; wasSpeculative: boolean }
+  | { kind: "ok"; roleTitles: string[]; wasSpeculative: boolean; alreadyApplied?: boolean }
   | { kind: "error"; message: string };
 
 export default function ApplyForm({
@@ -83,7 +83,12 @@ export default function ApplyForm({
           .map((r) => r.title);
         form.reset();
         clearSelection();
-        setStatus({ kind: "ok", roleTitles, wasSpeculative: isSpeculative });
+        setStatus({
+          kind: "ok",
+          roleTitles,
+          wasSpeculative: isSpeculative,
+          alreadyApplied: json.alreadyApplied === true,
+        });
       } else {
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
@@ -97,14 +102,18 @@ export default function ApplyForm({
     return (
       <div className="cart-panel">
         <p className="form-status ok" style={{ marginBottom: "0.6rem" }}>
-          {status.wasSpeculative
-            ? "Thank you for your application."
-            : status.roleTitles.length > 0
-              ? `Thank you for applying to ${status.roleTitles.join(", ")}.`
-              : "Thank you for your application."}
+          {status.alreadyApplied
+            ? "You've already applied."
+            : status.wasSpeculative
+              ? "Thank you for your application."
+              : status.roleTitles.length > 0
+                ? `Thank you for applying to ${status.roleTitles.join(", ")}.`
+                : "Thank you for your application."}
         </p>
         <p className="page-intro" style={{ fontSize: "0.74rem" }}>
-          We will be in touch within 48 hours.
+          {status.alreadyApplied
+            ? "We are reviewing your application and will reach out within 48 hours."
+            : "We will be in touch within 48 hours."}
         </p>
       </div>
     );

@@ -302,8 +302,8 @@ export default function MyPagePage() {
                 <span className="dash-mypage-live">● Published</span>
                 <small>
                   Your page: <a href={pageUrl} target="_blank" rel="noreferrer">{pageUrl}</a>
-                  {" "}(the public page goes live with the next release — your link
-                  is reserved now).
+                  {" "}— live now. Share it in your outreach; edits here appear
+                  within a few minutes.
                 </small>
               </>
             ) : (

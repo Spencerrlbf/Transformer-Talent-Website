@@ -32,7 +32,12 @@ export type BoardRoleView = {
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "ok"; matches: { jobId: string; title: string; salary: string }[]; wasSpeculative: boolean }
+  | {
+      kind: "ok";
+      matches: { jobId: string; title: string; salary: string }[];
+      wasSpeculative: boolean;
+      alreadyApplied?: boolean;
+    }
   | { kind: "error"; message: string };
 
 // comma = OR groups; space-separated terms = AND; -term excludes; "quoted phrase"
@@ -216,7 +221,12 @@ export default function BoardClient({
         form.reset();
         setSelected([]);
         setSpeculative(false);
-        setStatus({ kind: "ok", matches: json.matches || [], wasSpeculative: isSpeculative });
+        setStatus({
+          kind: "ok",
+          matches: json.matches || [],
+          wasSpeculative: isSpeculative,
+          alreadyApplied: json.alreadyApplied === true,
+        });
       } else {
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
@@ -343,7 +353,7 @@ export default function BoardClient({
 
       <div className={`board-layout${railVisible ? " with-panel" : ""}`}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ overflowX: "auto" }}>
+          <div className="board-scroll">
             <table className="board-table">
               <thead>
                 <tr>
@@ -358,7 +368,7 @@ export default function BoardClient({
                       <span className="board-sort">{sort === h.key ? (dir === 1 ? "▲" : "▼") : ""}</span>
                     </th>
                   ))}
-                  <th style={{ whiteSpace: "nowrap" }}>Apply</th>
+                  <th className="board-apcell" style={{ whiteSpace: "nowrap" }}>Apply</th>
                 </tr>
               </thead>
               <tbody>
@@ -391,7 +401,7 @@ export default function BoardClient({
                       <td className="board-salary" style={{ whiteSpace: "nowrap" }}>
                         {r.salary || "On request"}
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="board-apcell" style={{ whiteSpace: "nowrap" }}>
                         <button
                           type="button"
                           className={`board-apply-btn${isSel ? " sel" : ""}`}
@@ -405,8 +415,21 @@ export default function BoardClient({
                     isOpen ? (
                       <tr key={`${r.jobId}-detail`} className="board-detail-row">
                         <td colSpan={7}>
-                          <div className="board-detail">
-                            {r.about && <p>{r.about}</p>}
+                          <div className="board-jdcard">
+                            <div className="jd-chips">
+                              {r.salary && <span className="jd-chip money">{r.salary}</span>}
+                              {r.locations.length > 0 && (
+                                <span className="jd-chip">
+                                  {r.locations.length > 3
+                                    ? `${r.locations.slice(0, 3).join(" · ")} +${r.locations.length - 3}`
+                                    : r.locations.join(" · ")}
+                                </span>
+                              )}
+                              {r.workplace && <span className="jd-chip">{r.workplace}</span>}
+                              {r.yoe && <span className="jd-chip">{r.yoe}</span>}
+                              {r.visa && <span className="jd-chip">{visaBucket(r)}</span>}
+                            </div>
+                            {r.about && <p className="jd-about">{r.about}</p>}
                             {r.doing.length > 0 && (
                               <>
                                 <h4>What you&apos;ll do</h4>
@@ -425,6 +448,22 @@ export default function BoardClient({
                                 <ul>{r.bonus.map((d, i) => <li key={i}>{d}</li>)}</ul>
                               </>
                             )}
+                            <div className="jd-foot">
+                              <button
+                                type="button"
+                                className="board-btn"
+                                onClick={() => toggle(r.jobId)}
+                              >
+                                {isSel ? "✓ SELECTED · REMOVE" : "APPLY TO THIS ROLE +"}
+                              </button>
+                              <button
+                                type="button"
+                                className="jd-close"
+                                onClick={() => setExpanded(null)}
+                              >
+                                close
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -460,20 +499,37 @@ export default function BoardClient({
             {status.kind === "ok" ? (
               <div className="board-thanks">
                 <h2>
-                  {recruiter
-                    ? "Thank you for your application."
-                    : status.wasSpeculative
-                      ? "Resume received."
-                      : "Application received."}
+                  {status.alreadyApplied
+                    ? "You've already applied."
+                    : recruiter
+                      ? "Thank you for your application."
+                      : status.wasSpeculative
+                        ? "Resume received."
+                        : "Application received."}
                 </h2>
                 <p>
-                  {recruiter
-                    ? "We will be in touch within 48 hours."
-                    : status.wasSpeculative
-                      ? `We'll match you against ${org.name}'s open roles — and new ones as they arrive — and be in touch when there's a genuine fit.`
-                      : "Every application is screened and reviewed — you'll hear back when there's a fit."}
+                  {status.alreadyApplied
+                    ? "We are reviewing your application and will reach out within 48 hours."
+                    : recruiter
+                      ? "We will be in touch within 48 hours."
+                      : status.wasSpeculative
+                        ? `We'll match you against ${org.name}'s open roles — and new ones as they arrive — and be in touch when there's a genuine fit.`
+                        : "Every application is screened and reviewed — you'll hear back when there's a fit."}
                 </p>
-                {!recruiter && status.matches.length > 0 && (
+                <p style={{ marginTop: 14 }}>
+                  <button
+                    type="button"
+                    className="board-linkbtn"
+                    onClick={() => {
+                      setStatus({ kind: "idle" });
+                      setSelected([]);
+                      setSpeculative(false);
+                    }}
+                  >
+                    Submit another application
+                  </button>
+                </p>
+                {!recruiter && !status.alreadyApplied && status.matches.length > 0 && (
                   <>
                     <h3>You also look like a fit for</h3>
                     <ul className="board-matchlist">
