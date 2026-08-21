@@ -1964,3 +1964,4 @@ body:has(.board-app) {
 .pb-confirm-yes { border: 0; background: #b42318; color: #fff; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 700; padding: 5px 12px; cursor: pointer; }
 .pb-confirm-no { border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 650; padding: 5px 12px; cursor: pointer; }
 .pb-confirm-note { font-size: 10.5px; color: #8a919c; }
+@media (hover: none) { .pb-x { opacity: 1; } }
