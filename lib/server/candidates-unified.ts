@@ -537,6 +537,16 @@ export async function saveUnifiedStatus(
     status === "interviewing" && typeof interviewStage === "string" && interviewStage
       ? interviewStage.slice(0, 24)
       : null;
+
+  // Current position, so the history log records the transition (and no-op
+  // saves don't spam it).
+  const curRes = await sbRest(
+    `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${encodeURIComponent(key)}&job_id=eq.${encodeURIComponent(jobId)}&select=status,interview_stage&limit=1`
+  );
+  const [cur] = curRes.ok
+    ? ((await curRes.json()) as { status: string; interview_stage: string | null }[])
+    : [];
+
   const res = await sbRest(
     `candidate_role_statuses?on_conflict=organization_id,candidate_key,job_id`,
     {
@@ -552,7 +562,26 @@ export async function saveUnifiedStatus(
       }),
     }
   );
-  return res.ok ? { ok: true } : { ok: false, error: "save_failed" };
+  if (!res.ok) return { ok: false, error: "save_failed" };
+
+  // The journey, not just the position: append the transition. Best effort —
+  // history must never fail a stage change.
+  if (cur?.status !== status || (cur?.interview_stage ?? null) !== stage) {
+    await sbRest("stage_events", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: JSON.stringify({
+        organization_id: orgId,
+        candidate_key: key,
+        job_id: jobId,
+        from_status: cur?.status ?? null,
+        from_interview_stage: cur?.interview_stage ?? null,
+        to_status: status,
+        to_interview_stage: stage,
+      }),
+    }).catch(() => {});
+  }
+  return { ok: true };
 }
 
 export async function listUnifiedCandidates(params: UnifiedListParams): Promise<UnifiedList> {

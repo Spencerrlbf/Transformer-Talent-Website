@@ -241,8 +241,13 @@ export default function PipelineBoard({
                 onDragLeave={() => setOverCol((c) => (c === col.key ? null : c))}
                 onDrop={(e) => {
                   e.preventDefault();
+                  // Clear drag state here: the drop re-renders the card in its
+                  // new column, so the browser's dragend may never fire on it.
+                  const row = dragRow.current;
+                  dragRow.current = null;
+                  setDragKey(null);
                   setOverCol(null);
-                  if (dragRow.current) moveTo(dragRow.current, col);
+                  if (row) moveTo(row, col);
                 }}
               >
                 {col.iv && (
@@ -306,7 +311,11 @@ export default function PipelineBoard({
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
-            if (dragRow.current) reject(dragRow.current);
+            const row = dragRow.current;
+            dragRow.current = null;
+            setDragKey(null);
+            setOverCol(null);
+            if (row) reject(row);
           }}
         >
           Drop here to reject → moves to the Past tab (restorable)
