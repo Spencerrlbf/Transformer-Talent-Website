@@ -1085,6 +1085,10 @@ body:has(.board-app) {
   background: #fff;
 }
 .board-app {
+  /* body is a flex container; without these the table's min-content width
+     blows the page out sideways on phones. */
+  min-width: 0;
+  width: 100%;
   background: #fff;
   color: #111418;
   font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
@@ -1135,13 +1139,31 @@ body:has(.board-app) {
 .board-rolebtn .t { display: block; font-weight: 650; color: #111418; }
 .board-rolebtn .d { display: block; font-size: 12px; color: #8a919c; margin-top: 2px; }
 .board-rolebtn:hover .t { color: #2a5bd7; }
-/* Inline JD expansion (tenants have no detail pages) */
-.board-detail-row td { background: #fafbfc; padding: 0 12px 16px; }
-.board-detail { border-left: 2px solid #d3d7dd; padding: 4px 0 0 16px; max-width: 640px; }
-.board-detail p { margin: 8px 0; color: #3d434c; }
-.board-detail h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #8a919c; margin: 12px 0 5px; }
-.board-detail ul { margin: 0; padding-left: 18px; color: #3d434c; }
-.board-detail li { margin-bottom: 3px; }
+/* Inline JD expansion: a card, so the JD reads like a document rather than
+   a grey band. The card carries its own Apply button because the table's
+   Apply column may be scrolled away. */
+.board-detail-row td { background: #fafbfc; padding: 4px 12px 18px; }
+/* The table scrolls sideways, but the JD card must not: it sticks to the
+   visible left edge and caps its width to the scroll container (100cqw via
+   .board-scroll's container-type), so it always reads fully on screen. */
+.board-scroll { overflow-x: auto; container-type: inline-size; }
+.board-jdcard { background: #fff; border: 1px solid #e6e8ec; border-radius: 10px; padding: 20px 22px; max-width: 720px; position: sticky; left: 0; max-width: min(720px, calc(100cqw - 24px)); }
+.board-jdcard .jd-chips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
+.board-jdcard .jd-chip { font-size: 11.5px; font-weight: 650; color: #3d434c; background: #f4f6f8; border: 1px solid #e6e8ec; border-radius: 999px; padding: 3px 10px; }
+.board-jdcard .jd-chip.money { color: #067647; background: #ecfdf3; border-color: #a6f4c5; }
+.board-jdcard .jd-about { color: #3d434c; font-size: 13.5px; line-height: 1.65; margin: 0 0 4px; }
+.board-jdcard h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: #8a919c; margin: 18px 0 8px; }
+.board-jdcard ul { margin: 0; padding-left: 17px; color: #3d434c; }
+.board-jdcard li { margin-bottom: 6px; line-height: 1.5; }
+.jd-foot { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #eef0f3; }
+.jd-foot .board-btn { padding: 9px 16px; font-size: 12.5px; }
+.jd-close { background: none; border: 0; padding: 0; color: #6b7280; font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; }
+
+/* The Apply column pins to the right edge of the scroll area so the button
+   is never cut off; other columns scroll underneath. */
+.board-apcell { position: sticky; right: 0; background: #fff; z-index: 1; }
+.board-apcell::before { content: ''; position: absolute; left: -12px; top: 0; bottom: 0; width: 12px; background: linear-gradient(90deg, transparent, rgba(17,20,24,0.06)); pointer-events: none; }
+.board-table tbody tr:hover .board-apcell, .board-table tr.row-open .board-apcell { background: #fafbfc; }
 /* APPLY + button */
 .board-apply-btn {
   border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px;
@@ -1763,4 +1785,36 @@ body:has(.board-app) {
 .dash-mypage-web input {
   border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit;
   font-size: 13.5px; color: #111418; background: #fff; flex: 1; min-width: 0; max-width: 340px;
+}
+
+/* ---------- Recruiter page header (board in recruiter mode) ---------- */
+.rp-head {
+  display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+  padding-bottom: 20px; margin-bottom: 18px; border-bottom: 1px solid #e6e8ec;
+}
+.rp-photo { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; border: 1px solid #e6e8ec; flex: none; }
+.rp-initials {
+  width: 76px; height: 76px; border-radius: 50%; background: #eef2fb; color: #2a5bd7;
+  font-weight: 800; font-size: 24px; display: flex; align-items: center; justify-content: center; flex: none;
+}
+.rp-id { min-width: 0; flex: 1 1 320px; }
+.rp-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; text-transform: none; font-family: inherit; }
+.rp-sub { color: #6b7280; font-size: 13px; margin: 2px 0 0; }
+.rp-sub b { color: #111418; }
+.rp-bio { color: #3d434c; font-size: 13.5px; margin: 8px 0 0; max-width: 46rem; }
+.rp-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; margin-left: auto; }
+.rp-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-links a {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid #d3d7dd;
+  border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 650;
+  color: #111418; text-decoration: none; white-space: nowrap;
+}
+.rp-links a b { color: #0A66C2; }
+.rp-links a:hover { border-color: #111418; }
+.rp-open {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; color: #067647;
+  background: #ecfdf3; border: 1px solid #a6f4c5; border-radius: 999px; padding: 4px 10px;
+}
+@media (max-width: 700px) {
+  .rp-side { margin-left: 0; align-items: flex-start; }
 }

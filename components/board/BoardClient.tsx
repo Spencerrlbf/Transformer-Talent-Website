@@ -32,7 +32,12 @@ export type BoardRoleView = {
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "ok"; matches: { jobId: string; title: string; salary: string }[]; wasSpeculative: boolean }
+  | {
+      kind: "ok";
+      matches: { jobId: string; title: string; salary: string }[];
+      wasSpeculative: boolean;
+      alreadyApplied?: boolean;
+    }
   | { kind: "error"; message: string };
 
 // comma = OR groups; space-separated terms = AND; -term excludes; "quoted phrase"
@@ -72,12 +77,25 @@ const HEADERS: { key: SortKey; label: string }[] = [
   { key: "salary", label: "Base salary" },
 ];
 
+// Recruiter mode: the same board rendered as a person's public page — banner
+// header, first-person resume banner, mandatory resume, and attribution.
+export type RecruiterHead = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  linkedinUrl: string;
+  website: string;
+  bio: string;
+};
+
 export default function BoardClient({
   org,
   roles,
+  recruiter,
 }: {
   org: { slug: string; name: string };
   roles: BoardRoleView[];
+  recruiter?: RecruiterHead;
 }) {
   const [q, setQ] = useState("");
   const [loc, setLoc] = useState("");
@@ -179,8 +197,12 @@ export default function BoardClient({
     const data = new FormData(form);
     const resume = data.get("resume");
     const hasResume = resume instanceof File && resume.size > 0;
-    if (isSpeculative && !hasResume) {
-      setFormError("A resume is required for a general application — it's what we match you with.");
+    if ((isSpeculative || recruiter) && !hasResume) {
+      setFormError(
+        recruiter
+          ? "A resume is required."
+          : "A resume is required for a general application — it's what we match you with."
+      );
       return;
     }
     if (!isSpeculative && selected.length === 0) {
@@ -188,6 +210,7 @@ export default function BoardClient({
       return;
     }
     data.set("board", org.slug);
+    if (recruiter) data.set("recruiter", recruiter.id);
     data.set("roleIds", selected.join(","));
     if (isSpeculative) data.set("speculative", "1");
     setStatus({ kind: "sending" });
@@ -198,7 +221,12 @@ export default function BoardClient({
         form.reset();
         setSelected([]);
         setSpeculative(false);
-        setStatus({ kind: "ok", matches: json.matches || [], wasSpeculative: isSpeculative });
+        setStatus({
+          kind: "ok",
+          matches: json.matches || [],
+          wasSpeculative: isSpeculative,
+          alreadyApplied: json.alreadyApplied === true,
+        });
       } else {
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
@@ -211,16 +239,67 @@ export default function BoardClient({
 
   return (
     <div className="board-app">
-      <header className="board-head">
-        <h1>{org.name}</h1>
-        <p>Open roles</p>
-      </header>
+      {recruiter ? (
+        <header className="rp-head">
+          {recruiter.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="rp-photo" src={recruiter.photoUrl} alt={recruiter.name} />
+          ) : (
+            <span className="rp-initials">
+              {recruiter.name
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((w) => w[0]?.toUpperCase())
+                .join("")}
+            </span>
+          )}
+          <div className="rp-id">
+            <h1>{recruiter.name}</h1>
+            <p className="rp-sub">
+              Recruiter · <b>{org.name}</b>
+            </p>
+            {recruiter.bio && <p className="rp-bio">{recruiter.bio}</p>}
+          </div>
+          <div className="rp-side">
+            <div className="rp-links">
+              {recruiter.linkedinUrl && (
+                <a href={recruiter.linkedinUrl} target="_blank" rel="noreferrer">
+                  <b>in</b> LinkedIn
+                </a>
+              )}
+              {recruiter.website && (
+                <a href={recruiter.website} target="_blank" rel="noreferrer">
+                  {recruiter.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                </a>
+              )}
+            </div>
+            <span className="rp-open">
+              {roles.length} OPEN ROLE{roles.length === 1 ? "" : "S"}
+            </span>
+          </div>
+        </header>
+      ) : (
+        <header className="board-head">
+          <h1>{org.name}</h1>
+          <p>Open roles</p>
+        </header>
+      )}
 
       {!railVisible && (
         <div className="board-spec">
           <p>
-            <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
-            {org.name}&apos;s open roles and reach out when the right one arrives.
+            {recruiter ? (
+              <>
+                <b>If it is easier, upload your resume</b> and we will match you
+                against our roles and reach out if we have suitable matches.
+              </>
+            ) : (
+              <>
+                <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
+                {org.name}&apos;s open roles and reach out when the right one arrives.
+              </>
+            )}
           </p>
           <button
             className="board-btn"
@@ -274,7 +353,7 @@ export default function BoardClient({
 
       <div className={`board-layout${railVisible ? " with-panel" : ""}`}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ overflowX: "auto" }}>
+          <div className="board-scroll">
             <table className="board-table">
               <thead>
                 <tr>
@@ -289,7 +368,7 @@ export default function BoardClient({
                       <span className="board-sort">{sort === h.key ? (dir === 1 ? "▲" : "▼") : ""}</span>
                     </th>
                   ))}
-                  <th style={{ whiteSpace: "nowrap" }}>Apply</th>
+                  <th className="board-apcell" style={{ whiteSpace: "nowrap" }}>Apply</th>
                 </tr>
               </thead>
               <tbody>
@@ -322,7 +401,7 @@ export default function BoardClient({
                       <td className="board-salary" style={{ whiteSpace: "nowrap" }}>
                         {r.salary || "On request"}
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="board-apcell" style={{ whiteSpace: "nowrap" }}>
                         <button
                           type="button"
                           className={`board-apply-btn${isSel ? " sel" : ""}`}
@@ -336,8 +415,21 @@ export default function BoardClient({
                     isOpen ? (
                       <tr key={`${r.jobId}-detail`} className="board-detail-row">
                         <td colSpan={7}>
-                          <div className="board-detail">
-                            {r.about && <p>{r.about}</p>}
+                          <div className="board-jdcard">
+                            <div className="jd-chips">
+                              {r.salary && <span className="jd-chip money">{r.salary}</span>}
+                              {r.locations.length > 0 && (
+                                <span className="jd-chip">
+                                  {r.locations.length > 3
+                                    ? `${r.locations.slice(0, 3).join(" · ")} +${r.locations.length - 3}`
+                                    : r.locations.join(" · ")}
+                                </span>
+                              )}
+                              {r.workplace && <span className="jd-chip">{r.workplace}</span>}
+                              {r.yoe && <span className="jd-chip">{r.yoe}</span>}
+                              {r.visa && <span className="jd-chip">{visaBucket(r)}</span>}
+                            </div>
+                            {r.about && <p className="jd-about">{r.about}</p>}
                             {r.doing.length > 0 && (
                               <>
                                 <h4>What you&apos;ll do</h4>
@@ -356,6 +448,22 @@ export default function BoardClient({
                                 <ul>{r.bonus.map((d, i) => <li key={i}>{d}</li>)}</ul>
                               </>
                             )}
+                            <div className="jd-foot">
+                              <button
+                                type="button"
+                                className="board-btn"
+                                onClick={() => toggle(r.jobId)}
+                              >
+                                {isSel ? "✓ SELECTED · REMOVE" : "APPLY TO THIS ROLE +"}
+                              </button>
+                              <button
+                                type="button"
+                                className="jd-close"
+                                onClick={() => setExpanded(null)}
+                              >
+                                close
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -390,13 +498,38 @@ export default function BoardClient({
           <aside className="board-rail" ref={railRef}>
             {status.kind === "ok" ? (
               <div className="board-thanks">
-                <h2>{status.wasSpeculative ? "Resume received." : "Application received."}</h2>
+                <h2>
+                  {status.alreadyApplied
+                    ? "You've already applied."
+                    : recruiter
+                      ? "Thank you for your application."
+                      : status.wasSpeculative
+                        ? "Resume received."
+                        : "Application received."}
+                </h2>
                 <p>
-                  {status.wasSpeculative
-                    ? `We'll match you against ${org.name}'s open roles — and new ones as they arrive — and be in touch when there's a genuine fit.`
-                    : "Every application is screened and reviewed — you'll hear back when there's a fit."}
+                  {status.alreadyApplied
+                    ? "We are reviewing your application and will reach out within 48 hours."
+                    : recruiter
+                      ? "We will be in touch within 48 hours."
+                      : status.wasSpeculative
+                        ? `We'll match you against ${org.name}'s open roles — and new ones as they arrive — and be in touch when there's a genuine fit.`
+                        : "Every application is screened and reviewed — you'll hear back when there's a fit."}
                 </p>
-                {status.matches.length > 0 && (
+                <p style={{ marginTop: 14 }}>
+                  <button
+                    type="button"
+                    className="board-linkbtn"
+                    onClick={() => {
+                      setStatus({ kind: "idle" });
+                      setSelected([]);
+                      setSpeculative(false);
+                    }}
+                  >
+                    Submit another application
+                  </button>
+                </p>
+                {!recruiter && !status.alreadyApplied && status.matches.length > 0 && (
                   <>
                     <h3>You also look like a fit for</h3>
                     <ul className="board-matchlist">
@@ -423,9 +556,19 @@ export default function BoardClient({
                 </div>
                 {isSpeculative ? (
                   <p className="board-instr">
-                    <b>No role selected — we&apos;ll do the matching.</b> Drop your resume and
-                    we&apos;ll screen you against {org.name}&apos;s roles, now and as new ones
-                    open.{" "}
+                    {recruiter ? (
+                      <>
+                        <b>No role selected? No problem.</b> Upload your resume and we
+                        will match you against our roles and reach out if we have
+                        suitable matches.{" "}
+                      </>
+                    ) : (
+                      <>
+                        <b>No role selected — we&apos;ll do the matching.</b> Drop your resume and
+                        we&apos;ll screen you against {org.name}&apos;s roles, now and as new ones
+                        open.{" "}
+                      </>
+                    )}
                     <button className="board-linkbtn" onClick={() => setSpeculative(false)}>
                       back to roles
                     </button>
@@ -464,8 +607,13 @@ export default function BoardClient({
                     <input name="linkedin" type="url" required placeholder="https://linkedin.com/in/…" maxLength={300} />
                   </label>
                   <label>
-                    Resume (PDF{isSpeculative ? ", required" : ", optional but recommended"})
-                    <input name="resume" type="file" accept="application/pdf" required={isSpeculative} />
+                    Resume (PDF{isSpeculative || recruiter ? ", required" : ", optional but recommended"})
+                    <input
+                      name="resume"
+                      type="file"
+                      accept="application/pdf"
+                      required={isSpeculative || Boolean(recruiter)}
+                    />
                   </label>
                   <label>
                     Locations you&apos;re open to (optional — ⌘/Ctrl-click; empty = your profile location)
