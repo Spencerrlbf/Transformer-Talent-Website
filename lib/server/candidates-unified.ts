@@ -7,6 +7,7 @@
 import { sbRest } from "./supabase";
 import { signResumeUrl } from "./applicants";
 import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
+import { poolEmails } from "./network";
 import type { Scorecard } from "./scorecard";
 
 /* ------------------------------------------------------------------ */
@@ -136,7 +137,12 @@ export type ExperienceGroup = {
   }[];
 };
 
-export type UnifiedContact = { email?: string | null; phone?: string | null; github?: string | null };
+export type UnifiedContact = {
+  email?: string | null; // primary — what sends and list rows use
+  phone?: string | null;
+  github?: string | null;
+  otherEmails?: string[] | null; // additional addresses, user-manageable
+};
 
 export type UnifiedDetail = {
   key: string;
@@ -827,17 +833,17 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     const id = key.slice(4);
     const res = await sbRest(
       `candidates?id=eq.${id}&select=id,full_name,headline,location,linkedin_url,linkedin_username,` +
-        `email,phone,profile_picture_url,current_title,current_company,created_at&limit=1`
+        `email,phone,contact,profile_picture_url,current_title,current_company,created_at&limit=1`
     );
     const [p] = (res.ok ? await res.json() : []) as {
       id: string; full_name: string | null; headline: string | null; location: string | null;
       linkedin_url: string | null; linkedin_username: string | null; email: string | null;
-      phone: string | null; profile_picture_url: string | null; current_title: string | null;
-      current_company: string | null; created_at: string;
+      phone: string | null; contact: UnifiedContact | null; profile_picture_url: string | null;
+      current_title: string | null; current_company: string | null; created_at: string;
     }[];
     if (!p) return null;
 
-    const [enrRes, vRes] = await Promise.all([
+    const [enrRes, vRes, emailMap] = await Promise.all([
       sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
           `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
@@ -846,6 +852,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
+      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]])),
     ]);
     const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
@@ -893,7 +900,22 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       viaTT: false,
       alsoSourced: false,
       provenance: `Matched from your talent pool by the nightly runs`,
-      contact: { email: str(p.email), phone: str(p.phone) },
+      // Same contact shape as every other candidate (edit writes the pool's
+      // contact overlay). otherEmails: user-curated list once saved; until
+      // then, the verification tables' addresses minus the primary.
+      contact: (() => {
+        const primary = str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null;
+        const curated = Array.isArray(p.contact?.otherEmails) ? p.contact!.otherEmails! : null;
+        const fallback = (emailMap.get(id) || [])
+          .map((e) => e.email)
+          .filter((e) => e.toLowerCase() !== (primary || "").toLowerCase());
+        return {
+          email: primary,
+          phone: str(p.contact?.phone) ?? str(p.phone),
+          github: str(p.contact?.github),
+          otherEmails: curated ?? fallback,
+        };
+      })(),
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       pipeline,
@@ -1046,6 +1068,18 @@ const cleanContact = (c: UnifiedContact): UnifiedContact | { error: string } => 
   out.email = email || null;
   out.phone = phone || null;
   out.github = github || null;
+  const seen = new Set<string>([(email || "").toLowerCase()]);
+  const others: string[] = [];
+  for (const raw of c.otherEmails || []) {
+    const e = str(raw);
+    if (!e) continue;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 160) return { error: "invalid_email" };
+    if (seen.has(e.toLowerCase())) continue;
+    seen.add(e.toLowerCase());
+    others.push(e);
+    if (others.length >= 8) break;
+  }
+  out.otherEmails = others; // always an array on save — the list becomes curated
   return out;
 };
 
@@ -1057,11 +1091,14 @@ export async function saveUnifiedContact(
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
 
+  // net_ = pool candidate (TT-internal; the API route gates org access).
   const target = key.startsWith("src_")
     ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
     : key.startsWith("app_")
       ? `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
-      : null;
+      : key.startsWith("net_")
+        ? `candidates?id=eq.${key.slice(4)}`
+        : null;
   if (!target) return { error: "bad_key" };
 
   const res = await sbRest(target, {
