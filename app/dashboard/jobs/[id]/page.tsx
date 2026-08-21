@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
 import type { SkillChip } from "@/components/dashboard/JobForm";
 import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
+import PipelineBoard from "@/components/dashboard/candidates/PipelineBoard";
 import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
 import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
@@ -62,6 +63,10 @@ function JobWorkspace({ id }: { id: string }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Bumped when a Past-tab restore happens so the (mounted) Pipeline table refetches.
   const [pipelineRefresh, setPipelineRefresh] = useState(0);
+  // Pipeline view: the table and the board are the same data in two shapes.
+  const [view, setView] = useState<"table" | "board">(() =>
+    search.get("view") === "board" ? "board" : "table"
+  );
   // TT-only shortcut: how many nightly pool matches exist for this role.
   const [netCount, setNetCount] = useState<number>(0);
 
@@ -268,13 +273,44 @@ function JobWorkspace({ id }: { id: string }) {
             </button>
           </div>
         )}
-        <CandidatesTable
-          jobId={job.id}
-          defaultHideNotNow
-          refreshKey={pipelineRefresh}
-          onCounts={setCounts}
-          onOpen={setOpenKey}
-        />
+        <div className="pb-viewbar">
+          <div className="pb-seg" role="tablist" aria-label="Pipeline view">
+            {(["table", "board"] as const).map((v) => (
+              <button
+                key={v}
+                className={view === v ? "on" : ""}
+                onClick={() => {
+                  setView(v);
+                  const url = new URL(window.location.href);
+                  if (v === "board") url.searchParams.set("view", "board");
+                  else url.searchParams.delete("view");
+                  window.history.replaceState(null, "", url.toString());
+                }}
+              >
+                {v === "table" ? "Table" : "Board"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Both views stay mounted so filters / scroll positions survive the
+            toggle; each hides via CSS. */}
+        <div style={{ display: view === "table" ? undefined : "none" }}>
+          <CandidatesTable
+            jobId={job.id}
+            defaultHideNotNow
+            refreshKey={pipelineRefresh}
+            onCounts={setCounts}
+            onOpen={setOpenKey}
+          />
+        </div>
+        {view === "board" && (
+          <PipelineBoard
+            jobId={job.id}
+            refreshKey={pipelineRefresh}
+            onOpen={setOpenKey}
+            onChanged={() => setPipelineRefresh((n) => n + 1)}
+          />
+        )}
       </div>
 
       {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} />}

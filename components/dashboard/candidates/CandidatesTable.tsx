@@ -33,6 +33,8 @@ export type Cv2Row = {
   yearsExperience: number | null;
   addedAt: string;
   stage: string | null;
+  interviewStage?: string | null;
+  stageUpdatedAt?: string | null;
   screeningPending?: boolean;
 };
 
