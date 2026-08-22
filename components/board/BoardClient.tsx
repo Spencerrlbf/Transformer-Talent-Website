@@ -96,6 +96,24 @@ export type RecruiterHead = {
   referralAmount: number | null;
 };
 
+// Analytics beacon (recruiter pages only): fire-and-forget, deduped
+// server-side per visitor per day, never blocks or errors at a candidate.
+function track(profileId: string, event: string, roleId?: string) {
+  try {
+    const payload = JSON.stringify({
+      p: profileId,
+      e: event,
+      r: roleId || "",
+      ref: document.referrer || "",
+    });
+    if (!navigator.sendBeacon?.("/api/e", new Blob([payload], { type: "application/json" }))) {
+      fetch("/api/e", { method: "POST", body: payload, keepalive: true }).catch(() => {});
+    }
+  } catch {
+    /* analytics must never break the page */
+  }
+}
+
 // Known schedulers get their official embed form so booking happens right on
 // the page; anything unrecognized returns null and opens in a new tab instead.
 function bookingEmbedSrc(url: string): string | null {
@@ -172,6 +190,7 @@ export default function BoardClient({
 
   function openBooking() {
     if (!recruiter?.bookingUrl) return;
+    track(recruiter.id, "booking_click");
     const src = bookingEmbedSrc(recruiter.bookingUrl);
     if (src) setBookSrc(src);
     else window.open(recruiter.bookingUrl, "_blank", "noopener");
@@ -179,6 +198,7 @@ export default function BoardClient({
 
   async function copyEmail() {
     if (!recruiter?.contactEmail) return;
+    track(recruiter.id, "email_copy");
     try {
       await navigator.clipboard.writeText(recruiter.contactEmail);
       setEmailCopied(true);
@@ -204,7 +224,13 @@ export default function BoardClient({
         </button>
       )}
       {recruiter.linkedinUrl && (
-        <a className="rp-abtn" href={recruiter.linkedinUrl} target="_blank" rel="noreferrer">
+        <a
+          className="rp-abtn"
+          href={recruiter.linkedinUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => track(recruiter.id, "linkedin_click")}
+        >
           <b>in</b> LinkedIn
         </a>
       )}
@@ -228,6 +254,11 @@ export default function BoardClient({
   useEffect(() => {
     setPage(1);
   }, [q, loc, office, type, visaF]);
+
+  const recruiterId = recruiter?.id;
+  useEffect(() => {
+    if (recruiterId) track(recruiterId, "view");
+  }, [recruiterId]);
 
   const locations = useMemo(() => [...new Set(roles.flatMap((r) => r.locations))].sort(), [roles]);
   const offices = useMemo(() => [...new Set(roles.map((r) => r.workplace).filter(Boolean))].sort(), [roles]);
@@ -484,9 +515,10 @@ export default function BoardClient({
               <button
                 type="button"
                 className="board-refstrip-btn"
-                onClick={() =>
-                  document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
+                onClick={() => {
+                  track(recruiter.id, "referral_open");
+                  document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
               >
                 REFER AN ENGINEER →
               </button>
@@ -564,7 +596,10 @@ export default function BoardClient({
                       <td style={{ minWidth: 220 }}>
                         <button
                           className="board-rolebtn"
-                          onClick={() => setExpanded(isOpen ? null : r.jobId)}
+                          onClick={() => {
+                            if (!isOpen && recruiter) track(recruiter.id, "role_open", r.jobId);
+                            setExpanded(isOpen ? null : r.jobId);
+                          }}
                           aria-expanded={isOpen}
                         >
                           <span className="t">{r.title}</span>
@@ -886,9 +921,10 @@ export default function BoardClient({
             <button
               type="button"
               className="rp-abtn green"
-              onClick={() =>
-                document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
+              onClick={() => {
+                track(recruiter.id, "referral_open");
+                document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
             >
               Refer
             </button>
