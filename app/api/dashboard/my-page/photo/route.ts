@@ -37,6 +37,17 @@ export async function POST(req: NextRequest) {
   if (!base || !key)
     return NextResponse.json({ error: "storage_unavailable" }, { status: 502 });
 
+  // Bake the EXIF orientation into the pixels (phone photos are often
+  // stored sideways + a rotation flag; the OG-card renderer ignores the
+  // flag). Fail-open to the original bytes if sharp chokes.
+  let body = Buffer.from(await photo.arrayBuffer());
+  try {
+    const sharp = (await import("sharp")).default;
+    body = Buffer.from(await sharp(body).rotate().toBuffer());
+  } catch (err) {
+    console.error("photo orientation normalize failed", err);
+  }
+
   const path = `${member.org.id}/${member.userId}-${Date.now()}.${ext}`;
   const up = await fetch(`${base}/storage/v1/object/recruiter-photos/${path}`, {
     method: "POST",
@@ -46,7 +57,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": photo.type,
       "x-upsert": "true",
     },
-    body: Buffer.from(await photo.arrayBuffer()),
+    body,
   });
   if (!up.ok) {
     console.error("photo upload failed", up.status, await up.text());
