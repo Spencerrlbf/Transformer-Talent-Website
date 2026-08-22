@@ -60,6 +60,36 @@ export async function sendEmail(args: {
   }
 }
 
+/** Team invitation: a branded email carrying the sign-in link. Used for the
+ *  first invite and for resends alike. */
+export async function sendTeamInvite(args: {
+  to: string;
+  orgName: string;
+  inviterEmail: string;
+  actionLink: string;
+}): Promise<boolean> {
+  return sendEmail({
+    to: args.to,
+    subject: `You have been invited to ${args.orgName} on Transformer Talent`,
+    html: `
+      <p style="margin:0 0 14px;"><b>${args.inviterEmail}</b> invited you to join
+      <b>${args.orgName}</b> on Transformer Talent.</p>
+      <p style="margin:0 0 18px;">You get a dashboard for your roles and candidates, plus your own
+      public recruiter page: one link with your face, your bio, and the roles you are hiring for,
+      made for sharing in outreach.</p>
+      <p style="margin:0 0 18px;">
+        <a href="${args.actionLink}"
+           style="display:inline-block;background:#111418;color:#ffffff;text-decoration:none;
+                  font-weight:700;font-size:14px;border-radius:8px;padding:12px 22px;">
+          Accept invitation &amp; sign in
+        </a>
+      </p>
+      <p style="margin:0;color:#8a919c;font-size:12px;">The link signs you in directly, no password
+      needed. If it has expired, ask ${args.inviterEmail} to resend the invitation.</p>`,
+    text: `${args.inviterEmail} invited you to join ${args.orgName} on Transformer Talent.\n\nAccept and sign in: ${args.actionLink}\n\nThe link signs you in directly, no password needed. If it has expired, ask ${args.inviterEmail} to resend the invitation.`,
+  });
+}
+
 /** Referral confirmation to the referrer (identical for duplicates — the
  *  response never reveals whether we already knew the person). */
 export async function sendReferralConfirmation(args: {

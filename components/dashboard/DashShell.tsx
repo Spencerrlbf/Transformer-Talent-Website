@@ -13,7 +13,7 @@ import { supabaseBrowser } from "./supabaseBrowser";
 
 type Org = { id: string; slug: string; name: string };
 type MyPage = { published: boolean; slug: string } | null;
-type DashContext = { token: string; org: Org; email: string };
+type DashContext = { token: string; org: Org; email: string; role: string };
 
 const Ctx = createContext<DashContext | null>(null);
 export function useDash(): DashContext {
@@ -33,7 +33,9 @@ export default function DashShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // undefined = still resolving; null = signed out
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [me, setMe] = useState<{ org: Org; email: string; myPage?: MyPage } | null | undefined>(undefined);
+  const [me, setMe] = useState<
+    { org: Org; email: string; memberRole?: string; myPage?: MyPage } | null | undefined
+  >(undefined);
 
   useEffect(() => {
     const supabase = supabaseBrowser();
@@ -95,7 +97,14 @@ export default function DashShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ token: session.access_token, org: me.org, email: me.email }}>
+    <Ctx.Provider
+      value={{
+        token: session.access_token,
+        org: me.org,
+        email: me.email,
+        role: me.memberRole || "member",
+      }}
+    >
       <div className="dash-app">
         <aside className="dash-side">
           <div className="dash-org">
@@ -121,6 +130,16 @@ export default function DashShell({ children }: { children: ReactNode }) {
                     className={pathname === "/dashboard/network" ? "on" : ""}
                   >
                     Network <span className="nw-navlock">TT</span>
+                  </Link>
+                )}
+                {/* Admin-only: team management. The API 404s recruiters even
+                    if they guess the URL. */}
+                {item.href === "/dashboard/my-page" && me.memberRole === "owner" && (
+                  <Link
+                    href="/dashboard/team"
+                    className={pathname === "/dashboard/team" ? "on" : ""}
+                  >
+                    Team
                   </Link>
                 )}
               </span>
