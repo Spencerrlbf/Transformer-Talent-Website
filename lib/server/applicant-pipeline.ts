@@ -27,6 +27,7 @@ import {
 import { computeFacts, formatFacts } from "./facts";
 import { roleLocationCompatible } from "./locations";
 import { renderScorecard } from "./scorecard";
+import { leadRecipients, sendLeadNotification } from "./lead-notify";
 
 export type ApplicantPipelineInput = {
   submissionId: string;
@@ -346,4 +347,32 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     preferredLocations,
     applicationFit,
   });
+
+  // Tell the page's recruiter (or the org owners) this person arrived.
+  // Referrals notify from their own route, where the referrer is known.
+  if (p.applicationType !== "Referral") {
+    try {
+      const res = await sbRest(
+        `website_applications?id=eq.${submissionId}&select=recruiter_profile_id`
+      );
+      const [row] = res.ok
+        ? ((await res.json()) as { recruiter_profile_id: string | null }[])
+        : [];
+      const to = await leadRecipients({
+        recruiterProfileId: row?.recruiter_profile_id ?? null,
+        orgId,
+      });
+      await sendLeadNotification({
+        to,
+        kind: speculative ? "speculative" : "application",
+        name,
+        email,
+        linkedin,
+        roleTitles,
+        viaPage: Boolean(row?.recruiter_profile_id),
+      });
+    } catch (err) {
+      console.error("lead notification failed", err);
+    }
+  }
 }
