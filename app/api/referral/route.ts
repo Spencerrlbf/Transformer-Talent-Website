@@ -5,6 +5,7 @@ import { linkedinUsername } from "@/lib/server/applicants";
 import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
 import { sendReferralConfirmation } from "@/lib/server/email";
+import { leadRecipients, sendLeadNotification } from "@/lib/server/lead-notify";
 
 export const maxDuration = 60;
 
@@ -219,6 +220,26 @@ export async function POST(req: NextRequest) {
       orgId,
       applicationType: "Referral",
     });
+    // Tell the page's recruiter, referrer included. After the pipeline so
+    // the candidate's name is resolved from their profile.
+    try {
+      const nres = await sbRest(`website_applications?id=eq.${submission.id}&select=name`);
+      const [nrow] = nres.ok ? ((await nres.json()) as { name: string }[]) : [];
+      const to = await leadRecipients({ recruiterProfileId: profile.id, orgId });
+      await sendLeadNotification({
+        to,
+        kind: "referral",
+        name: nrow?.name || "",
+        email: candidateEmail,
+        linkedin: candidateLinkedin,
+        roleTitles: [],
+        referrerName,
+        referrerEmail,
+        viaPage: true,
+      });
+    } catch (err) {
+      console.error("referral lead notification failed", err);
+    }
   });
 
   return NextResponse.json({ ok: true });
