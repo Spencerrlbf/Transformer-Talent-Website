@@ -112,7 +112,10 @@ function bookingEmbedSrc(url: string): string | null {
       u.searchParams.set("hide_gdpr_banner", "1");
       return u.toString();
     }
-    if (h === "calendar.google.com") {
+    // Only Google APPOINTMENT pages embed; other calendar.google.com URLs
+    // (e.g. someone pasting their own week view) refuse framing, so those
+    // fall through to the new-tab path instead of a blank popup.
+    if (h === "calendar.google.com" && u.pathname.includes("/appointments/")) {
       u.searchParams.set("gv", "true");
       return u.toString();
     }
