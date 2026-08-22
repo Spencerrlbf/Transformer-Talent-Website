@@ -13,6 +13,8 @@ export type RecruiterPage = {
     photoUrl: string | null;
     linkedinUrl: string;
     bio: string;
+    bookingUrl: string;
+    contactEmail: string;
   };
   org: { id: string; slug: string; name: string; website: string };
   roles: BoardRole[];
@@ -54,6 +56,8 @@ export async function loadRecruiterPage(slug: string): Promise<RecruiterPage | n
       photoUrl: photoPublicUrl(profile.photo_path),
       linkedinUrl: profile.linkedin_url || "",
       bio: profile.bio,
+      bookingUrl: profile.booking_url || "",
+      contactEmail: profile.contact_email || "",
     },
     org: { id: org.id, slug: org.slug, name: org.name, website: org.website || "" },
     roles,

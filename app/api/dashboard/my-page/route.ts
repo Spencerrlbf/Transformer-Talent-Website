@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import {
+  BOOKING_RE,
+  EMAIL_RE,
   LINKEDIN_RE,
   SLUG_RE,
   loadProfile,
@@ -53,6 +55,8 @@ export async function PUT(req: NextRequest) {
     showAllRoles?: boolean;
     showReferral?: boolean;
     published?: boolean;
+    bookingUrl?: string;
+    contactEmail?: string;
   };
   try {
     body = await req.json();
@@ -67,11 +71,17 @@ export async function PUT(req: NextRequest) {
   const showAllRoles = body.showAllRoles !== false;
   const showReferral = body.showReferral !== false;
   const published = body.published === true;
+  const bookingUrl = String(body.bookingUrl || "").trim().slice(0, 500);
+  const contactEmail = String(body.contactEmail || "").trim().toLowerCase().slice(0, 200);
 
   if (!SLUG_RE.test(slug))
     return NextResponse.json({ error: "bad_slug" }, { status: 400 });
   if (linkedinUrl && !LINKEDIN_RE.test(linkedinUrl))
     return NextResponse.json({ error: "bad_linkedin" }, { status: 400 });
+  if (bookingUrl && !BOOKING_RE.test(bookingUrl))
+    return NextResponse.json({ error: "bad_booking_url" }, { status: 400 });
+  if (contactEmail && !EMAIL_RE.test(contactEmail))
+    return NextResponse.json({ error: "bad_contact_email" }, { status: 400 });
   if (published && (!displayName || !bio || !linkedinUrl))
     return NextResponse.json({ error: "incomplete_for_publish" }, { status: 400 });
 
@@ -87,6 +97,8 @@ export async function PUT(req: NextRequest) {
       show_all_roles: showAllRoles,
       show_referral: showReferral,
       published,
+      booking_url: bookingUrl || null,
+      contact_email: contactEmail || null,
       updated_at: new Date().toISOString(),
     }),
     prefer: "resolution=merge-duplicates,return=representation",

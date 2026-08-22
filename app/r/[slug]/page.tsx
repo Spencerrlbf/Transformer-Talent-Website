@@ -33,6 +33,8 @@ export default async function RecruiterPublicPage({ params }: Params) {
         linkedinUrl: page.profile.linkedinUrl,
         website: page.org.website,
         bio: page.profile.bio,
+        bookingUrl: page.profile.bookingUrl,
+        contactEmail: page.profile.contactEmail,
         referralAmount: page.referralAmount,
       }}
       roles={page.roles.map((r) => ({
