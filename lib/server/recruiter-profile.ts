@@ -15,11 +15,15 @@ export type RecruiterProfileRow = {
   show_all_roles: boolean;
   show_referral: boolean;
   published: boolean;
+  booking_url: string | null;
+  contact_email: string | null;
   updated_at: string;
 };
 
 export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$/;
 export const LINKEDIN_RE = /^https?:\/\/([a-z0-9-]+\.)?linkedin\.com\/in\/[^\s]+$/i;
+export const BOOKING_RE = /^https:\/\/[^\s]+$/i;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function photoPublicUrl(photoPath: string | null): string | null {
   if (!photoPath) return null;
@@ -49,5 +53,7 @@ export function profileView(row: RecruiterProfileRow) {
     showAllRoles: row.show_all_roles,
     showReferral: row.show_referral !== false,
     published: row.published,
+    bookingUrl: row.booking_url || "",
+    contactEmail: row.contact_email || "",
   };
 }

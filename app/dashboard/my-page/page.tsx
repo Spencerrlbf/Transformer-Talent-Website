@@ -15,6 +15,8 @@ type ProfileView = {
   showAllRoles: boolean;
   showReferral: boolean;
   published: boolean;
+  bookingUrl: string;
+  contactEmail: string;
 };
 
 type PageData = {
@@ -30,6 +32,9 @@ const ERRORS: Record<string, string> = {
   slug_taken: "That link name is already taken — try another.",
   incomplete_for_publish:
     "To publish, fill in your name, bio, and LinkedIn URL first.",
+  bad_booking_url:
+    "The booking link must be a full https:// URL (a cal.com, Calendly, or Google appointment link).",
+  bad_contact_email: "That doesn't look like an email address.",
   save_failed: "Couldn't save — please try again.",
 };
 
@@ -43,6 +48,8 @@ export default function MyPagePage() {
   const [bio, setBio] = useState("");
   const [showAllRoles, setShowAllRoles] = useState(true);
   const [showReferral, setShowReferral] = useState(true);
+  const [bookingUrl, setBookingUrl] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [published, setPublished] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
@@ -73,6 +80,8 @@ export default function MyPagePage() {
         setBio(p?.bio || "");
         setShowAllRoles(p ? p.showAllRoles : true);
         setShowReferral(p ? p.showReferral : true);
+        setBookingUrl(p?.bookingUrl || "");
+        setContactEmail(p?.contactEmail || "");
         setPublished(p?.published || false);
         setPhotoUrl(p?.photoUrl || null);
         setWebsite(d.org.website);
@@ -96,6 +105,8 @@ export default function MyPagePage() {
           bio,
           showAllRoles,
           showReferral,
+          bookingUrl,
+          contactEmail,
           published: wantPublished,
         }),
       });
@@ -266,6 +277,35 @@ export default function MyPagePage() {
               maxLength={40}
               placeholder="your-name"
             />
+          </div>
+        </div>
+
+        <div className="dash-formgrid" style={{ marginTop: 14 }}>
+          <div className="dash-field">
+            <label>Booking link</label>
+            <input
+              value={bookingUrl}
+              onChange={(e) => setBookingUrl(e.target.value)}
+              placeholder="https://cal.com/your-name/15min"
+              maxLength={500}
+            />
+            <small className="dash-hint">
+              Paste your cal.com, Calendly, or Google appointment link. Adds a
+              Book a call button to your page; leave empty to hide it.
+            </small>
+          </div>
+          <div className="dash-field">
+            <label>Contact email</label>
+            <input
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder={email || "you@company.com"}
+              maxLength={200}
+            />
+            <small className="dash-hint">
+              Shown as an Email button that copies the address. Leave empty to
+              hide it.
+            </small>
           </div>
         </div>
 

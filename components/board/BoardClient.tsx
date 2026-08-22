@@ -88,9 +88,39 @@ export type RecruiterHead = {
   linkedinUrl: string;
   website: string;
   bio: string;
+  /** Pasted scheduling link (cal.com / Calendly / Google); empty hides Book a call. */
+  bookingUrl: string;
+  /** Public email for the copy-to-clipboard button; empty hides it. */
+  contactEmail: string;
   /** Bounty in dollars; null hides the referral block. */
   referralAmount: number | null;
 };
+
+// Known schedulers get their official embed form so booking happens right on
+// the page; anything unrecognized returns null and opens in a new tab instead.
+function bookingEmbedSrc(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const h = u.hostname.replace(/^www\./, "");
+    if (h === "cal.com" || h.endsWith(".cal.com")) {
+      u.searchParams.set("embed", "true");
+      return u.toString();
+    }
+    if (h === "calendly.com" || h.endsWith(".calendly.com")) {
+      u.searchParams.set("embed_domain", window.location.hostname);
+      u.searchParams.set("embed_type", "Inline");
+      u.searchParams.set("hide_gdpr_banner", "1");
+      return u.toString();
+    }
+    if (h === "calendar.google.com") {
+      u.searchParams.set("gv", "true");
+      return u.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export default function BoardClient({
   org,
@@ -131,6 +161,52 @@ export default function BoardClient({
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [formError, setFormError] = useState("");
   const railRef = useRef<HTMLElement>(null);
+
+  // Booking + contact actions (recruiter mode): header row on desktop, a
+  // bottom-pinned bar on phones — same buttons, position by screen width.
+  const [bookSrc, setBookSrc] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  function openBooking() {
+    if (!recruiter?.bookingUrl) return;
+    const src = bookingEmbedSrc(recruiter.bookingUrl);
+    if (src) setBookSrc(src);
+    else window.open(recruiter.bookingUrl, "_blank", "noopener");
+  }
+
+  async function copyEmail() {
+    if (!recruiter?.contactEmail) return;
+    try {
+      await navigator.clipboard.writeText(recruiter.contactEmail);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 1600);
+    } catch {
+      window.location.href = `mailto:${recruiter.contactEmail}`;
+    }
+  }
+
+  const hasContactActions = Boolean(
+    recruiter && (recruiter.bookingUrl || recruiter.contactEmail || recruiter.linkedinUrl)
+  );
+  const contactActions = recruiter ? (
+    <>
+      {recruiter.bookingUrl && (
+        <button type="button" className="rp-abtn primary" onClick={openBooking}>
+          Book a call
+        </button>
+      )}
+      {recruiter.contactEmail && (
+        <button type="button" className="rp-abtn" onClick={copyEmail}>
+          {emailCopied ? "Copied ✓" : "Email"}
+        </button>
+      )}
+      {recruiter.linkedinUrl && (
+        <a className="rp-abtn" href={recruiter.linkedinUrl} target="_blank" rel="noreferrer">
+          <b>in</b> LinkedIn
+        </a>
+      )}
+    </>
+  ) : null;
 
   // Embed mode: report height to the parent page for iframe auto-resize.
   useEffect(() => {
@@ -344,14 +420,10 @@ export default function BoardClient({
               Recruiter · <b>{org.name}</b>
             </p>
             {recruiter.bio && <p className="rp-bio">{recruiter.bio}</p>}
+            {hasContactActions && <div className="rp-actions">{contactActions}</div>}
           </div>
           <div className="rp-side">
             <div className="rp-links">
-              {recruiter.linkedinUrl && (
-                <a href={recruiter.linkedinUrl} target="_blank" rel="noreferrer">
-                  <b>in</b> LinkedIn
-                </a>
-              )}
               {recruiter.website && (
                 <a href={recruiter.website} target="_blank" rel="noreferrer">
                   {recruiter.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
@@ -803,6 +875,42 @@ export default function BoardClient({
           Powered by Transformer Talent
         </a>
       </footer>
+
+      {hasContactActions && (
+        <div className="rp-mbar">
+          {contactActions}
+          {recruiter && recruiter.referralAmount != null && (
+            <button
+              type="button"
+              className="rp-abtn green"
+              onClick={() =>
+                document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+            >
+              Refer
+            </button>
+          )}
+        </div>
+      )}
+
+      {bookSrc && recruiter && (
+        <div
+          className="rp-bkov"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setBookSrc(null);
+          }}
+        >
+          <div className="rp-bk">
+            <div className="rp-bkhead">
+              <b>Book a call with {recruiter.name.split(/\s+/)[0]}</b>
+              <button type="button" aria-label="Close" onClick={() => setBookSrc(null)}>
+                ✕
+              </button>
+            </div>
+            <iframe src={bookSrc} title={`Book a call with ${recruiter.name}`} />
+          </div>
+        </div>
+      )}
         </>
       )}
     </div>
