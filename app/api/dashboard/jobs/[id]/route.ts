@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { publishOrgRole, sanitizeSkills } from "@/lib/server/publish-role";
 import { roleInputFromBody } from "@/lib/server/job-body";
+import { sendEmail } from "@/lib/server/email";
 
 export const maxDuration = 60;
 
@@ -11,7 +12,7 @@ type Params = { params: Promise<{ id: string }> };
 async function loadJob(orgId: string, externalId: string) {
   const res = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(externalId)}` +
-      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role&limit=1`
+      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role,sourcing_requested&limit=1`
   );
   if (!res.ok) return null;
   const [row] = await res.json();
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       targetCompanies: Array.isArray(job.target_companies) ? job.target_companies : [],
       companyName: job.company_name || "",
       linkedOrgRole: job.linked_org_role || null,
+      sourcingRequested: !!job.sourcing_requested,
     },
   });
 }
@@ -94,9 +96,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (
     body.targetCompanies !== undefined ||
     body.companyName !== undefined ||
-    body.linkedOrgRole !== undefined
+    body.linkedOrgRole !== undefined ||
+    body.sourcingRequested !== undefined
   ) {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.sourcingRequested !== undefined) {
+      // Client raises (or lowers) a hand for sourcing help on this role.
+      const on = body.sourcingRequested === true;
+      patch.sourcing_requested = on;
+      patch.sourcing_requested_at = on ? new Date().toISOString() : null;
+      if (on && !job.sourcing_requested) {
+        // Notify Spencer on the false -> true transition only.
+        after(async () => {
+          await sendEmail({
+            to: "spencer@transformertalent.com",
+            subject: `${member.org.name} asked for help: ${job.title} (#${job.external_id})`,
+            html: `<p style="margin:0 0 14px;"><b>${member.org.name}</b> switched on sourcing help for
+              <b>${job.title}</b> (#${job.external_id}).</p>
+              <p style="margin:0;">Open your <a href="https://www.transformertalent.com/dashboard" style="color:#2a5bd7;">Jobs page</a>
+              to copy it into your jobs and link it.</p>`,
+          });
+        });
+      }
+    }
     if (body.linkedOrgRole !== undefined) {
       // Cross-org send bridge target: TT wires its jobs to client jobs.
       if (member.org.slug !== "transformer-talent")

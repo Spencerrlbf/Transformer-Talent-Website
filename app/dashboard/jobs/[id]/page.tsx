@@ -14,6 +14,7 @@ import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
 import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
 import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
 import ClientLinkCard from "@/components/dashboard/jobs/ClientLinkCard";
+import SourcingHelpCard from "@/components/dashboard/jobs/SourcingHelpCard";
 
 type Job = {
   id: string;
@@ -32,6 +33,7 @@ type Job = {
   targetCompanies: TargetCompany[];
   companyName: string;
   linkedOrgRole: { orgId: string; jobId: string } | null;
+  sourcingRequested: boolean;
 };
 
 const TABS = [
@@ -217,12 +219,14 @@ function JobWorkspace({ id }: { id: string }) {
               onSaved={(targetCompanies) => setJob({ ...job, targetCompanies })}
             />
             <InterviewStagesCard jobId={job.id} />
-            {org.slug === "transformer-talent" && (
+            {org.slug === "transformer-talent" ? (
               <ClientLinkCard
                 jobId={job.id}
                 initial={job.linkedOrgRole}
                 onSaved={(linkedOrgRole) => setJob({ ...job, linkedOrgRole })}
               />
+            ) : (
+              <SourcingHelpCard jobId={job.id} initial={job.sourcingRequested} />
             )}
             {job.skills.length > 0 && (
               <>

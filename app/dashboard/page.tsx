@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
+import ClientRequestsBlock from "@/components/dashboard/ClientRequestsBlock";
 
 type Job = {
   id: string;
@@ -21,6 +22,7 @@ export default function JobsPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     fetch("/api/dashboard/jobs", { headers: { Authorization: `Bearer ${token}` } })
@@ -30,13 +32,14 @@ export default function JobsPage() {
       })
       .then((data) => setJobs(data.jobs))
       .catch(() => setError(true));
-  }, [token]);
+  }, [token, refresh]);
 
   const open = jobs?.filter((j) => j.status === "open") ?? [];
   const closed = jobs?.filter((j) => j.status !== "open") ?? [];
 
   return (
     <>
+      <ClientRequestsBlock onCopied={() => setRefresh((n) => n + 1)} />
       <div className="dash-jobhead">
         <div>
           <h1 className="dash-h1">Jobs</h1>
