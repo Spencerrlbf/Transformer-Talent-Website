@@ -32,8 +32,24 @@ export async function GET(req: NextRequest) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
 
+  // Page analytics: one RPC returns event counts, per-role engagement, and
+  // the application/referral tallies. Null (not an error) when unavailable.
+  let stats: unknown = null;
+  if (profile) {
+    try {
+      const sres = await sbRest("rpc/recruiter_page_stats", {
+        method: "POST",
+        body: JSON.stringify({ profile: profile.id }),
+      });
+      if (sres.ok) stats = await sres.json();
+    } catch {
+      stats = null;
+    }
+  }
+
   return NextResponse.json({
     profile: profile ? profileView(profile) : null,
+    stats,
     suggestedSlug,
     org: {
       website: orgRow?.website || "",

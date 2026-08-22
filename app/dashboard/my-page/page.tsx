@@ -19,8 +19,23 @@ type ProfileView = {
   contactEmail: string;
 };
 
+type StatPair = { week: number; all: number };
+type Stats = {
+  events: Partial<
+    Record<
+      "view" | "role_open" | "booking_click" | "email_copy" | "linkedin_click" | "referral_open",
+      StatPair
+    >
+  >;
+  applications: StatPair;
+  resumeDrops: StatPair;
+  referrals: StatPair;
+  roles: { roleId: string; title: string; opens: number; applies: number }[];
+};
+
 type PageData = {
   profile: ProfileView | null;
+  stats: Stats | null;
   suggestedSlug: string;
   org: { website: string; referralAmount: number; canEditWebsite: boolean };
 };
@@ -210,6 +225,53 @@ export default function MyPagePage() {
         Your public recruiter page: one link with your face, your bio, and the
         roles you&apos;re recruiting — made for sharing in LinkedIn outreach.
       </p>
+
+      {data.stats && published && (
+        <div className="anx">
+          <div className="anx-cards">
+            {[
+              { label: "Page views", v: data.stats.events.view },
+              { label: "Applications", v: data.stats.applications },
+              { label: "Resume drops", v: data.stats.resumeDrops },
+              { label: "Referrals", v: data.stats.referrals },
+            ].map((c) => (
+              <div className="anx-card" key={c.label}>
+                <b>{c.v?.week ?? 0}</b>
+                <span>{c.label} this week</span>
+                <small>{c.v?.all ?? 0} all time</small>
+              </div>
+            ))}
+          </div>
+          <p className="anx-actions">
+            Clicks all time: booking {data.stats.events.booking_click?.all ?? 0} · email{" "}
+            {data.stats.events.email_copy?.all ?? 0} · LinkedIn{" "}
+            {data.stats.events.linkedin_click?.all ?? 0} · referral{" "}
+            {data.stats.events.referral_open?.all ?? 0}
+          </p>
+          {data.stats.roles.length > 0 && (
+            <table className="anx-table">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>Opened</th>
+                  <th>Applied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.stats.roles.slice(0, 6).map((r) => (
+                  <tr key={r.roleId}>
+                    <td>
+                      {r.title} <em>#{r.roleId}</em>
+                    </td>
+                    <td>{r.opens}</td>
+                    <td>{r.applies}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div className="dash-jobform">
         <div className="dash-mypage-photo">

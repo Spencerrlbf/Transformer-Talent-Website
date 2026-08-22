@@ -1886,6 +1886,23 @@ body:has(.board-app) {
   .board-referral-form { grid-template-columns: 1fr; }
 }
 
+/* ---------- My page analytics ---------- */
+.anx { border: 1px solid #e6e8ec; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px; }
+.anx-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.anx-card { border: 1px solid #eef0f3; background: #fafbfc; border-radius: 10px; padding: 12px 14px; }
+.anx-card b { display: block; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: #111418; }
+.anx-card span { display: block; font-size: 12px; color: #3d434c; margin-top: 1px; }
+.anx-card small { display: block; font-size: 11px; color: #8a919c; margin-top: 2px; }
+.anx-actions { font-size: 12px; color: #6b7280; margin: 12px 0 0; }
+.anx-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.anx-table th {
+  text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #8a919c; font-weight: 600; padding: 6px 10px; border-bottom: 1px solid #e6e8ec;
+}
+.anx-table th:not(:first-child), .anx-table td:not(:first-child) { text-align: right; width: 90px; }
+.anx-table td { padding: 8px 10px; border-bottom: 1px solid #f2f4f6; font-size: 13px; }
+.anx-table td em { font-style: normal; color: #8a919c; font-size: 12px; }
+
 /* My page referral amount input */
 .dash-mypage-amount { display: flex; align-items: center; border: 1px solid #d3d7dd; border-radius: 7px; background: #fff; padding-left: 10px; }
 .dash-mypage-amount span { color: #6b7280; font-size: 13.5px; }
