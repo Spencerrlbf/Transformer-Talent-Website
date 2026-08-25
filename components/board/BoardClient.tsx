@@ -522,23 +522,13 @@ export default function BoardClient({
         </header>
       )}
 
-      {/* Resume banner + referral strip share one row when both are on;
-          either alone takes the full width. */}
-      {!railVisible && (
+      {/* Org boards keep the plain resume banner. */}
+      {!recruiter && !railVisible && (
         <div className="board-banners">
           <div className="board-spec">
             <p>
-              {recruiter ? (
-                <>
-                  <b>If it is easier, upload your resume</b> and we will match you
-                  against our roles and reach out if we have suitable matches.
-                </>
-              ) : (
-                <>
-                  <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
-                  {org.name}&apos;s open roles and reach out when the right one arrives.
-                </>
-              )}
+              <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
+              {org.name}&apos;s open roles and reach out when the right one arrives.
             </p>
             <button
               className="board-btn"
@@ -549,34 +539,56 @@ export default function BoardClient({
               UPLOAD RESUME →
             </button>
           </div>
-
-          {/* Someone not job-hunting won't scroll past 96 roles — surface the
-              referral offer up top and jump them to the form. */}
-          {recruiter && recruiter.referralAmount != null && (
-            <div className="board-refstrip">
-              <p>
-                <b>Know someone great?</b> Refer them and receive $
-                {recruiter.referralAmount.toLocaleString()} if we place them.
-              </p>
-              <button
-                type="button"
-                className="board-refstrip-btn"
-                onClick={() => {
-                  track(recruiter.id, "referral_open");
-                  document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-              >
-                REFER AN ENGINEER →
-              </button>
-            </div>
-          )}
         </div>
       )}
 
-      {/* "Hear from me later": the slim entrance for people the page was sent
-          to who are not job-hunting today — visible before any scrolling. */}
+      {/* Recruiter pages: one block, three doors — resume now, hear from me
+          later, refer someone. Each opens its own form. */}
       {recruiter && !railVisible && (
         <div className="board-futwrap" ref={futRef}>
+          <div className="board-triple">
+            <p>
+              <b>Not applying today?</b> Upload your resume for matching, ask{" "}
+              {firstName} to come back to you later, or refer someone great
+              {recruiter.referralAmount != null
+                ? ` and receive $${recruiter.referralAmount.toLocaleString()} if we place them`
+                : ""}
+              .
+            </p>
+            <div className="board-triple-btns">
+              <button
+                type="button"
+                className="board-btn"
+                onClick={() => {
+                  setSpeculative(true);
+                }}
+              >
+                UPLOAD RESUME →
+              </button>
+              <button
+                type="button"
+                className="board-doorbtn"
+                aria-expanded={futOpen}
+                onClick={() => (futOpen ? setFutOpen(false) : openFuture(false))}
+              >
+                HEAR FROM {firstName.toUpperCase()} LATER
+              </button>
+              {recruiter.referralAmount != null && (
+                <button
+                  type="button"
+                  className="board-refstrip-btn"
+                  onClick={() => {
+                    track(recruiter.id, "referral_open");
+                    document
+                      .getElementById("refer")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  REFER AN ENGINEER →
+                </button>
+              )}
+            </div>
+          </div>
           {futStatus.kind === "ok" ? (
             <div className="board-futdone">
               <b>
@@ -586,14 +598,6 @@ export default function BoardClient({
             </div>
           ) : (
             <>
-              <button
-                type="button"
-                className="board-futstrip"
-                aria-expanded={futOpen}
-                onClick={() => (futOpen ? setFutOpen(false) : openFuture(false))}
-              >
-                Not looking right now? <b>Hear from {firstName} later</b>
-              </button>
               {futOpen && (
                 <form className="board-fut" onSubmit={onFutureSubmit}>
                   <div className="board-fut-row">
@@ -1036,32 +1040,6 @@ export default function BoardClient({
           </aside>
         )}
       </div>
-
-      {/* The same two answers, at the bottom for people who read the roles
-          first: interested now (resume) or interested later (future form). */}
-      {recruiter && !railVisible && futStatus.kind !== "ok" && (
-        <div className="board-doors">
-          <div>
-            <h4>No fit on the list?</h4>
-            <p>{firstName} still wants to hear from you, now or when the time is right.</p>
-          </div>
-          <div className="board-doors-btns">
-            <button
-              type="button"
-              className="board-btn"
-              onClick={() => {
-                setSpeculative(true);
-                setTimeout(goToRail, 60);
-              }}
-            >
-              SEND YOUR RESUME →
-            </button>
-            <button type="button" className="board-doorbtn" onClick={() => openFuture(true)}>
-              HEAR FROM {firstName.toUpperCase()} LATER
-            </button>
-          </div>
-        </div>
-      )}
 
       {recruiter && recruiter.referralAmount != null && (
         <ReferralBlock recruiterId={recruiter.id} amount={recruiter.referralAmount} />
