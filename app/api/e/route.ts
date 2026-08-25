@@ -15,6 +15,7 @@ const EVENTS = new Set([
   "email_copy",
   "linkedin_click",
   "referral_open",
+  "future_open",
 ]);
 
 export async function POST(req: NextRequest) {

@@ -39,6 +39,13 @@ type Detail = {
   bestTag: string | null;
   bestTagLabel: string | null;
   screeningPending?: boolean;
+  followUp: {
+    at: string;
+    due: boolean;
+    roles: string[];
+    location: string | null;
+    salary: string | null;
+  } | null;
   pipeline: PipelineEntry[];
   experience: {
     company: string;
@@ -279,6 +286,8 @@ export default function CandidateDrawer({
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const [stageSaving, setStageSaving] = useState<string | null>(null);
+  const [marking, setMarking] = useState(false);
+  const [markedDone, setMarkedDone] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
   const [openJob, setOpenJob] = useState<string | null>(null);
   // Pool person opened from the internal Network page: read-only extras
@@ -298,6 +307,8 @@ export default function CandidateDrawer({
     setEditingContact(false);
     setContactErr("");
     setOpenJob(null);
+    setMarking(false);
+    setMarkedDone(false);
     if (!candKey) return;
     fetch(`/api/dashboard/candidates/v2/${candKey}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -582,6 +593,54 @@ export default function CandidateDrawer({
             <div className={`cv2d-provenance${detail.source === "applied" ? " applied" : ""}`}>
               {detail.provenance}
             </div>
+
+            {/* Their ask: an open "hear from me later" follow-up. Mark
+                contacted clears the date; the person stays in the pool. */}
+            {detail.followUp && (
+              <div className={`dw-ask${markedDone ? " done" : ""}`}>
+                <span className="k">Their ask</span>
+                {markedDone ? (
+                  <>Contacted ✓ — follow-up cleared. They stay in your candidates.</>
+                ) : (
+                  <>
+                    Reach out{" "}
+                    <b>
+                      {new Date(`${detail.followUp.at}T00:00:00Z`).toLocaleDateString("en-GB", {
+                        month: "long",
+                        year: "numeric",
+                        timeZone: "UTC",
+                      })}
+                      {detail.followUp.due ? " (due)" : ""}
+                    </b>
+                    {(() => {
+                      const wants = [
+                        detail.followUp.roles.join(", ") || null,
+                        detail.followUp.location,
+                        detail.followUp.salary,
+                      ].filter(Boolean);
+                      return wants.length ? <> about {wants.join(" · ")}</> : null;
+                    })()}
+                    <br />
+                    <button
+                      type="button"
+                      className="dw-mark"
+                      disabled={marking}
+                      onClick={async () => {
+                        setMarking(true);
+                        const res = await fetch(
+                          `/api/dashboard/candidates/v2/${candKey}/followup`,
+                          { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+                        ).catch(() => null);
+                        setMarking(false);
+                        if (res?.ok) setMarkedDone(true);
+                      }}
+                    >
+                      {marking ? "Saving…" : "Mark contacted"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="cv2d-tabs">
               {(

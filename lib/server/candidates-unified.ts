@@ -88,6 +88,8 @@ export type UnifiedRow = {
   /** When bestTag is null: true = screening still running ("Screening…"),
    *  false = finished with nothing to show ("Not screened"). */
   screeningPending: boolean;
+  /** "Hear from me later" ask: the date they want contact (null otherwise). */
+  followUpAt: string | null;
 };
 
 // Human pipeline statuses — distinct from the AI fit tag. "rejected" moves a
@@ -115,6 +117,8 @@ export type UnifiedListParams = {
   hideNotNow?: boolean;
   /** With jobId: return ONLY rejected candidates (the Past tab). */
   past?: boolean;
+  /** Only people with a future-interest ask, soonest follow-up first. */
+  followups?: boolean;
   sort?: "fit" | "added" | "name" | "years";
   dir?: "asc" | "desc";
   page?: number;
@@ -125,6 +129,8 @@ export type UnifiedList = {
   items: UnifiedRow[];
   total: number; // rows matching filters (after Not-now handling)
   counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
+  /** Future-interest summary across the whole pool (pagination-independent). */
+  followups: { total: number; due: number; dueNames: string[] };
   page: number;
   pageSize: number;
 };
@@ -168,6 +174,14 @@ export type UnifiedDetail = {
   bestTagLabel: string | null;
   /** False once screening finished with nothing to show ("Not screened"). */
   screeningPending: boolean;
+  /** "Hear from me later" ask, when one is open on this person. */
+  followUp: {
+    at: string;
+    due: boolean;
+    roles: string[];
+    location: string | null;
+    salary: string | null;
+  } | null;
   pipeline: {
     jobId: string;
     title: string;
@@ -232,10 +246,15 @@ type AppRow = {
   source: string | null;
   status: string | null;
   created_at: string;
+  follow_up_at: string | null;
+  preferred_roles: string[] | null;
+  /** On future-interest rows these hold preferred location / salary floor. */
+  location: string | null;
+  comp_expectation: string | null;
 };
 
 const APP_COLS =
-  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at";
+  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,location,comp_expectation";
 
 type VerdictRow = {
   candidate_id: string;
@@ -645,6 +664,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       // "processing" = pipeline still running; anything else means screening
       // finished — no verdict then reads "Not screened", not "Screening…".
       screeningPending: a.status === "processing",
+      followUpAt: a.follow_up_at,
     });
   }
 
@@ -679,6 +699,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       addedAt: ms[ms.length - 1]?.created_at || p.created_at,
       stage: null,
       screeningPending: true, // sourced judgments arrive asynchronously
+      followUpAt: null,
     });
   }
 
@@ -718,7 +739,21 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     rejected: rejectedCount,
   };
 
-  let filtered = params.hideNotNow ? actionable : visible;
+  // Future-interest summary over the whole pool — the due strip must show
+  // regardless of the current page or filters.
+  const today = new Date().toISOString().slice(0, 10);
+  const fuRows = rows.filter((r) => r.followUpAt);
+  const fuDue = fuRows
+    .filter((r) => r.followUpAt! <= today)
+    .sort((a, b) => a.followUpAt!.localeCompare(b.followUpAt!));
+  const followups = {
+    total: fuRows.length,
+    due: fuDue.length,
+    dueNames: fuDue.slice(0, 3).map((r) => r.name),
+  };
+
+  let filtered = params.hideNotNow && !params.followups ? actionable : visible;
+  if (params.followups) filtered = filtered.filter((r) => r.followUpAt);
   if (params.source) filtered = filtered.filter((r) => r.source === params.source);
   if (params.fit) {
     if (params.fit === "pending") filtered = filtered.filter((r) => r.bestTag == null);
@@ -744,6 +779,10 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       rankOf(a.bestTag) - rankOf(b.bestTag) || b.addedAt.localeCompare(a.addedAt)
     );
   });
+  // Follow-ups view reads as a todo list: soonest date first, due at the top.
+  if (params.followups) {
+    filtered.sort((a, b) => (a.followUpAt || "").localeCompare(b.followUpAt || ""));
+  }
 
   const items = filtered.slice((page - 1) * pageSize, page * pageSize);
 
@@ -771,7 +810,37 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   ]);
   for (const item of items) item.photoUrl = photos.get(item.key) ?? null;
 
-  return { items, total: filtered.length, counts, page, pageSize };
+  return { items, total: filtered.length, counts, followups, page, pageSize };
+}
+
+/** Clear a future-interest ask ("Mark contacted"): the follow-up date comes
+ *  off the application row and the mirrored candidate record. The person and
+ *  their preferences stay in the pool. */
+export async function clearFollowUp(
+  orgId: string,
+  key: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
+  const id = key.slice(4);
+  const res = await sbRest(
+    `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=id,candidate_id&limit=1`
+  );
+  const [row] = (res.ok ? await res.json() : []) as { id: string; candidate_id: string | null }[];
+  if (!row) return { ok: false, error: "not_found" };
+  const patch = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ follow_up_at: null }),
+    prefer: "return=minimal",
+  });
+  if (!patch.ok) return { ok: false, error: "save_failed" };
+  if (row.candidate_id) {
+    await sbRest(`candidates?id=eq.${row.candidate_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ follow_up_at: null }),
+      prefer: "return=minimal",
+    }).catch(() => {});
+  }
+  return { ok: true };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1034,6 +1103,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: true,
+      followUp: null,
       pipeline,
       experience: bits.experience,
       education: bits.education,
@@ -1092,6 +1162,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: true,
+      followUp: null,
       pipeline,
       experience: bits.experience,
       education: bits.education,
@@ -1153,14 +1224,24 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       provenance: (() => {
         // "referral: by NAME <EMAIL>" — credit the referrer in the drawer.
         const m = (a.source || "").match(/^referral: by (.+) <([^>]+)>/);
-        return m
-          ? `Referred by ${m[1]} (${m[2]}) · ${fmtDate(a.created_at)}`
-          : `Applied via your board · ${fmtDate(a.created_at)}`;
+        if (m) return `Referred by ${m[1]} (${m[2]}) · ${fmtDate(a.created_at)}`;
+        if (a.source === "future")
+          return `Asked to hear from you later, via your page · ${fmtDate(a.created_at)}`;
+        return `Applied via your board · ${fmtDate(a.created_at)}`;
       })(),
       contact: { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: a.status === "processing",
+      followUp: a.follow_up_at
+        ? {
+            at: a.follow_up_at,
+            due: a.follow_up_at <= new Date().toISOString().slice(0, 10),
+            roles: a.preferred_roles || [],
+            location: str(a.location),
+            salary: str(a.comp_expectation),
+          }
+        : null,
       pipeline,
       experience: bits.experience,
       education: bits.education,

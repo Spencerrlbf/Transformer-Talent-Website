@@ -1417,6 +1417,39 @@ body:has(.board-app) {
 .cv2-tt { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: #c2410c; background: #fff0e9; border-radius: 5px; padding: 2px 7px; margin-left: 7px; vertical-align: 1px; white-space: nowrap; }
 
 .cv2-src { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 650; padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+/* Future-interest ("hear from me later") chips + due strip */
+.cv2-fu {
+  display: inline-block; margin-top: 4px; font-size: 10.5px; font-weight: 700;
+  padding: 2px 8px; border-radius: 99px; background: #f1f3f6; color: #6b7280; white-space: nowrap;
+}
+.cv2-fu.due { background: #fdf2e3; color: #b45309; }
+.cv2-due {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  border: 1px solid #f0dfc4; background: #fdf6ea; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 12px; font-size: 12.5px; color: #3d434c;
+}
+.cv2-due b { color: #b45309; }
+.cv2-due button {
+  margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; color: #111418;
+  background: #fff; border: 1px solid #d3d7dd; border-radius: 7px; padding: 6px 12px; cursor: pointer;
+}
+.cv2-due button:hover { border-color: #9aa3ae; }
+/* Drawer: the ask box + mark contacted */
+.dw-ask {
+  border: 1px solid #f0dfc4; background: #fdf6ea; border-radius: 10px;
+  padding: 12px 14px; margin: 0 0 14px; font-size: 13px; color: #3d434c;
+}
+.dw-ask.done { border-color: #abefc6; background: #ecfdf3; }
+.dw-ask .k {
+  display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: #8a919c; margin-bottom: 4px;
+}
+.dw-ask b { color: #b45309; }
+.dw-ask .dw-mark {
+  margin-top: 10px; font: inherit; font-size: 12px; font-weight: 700; color: #fff;
+  background: #111418; border: 0; border-radius: 7px; padding: 7px 14px; cursor: pointer;
+}
+.dw-ask .dw-mark:disabled { opacity: 0.6; cursor: default; }
 .cv2-src i { width: 6px; height: 6px; border-radius: 50%; }
 .cv2-src-applied { background: #f4f6f9; color: #4a5160; border: 1px solid #e6e8ec; }
 .cv2-src-applied i { background: #4a5160; }
@@ -1979,6 +2012,57 @@ body:has(.board-app) {
 /* Banner row: resume + referral share the width; either alone fills it. */
 .board-banners { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .board-banners .board-spec { flex: 1 1 380px; margin-bottom: 0; align-content: flex-start; }
+
+/* Future interest ("hear from me later") */
+.board-futwrap { margin-bottom: 16px; scroll-margin-top: 12px; }
+.board-futstrip {
+  width: 100%; text-align: center; background: #fff; border: 1px solid #d3d7dd; border-radius: 10px;
+  padding: 11px 14px; font: inherit; font-size: 13px; color: #4a5160; cursor: pointer;
+}
+.board-futstrip b { color: #111418; }
+.board-futstrip:hover { border-color: #9aa3ae; }
+.board-futstrip[aria-expanded="true"] {
+  border-color: #111418; border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.board-fut {
+  border: 1px solid #111418; border-top: 0; border-radius: 0 0 10px 10px; padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px; background: #fff; position: relative;
+}
+.board-fut-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.board-fut-row label {
+  flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; font-weight: 600; color: #4a5160;
+}
+.board-fut-row input {
+  border: 1px solid #d3d7dd; border-radius: 7px; padding: 9px 12px;
+  font: inherit; font-size: 13px; color: #111418; background: #fff;
+}
+.board-fut-row input:focus { outline: 2px solid #2a5bd7; outline-offset: -1px; border-color: #2a5bd7; }
+.board-fut-lbl { margin: 2px 0 0; font-size: 12px; font-weight: 600; color: #4a5160; }
+.board-fut-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.board-fut-pills button {
+  flex: 1 1 90px; border: 1px solid #d3d7dd; background: #fff; border-radius: 8px; padding: 9px 0;
+  font: inherit; font-size: 12.5px; font-weight: 650; color: #111418; cursor: pointer;
+}
+.board-fut-pills button.on { background: #111418; border-color: #111418; color: #fff; }
+.board-fut-fine { margin: 0; font-size: 11.5px; color: #8a919c; text-align: center; }
+.board-futdone {
+  border: 1px solid #abefc6; background: #ecfdf3; border-radius: 10px; padding: 14px 18px;
+  font-size: 13.5px; color: #3d434c;
+}
+.board-futdone b { color: #067647; }
+.board-doors {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  border: 1px solid #e6e8ec; border-radius: 10px; padding: 16px 18px; margin: 22px 0 6px; background: #fff;
+}
+.board-doors h4 { margin: 0 0 2px; font-size: 14px; color: #111418; }
+.board-doors p { margin: 0; font-size: 13px; color: #3d434c; }
+.board-doors-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.board-doorbtn {
+  background: #fff; color: #111418; border: 1px solid #111418; border-radius: 8px; padding: 10px 18px;
+  font: inherit; font-size: 13px; font-weight: 650; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap;
+}
+.board-doorbtn:hover { background: #f4f5f7; }
 .board-banners .board-refstrip { flex: 1 1 380px; margin-bottom: 0; }
 
 /* ---------- Interview stages (editor + cards) ---------- */

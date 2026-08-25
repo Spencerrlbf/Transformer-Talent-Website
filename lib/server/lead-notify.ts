@@ -56,7 +56,7 @@ export async function leadRecipients(args: {
 
 export async function sendLeadNotification(args: {
   to: string[];
-  kind: "application" | "speculative" | "referral";
+  kind: "application" | "speculative" | "referral" | "future";
   /** Candidate name; falls back to their email/LinkedIn when unresolved. */
   name: string;
   email: string;
@@ -65,6 +65,11 @@ export async function sendLeadNotification(args: {
   /** Present on referrals only. */
   referrerName?: string;
   referrerEmail?: string;
+  /** Present on future-interest entries: the date they asked to hear back. */
+  followUpAt?: string;
+  preferredRoles?: string[];
+  preferredLocation?: string | null;
+  salaryFloor?: string | null;
   /** True when the entry came through a recruiter page. */
   viaPage: boolean;
 }): Promise<void> {
@@ -74,7 +79,24 @@ export async function sendLeadNotification(args: {
 
   let subject: string;
   let lead: string;
-  if (args.kind === "referral") {
+  if (args.kind === "future") {
+    const month = args.followUpAt
+      ? new Date(`${args.followUpAt}T00:00:00Z`).toLocaleDateString("en-GB", {
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        })
+      : "later";
+    const wants = [
+      (args.preferredRoles || []).join(", ") || null,
+      args.preferredLocation || null,
+      args.salaryFloor || null,
+    ].filter(Boolean);
+    subject = `Future interest: ${who} (reach out ${month})`;
+    lead =
+      `<b>${who}</b> asked on ${surface} to hear from you around <b>${month}</b>.` +
+      (wants.length ? `<br>They want: ${wants.join(" · ")}.` : "");
+  } else if (args.kind === "referral") {
     subject = `New referral: ${who}`;
     lead = `<b>${args.referrerName || "Someone"}</b> (${args.referrerEmail || "no email"})
       referred <b>${who}</b> through ${surface}.`;
