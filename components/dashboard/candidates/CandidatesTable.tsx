@@ -36,15 +36,27 @@ export type Cv2Row = {
   interviewStage?: string | null;
   stageUpdatedAt?: string | null;
   screeningPending?: boolean;
+  followUpAt?: string | null;
 };
 
 type Cv2List = {
   items: Cv2Row[];
   total: number;
   counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
+  followups?: { total: number; due: number; dueNames: string[] };
   page: number;
   pageSize: number;
 };
+
+const TODAY = new Date().toISOString().slice(0, 10);
+function fuLabel(at: string): string {
+  if (at <= TODAY) return "Due";
+  return `Future · ${new Date(`${at}T00:00:00Z`).toLocaleDateString("en-GB", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  })}`;
+}
 
 export const STAGE_OPTIONS: [string, string][] = [
   ["new", "New"],
@@ -226,7 +238,7 @@ export default function CandidatesTable({
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [seg, setSeg] = useState<"" | "applied" | "sourced">("");
+  const [seg, setSeg] = useState<"" | "applied" | "sourced" | "followups">("");
   const [roleFilter, setRoleFilter] = useState("");
   const [fit, setFit] = useState("");
   const [q, setQ] = useState("");
@@ -266,7 +278,8 @@ export default function CandidatesTable({
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const params = new URLSearchParams();
-    if (seg) params.set("source", seg);
+    if (seg === "followups") params.set("followups", "1");
+    else if (seg) params.set("source", seg);
     if (effectiveJob) params.set("job", effectiveJob);
     if (fit) params.set("fit", fit);
     if (debouncedQ) params.set("q", debouncedQ);
@@ -375,7 +388,10 @@ export default function CandidatesTable({
                 ["", `All ${counts.all + (hideNotNow ? 0 : counts.notNow)}`],
                 ["applied", `Applied ${counts.applied}`],
                 ["sourced", `Sourced ${counts.sourced + (hideNotNow ? 0 : counts.notNow)}`],
-              ] as ["" | "applied" | "sourced", string][]
+                ...(data?.followups?.total
+                  ? [["followups", `Follow-ups ${data.followups.total}`]]
+                  : []),
+              ] as ["" | "applied" | "sourced" | "followups", string][]
             ).map(([v, label]) => (
               <button key={v} className={seg === v ? "on" : ""} onClick={() => setSeg(v)}>
                 {label}
@@ -418,6 +434,24 @@ export default function CandidatesTable({
           </label>
         )}
       </div>
+
+      {/* Follow-ups due: surfaced above the table so nobody has to remember
+          to check. Clicking through applies the Follow-ups view. */}
+      {pool && !past && seg !== "followups" && data?.followups && data.followups.due > 0 && (
+        <div className="cv2-due">
+          <b>
+            {data.followups.due} follow-up{data.followups.due === 1 ? "" : "s"} due
+          </b>
+          <span>
+            {data.followups.dueNames.join(", ")}
+            {data.followups.due > data.followups.dueNames.length ? " and more" : ""} asked to hear
+            from you.
+          </span>
+          <button type="button" onClick={() => setSeg("followups")}>
+            View
+          </button>
+        </div>
+      )}
 
       {error && <div className="dash-empty">Couldn&apos;t load candidates — refresh to retry.</div>}
 
@@ -467,6 +501,14 @@ export default function CandidatesTable({
                       <i />
                       {r.source === "applied" ? "Applied" : "Sourced"}
                     </span>
+                    {r.followUpAt && (
+                      <>
+                        <br />
+                        <span className={`cv2-fu${r.followUpAt <= TODAY ? " due" : ""}`}>
+                          {fuLabel(r.followUpAt)}
+                        </span>
+                      </>
+                    )}
                   </td>
                   <td>
                     {r.bestTag ? (

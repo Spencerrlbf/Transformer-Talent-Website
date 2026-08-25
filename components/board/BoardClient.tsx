@@ -237,6 +237,52 @@ export default function BoardClient({
     </>
   ) : null;
 
+  // "Hear from me later": future-interest capture. One form, two entrances —
+  // the slim strip under the banners and the "no fit" doors after the table.
+  const [futOpen, setFutOpen] = useState(false);
+  const [futMonths, setFutMonths] = useState("6");
+  const [futPrefsOpen, setFutPrefsOpen] = useState(false);
+  const [futStatus, setFutStatus] = useState<
+    { kind: "idle" | "sending" } | { kind: "ok"; when: string } | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const futRef = useRef<HTMLDivElement>(null);
+  const firstName = recruiter?.name.split(/\s+/)[0] || "us";
+
+  function openFuture(scroll: boolean) {
+    if (!recruiter) return;
+    if (!futOpen) track(recruiter.id, "future_open");
+    setFutOpen(true);
+    if (scroll) futRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function onFutureSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!recruiter) return;
+    const data = new FormData(e.currentTarget);
+    data.set("board", org.slug);
+    data.set("recruiter", recruiter.id);
+    data.set("months", futMonths);
+    setFutStatus({ kind: "sending" });
+    try {
+      const res = await fetch("/api/future-interest", { method: "POST", body: data });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        const when = json.followUpAt
+          ? new Date(`${json.followUpAt}T00:00:00Z`).toLocaleDateString("en-GB", {
+              month: "long",
+              year: "numeric",
+              timeZone: "UTC",
+            })
+          : "a few months";
+        setFutStatus({ kind: "ok", when });
+      } else {
+        setFutStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
+      }
+    } catch {
+      setFutStatus({ kind: "error", message: "Network error — please try again." });
+    }
+  }
+
   // Embed mode: report height to the parent page for iframe auto-resize.
   useEffect(() => {
     if (window.self === window.top) return;
@@ -476,23 +522,13 @@ export default function BoardClient({
         </header>
       )}
 
-      {/* Resume banner + referral strip share one row when both are on;
-          either alone takes the full width. */}
-      {!railVisible && (
+      {/* Org boards keep the plain resume banner. */}
+      {!recruiter && !railVisible && (
         <div className="board-banners">
           <div className="board-spec">
             <p>
-              {recruiter ? (
-                <>
-                  <b>If it is easier, upload your resume</b> and we will match you
-                  against our roles and reach out if we have suitable matches.
-                </>
-              ) : (
-                <>
-                  <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
-                  {org.name}&apos;s open roles and reach out when the right one arrives.
-                </>
-              )}
+              <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
+              {org.name}&apos;s open roles and reach out when the right one arrives.
             </p>
             <button
               className="board-btn"
@@ -503,26 +539,137 @@ export default function BoardClient({
               UPLOAD RESUME →
             </button>
           </div>
+        </div>
+      )}
 
-          {/* Someone not job-hunting won't scroll past 96 roles — surface the
-              referral offer up top and jump them to the form. */}
-          {recruiter && recruiter.referralAmount != null && (
-            <div className="board-refstrip">
-              <p>
-                <b>Know someone great?</b> Refer them and receive $
-                {recruiter.referralAmount.toLocaleString()} if we place them.
-              </p>
+      {/* Recruiter pages: one block, three doors — resume now, hear from me
+          later, refer someone. Each opens its own form. */}
+      {recruiter && !railVisible && (
+        <div className="board-futwrap" ref={futRef}>
+          <div className="board-triple">
+            <p>
+              <b>Not applying today?</b> Upload your resume for matching, ask{" "}
+              {firstName} to come back to you later, or refer someone great
+              {recruiter.referralAmount != null
+                ? ` and receive $${recruiter.referralAmount.toLocaleString()} if we place them`
+                : ""}
+              .
+            </p>
+            <div className="board-triple-btns">
               <button
                 type="button"
-                className="board-refstrip-btn"
+                className="board-btn"
                 onClick={() => {
-                  track(recruiter.id, "referral_open");
-                  document.getElementById("refer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  setSpeculative(true);
                 }}
               >
-                REFER AN ENGINEER →
+                UPLOAD RESUME →
               </button>
+              <button
+                type="button"
+                className="board-doorbtn"
+                aria-expanded={futOpen}
+                onClick={() => (futOpen ? setFutOpen(false) : openFuture(false))}
+              >
+                HEAR FROM {firstName.toUpperCase()} LATER
+              </button>
+              {recruiter.referralAmount != null && (
+                <button
+                  type="button"
+                  className="board-refstrip-btn"
+                  onClick={() => {
+                    track(recruiter.id, "referral_open");
+                    document
+                      .getElementById("refer")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  REFER AN ENGINEER →
+                </button>
+              )}
             </div>
+          </div>
+          {futStatus.kind === "ok" ? (
+            <div className="board-futdone">
+              <b>
+                Done. {firstName} will come back to you in {futStatus.when}.
+              </b>{" "}
+              Nothing before then unless something exceptional appears.
+            </div>
+          ) : (
+            <>
+              {futOpen && (
+                <form className="board-fut" onSubmit={onFutureSubmit}>
+                  <div className="board-fut-row">
+                    <label>
+                      Email
+                      <input name="email" type="email" required maxLength={254} autoComplete="email" />
+                    </label>
+                    <label>
+                      LinkedIn URL
+                      <input
+                        name="linkedin"
+                        required
+                        maxLength={300}
+                        placeholder="linkedin.com/in/…"
+                        autoComplete="url"
+                      />
+                    </label>
+                  </div>
+                  <div className="board-fut-row">
+                    <label>
+                      Resume (optional, PDF)
+                      <input name="resume" type="file" accept="application/pdf" />
+                    </label>
+                  </div>
+                  <p className="board-fut-lbl">When should {firstName} get back to you?</p>
+                  <div className="board-fut-pills" role="group" aria-label="When to reach out">
+                    {["3", "6", "9", "12"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={futMonths === m ? "on" : ""}
+                        onClick={() => setFutMonths(m)}
+                      >
+                        {m} months
+                      </button>
+                    ))}
+                  </div>
+                  {!futPrefsOpen ? (
+                    <button type="button" className="board-linkbtn" onClick={() => setFutPrefsOpen(true)}>
+                      What should {firstName} come back with? (optional)
+                    </button>
+                  ) : (
+                    <div className="board-fut-row">
+                      <label>
+                        Role types
+                        <input name="prefRoles" maxLength={200} placeholder="e.g. Staff backend, EM" />
+                      </label>
+                      <label>
+                        Location
+                        <input name="prefLocation" maxLength={120} placeholder="e.g. London or remote" />
+                      </label>
+                      <label>
+                        Salary floor
+                        <input name="prefSalary" maxLength={60} placeholder="e.g. £90k" />
+                      </label>
+                    </div>
+                  )}
+                  <input
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    style={{ position: "absolute", left: "-9999px" }}
+                    aria-hidden="true"
+                  />
+                  {futStatus.kind === "error" && <p className="board-error">{futStatus.message}</p>}
+                  <button type="submit" className="board-btn" disabled={futStatus.kind === "sending"}>
+                    {futStatus.kind === "sending" ? "SENDING…" : "ASK TO HEAR BACK LATER →"}
+                  </button>
+                  <p className="board-fut-fine">Nothing before then. No newsletter, no spam, one recruiter.</p>
+                </form>
+              )}
+            </>
           )}
         </div>
       )}

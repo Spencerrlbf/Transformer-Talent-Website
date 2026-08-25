@@ -48,6 +48,12 @@ export type ApplicantPipelineInput = {
   boardOrg: { id: string; slug: string; name: string } | null;
   orgId: string | null;
   applicationType: "Applied" | "Speculative" | "Referral";
+  /** Future-interest entries: the date the person asked to hear back, plus
+   *  what the outreach should be about. Mirrored onto the candidate record. */
+  followUpAt?: string | null;
+  preferredRoles?: string[];
+  preferredLocation?: string | null;
+  salaryFloor?: string | null;
 };
 
 function clean(s: unknown, max: number): string {
@@ -308,6 +314,23 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       prefer: "return=minimal",
     }).catch(() => {});
 
+    // Future interest travels with the person, not just the application —
+    // the pool record carries the date and what to come back with.
+    if (p.followUpAt && candidateId) {
+      await sbRest(`candidates?id=eq.${candidateId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          follow_up_at: p.followUpAt,
+          role_preferences: {
+            roles: p.preferredRoles || [],
+            location: p.preferredLocation || null,
+            salary: p.salaryFloor || null,
+          },
+        }),
+        prefer: "return=minimal",
+      }).catch(() => {});
+    }
+
     await mirrorToAirtable({
       name,
       email,
@@ -335,9 +358,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     roleTitles:
       p.applicationType === "Referral"
         ? ["Referral"]
-        : speculative
-          ? ["Speculative — resume drop"]
-          : roleTitles,
+        : p.followUpAt
+          ? ["Future interest"]
+          : speculative
+            ? ["Speculative — resume drop"]
+            : roleTitles,
     matchedTitles: matches.map((m) => `${m.title} (#${m.jobId})`),
     resumePath,
     appliedRoleIds: applied.map((r) => r.jobId),
@@ -364,11 +389,15 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       });
       await sendLeadNotification({
         to,
-        kind: speculative ? "speculative" : "application",
+        kind: p.followUpAt ? "future" : speculative ? "speculative" : "application",
         name,
         email,
         linkedin,
         roleTitles,
+        followUpAt: p.followUpAt || undefined,
+        preferredRoles: p.preferredRoles,
+        preferredLocation: p.preferredLocation,
+        salaryFloor: p.salaryFloor,
         viaPage: Boolean(row?.recruiter_profile_id),
       });
     } catch (err) {
