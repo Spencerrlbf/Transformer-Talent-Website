@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EE;font-family:'Instrument Sans',system-ui,sans-serif;color:#111110;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#4536E8;text-decoration:none}
+  a:hover{color:#2E22B8}
+  input,select,textarea,button{font-family:inherit}
+</style>
+</helmet>
+
+<section style="padding:44px 48px 90px">
+  <div style="max-width:1240px;margin:0 auto">
+
+    <div id="8a">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">8a</span>
+        <span style="font-size:13px;color:#5d5b56">Network matches — <b style="font-weight:600">/dashboard/network</b>, Transformer Talent org only. Click a row&rsquo;s chips or caret to open the reviews, then Send to job.</span>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden;position:relative">
+        <div style="display:flex;align-items:center;gap:14px;height:56px;padding:0 28px;border-bottom:1px solid rgba(0,0,0,.08)">
+          <span style="font-size:13px;color:#8a877f">Transformer Talent</span>
+          <span style="font-size:13px;color:#c2bfb8">/</span>
+          <span style="font-size:13px;color:#111110;font-weight:500">Network matches</span>
+          <div style="flex:1"></div>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#1F7A4C;font-weight:600"><span style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block"></span>7 new since yesterday</span>
+        </div>
+
+        <div style="padding:26px 28px 34px">
+          <div style="display:flex;align-items:flex-start;gap:16px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:10px">
+                <h1 style="margin:0;font-size:27px;font-weight:600;letter-spacing:-.025em">Network matches</h1>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#FBF1E6;color:#9A5B14;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">Internal — clients never see this</span>
+              </div>
+              <p style="margin:6px 0 0;max-width:760px;font-size:13.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">People from your talent pool matched to open roles by the nightly runs. Reach out via LinkedIn; when they&rsquo;re interested, send them to the job — they&rsquo;ll appear in its pipeline marked ⚡ Via Transformer Talent.</p>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:22px">
+            <button type="button" onClick="{{ toggleFilters }}" style="{{ filtersBtnStyle }}">
+              <span style="font-size:12px">☰</span>Filters
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#5B4BFF;color:#fff;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums">2</span>
+              <span style="font-size:11px;color:#8a877f">▾</span>
+            </button>
+            <div style="flex:1;display:flex;align-items:center;gap:9px;height:36px;padding:0 13px;border:1px solid rgba(0,0,0,.12);border-radius:8px;color:#8a877f;font-size:13.5px;min-width:0">
+              <span style="width:13px;height:13px;border:1.5px solid #8a877f;border-radius:999px;flex:none;display:block"></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Search name, title or company…</span>
+            </div>
+            <span style="font-size:12.5px;color:#8a877f;flex:none;white-space:nowrap">Newest match first</span>
+          </div>
+
+          <sc-if value="{{ filtersOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px 16px;border:1px solid rgba(0,0,0,.1);border-radius:12px;background:#FBFAF8;margin-top:12px">
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Role
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Senior Fleet Software Engineer (#1042)</option><option>All roles (96)</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Hiring company
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>All hiring companies</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Fit
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Strong fit</option><option>All fits</option><option>Worth a look</option><option>Likely a stretch</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Recency
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>New this week</option><option>Any time</option></select>
+              </label>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border:1px solid rgba(91,75,255,.32);background:#F6F4FF;border-radius:8px;font-size:12.5px;color:#4536E8;white-space:nowrap">Fit: <b style="font-weight:600">Strong fit</b><span style="color:#9C93FF;font-size:13px">×</span></span>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border:1px solid rgba(91,75,255,.32);background:#F6F4FF;border-radius:8px;font-size:12.5px;color:#4536E8;white-space:nowrap">Recency: <b style="font-weight:600">New this week</b><span style="color:#9C93FF;font-size:13px">×</span></span>
+            <a href="#8a" style="display:inline-flex;align-items:center;height:30px;padding:0 10px;font-size:12.5px;font-weight:600;color:#8a877f">Clear all</a>
+            <div style="flex:1"></div>
+            <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">24 people · 61 matches</span>
+          </div>
+
+          <div style="margin-top:16px;border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow-x:auto">
+            <div style="min-width:900px">
+              <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 130px minmax(0,2.2fr) 76px 44px 24px;gap:14px;padding:11px 20px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+                <span>Candidate</span><span>Location</span><span>Matched roles</span><span style="text-align:right">Latest</span><span style="text-align:center">In</span><span></span>
+              </div>
+              <sc-for list="{{ people }}" as="p" hint-placeholder-count="4">
+                <div style="{{ p.rowStyle }}">
+                  <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 130px minmax(0,2.2fr) 76px 44px 24px;gap:14px;padding:13px 20px;align-items:center;cursor:pointer" onClick="{{ p.toggle }}">
+                    <div style="display:flex;align-items:center;gap:11px;min-width:0">
+                      <span style="{{ p.avatarStyle }}">{{ p.initials }}</span>
+                      <span style="min-width:0">
+                        <span style="display:flex;align-items:center;gap:7px">
+                          <b style="font-size:14.5px;font-weight:600;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</b>
+                          <sc-if value="{{ p.isNew }}" hint-placeholder-val="{{ false }}"><i style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block;flex:none"></i></sc-if>
+                        </span>
+                        <span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.meta }}</span>
+                      </span>
+                    </div>
+                    <span style="font-size:13px;color:#3b3934;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.location }}</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:5px;min-width:0">
+                      <sc-for list="{{ p.chips }}" as="c" hint-placeholder-count="2">
+                        <span style="{{ c.style }}">{{ c.label }}</span>
+                      </sc-for>
+                    </div>
+                    <span style="font-size:12.5px;color:#8a877f;text-align:right;font-variant-numeric:tabular-nums">{{ p.latest }}</span>
+                    <span style="display:flex;justify-content:center"><span style="{{ p.inStyle }}">in</span></span>
+                    <span style="font-size:12px;color:#8a877f;text-align:center">{{ p.caret }}</span>
+                  </div>
+
+                  <sc-if value="{{ p.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:2px 20px 18px">
+                      <div style="border:1px solid rgba(0,0,0,.09);border-radius:12px;background:#FBFAF8;overflow:hidden">
+                        <sc-for list="{{ p.reviews }}" as="m" hint-placeholder-count="2">
+                          <div style="{{ m.wrapStyle }}">
+                            <div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1.5fr) 168px;gap:16px;padding:14px 16px;align-items:start">
+                              <div style="min-width:0">
+                                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                                  <b style="font-size:14px;font-weight:600;letter-spacing:-.01em">{{ m.title }}</b>
+                                  <span style="{{ m.tagStyle }}">{{ m.tagLabel }}</span>
+                                </div>
+                                <div style="margin-top:3px;font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">{{ m.meta }}</div>
+                                <sc-if value="{{ m.sendsTo }}" hint-placeholder-val="{{ false }}">
+                                  <div style="margin-top:4px;font-size:12px;color:#4536E8;font-weight:600">→ delivers to {{ m.sendsToName }}</div>
+                                </sc-if>
+                              </div>
+                              <p style="margin:0;font-size:13px;line-height:1.6;color:#3b3934;text-wrap:pretty">{{ m.reason }}</p>
+                              <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end">
+                                <sc-if value="{{ m.sent }}" hint-placeholder-val="{{ false }}">
+                                  <span style="text-align:right"><b style="display:block;font-size:12.5px;font-weight:600;color:#1F7A4C">Sent ✓</b><small style="display:block;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">{{ m.sentNote }}</small></span>
+                                </sc-if>
+                                <sc-if value="{{ m.canSend }}" hint-placeholder-val="{{ true }}">
+                                  <button type="button" onClick="{{ m.send }}" style="appearance:none;height:32px;padding:0 13px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap">Send to job</button>
+                                </sc-if>
+                                <button type="button" style="appearance:none;border:none;background:none;padding:0;font-size:12.5px;font-weight:600;color:#5d5b56;cursor:pointer;white-space:nowrap;text-decoration:underline">View job</button>
+                              </div>
+                            </div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <p style="margin:14px 0 0;max-width:820px;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Person-first on purpose: one row per person with every role they matched, so nobody clicks through 96 jobs to find the same engineer three times. The green dot marks a match added since yesterday.</p>
+        </div>
+
+        <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;inset:0;z-index:50;background:rgba(17,17,16,.34);display:flex;align-items:center;justify-content:center;padding:40px" onClick="{{ closeModal }}">
+            <div style="width:520px;max-width:100%;background:#fff;border-radius:16px;box-shadow:0 30px 70px -24px rgba(17,17,16,.5);padding:26px 28px">
+              <h3 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Send Marcus to Senior Fleet Software Engineer?</h3>
+              <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;color:#5d5b56;text-wrap:pretty">This creates an application on <b style="font-weight:600;color:#111110">Senior Fleet Software Engineer (#1042)</b> — delivered straight into <b style="font-weight:600;color:#111110">Northwind Robotics&rsquo;</b> pipeline.</p>
+              <div style="display:flex;align-items:center;gap:11px;margin-top:18px;padding:12px 14px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8">
+                <span style="width:34px;height:34px;border-radius:999px;background:#4CA88C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;flex:none">MB</span>
+                <span style="flex:1;min-width:0">
+                  <b style="display:block;font-size:14px;font-weight:600">Marcus Bell</b>
+                  <small style="display:block;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Staff Software Engineer @ Locus Robotics</small>
+                </span>
+                <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:#E9F5EE;color:#1F7A4C;font-size:11.5px;font-weight:600;flex:none;white-space:nowrap">Strong fit</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">
+                <div style="display:flex;gap:10px;font-size:13px;line-height:1.5;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span>Marked <b style="font-weight:600">⚡ Via Transformer Talent</b> — the referral credit is yours.</span></div>
+                <div style="display:flex;gap:10px;font-size:13px;line-height:1.5;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span>Built from their pool profile (LinkedIn data on file).</span></div>
+                <div style="display:flex;gap:10px;font-size:13px;line-height:1.5;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span>Starts at stage <b style="font-weight:600">New</b> in that job&rsquo;s Pipeline.</span></div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:22px">
+                <button type="button" onClick="{{ closeModal }}" style="appearance:none;height:36px;padding:0 15px;border-radius:8px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:13px;font-weight:600;color:#111110;cursor:pointer">Cancel</button>
+                <button type="button" onClick="{{ confirmSend }}" style="appearance:none;height:36px;padding:0 15px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Send to job</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div id="8b" style="margin-top:52px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">8b</span>
+        <span style="font-size:13px;color:#5d5b56">Auth &amp; access states — everything <b style="font-weight:600">DashShell</b> renders before the dashboard exists.</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+          <div style="padding:10px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a877f">Sign in — idle</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:300px;padding:34px">
+            <div style="width:100%;max-width:380px;border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:26px 26px 24px">
+              <h1 style="margin:0;font-size:21px;font-weight:600;letter-spacing:-.02em">Company dashboard</h1>
+              <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Enter your work email and we&rsquo;ll send you a one-time sign-in link. No password needed.</p>
+              <input type="email" placeholder="you@company.com" style="display:block;width:100%;height:38px;margin-top:16px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+              <button type="button" style="appearance:none;width:100%;height:40px;margin-top:10px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Send sign-in link</button>
+              <p style="margin:14px 0 0;font-size:12px;line-height:1.5;color:#8a877f;text-wrap:pretty">Access is granted by your admin. Invited by email? Use that address.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+          <div style="padding:10px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a877f">Sign in — link sent</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:300px;padding:34px">
+            <div style="width:100%;max-width:380px;border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:26px">
+              <h1 style="margin:0;font-size:21px;font-weight:600;letter-spacing:-.02em">Company dashboard</h1>
+              <div style="display:flex;gap:11px;margin-top:16px;padding:14px 15px;border:1px solid rgba(31,122,76,.28);border-radius:10px;background:#F4FAF6">
+                <span style="color:#1F7A4C;font-size:14px;font-weight:700;flex:none">✓</span>
+                <p style="margin:0;font-size:13.5px;line-height:1.6;color:#2F5C46;text-wrap:pretty">Check your email — we sent a sign-in link to <b style="font-weight:600;color:#111110">priya@northwindrobotics.com</b>. The link works once and expires in an hour.</p>
+              </div>
+              <p style="margin:14px 0 0;font-size:12.5px;color:#8a877f">Wrong address? <a href="#8b" style="font-weight:600">Start again</a></p>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+          <div style="padding:10px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a877f">Sign in — send failed</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:300px;padding:34px">
+            <div style="width:100%;max-width:380px;border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:26px">
+              <h1 style="margin:0;font-size:21px;font-weight:600;letter-spacing:-.02em">Company dashboard</h1>
+              <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Enter your work email and we&rsquo;ll send you a one-time sign-in link. No password needed.</p>
+              <input type="email" value="priya@northwindrobotics.com" onChange="{{ noop }}" style="display:block;width:100%;height:38px;margin-top:16px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+              <button type="button" style="appearance:none;width:100%;height:40px;margin-top:10px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Send sign-in link</button>
+              <div style="display:flex;gap:10px;margin-top:12px;padding:11px 13px;border:1px solid rgba(154,91,20,.3);border-radius:10px;background:#FBF1E6">
+                <span style="color:#9A5B14;font-size:13px;font-weight:700;flex:none">!</span>
+                <p style="margin:0;font-size:13px;line-height:1.55;color:#584634">Couldn&rsquo;t send the link — wait a minute and try again.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+          <div style="padding:10px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a877f">No dashboard access</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:300px;padding:34px">
+            <div style="width:100%;max-width:380px;border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:26px">
+              <h1 style="margin:0;font-size:21px;font-weight:600;letter-spacing:-.02em">No dashboard access</h1>
+              <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;color:#8a877f;text-wrap:pretty"><b style="font-weight:600;color:#3b3934">priya@northwindrobotics.com</b> isn&rsquo;t linked to a company yet. If you were expecting access, contact <a href="#8b" style="font-weight:600">spencer@transformertalent.com</a>.</p>
+              <button type="button" style="appearance:none;height:36px;margin-top:16px;padding:0 15px;border-radius:8px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:13px;font-weight:600;color:#111110;cursor:pointer">Sign out</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+          <div style="padding:10px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a877f">Resolving session</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:220px;padding:34px">
+            <span style="font-size:13.5px;color:#8a877f">Loading…</span>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+          <div style="padding:10px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8a877f">Wrong org / wrong role</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:220px;padding:34px">
+            <div style="width:100%;max-width:380px">
+              <p style="margin:0;font-size:13.5px;color:#8a877f">Page not found.</p>
+              <p style="margin:12px 0 0;font-size:12.5px;line-height:1.6;color:#a9a6a0;text-wrap:pretty">What a non-TT org sees at <b style="font-weight:600;color:#8a877f">/dashboard/network</b>, and a non-owner at <b style="font-weight:600;color:#8a877f">/dashboard/team</b>. The nav item is hidden and the API 404s independently, so a guessed URL leaks nothing.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:20px 22px;max-width:1000px">
+        <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">For implementation — what drives each state</div>
+        <div style="margin-top:14px;border:1px solid rgba(0,0,0,.09);border-radius:12px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:190px 220px minmax(0,1fr);gap:14px;padding:10px 16px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+            <span>State</span><span>Condition</span><span>Notes</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 220px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+            <span style="font-size:13px;font-weight:600">Resolving session</span>
+            <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">session === undefined</span>
+            <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Also while <code style="font-size:12.5px">/api/dashboard/me</code> is in flight. Existing &ldquo;Loading…&rdquo; copy, centred.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 220px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+            <span style="font-size:13px;font-weight:600">Sign in</span>
+            <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">!session</span>
+            <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Supabase <code style="font-size:12.5px">signInWithOtp</code>, redirect <code style="font-size:12.5px">/dashboard</code>. Three states: idle, sent, error. The &ldquo;Access is granted by your admin&rdquo; line and &ldquo;Start again&rdquo; link are new.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 220px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+            <span style="font-size:13px;font-weight:600">No dashboard access</span>
+            <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">session &amp;&amp; !me</span>
+            <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Signed in but no <code style="font-size:12.5px">org_members</code> row. Copy verbatim from DashShell, including the contact address.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 220px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+            <span style="font-size:13px;font-weight:600">Page not found</span>
+            <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">org.slug !== TT_SLUG</span>
+            <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Network is TT-only; Team is <code style="font-size:12.5px">memberRole === "owner"</code>. Nav hides the item and the API 404s separately.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 220px minmax(0,1fr);gap:14px;padding:12px 16px;align-items:baseline">
+            <span style="font-size:13px;font-weight:600">Network table</span>
+            <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">GET /dashboard/network</span>
+            <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Send is <code style="font-size:12.5px">POST /network/send</code> with <code style="font-size:12.5px">{candidateId, jobId}</code>; treat <b style="font-weight:600">409</b> as already-sent and mark it sent locally. Fetch error renders &ldquo;Couldn&rsquo;t load network matches — refresh to retry.&rdquo;</span>
+          </div>
+        </div>
+        <p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Filters here are client-side over the single payload (role, hiring company, fit, new-this-week, text search) — the same Filters-menu-plus-chips pattern as Candidates, so all three tables behave identically. Row click opens the shared CandidateDrawer with key <code style="font-size:12px">net_&lt;candidateId&gt;</code>; the chips cell and caret expand the reviews instead.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const AV = ["#5B7FDB", "#4CA88C", "#C4736B", "#8A6FC2", "#C99242", "#5E9DB8", "#7A8699"];
+const avColor = (n) => {
+  let h = 0;
+  for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) | 0;
+  return AV[Math.abs(h) % AV.length];
+};
+const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+
+const TAGS = {
+  strong: { label: "Strong fit", bg: "#E9F5EE", fg: "#1F7A4C", dot: "#1F7A4C" },
+  possible: { label: "Worth a look", bg: "rgba(0,0,0,.06)", fg: "#5d5b56", dot: "#5B4BFF" },
+  stretch: { label: "Likely a stretch", bg: "rgba(0,0,0,.06)", fg: "#8a877f", dot: "#C9C4FF" },
+};
+
+const PEOPLE = [
+  {
+    id: "c1", name: "Marcus Bell", title: "Staff Software Engineer", company: "Locus Robotics",
+    location: "Boston, MA", latest: "Aug 27", isNew: true, linkedin: true,
+    matches: [
+      { jobId: "1042", title: "Senior Fleet Software Engineer", co: "Northwind Robotics", salary: "$185k–$220k", tag: "strong", sendsTo: "Northwind Robotics", sentAt: null,
+        reason: "Eight years on fleet coordination at Locus, most recently owning the task allocator for multi-site deployments. Exactly the system this role is hiring for, and he has already done the hard version of it." },
+      { jobId: "1017", title: "Robotics Platform Lead", co: "Verdant Systems", salary: "$200k–$240k", tag: "possible", sendsTo: null, sentAt: null,
+        reason: "Has the depth but has not led a team; the client wants someone who has carried headcount before. Worth a conversation if they widen the brief." },
+      { jobId: "0994", title: "Simulation Engineer", co: "Northwind Robotics", salary: "$150k–$180k", tag: "stretch", sendsTo: "Northwind Robotics", sentAt: "Aug 14",
+        reason: "Built simulation tooling as part of his planner work, but it was never the job. A stretch unless they want a generalist." }
+    ],
+  },
+  {
+    id: "c2", name: "Ana Duarte", title: "Perception Lead", company: "Symbotic",
+    location: "Austin, TX", latest: "Aug 27", isNew: true, linkedin: true,
+    matches: [
+      { jobId: "1039", title: "Perception Engineer", co: "Northwind Robotics", salary: "$175k–$205k", tag: "strong", sendsTo: "Northwind Robotics", sentAt: null,
+        reason: "Leads a four-person perception team shipping on-vehicle models in warehouse conditions. Already in Austin, already living with dust and bad light." },
+      { jobId: "1008", title: "Computer Vision Engineer", co: "Halcyon Freight", salary: "$165k–$190k", tag: "strong", sendsTo: null, sentAt: null,
+        reason: "Same core skills; this role is more research-leaning, which matches the papers she published before moving into industry." }
+    ],
+  },
+  {
+    id: "c3", name: "Tobias Renner", title: "Senior Infrastructure Engineer", company: "Cadence Logistics",
+    location: "Remote, US", latest: "Aug 26", isNew: false, linkedin: true,
+    matches: [
+      { jobId: "1036", title: "Platform Engineer", co: "Northwind Robotics", salary: "$160k–$190k", tag: "strong", sendsTo: "Northwind Robotics", sentAt: null,
+        reason: "Owns the deploy path for a forty-engineer team across two hundred edge sites — the same shape of problem, at the same scale." },
+      { jobId: "1021", title: "Staff SRE", co: "Verdant Systems", salary: "$180k–$215k", tag: "possible", sendsTo: null, sentAt: null,
+        reason: "Strong on infrastructure, lighter on incident command at the level this client expects. Fine if they will invest in it." }
+    ],
+  },
+  {
+    id: "c4", name: "Priyanka Shah", title: "Product Designer", company: "Freight Wave",
+    location: "Chicago, IL", latest: "Aug 22", isNew: false, linkedin: false,
+    matches: [
+      { jobId: "1031", title: "Staff Product Designer", co: "Northwind Robotics", salary: "$170k–$200k", tag: "possible", sendsTo: "Northwind Robotics", sentAt: null,
+        reason: "Six years on dense operational tooling for freight dispatch. Below the eight-year bar, but the portfolio is the closest match in the pool." }
+    ],
+  },
+];
+
+class Component extends DCLogic {
+  state = { open: "c1", filters: false, modal: false, sent: {} };
+
+  renderVals() {
+    const s = this.state;
+
+    const people = PEOPLE.map((p) => {
+      const isOpen = s.open === p.id;
+      const chips = p.matches.slice(0, isOpen ? 99 : 3).map((m) => {
+        const sent = m.sentAt || s.sent[p.id + m.jobId];
+        const t = TAGS[m.tag];
+        return {
+          label: (sent ? "✓ " : "● ") + m.title + " #" + m.jobId,
+          style:
+            "display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:6px;font-size:11.5px;font-weight:500;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;" +
+            (sent
+              ? "background:#E9F5EE;color:#1F7A4C"
+              : "background:rgba(0,0,0,.05);color:#3b3934;box-shadow:inset 2px 0 0 " + t.dot),
+        };
+      });
+      if (!isOpen && p.matches.length > 3) {
+        chips.push({
+          label: "+" + (p.matches.length - 3) + " more",
+          style: "display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:6px;font-size:11.5px;color:#8a877f;background:none;border:1px dashed rgba(0,0,0,.16);white-space:nowrap",
+        });
+      }
+
+      const reviews = p.matches.map((m, i) => {
+        const sent = m.sentAt || s.sent[p.id + m.jobId];
+        const t = TAGS[m.tag];
+        return {
+          title: m.title,
+          tagLabel: t.label,
+          tagStyle:
+            "display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;background:" +
+            t.bg + ";color:" + t.fg,
+          meta: "#" + m.jobId + (m.co ? " · " + m.co : "") + (m.salary ? " · " + m.salary : ""),
+          sendsTo: Boolean(m.sendsTo),
+          sendsToName: m.sendsTo || "",
+          reason: m.reason,
+          sent: Boolean(sent),
+          canSend: !sent,
+          sentNote: (m.sentAt || "Just now") + " · in Pipeline",
+          send: () => this.setState({ modal: true, pending: p.id + m.jobId }),
+          wrapStyle:
+            (i ? "border-top:1px solid rgba(0,0,0,.07);" : "") +
+            (m.tag === "strong" ? "box-shadow:inset 3px 0 0 #1F7A4C" : ""),
+        };
+      });
+
+      return {
+        name: p.name,
+        initials: initials(p.name),
+        avatarStyle:
+          "width:30px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;color:#fff;flex:none;background:" +
+          avColor(p.name),
+        meta: [p.title, p.company].filter(Boolean).join(" @ "),
+        location: p.location,
+        latest: p.latest,
+        isNew: p.isNew,
+        caret: isOpen ? "▾" : "▸",
+        open: isOpen,
+        chips,
+        reviews,
+        inStyle:
+          "width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;background:#0A66C2;" +
+          (p.linkedin ? "" : "opacity:.28"),
+        rowStyle: "border-bottom:1px solid rgba(0,0,0,.07);" + (isOpen ? "background:#FBFAF8" : ""),
+        toggle: () => this.setState((prev) => ({ open: prev.open === p.id ? null : p.id })),
+      };
+    });
+
+    return {
+      noop: () => {},
+      people,
+      filtersOpen: s.filters,
+      toggleFilters: () => this.setState((p) => ({ filters: !p.filters })),
+      filtersBtnStyle:
+        "appearance:none;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border-radius:8px;font-size:13.5px;font-weight:600;color:#111110;cursor:pointer;flex:none;white-space:nowrap;border:1px solid " +
+        (s.filters ? "rgba(91,75,255,.45);background:#F6F4FF" : "rgba(0,0,0,.12);background:#fff"),
+      modalOpen: s.modal,
+      closeModal: () => this.setState({ modal: false, pending: null }),
+      confirmSend: () =>
+        this.setState((p) => ({
+          modal: false,
+          sent: p.pending ? { ...p.sent, [p.pending]: true } : p.sent,
+          pending: null,
+        })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"><style>body{margin:0;background:#e9e7e2;font-family:'Instrument Sans',system-ui,sans-serif}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 'Instrument Sans',sans-serif;color:#1a1a1a}.dv-opts{display:flex;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Instrument Sans',sans-serif;color:rgba(0,0,0,.55)}.dv-card{background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.07);overflow:hidden}.dv-opt:target .dv-oid{background:#5B4BFF;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 'Instrument Sans',sans-serif;color:rgba(0,0,0,.5)}a{color:inherit}</style></helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Dashboard shell — 1a Quiet Utility, applied to the real app</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>The shell: sidebar, top bar, page header, table — shown on Jobs. Every later screen slots into this frame.</div>
+<div class="dv-card" style="width:1440px">
+<div style="display:flex;min-height:900px;background:#fff;color:#111110;font-size:14px;line-height:1.5;font-family:'Instrument Sans',system-ui,sans-serif">
+
+  <aside style="width:236px;flex:none;background:#FBFAF8;border-right:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;padding:18px 14px">
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 8px 18px">
+      <div style="width:30px;height:30px;border-radius:9px;background:#111110;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;letter-spacing:-.02em;flex:none">TT</div>
+      <div style="min-width:0">
+        <div style="font-size:13.5px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Transformer Talent</div>
+        <div style="font-size:11.5px;color:#8a877f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">board/transformer-talent</div>
+      </div>
+    </div>
+
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="#2a" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;background:#EFEDFF;color:#111110;font-size:13.5px;font-weight:600;text-decoration:none">
+        Jobs
+        <span style="margin-left:auto;font-size:11.5px;color:#5B4BFF;font-variant-numeric:tabular-nums">6</span>
+      </a>
+      <a href="#2a" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:#5d5b56;font-size:13.5px;font-weight:500;text-decoration:none" style-hover="background:rgba(0,0,0,.04);color:#111110">
+        Candidates
+        <span style="margin-left:auto;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">418</span>
+      </a>
+      <a href="#2a" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px 0 22px;border-radius:8px;color:#5d5b56;font-size:13.5px;font-weight:500;text-decoration:none" style-hover="background:rgba(0,0,0,.04);color:#111110">
+        Network
+        <span style="margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.05em;color:#8a877f;border:1px solid rgba(0,0,0,.14);border-radius:4px;padding:1px 5px">TT</span>
+      </a>
+      <a href="#2a" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:#5d5b56;font-size:13.5px;font-weight:500;text-decoration:none" style-hover="background:rgba(0,0,0,.04);color:#111110">
+        My page
+        <span style="margin-left:auto;font-size:10.5px;font-weight:600;color:#9A5B14;background:#FBF1E6;border-radius:999px;padding:2px 7px">set up</span>
+      </a>
+      <a href="#2a" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px 0 22px;border-radius:8px;color:#5d5b56;font-size:13.5px;font-weight:500;text-decoration:none" style-hover="background:rgba(0,0,0,.04);color:#111110">Team</a>
+      <a href="#2a" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:#5d5b56;font-size:13.5px;font-weight:500;text-decoration:none" style-hover="background:rgba(0,0,0,.04);color:#111110">Settings</a>
+    </nav>
+
+    <div style="margin:20px 8px 0;padding-top:16px;border-top:1px solid rgba(0,0,0,.08)">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">Sourcing credits</div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-top:7px"><span style="font-size:19px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums">2,140</span><span style="font-size:12px;color:#8a877f">available</span></div>
+      <div style="height:4px;border-radius:999px;background:rgba(0,0,0,.08);margin-top:9px;overflow:hidden"><div style="width:64%;height:100%;background:#5B4BFF"></div></div>
+      <div style="font-size:11.5px;color:#8a877f;margin-top:7px">180 reserved by 2 runs in progress</div>
+    </div>
+
+    <div style="margin-top:auto;padding:14px 8px 4px;border-top:1px solid rgba(0,0,0,.08)">
+      <div style="display:flex;align-items:center;gap:9px">
+        <div style="width:26px;height:26px;border-radius:999px;background:#EFEDFF;color:#4536E8;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:none">SB</div>
+        <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">spencer@transformertalent.com</div><div style="font-size:11px;color:#8a877f">Owner</div></div>
+      </div>
+      <a href="#2a" style="display:block;font-size:12px;color:#8a877f;text-decoration:none;margin-top:10px" style-hover="color:#111110">Sign out</a>
+    </div>
+  </aside>
+
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:16px;height:56px;padding:0 32px;border-bottom:1px solid rgba(0,0,0,.08);flex:none">
+      <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#8a877f"><span>Transformer Talent</span><span style="color:#c2bfb8">/</span><span style="color:#111110;font-weight:500">Jobs</span></div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid rgba(0,0,0,.12);border-radius:8px;width:260px;color:#8a877f;font-size:13px">
+        <span style="width:12px;height:12px;border:1.5px solid #8a877f;border-radius:999px;flex:none;display:block"></span>Search roles and candidates
+        <span style="margin-left:auto;font-size:11px;border:1px solid rgba(0,0,0,.12);border-radius:4px;padding:1px 5px">⌘K</span>
+      </div>
+      <a href="#2a" style="display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-size:13px;font-weight:600;text-decoration:none;color:#111110" style-hover="background:#FBFAF8">View board</a>
+    </div>
+
+    <div style="padding:26px 32px 40px">
+      <div style="display:flex;align-items:flex-start;gap:20px">
+        <div>
+          <h1 style="margin:0;font-size:27px;font-weight:600;letter-spacing:-.025em">Jobs</h1>
+          <p style="margin:5px 0 0;font-size:13.5px;color:#8a877f;font-variant-numeric:tabular-nums">6 open · 3 closed · 418 people in the pool</p>
+        </div>
+        <div style="flex:1"></div>
+        <a href="#2a" style="display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-size:13.5px;font-weight:600;text-decoration:none;color:#111110" style-hover="background:#FBFAF8">Import a JD</a>
+        <a href="#2a" style="display:inline-flex;align-items:center;height:36px;padding:0 18px;border-radius:999px;background:#111110;color:#fff;font-size:13.5px;font-weight:600;text-decoration:none" style-hover="background:#2f2d29">New job</a>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:16px;margin-top:24px;padding:16px 18px;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#FBFAFF">
+        <div style="width:32px;height:32px;border-radius:9px;background:#EFEDFF;color:#4536E8;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex:none">2</div>
+        <div style="flex:1"><div style="font-size:14px;font-weight:600">Two client requests waiting</div><div style="font-size:13px;color:#5d5b56;margin-top:2px">Northline Search sent a Staff Product Engineer brief · Kestrel Labs sent an EM brief</div></div>
+        <a href="#2a" style="display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;background:#5B4BFF;color:#fff;font-size:13px;font-weight:600;text-decoration:none" style-hover="background:#4536E8">Review</a>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-top:26px">
+        <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;background:#111110;color:#fff;font-size:12.5px;font-weight:600">Open <span style="opacity:.55;margin-left:5px;font-variant-numeric:tabular-nums">6</span></span>
+        <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-size:12.5px;font-weight:500;color:#5d5b56">Closed <span style="color:#8a877f;margin-left:5px;font-variant-numeric:tabular-nums">3</span></span>
+        <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-size:12.5px;font-weight:500;color:#5d5b56">Linked to a client <span style="color:#8a877f;margin-left:5px;font-variant-numeric:tabular-nums">4</span></span>
+        <div style="flex:1"></div>
+        <span style="font-size:12.5px;color:#8a877f">Sorted by newest activity</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:16px;margin-top:18px;font-size:12px;color:#8a877f">
+        <span style="font-weight:600;color:#5d5b56">Pipeline</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:rgba(0,0,0,.09);display:block"></span>Not contacted yet</span>
+        <span style="margin-left:auto;font-style:italic;font-family:'Instrument Serif',Georgia,serif;font-size:13px">hover a bar for the counts</span>
+      </div>
+
+      <div style="margin-top:10px;border:1px solid rgba(0,0,0,.09);border-radius:14px">
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:11px 20px;background:#FBFAF8;border-radius:13px 13px 0 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+          <span>Role</span><span>Locations</span><span>Salary</span><span>Years</span><span style="text-align:right">Applicants</span><span>Pipeline</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center" style-hover="background:#FBFAF8">
+          <div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Senior Backend Engineer</span><span style="font-size:10.5px;font-weight:600;color:#4536E8;background:#EFEDFF;border-radius:999px;padding:2px 8px">linked</span></div><div style="font-size:12px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">#1042 · Hybrid · Northline Search</div></div>
+          <span style="font-size:13.5px;color:#3b3934">New York</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$185k–$215k</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">5–8</span>
+          <span style="font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">34</span>
+          <div onMouseEnter="{{ onA }}" onMouseLeave="{{ off }}" style="position:relative;display:flex;align-items:center;gap:8px;cursor:default">
+            <div style="flex:1;display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.09)"><div style="width:44%;background:#5B4BFF"></div><div style="width:24%;background:#9C93FF"></div><div style="width:12%;background:#C9C4FF"></div><div style="width:9%;background:#1F7A4C"></div></div>
+            <span style="font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">3 at offer</span>
+            <sc-if value="{{ tipA }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 10px);right:0;z-index:30;width:244px;background:#111110;color:#fff;border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.3)">
+                <div style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">34 candidates · Senior Backend Engineer</div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:10px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span><b style="color:#fff;font-variant-numeric:tabular-nums">15</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span><b style="color:#fff;font-variant-numeric:tabular-nums">8</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span><b style="color:#fff;font-variant-numeric:tabular-nums">4</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span><b style="color:#fff;font-variant-numeric:tabular-nums">3</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.22);display:block"></span>Not contacted yet</span><b style="color:#fff;font-variant-numeric:tabular-nums">4</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center" style-hover="background:#FBFAF8">
+          <div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Staff Product Engineer</span><span style="font-size:10.5px;font-weight:600;color:#4536E8;background:#EFEDFF;border-radius:999px;padding:2px 8px">linked</span></div><div style="font-size:12px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">#1038 · Remote · Northline Search</div></div>
+          <span style="font-size:13.5px;color:#3b3934">Remote</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$210k–$250k</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">8+</span>
+          <span style="font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">27</span>
+          <div onMouseEnter="{{ onB }}" onMouseLeave="{{ off }}" style="position:relative;display:flex;align-items:center;gap:8px;cursor:default">
+            <div style="flex:1;display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.09)"><div style="width:52%;background:#5B4BFF"></div><div style="width:18%;background:#9C93FF"></div><div style="width:11%;background:#C9C4FF"></div></div>
+            <span style="font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">3 in interview</span>
+            <sc-if value="{{ tipB }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 10px);right:0;z-index:30;width:244px;background:#111110;color:#fff;border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.3)">
+                <div style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">27 candidates · Staff Product Engineer</div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:10px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span><b style="color:#fff;font-variant-numeric:tabular-nums">14</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span><b style="color:#fff;font-variant-numeric:tabular-nums">5</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span><b style="color:#fff;font-variant-numeric:tabular-nums">3</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.22);display:block"></span>Not contacted yet</span><b style="color:#fff;font-variant-numeric:tabular-nums">5</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center" style-hover="background:#FBFAF8">
+          <div><div style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Engineering Manager, Platform</div><div style="font-size:12px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">#1035 · Hybrid</div></div>
+          <span style="font-size:13.5px;color:#3b3934">Boston</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$200k–$235k</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">8+</span>
+          <span style="font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">11</span>
+          <div onMouseEnter="{{ onC }}" onMouseLeave="{{ off }}" style="position:relative;display:flex;align-items:center;gap:8px;cursor:default">
+            <div style="flex:1;display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.09)"><div style="width:18%;background:#5B4BFF"></div></div>
+            <span style="font-size:12px;color:#8a877f">sourcing</span>
+            <sc-if value="{{ tipC }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 10px);right:0;z-index:30;width:244px;background:#111110;color:#fff;border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.3)">
+                <div style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">11 candidates · EM, Platform</div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:10px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span><b style="color:#fff;font-variant-numeric:tabular-nums">2</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.22);display:block"></span>Not contacted yet</span><b style="color:#fff;font-variant-numeric:tabular-nums">9</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center" style-hover="background:#FBFAF8">
+          <div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Data Platform Engineer</span><span style="font-size:10.5px;font-weight:600;color:#4536E8;background:#EFEDFF;border-radius:999px;padding:2px 8px">linked</span></div><div style="font-size:12px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">#1031 · Hybrid · Kestrel Labs</div></div>
+          <span style="font-size:13.5px;color:#3b3934">New York, Chicago</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$175k–$205k</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">4–7</span>
+          <span style="font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">19</span>
+          <div onMouseEnter="{{ onD }}" onMouseLeave="{{ off }}" style="position:relative;display:flex;align-items:center;gap:8px;cursor:default">
+            <div style="flex:1;display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.09)"><div style="width:37%;background:#5B4BFF"></div><div style="width:16%;background:#9C93FF"></div></div>
+            <span style="font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">3 replied</span>
+            <sc-if value="{{ tipD }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 10px);right:0;z-index:30;width:244px;background:#111110;color:#fff;border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.3)">
+                <div style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">19 candidates · Data Platform Engineer</div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:10px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span><b style="color:#fff;font-variant-numeric:tabular-nums">7</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span><b style="color:#fff;font-variant-numeric:tabular-nums">3</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.22);display:block"></span>Not contacted yet</span><b style="color:#fff;font-variant-numeric:tabular-nums">9</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center" style-hover="background:#FBFAF8">
+          <div><div style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Senior Frontend Engineer</div><div style="font-size:12px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">#1024 · Remote</div></div>
+          <span style="font-size:13.5px;color:#3b3934">Remote</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$165k–$195k</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">5–8</span>
+          <span style="font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">42</span>
+          <div onMouseEnter="{{ onE }}" onMouseLeave="{{ off }}" style="position:relative;display:flex;align-items:center;gap:8px;cursor:default">
+            <div style="flex:1;display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.09)"><div style="width:57%;background:#5B4BFF"></div><div style="width:21%;background:#9C93FF"></div><div style="width:10%;background:#C9C4FF"></div><div style="width:2%;background:#1F7A4C"></div></div>
+            <span style="font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">1 at offer</span>
+            <sc-if value="{{ tipE }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;bottom:calc(100% + 10px);right:0;z-index:30;width:244px;background:#111110;color:#fff;border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.3)">
+                <div style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">42 candidates · Senior Frontend Engineer</div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:10px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span><b style="color:#fff;font-variant-numeric:tabular-nums">24</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span><b style="color:#fff;font-variant-numeric:tabular-nums">9</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span><b style="color:#fff;font-variant-numeric:tabular-nums">4</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span><b style="color:#fff;font-variant-numeric:tabular-nums">1</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.22);display:block"></span>Not contacted yet</span><b style="color:#fff;font-variant-numeric:tabular-nums">4</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:15px 20px;align-items:center" style-hover="background:#FBFAF8">
+          <div><div style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Infrastructure Engineer</div><div style="font-size:12px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">#1019 · Onsite</div></div>
+          <span style="font-size:13.5px;color:#3b3934">Seattle</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$155k–$180k</span>
+          <span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">3–6</span>
+          <span style="font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">8</span>
+          <div onMouseEnter="{{ onF }}" onMouseLeave="{{ off }}" style="position:relative;display:flex;align-items:center;gap:8px;cursor:default">
+            <div style="flex:1;display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.09)"><div style="width:13%;background:#5B4BFF"></div></div>
+            <span style="font-size:12px;color:#8a877f">new</span>
+            <sc-if value="{{ tipF }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;bottom:calc(100% + 10px);right:0;z-index:30;width:244px;background:#111110;color:#fff;border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.3)">
+                <div style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">8 candidates · Infrastructure Engineer</div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:10px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#5B4BFF;display:block"></span>Screening</span><b style="color:#fff;font-variant-numeric:tabular-nums">1</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9C93FF;display:block"></span>Replied</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#C9C4FF;display:block"></span>Interview</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#1F7A4C;display:block"></span>Offer</span><b style="color:#fff;font-variant-numeric:tabular-nums">0</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.72)"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.22);display:block"></span>Not contacted yet</span><b style="color:#fff;font-variant-numeric:tabular-nums">7</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f;margin:30px 0 10px">Closed</div>
+      <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:14px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center;color:#8a877f">
+          <div><span style="font-size:14px;font-weight:600;color:#5d5b56">Senior SRE</span><div style="font-size:12px;margin-top:3px;font-variant-numeric:tabular-nums">#1008 · New York</div></div>
+          <span style="font-size:13px">New York</span><span style="font-size:13px;font-variant-numeric:tabular-nums">$185k–$210k</span>
+          <span style="font-size:13px;font-variant-numeric:tabular-nums">5–8</span>
+          <span style="font-size:13px;text-align:right;font-variant-numeric:tabular-nums">51</span>
+          <span style="font-size:12.5px;font-variant-numeric:tabular-nums">Filled 12 Aug</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:14px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center;color:#8a877f">
+          <div><span style="font-size:14px;font-weight:600;color:#5d5b56">Product Designer</span><div style="font-size:12px;margin-top:3px;font-variant-numeric:tabular-nums">#0996 · Remote</div></div>
+          <span style="font-size:13px">Remote</span><span style="font-size:13px;font-variant-numeric:tabular-nums">$140k–$165k</span>
+          <span style="font-size:13px;font-variant-numeric:tabular-nums">3–6</span>
+          <span style="font-size:13px;text-align:right;font-variant-numeric:tabular-nums">63</span>
+          <span style="font-size:12.5px;font-variant-numeric:tabular-nums">Filled 29 Jul</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;gap:16px;padding:14px 20px;align-items:center;color:#8a877f">
+          <div><span style="font-size:14px;font-weight:600;color:#5d5b56">Analytics Engineer</span><div style="font-size:12px;margin-top:3px;font-variant-numeric:tabular-nums">#0981 · Hybrid</div></div>
+          <span style="font-size:13px">Boston</span><span style="font-size:13px;font-variant-numeric:tabular-nums">$130k–$155k</span>
+          <span style="font-size:13px;font-variant-numeric:tabular-nums">4–7</span>
+          <span style="font-size:13px;text-align:right;font-variant-numeric:tabular-nums">22</span>
+          <span style="font-size:12.5px;font-variant-numeric:tabular-nums">Closed 04 Jul</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</div></div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>The primitives every other screen reuses — fix these once and the site stays uniform</div>
+<div class="dv-card" style="width:660px">
+<div style="background:#fff;color:#111110;font-size:14px;font-family:'Instrument Sans',system-ui,sans-serif;padding:30px 32px 36px">
+
+  <div style="font-size:19px;font-weight:600;letter-spacing:-.02em">Foundations <span style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;color:#8a877f">1a</span></div>
+  <p style="margin:6px 0 0;font-size:13px;color:#8a877f">Locked values. Nothing in a later screen invents its own.</p>
+
+  <div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f;margin:26px 0 12px">Type — Instrument Sans, serif italic for accents only</div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="width:96px;flex:none;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">27 / 600</span><span style="font-size:27px;font-weight:600;letter-spacing:-.025em">Page title</span></div>
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="width:96px;flex:none;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">19 / 600</span><span style="font-size:19px;font-weight:600;letter-spacing:-.02em">Section heading</span></div>
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="width:96px;flex:none;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">14.5 / 600</span><span style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Row name / emphasis</span></div>
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="width:96px;flex:none;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">13.5 / 400</span><span style="font-size:13.5px">Body and cell text</span></div>
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="width:96px;flex:none;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">12 / 400</span><span style="font-size:12px;color:#8a877f">Meta, counts, timestamps</span></div>
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="width:96px;flex:none;font-size:11.5px;color:#8a877f;font-variant-numeric:tabular-nums">11 / 600</span><span style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">Column + section label</span></div>
+  </div>
+  <p style="margin:12px 0 0;font-size:12.5px;color:#8a877f">Every number, salary, date and count uses tabular figures so columns line up.</p>
+
+  <div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f;margin:28px 0 12px">Color</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+    <div><div style="height:44px;border-radius:9px;background:#111110"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Ink</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#111110</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#5d5b56"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Body</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#5D5B56</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#8a877f"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Muted</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#8A877F</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#FBFAF8;border:1px solid rgba(0,0,0,.09)"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Surface</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#FBFAF8</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#5B4BFF"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Accent</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#5B4BFF</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#EFEDFF"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Accent wash</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#EFEDFF</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#1F7A4C"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Positive</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#1F7A4C</div></div>
+    <div><div style="height:44px;border-radius:9px;background:#9A5B14"></div><div style="font-size:11.5px;margin-top:6px;font-weight:600">Attention</div><div style="font-size:11px;color:#8a877f;font-variant-numeric:tabular-nums">#9A5B14</div></div>
+  </div>
+  <p style="margin:12px 0 0;font-size:12.5px;color:#8a877f">Borders are always <b style="color:#111110;font-weight:600">rgba(0,0,0,.08)</b> hairlines — no shadows in the dashboard.</p>
+
+  <div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f;margin:28px 0 12px">Controls</div>
+  <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center">
+    <span style="display:inline-flex;align-items:center;height:36px;padding:0 18px;border-radius:999px;background:#111110;color:#fff;font-size:13.5px;font-weight:600">Primary</span>
+    <span style="display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-size:13.5px;font-weight:600">Secondary</span>
+    <span style="display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;background:#5B4BFF;color:#fff;font-size:13px;font-weight:600">Accent, in context</span>
+    <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;background:#111110;color:#fff;font-size:12.5px;font-weight:600">Filter on</span>
+    <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-size:12.5px;font-weight:500;color:#5d5b56">Filter off</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:12px">
+    <span style="font-size:10.5px;font-weight:600;color:#4536E8;background:#EFEDFF;border-radius:999px;padding:3px 9px">linked</span>
+    <span style="font-size:10.5px;font-weight:600;color:#1F7A4C;background:#E9F5EE;border-radius:999px;padding:3px 9px">offer</span>
+    <span style="font-size:10.5px;font-weight:600;color:#9A5B14;background:#FBF1E6;border-radius:999px;padding:3px 9px">not now</span>
+    <span style="font-size:10.5px;font-weight:600;color:#5d5b56;background:rgba(0,0,0,.06);border-radius:999px;padding:3px 9px">sourced</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid rgba(0,0,0,.12);border-radius:8px;font-size:13px;color:#8a877f">Text input</span>
+  </div>
+
+  <div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f;margin:28px 0 12px">Structure</div>
+  <div style="display:flex;flex-direction:column;gap:9px;font-size:13px;color:#5d5b56">
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Sidebar</span>236px, surface, hairline right edge</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Top bar</span>56px: breadcrumb, ⌘K search, one contextual action</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Page gutter</span>32px horizontal, 26px top</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Radii</span>8px controls · 14px panels · 999px pills</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Table row</span>15px vertical padding, hairline divider, surface on hover</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Nav rows</span>no icons — label plus a right-aligned count or badge; sub-items indent 12px</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Tables</span>one column grid per entity, reused by every table on the page</div>
+    <div style="display:flex;gap:12px"><span style="width:112px;flex:none;color:#111110;font-weight:600">Pipeline bar</span>Screening → Replied → Interview → Offer, remainder not contacted; legend above, exact counts on hover</div>
+  </div>
+</div>
+</div></div>
+
+</div>
+<p class="dv-next">Next, on this exact frame: Candidates table + drawer · Job detail with pipeline · My page editor · Settings.</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tip: null };
+  renderVals() {
+    const on = (k) => () => this.setState({ tip: k });
+    const off = () => this.setState({ tip: null });
+    const t = this.state.tip;
+    return {
+      off,
+      onA: on("a"), onB: on("b"), onC: on("c"), onD: on("d"), onE: on("e"), onF: on("f"),
+      tipA: t === "a", tipB: t === "b", tipC: t === "c", tipD: t === "d", tipE: t === "e", tipF: t === "f",
+    };
+  }
+}
+</script>
+</body>
+</html>
