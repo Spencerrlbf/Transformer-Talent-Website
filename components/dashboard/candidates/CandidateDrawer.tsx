@@ -13,6 +13,7 @@ import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
   SALARY_BAND_OPTIONS,
+  VISA_OPTIONS,
 } from "@/lib/future-options";
 
 type PipelineEntry = {
@@ -54,6 +55,7 @@ type Detail = {
     locations: string[];
     locationOptions: string[];
     salary: string | null;
+    visa: string | null;
   } | null;
   pipeline: PipelineEntry[];
   experience: {
@@ -313,6 +315,7 @@ export default function CandidateDrawer({
   const [eWp, setEWp] = useState<string[]>([]);
   const [eLocs, setELocs] = useState<string[]>([]);
   const [eSal, setESal] = useState("");
+  const [eVisa, setEVisa] = useState("");
   const [editingContact, setEditingContact] = useState(false);
   const [openJob, setOpenJob] = useState<string | null>(null);
   // Pool person opened from the internal Network page: read-only extras
@@ -634,6 +637,7 @@ export default function CandidateDrawer({
                           setEWp([...f.workplace]);
                           setELocs([...f.locations]);
                           setESal(f.salary || "");
+                          setEVisa(f.visa || "");
                           setAskErr("");
                           setAskEditing(true);
                         }}
@@ -686,6 +690,10 @@ export default function CandidateDrawer({
                         <div className="ca-r">
                           <span className="ca-rk">Salary</span>
                           <span>{detail.followUp.salary || "Any"}</span>
+                        </div>
+                        <div className="ca-r">
+                          <span className="ca-rk">Visa</span>
+                          <span>{detail.followUp.visa || "Not set"}</span>
                         </div>
                       </div>
                       <button
@@ -742,6 +750,17 @@ export default function CandidateDrawer({
                           ))}
                         </select>
                       </label>
+                      <label className="ca-fld">
+                        Visa status
+                        <select value={eVisa} onChange={(e) => setEVisa(e.target.value)}>
+                          <option value="">Not set</option>
+                          {VISA_OPTIONS.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       {askErr && <span className="cv2d-err">{askErr}</span>}
                       <div className="ca-btns">
                         <button
@@ -765,6 +784,7 @@ export default function CandidateDrawer({
                                   workplace: eWp,
                                   locations: eLocs,
                                   salary: eSal || null,
+                                  visa: eVisa || null,
                                 }),
                               }
                             ).catch(() => null);
@@ -785,6 +805,7 @@ export default function CandidateDrawer({
                                       workplace: eWp,
                                       locations: eLocs,
                                       salary: eSal || null,
+                                      visa: eVisa || null,
                                     },
                                   }
                                 : d

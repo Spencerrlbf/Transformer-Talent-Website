@@ -71,6 +71,7 @@ export async function sendLeadNotification(args: {
   preferredLocations?: string[];
   preferredWorkplace?: string[];
   salaryFloor?: string | null;
+  visaStatus?: string | null;
   /** True when the entry came through a recruiter page. */
   viaPage: boolean;
 }): Promise<void> {
@@ -93,6 +94,7 @@ export async function sendLeadNotification(args: {
       (args.preferredWorkplace || []).join("/") || null,
       (args.preferredLocations || []).join(", ") || null,
       args.salaryFloor || null,
+      args.visaStatus ? `visa: ${args.visaStatus}` : null,
     ].filter(Boolean);
     subject = `Future interest: ${who} (reach out ${month})`;
     lead =

@@ -9,6 +9,7 @@ import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
   SALARY_BAND_OPTIONS,
+  VISA_OPTIONS,
 } from "@/lib/future-options";
 
 export const maxDuration = 60;
@@ -99,6 +100,8 @@ export async function POST(req: NextRequest) {
   const salaryFloor = (SALARY_BAND_OPTIONS as readonly string[]).includes(salaryRaw)
     ? salaryRaw
     : null;
+  const visaRaw = clean(form.get("prefVisa"), 60);
+  const visaStatus = (VISA_OPTIONS as readonly string[]).includes(visaRaw) ? visaRaw : null;
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide a valid email." }, { status: 400 });
@@ -151,6 +154,7 @@ export async function POST(req: NextRequest) {
       preferred_locations: preferredLocations,
       preferred_workplace: preferredWorkplace,
       comp_expectation: salaryFloor,
+      ...(visaStatus ? { visa_status: visaStatus } : {}),
     };
     await sbRest(`website_applications?id=eq.${dup.id}`, {
       method: "PATCH",
@@ -168,6 +172,7 @@ export async function POST(req: NextRequest) {
             workplace: preferredWorkplace,
             salary: salaryFloor,
           },
+          ...(visaStatus ? { visa_status: visaStatus } : {}),
         }),
         prefer: "return=minimal",
       }).catch(() => {});
@@ -215,6 +220,7 @@ export async function POST(req: NextRequest) {
       email,
       linkedin_url: linkedin,
       linkedin_username: linkedinUsername(linkedin),
+      visa_status: visaStatus,
       follow_up_at: followUpAt,
       preferred_roles: preferredRoles,
       preferred_locations: preferredLocations,
@@ -248,7 +254,7 @@ export async function POST(req: NextRequest) {
       name: "",
       email,
       linkedin,
-      visa: "",
+      visa: visaStatus || "",
       preferredLocations,
       roleIds: [],
       speculative: true,

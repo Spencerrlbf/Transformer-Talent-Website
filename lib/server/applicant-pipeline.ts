@@ -328,6 +328,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
             workplace: p.preferredWorkplace || [],
             salary: p.salaryFloor || null,
           },
+          ...(visa ? { visa_status: visa } : {}),
         }),
         prefer: "return=minimal",
       }).catch(() => {});
@@ -401,6 +402,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         preferredLocations: p.followUpAt ? preferredLocations : undefined,
         preferredWorkplace: p.preferredWorkplace,
         salaryFloor: p.salaryFloor,
+        visaStatus: p.followUpAt ? visa || null : null,
         viaPage: Boolean(row?.recruiter_profile_id),
       });
     } catch (err) {

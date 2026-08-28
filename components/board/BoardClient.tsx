@@ -16,6 +16,7 @@ import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
   SALARY_BAND_OPTIONS,
+  VISA_OPTIONS,
 } from "@/lib/future-options";
 
 const MAX_ROLES = 3;
@@ -251,6 +252,7 @@ export default function BoardClient({
   const [futWorkplace, setFutWorkplace] = useState<string[]>([]);
   const [futLocs, setFutLocs] = useState<string[]>([]);
   const [futSalary, setFutSalary] = useState("");
+  const [futVisa, setFutVisa] = useState("");
   const [futStatus, setFutStatus] = useState<
     { kind: "idle" | "sending" } | { kind: "ok"; when: string } | { kind: "error"; message: string }
   >({ kind: "idle" });
@@ -275,6 +277,7 @@ export default function BoardClient({
     for (const v of futWorkplace) data.append("prefWorkplace", v);
     for (const v of futLocs) data.append("prefLocations", v);
     if (futSalary) data.set("prefSalary", futSalary);
+    if (futVisa) data.set("prefVisa", futVisa);
     setFutStatus({ kind: "sending" });
     try {
       const res = await fetch("/api/future-interest", { method: "POST", body: data });
@@ -677,6 +680,17 @@ export default function BoardClient({
                       <select value={futSalary} onChange={(e) => setFutSalary(e.target.value)}>
                         <option value="">Any</option>
                         {SALARY_BAND_OPTIONS.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="board-msel">
+                      <span className="board-msel-lbl">Visa status</span>
+                      <select value={futVisa} onChange={(e) => setFutVisa(e.target.value)}>
+                        <option value="">Select…</option>
+                        {VISA_OPTIONS.map((v) => (
                           <option key={v} value={v}>
                             {v}
                           </option>

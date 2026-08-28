@@ -13,6 +13,7 @@ import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
   SALARY_BAND_OPTIONS,
+  VISA_OPTIONS,
 } from "@/lib/future-options";
 
 /* ------------------------------------------------------------------ */
@@ -192,6 +193,7 @@ export type UnifiedDetail = {
      *  locations, unioned with whatever is already saved on the person. */
     locationOptions: string[];
     salary: string | null;
+    visa: string | null;
   } | null;
   pipeline: {
     jobId: string;
@@ -264,10 +266,11 @@ type AppRow = {
   /** Legacy future rows stored a free-text location here; salary band. */
   location: string | null;
   comp_expectation: string | null;
+  visa_status: string | null;
 };
 
 const APP_COLS =
-  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,location,comp_expectation";
+  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,location,comp_expectation,visa_status";
 
 type VerdictRow = {
   candidate_id: string;
@@ -841,7 +844,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
 export async function updateFollowUp(
   orgId: string,
   key: string,
-  patch: { at?: unknown; roles?: unknown; workplace?: unknown; locations?: unknown; salary?: unknown }
+  patch: { at?: unknown; roles?: unknown; workplace?: unknown; locations?: unknown; salary?: unknown; visa?: unknown }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
   const id = key.slice(4);
@@ -859,6 +862,10 @@ export async function updateFollowUp(
   const salary =
     typeof patch.salary === "string" && (SALARY_BAND_OPTIONS as readonly string[]).includes(patch.salary)
       ? patch.salary
+      : null;
+  const visa =
+    typeof patch.visa === "string" && (VISA_OPTIONS as readonly string[]).includes(patch.visa)
+      ? patch.visa
       : null;
 
   const res = await sbRest(
@@ -880,6 +887,7 @@ export async function updateFollowUp(
       preferred_locations: locations,
       preferred_workplace: workplace,
       comp_expectation: salary,
+      visa_status: visa,
       // Structured values supersede any legacy free-text location.
       location: null,
     }),
@@ -892,6 +900,7 @@ export async function updateFollowUp(
       body: JSON.stringify({
         follow_up_at: at,
         role_preferences: { roles, locations, workplace, salary },
+        visa_status: visa,
       }),
       prefer: "return=minimal",
     }).catch(() => {});
@@ -1342,6 +1351,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
           locations: saved,
           locationOptions: [...new Set([...live, ...saved])].sort(),
           salary: str(a.comp_expectation),
+          visa: str(a.visa_status),
         };
       })(),
       pipeline,
