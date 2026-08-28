@@ -103,6 +103,58 @@ export type RecruiterHead = {
 
 // Analytics beacon (recruiter pages only): fire-and-forget, deduped
 // server-side per visitor per day, never blocks or errors at a candidate.
+/** Multi-select dropdown: a labeled control that opens a checkbox list.
+ *  Closes on outside click; the button summarizes the selection. */
+function MultiSelect({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const summary =
+    value.length === 0 ? "Any" : value.length <= 2 ? value.join(", ") : `${value.length} selected`;
+  return (
+    <div className="board-msel" ref={wrapRef}>
+      <span className="board-msel-lbl">{label}</span>
+      <button type="button" aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(!open)}>
+        <span>{summary}</span>
+        <i aria-hidden="true">▾</i>
+      </button>
+      {open && (
+        <div className="board-msel-pop" role="listbox" aria-label={label}>
+          {options.map((o) => (
+            <label key={o}>
+              <input
+                type="checkbox"
+                checked={value.includes(o)}
+                onChange={() =>
+                  onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o])
+                }
+              />
+              {o}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function track(profileId: string, event: string, roleId?: string) {
   try {
     const payload = JSON.stringify({
@@ -261,10 +313,6 @@ export default function BoardClient({
     if (!futOpen) track(recruiter.id, "future_open");
     setFutOpen(true);
     if (scroll) futRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function toggleIn(list: string[], v: string): string[] {
-    return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
   }
 
   async function onFutureSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -652,61 +700,40 @@ export default function BoardClient({
                     ))}
                   </div>
                   <p className="board-fut-lbl">
-                    What should {firstName} come back with? <span>All optional — pick any that fit.</span>
+                    What should {firstName} come back with? <span>All optional.</span>
                   </p>
-                  <div className="board-fut-chips" role="group" aria-label="Role focus">
-                    {ROLE_FOCUS_OPTIONS.map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-pressed={futRoles.includes(v)}
-                        className={futRoles.includes(v) ? "on" : ""}
-                        onClick={() => setFutRoles((cur) => toggleIn(cur, v))}
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="board-fut-chips" role="group" aria-label="Workplace">
-                    {WORKPLACE_OPTIONS.map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-pressed={futWorkplace.includes(v)}
-                        className={futWorkplace.includes(v) ? "on" : ""}
-                        onClick={() => setFutWorkplace((cur) => toggleIn(cur, v))}
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                  {locations.length > 0 && (
-                    <div className="board-fut-chips" role="group" aria-label="Locations">
-                      {locations.map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          aria-pressed={futLocs.includes(v)}
-                          className={futLocs.includes(v) ? "on" : ""}
-                          onClick={() => setFutLocs((cur) => toggleIn(cur, v))}
-                        >
-                          {v}
-                        </button>
-                      ))}
+                  <div className="board-msel-row">
+                    <MultiSelect
+                      label="Role focus"
+                      options={ROLE_FOCUS_OPTIONS}
+                      value={futRoles}
+                      onChange={setFutRoles}
+                    />
+                    <MultiSelect
+                      label="Workplace"
+                      options={WORKPLACE_OPTIONS}
+                      value={futWorkplace}
+                      onChange={setFutWorkplace}
+                    />
+                    {locations.length > 0 && (
+                      <MultiSelect
+                        label="Location"
+                        options={locations}
+                        value={futLocs}
+                        onChange={setFutLocs}
+                      />
+                    )}
+                    <div className="board-msel">
+                      <span className="board-msel-lbl">Minimum salary</span>
+                      <select value={futSalary} onChange={(e) => setFutSalary(e.target.value)}>
+                        <option value="">Any</option>
+                        {SALARY_BAND_OPTIONS.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
-                  <div className="board-fut-chips" role="group" aria-label="Minimum salary">
-                    {SALARY_BAND_OPTIONS.map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-pressed={futSalary === v}
-                        className={futSalary === v ? "on" : ""}
-                        onClick={() => setFutSalary((cur) => (cur === v ? "" : v))}
-                      >
-                        {v}
-                      </button>
-                    ))}
                   </div>
                   <input
                     name="website"
