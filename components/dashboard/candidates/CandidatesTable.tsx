@@ -546,8 +546,15 @@ export default function CandidatesTable({
                         {r.bestTagLabel}
                       </span>
                     ) : (
-                      <span className="dash-tag t-pending">
-                        {r.screeningPending === false ? "Not screened" : "Screening…"}
+                      <span
+                        className="dash-tag t-pending"
+                        title={
+                          r.screeningPending === false
+                            ? "Screening finished — no open role matched strongly enough to run a full screen."
+                            : undefined
+                        }
+                      >
+                        {r.screeningPending === false ? "No role match" : "Screening…"}
                       </span>
                     )}
                   </td>
