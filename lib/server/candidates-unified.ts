@@ -119,7 +119,7 @@ export type UnifiedListParams = {
   past?: boolean;
   /** Only people with a future-interest ask, soonest follow-up first. */
   followups?: boolean;
-  sort?: "fit" | "added" | "name" | "years";
+  sort?: "fit" | "added" | "name" | "years" | "followup";
   dir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
@@ -774,13 +774,22 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       const by = b.yearsExperience ?? -1;
       return dir * (ay - by) || a.name.localeCompare(b.name);
     }
+    if (sort === "followup") {
+      // People with a date sort by it (asc = soonest first); everyone
+      // without one sinks to the bottom regardless of direction.
+      if (!a.followUpAt && !b.followUpAt) return b.addedAt.localeCompare(a.addedAt);
+      if (!a.followUpAt) return 1;
+      if (!b.followUpAt) return -1;
+      return dir * a.followUpAt.localeCompare(b.followUpAt);
+    }
     // fit: best first regardless of dir, newest breaks ties
     return (
       rankOf(a.bestTag) - rankOf(b.bestTag) || b.addedAt.localeCompare(a.addedAt)
     );
   });
-  // Follow-ups view reads as a todo list: soonest date first, due at the top.
-  if (params.followups) {
+  // Follow-ups view defaults to a todo list (soonest first) unless the user
+  // picked an explicit sort of their own.
+  if (params.followups && (sort === "fit" || sort === "followup") && params.dir !== "desc") {
     filtered.sort((a, b) => (a.followUpAt || "").localeCompare(b.followUpAt || ""));
   }
 
