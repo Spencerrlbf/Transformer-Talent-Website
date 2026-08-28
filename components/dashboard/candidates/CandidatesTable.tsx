@@ -270,9 +270,14 @@ export default function CandidatesTable({
 
   const effectiveJob = jobId || roleFilter;
   const abortRef = useRef<AbortController | null>(null);
+  // Poll-triggered refetches skip the loading dim so the table doesn't
+  // flicker while it quietly re-asks.
+  const silentRef = useRef(false);
+  const pollCount = useRef(0);
 
   useEffect(() => {
-    setLoading(true);
+    setLoading(!silentRef.current);
+    silentRef.current = false;
     setError(false);
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -309,6 +314,37 @@ export default function CandidatesTable({
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
+
+  // Self-refresh, two speeds. Fast (10s): an applicant on screen is still
+  // mid-pipeline ("Screening…"), so refetch until it settles — capped so a
+  // stuck row can't poll forever; filter changes reset the cap. Ambient
+  // (45s): a lead that arrives AFTER the page loaded should appear on its
+  // own, so the visible tab re-checks quietly even when nothing is pending.
+  useEffect(() => {
+    if (!data) return;
+    const pending = data.items.some((r) => r.source === "applied" && r.screeningPending);
+    const fast = pending && pollCount.current < 30;
+    const t = setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      if (fast) pollCount.current += 1;
+      silentRef.current = true;
+      setBump((b) => b + 1);
+    }, fast ? 10000 : 45000);
+    return () => clearTimeout(t);
+  }, [data]);
+  useEffect(() => {
+    pollCount.current = 0;
+  }, [seg, effectiveJob, fit, debouncedQ, hideNotNow, past]);
+  // Coming back to a background tab: catch up immediately.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      silentRef.current = true;
+      setBump((b) => b + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   // Past tab: put a rejected candidate back into the active pipeline.
   async function restore(key: string) {
