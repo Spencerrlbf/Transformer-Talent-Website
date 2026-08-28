@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Archivo } from "next/font/google";
+import { Instrument_Sans, Instrument_Serif } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
-const plexMono = IBM_Plex_Mono({
+const sans = Instrument_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-mono",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
 });
 
-const archivo = Archivo({
+const serif = Instrument_Serif({
   subsets: ["latin"],
-  weight: ["500", "700", "800", "900"],
-  variable: "--font-grot",
+  weight: ["400"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
 });
 
 export const metadata: Metadata = {
@@ -46,7 +46,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${plexMono.variable} ${archivo.variable}`}>
+    <html lang="en" className={`${sans.variable} ${serif.variable}`}>
       <body>
         <script
           type="application/ld+json"
