@@ -43,7 +43,8 @@ type Detail = {
     at: string;
     due: boolean;
     roles: string[];
-    location: string | null;
+    workplace: string[];
+    locations: string[];
     salary: string | null;
   } | null;
   pipeline: PipelineEntry[];
@@ -622,7 +623,8 @@ export default function CandidateDrawer({
                     {(() => {
                       const wants = [
                         detail.followUp.roles.join(", ") || null,
-                        detail.followUp.location,
+                        detail.followUp.workplace.join("/") || null,
+                        detail.followUp.locations.join(", ") || null,
                         detail.followUp.salary,
                       ].filter(Boolean);
                       return wants.length ? <> about {wants.join(" · ")}</> : null;

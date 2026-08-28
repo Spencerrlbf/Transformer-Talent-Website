@@ -11,6 +11,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CompanyAbout from "@/components/board/CompanyAbout";
 import type { CompanyPage } from "@/lib/server/company-page";
+import {
+  ROLE_FOCUS_OPTIONS,
+  WORKPLACE_OPTIONS,
+  SALARY_BAND_OPTIONS,
+} from "@/lib/future-options";
 
 const MAX_ROLES = 3;
 const PAGE_SIZE = 25;
@@ -98,6 +103,58 @@ export type RecruiterHead = {
 
 // Analytics beacon (recruiter pages only): fire-and-forget, deduped
 // server-side per visitor per day, never blocks or errors at a candidate.
+/** Multi-select dropdown: a labeled control that opens a checkbox list.
+ *  Closes on outside click; the button summarizes the selection. */
+function MultiSelect({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const summary =
+    value.length === 0 ? "Any" : value.length <= 2 ? value.join(", ") : `${value.length} selected`;
+  return (
+    <div className="board-msel" ref={wrapRef}>
+      <span className="board-msel-lbl">{label}</span>
+      <button type="button" aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(!open)}>
+        <span>{summary}</span>
+        <i aria-hidden="true">▾</i>
+      </button>
+      {open && (
+        <div className="board-msel-pop" role="listbox" aria-label={label}>
+          {options.map((o) => (
+            <label key={o}>
+              <input
+                type="checkbox"
+                checked={value.includes(o)}
+                onChange={() =>
+                  onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o])
+                }
+              />
+              {o}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function track(profileId: string, event: string, roleId?: string) {
   try {
     const payload = JSON.stringify({
@@ -241,7 +298,10 @@ export default function BoardClient({
   // the slim strip under the banners and the "no fit" doors after the table.
   const [futOpen, setFutOpen] = useState(false);
   const [futMonths, setFutMonths] = useState("6");
-  const [futPrefsOpen, setFutPrefsOpen] = useState(false);
+  const [futRoles, setFutRoles] = useState<string[]>([]);
+  const [futWorkplace, setFutWorkplace] = useState<string[]>([]);
+  const [futLocs, setFutLocs] = useState<string[]>([]);
+  const [futSalary, setFutSalary] = useState("");
   const [futStatus, setFutStatus] = useState<
     { kind: "idle" | "sending" } | { kind: "ok"; when: string } | { kind: "error"; message: string }
   >({ kind: "idle" });
@@ -262,6 +322,10 @@ export default function BoardClient({
     data.set("board", org.slug);
     data.set("recruiter", recruiter.id);
     data.set("months", futMonths);
+    for (const v of futRoles) data.append("prefRoles", v);
+    for (const v of futWorkplace) data.append("prefWorkplace", v);
+    for (const v of futLocs) data.append("prefLocations", v);
+    if (futSalary) data.set("prefSalary", futSalary);
     setFutStatus({ kind: "sending" });
     try {
       const res = await fetch("/api/future-interest", { method: "POST", body: data });
@@ -635,26 +699,42 @@ export default function BoardClient({
                       </button>
                     ))}
                   </div>
-                  {!futPrefsOpen ? (
-                    <button type="button" className="board-linkbtn" onClick={() => setFutPrefsOpen(true)}>
-                      What should {firstName} come back with? (optional)
-                    </button>
-                  ) : (
-                    <div className="board-fut-row">
-                      <label>
-                        Role types
-                        <input name="prefRoles" maxLength={200} placeholder="e.g. Staff backend, EM" />
-                      </label>
-                      <label>
-                        Location
-                        <input name="prefLocation" maxLength={120} placeholder="e.g. London or remote" />
-                      </label>
-                      <label>
-                        Salary floor
-                        <input name="prefSalary" maxLength={60} placeholder="e.g. £90k" />
-                      </label>
+                  <p className="board-fut-lbl">
+                    What should {firstName} come back with? <span>All optional.</span>
+                  </p>
+                  <div className="board-msel-row">
+                    <MultiSelect
+                      label="Role focus"
+                      options={ROLE_FOCUS_OPTIONS}
+                      value={futRoles}
+                      onChange={setFutRoles}
+                    />
+                    <MultiSelect
+                      label="Workplace"
+                      options={WORKPLACE_OPTIONS}
+                      value={futWorkplace}
+                      onChange={setFutWorkplace}
+                    />
+                    {locations.length > 0 && (
+                      <MultiSelect
+                        label="Location"
+                        options={locations}
+                        value={futLocs}
+                        onChange={setFutLocs}
+                      />
+                    )}
+                    <div className="board-msel">
+                      <span className="board-msel-lbl">Minimum salary</span>
+                      <select value={futSalary} onChange={(e) => setFutSalary(e.target.value)}>
+                        <option value="">Any</option>
+                        {SALARY_BAND_OPTIONS.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
+                  </div>
                   <input
                     name="website"
                     tabIndex={-1}

@@ -179,7 +179,8 @@ export type UnifiedDetail = {
     at: string;
     due: boolean;
     roles: string[];
-    location: string | null;
+    workplace: string[];
+    locations: string[];
     salary: string | null;
   } | null;
   pipeline: {
@@ -248,13 +249,15 @@ type AppRow = {
   created_at: string;
   follow_up_at: string | null;
   preferred_roles: string[] | null;
-  /** On future-interest rows these hold preferred location / salary floor. */
+  preferred_locations: string[] | null;
+  preferred_workplace: string[] | null;
+  /** Legacy future rows stored a free-text location here; salary band. */
   location: string | null;
   comp_expectation: string | null;
 };
 
 const APP_COLS =
-  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,location,comp_expectation";
+  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,location,comp_expectation";
 
 type VerdictRow = {
   candidate_id: string;
@@ -1247,7 +1250,14 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
             at: a.follow_up_at,
             due: a.follow_up_at <= new Date().toISOString().slice(0, 10),
             roles: a.preferred_roles || [],
-            location: str(a.location),
+            workplace: a.preferred_workplace || [],
+            // Structured rows use preferred_locations; earliest future rows
+            // stored one free-text location instead.
+            locations: a.preferred_locations?.length
+              ? a.preferred_locations
+              : str(a.location)
+                ? [str(a.location)!]
+                : [],
             salary: str(a.comp_expectation),
           }
         : null,
