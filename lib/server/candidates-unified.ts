@@ -9,6 +9,12 @@ import { signResumeUrl } from "./applicants";
 import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
 import { poolEmails } from "./network";
 import type { Scorecard } from "./scorecard";
+import {
+  ROLE_FOCUS_OPTIONS,
+  WORKPLACE_OPTIONS,
+  SALARY_BAND_OPTIONS,
+  VISA_OPTIONS,
+} from "@/lib/future-options";
 
 /* ------------------------------------------------------------------ */
 /* Fit vocabulary: both engines' tags share one display + sort order.  */
@@ -178,10 +184,16 @@ export type UnifiedDetail = {
   followUp: {
     at: string;
     due: boolean;
+    /** When the ask was made (the application row's creation). */
+    askedAt: string;
     roles: string[];
     workplace: string[];
     locations: string[];
+    /** Pickable location values for the edit form: the org's live role
+     *  locations, unioned with whatever is already saved on the person. */
+    locationOptions: string[];
     salary: string | null;
+    visa: string | null;
   } | null;
   pipeline: {
     jobId: string;
@@ -254,10 +266,11 @@ type AppRow = {
   /** Legacy future rows stored a free-text location here; salary band. */
   location: string | null;
   comp_expectation: string | null;
+  visa_status: string | null;
 };
 
 const APP_COLS =
-  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,location,comp_expectation";
+  "id,name,email,linkedin_url,linkedin_username,role_ids,role_titles,candidate_id,parsed_profile,resume_path,contact,source,status,created_at,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,location,comp_expectation,visa_status";
 
 type VerdictRow = {
   candidate_id: string;
@@ -825,6 +838,76 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   return { items, total: filtered.length, counts, followups, page, pageSize };
 }
 
+/** Edit a future-interest ask: date and preferences, validated against the
+ *  fixed vocabularies, written to the application row and mirrored onto the
+ *  candidate record — the same shape a fresh submission produces. */
+export async function updateFollowUp(
+  orgId: string,
+  key: string,
+  patch: { at?: unknown; roles?: unknown; workplace?: unknown; locations?: unknown; salary?: unknown; visa?: unknown }
+): Promise<{ ok: boolean; error?: string }> {
+  if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
+  const id = key.slice(4);
+
+  const at = typeof patch.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(patch.at) ? patch.at : null;
+  if (!at) return { ok: false, error: "bad_date" };
+  const pickList = (v: unknown, allowed: readonly string[] | null, cap: number): string[] =>
+    (Array.isArray(v) ? v : [])
+      .map((x) => String(x ?? "").trim().slice(0, 80))
+      .filter((x) => x && (!allowed || allowed.includes(x)))
+      .slice(0, cap);
+  const roles = pickList(patch.roles, ROLE_FOCUS_OPTIONS, ROLE_FOCUS_OPTIONS.length);
+  const workplace = pickList(patch.workplace, WORKPLACE_OPTIONS, WORKPLACE_OPTIONS.length);
+  const locations = pickList(patch.locations, null, 8);
+  const salary =
+    typeof patch.salary === "string" && (SALARY_BAND_OPTIONS as readonly string[]).includes(patch.salary)
+      ? patch.salary
+      : null;
+  const visa =
+    typeof patch.visa === "string" && (VISA_OPTIONS as readonly string[]).includes(patch.visa)
+      ? patch.visa
+      : null;
+
+  const res = await sbRest(
+    `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=id,candidate_id,follow_up_at&limit=1`
+  );
+  const [row] = (res.ok ? await res.json() : []) as {
+    id: string;
+    candidate_id: string | null;
+    follow_up_at: string | null;
+  }[];
+  if (!row) return { ok: false, error: "not_found" };
+  if (!row.follow_up_at) return { ok: false, error: "no_ask" };
+
+  const saved = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      follow_up_at: at,
+      preferred_roles: roles,
+      preferred_locations: locations,
+      preferred_workplace: workplace,
+      comp_expectation: salary,
+      visa_status: visa,
+      // Structured values supersede any legacy free-text location.
+      location: null,
+    }),
+    prefer: "return=minimal",
+  });
+  if (!saved.ok) return { ok: false, error: "save_failed" };
+  if (row.candidate_id) {
+    await sbRest(`candidates?id=eq.${row.candidate_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        follow_up_at: at,
+        role_preferences: { roles, locations, workplace, salary },
+        visa_status: visa,
+      }),
+      prefer: "return=minimal",
+    }).catch(() => {});
+  }
+  return { ok: true };
+}
+
 /** Clear a future-interest ask ("Mark contacted"): the follow-up date comes
  *  off the application row and the mirrored candidate record. The person and
  *  their preferences stay in the pool. */
@@ -1245,22 +1328,32 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: a.status === "processing",
-      followUp: a.follow_up_at
-        ? {
-            at: a.follow_up_at,
-            due: a.follow_up_at <= new Date().toISOString().slice(0, 10),
-            roles: a.preferred_roles || [],
-            workplace: a.preferred_workplace || [],
-            // Structured rows use preferred_locations; earliest future rows
-            // stored one free-text location instead.
-            locations: a.preferred_locations?.length
-              ? a.preferred_locations
-              : str(a.location)
-                ? [str(a.location)!]
-                : [],
-            salary: str(a.comp_expectation),
-          }
-        : null,
+      followUp: await (async () => {
+        if (!a.follow_up_at) return null;
+        // Structured rows use preferred_locations; earliest future rows
+        // stored one free-text location instead.
+        const saved = a.preferred_locations?.length
+          ? a.preferred_locations
+          : str(a.location)
+            ? [str(a.location)!]
+            : [];
+        const locRes = await sbRest(
+          `org_roles?organization_id=eq.${orgId}&select=locations`
+        );
+        const live = (locRes.ok ? ((await locRes.json()) as { locations: string[] | null }[]) : [])
+          .flatMap((r) => r.locations || []);
+        return {
+          at: a.follow_up_at,
+          due: a.follow_up_at <= new Date().toISOString().slice(0, 10),
+          askedAt: a.created_at,
+          roles: a.preferred_roles || [],
+          workplace: a.preferred_workplace || [],
+          locations: saved,
+          locationOptions: [...new Set([...live, ...saved])].sort(),
+          salary: str(a.comp_expectation),
+          visa: str(a.visa_status),
+        };
+      })(),
       pipeline,
       experience: bits.experience,
       education: bits.education,
