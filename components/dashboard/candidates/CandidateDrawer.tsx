@@ -232,8 +232,15 @@ function PipelineRows({
           {entry.tag ? (
             <span className={`dash-tag ${TAG_CLASS[entry.tag] || "t-pending"}`}>{entry.tagLabel}</span>
           ) : (
-            <span className="dash-tag t-pending">
-              {screeningPending ? "Screening…" : "Not screened"}
+            <span
+              className="dash-tag t-pending"
+              title={
+                screeningPending
+                  ? undefined
+                  : "Screening finished — this role did not match strongly enough to run a full screen."
+              }
+            >
+              {screeningPending ? "Screening…" : "No role match"}
             </span>
           )}
         </td>

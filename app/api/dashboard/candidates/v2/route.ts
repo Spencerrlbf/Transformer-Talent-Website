@@ -22,7 +22,10 @@ export async function GET(req: NextRequest) {
     hideNotNow: q.get("hideNotNow") === "1",
     past: q.get("past") === "1",
     followups: q.get("followups") === "1",
-    sort: sort === "added" || sort === "name" || sort === "years" ? sort : "fit",
+    sort:
+      sort === "added" || sort === "name" || sort === "years" || sort === "followup"
+        ? sort
+        : "fit",
     dir: q.get("dir") === "asc" ? "asc" : "desc",
     page: Number(q.get("page")) || 1,
     pageSize: Number(q.get("pageSize")) || 25,

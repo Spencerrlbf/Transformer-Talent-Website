@@ -330,7 +330,7 @@ export default function PipelineBoard({
                             </span>
                           ) : (
                             <span className="dash-tag t-pending">
-                              {r.screeningPending === false ? "Not screened" : "Screening…"}
+                              {r.screeningPending === false ? "No role match" : "Screening…"}
                             </span>
                           )}
                           <span className="pb-days">{daysIn(r)}</span>

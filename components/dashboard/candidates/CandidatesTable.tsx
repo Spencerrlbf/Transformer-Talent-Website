@@ -50,12 +50,12 @@ type Cv2List = {
 
 const TODAY = new Date().toISOString().slice(0, 10);
 function fuLabel(at: string): string {
-  if (at <= TODAY) return "Due";
-  return `Future · ${new Date(`${at}T00:00:00Z`).toLocaleDateString("en-GB", {
+  const when = new Date(`${at}T00:00:00Z`).toLocaleDateString("en-GB", {
     month: "short",
     year: "numeric",
     timeZone: "UTC",
-  })}`;
+  });
+  return at <= TODAY ? `Due · ${when}` : when;
 }
 
 export const STAGE_OPTIONS: [string, string][] = [
@@ -212,7 +212,7 @@ function ContactIcon({
   );
 }
 
-type SortKey = "fit" | "added" | "name";
+type SortKey = "fit" | "added" | "name" | "followup";
 
 export default function CandidatesTable({
   jobId,
@@ -398,7 +398,8 @@ export default function CandidatesTable({
         if (sort === key) setDir(dir === "desc" ? "asc" : "desc");
         else {
           setSort(key);
-          setDir(key === "name" ? "asc" : "desc");
+          // Dates and names read soonest/A-first; everything else best-first.
+          setDir(key === "name" || key === "followup" ? "asc" : "desc");
         }
       }}
     >
@@ -513,6 +514,7 @@ export default function CandidatesTable({
                 <th>Location</th>
                 <th className="cv2-th-icon">LinkedIn</th>
                 <th className="cv2-th-icon">Contact</th>
+                {pool && header("followup", "Reach out")}
                 {header("added", "Added")}
               </tr>
             </thead>
@@ -537,14 +539,6 @@ export default function CandidatesTable({
                       <i />
                       {r.source === "applied" ? "Applied" : "Sourced"}
                     </span>
-                    {r.followUpAt && (
-                      <>
-                        <br />
-                        <span className={`cv2-fu${r.followUpAt <= TODAY ? " due" : ""}`}>
-                          {fuLabel(r.followUpAt)}
-                        </span>
-                      </>
-                    )}
                   </td>
                   <td>
                     {r.bestTag ? (
@@ -552,8 +546,15 @@ export default function CandidatesTable({
                         {r.bestTagLabel}
                       </span>
                     ) : (
-                      <span className="dash-tag t-pending">
-                        {r.screeningPending === false ? "Not screened" : "Screening…"}
+                      <span
+                        className="dash-tag t-pending"
+                        title={
+                          r.screeningPending === false
+                            ? "Screening finished — no open role matched strongly enough to run a full screen."
+                            : undefined
+                        }
+                      >
+                        {r.screeningPending === false ? "No role match" : "Screening…"}
                       </span>
                     )}
                   </td>
@@ -605,6 +606,19 @@ export default function CandidatesTable({
                       <PhoneIcon active={!!r.contact.phone} />
                     </ContactIcon>
                   </td>
+                  {pool && (
+                    <td className="cv2-reach">
+                      {r.followUpAt ? (
+                        r.followUpAt <= TODAY ? (
+                          <span className="cv2-fu due">{fuLabel(r.followUpAt)}</span>
+                        ) : (
+                          fuLabel(r.followUpAt)
+                        )
+                      ) : (
+                        <span className="cv2-dim">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="cv2-added">{fmtDay(r.addedAt)}</td>
                 </tr>
               ))}
