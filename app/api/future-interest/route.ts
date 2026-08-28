@@ -5,6 +5,11 @@ import { linkedinUsername } from "@/lib/server/applicants";
 import { loadOrgBySlug } from "@/lib/server/org-board";
 import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
+import {
+  ROLE_FOCUS_OPTIONS,
+  WORKPLACE_OPTIONS,
+  SALARY_BAND_OPTIONS,
+} from "@/lib/future-options";
 
 export const maxDuration = 60;
 
@@ -72,13 +77,28 @@ export async function POST(req: NextRequest) {
   const email = clean(form.get("email"), 254).toLowerCase();
   const linkedin = clean(form.get("linkedin"), 300);
   const monthsRaw = clean(form.get("months"), 3);
-  const preferredRoles = clean(form.get("prefRoles"), 200)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 6);
-  const preferredLocation = clean(form.get("prefLocation"), 120) || null;
-  const salaryFloor = clean(form.get("prefSalary"), 60) || null;
+  // Structured preferences: role focus / workplace / salary come from fixed
+  // vocabularies (anything else is dropped); locations echo the live board's
+  // own location chips, so they're sanitized but not enumerated here.
+  const roleSet = new Set<string>(ROLE_FOCUS_OPTIONS);
+  const workplaceSet = new Set<string>(WORKPLACE_OPTIONS);
+  const preferredRoles = form
+    .getAll("prefRoles")
+    .map((v) => clean(v, 60))
+    .filter((v) => roleSet.has(v))
+    .slice(0, ROLE_FOCUS_OPTIONS.length);
+  const preferredWorkplace = form
+    .getAll("prefWorkplace")
+    .map((v) => clean(v, 20))
+    .filter((v) => workplaceSet.has(v))
+    .slice(0, WORKPLACE_OPTIONS.length);
+  const preferredLocations = [
+    ...new Set(form.getAll("prefLocations").map((v) => clean(v, 60)).filter(Boolean)),
+  ].slice(0, 8);
+  const salaryRaw = clean(form.get("prefSalary"), 20);
+  const salaryFloor = (SALARY_BAND_OPTIONS as readonly string[]).includes(salaryRaw)
+    ? salaryRaw
+    : null;
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide a valid email." }, { status: 400 });
@@ -128,7 +148,8 @@ export async function POST(req: NextRequest) {
     const prefs = {
       follow_up_at: followUpAt,
       preferred_roles: preferredRoles,
-      location: preferredLocation,
+      preferred_locations: preferredLocations,
+      preferred_workplace: preferredWorkplace,
       comp_expectation: salaryFloor,
     };
     await sbRest(`website_applications?id=eq.${dup.id}`, {
@@ -141,7 +162,12 @@ export async function POST(req: NextRequest) {
         method: "PATCH",
         body: JSON.stringify({
           follow_up_at: followUpAt,
-          role_preferences: { roles: preferredRoles, location: preferredLocation, salary: salaryFloor },
+          role_preferences: {
+            roles: preferredRoles,
+            locations: preferredLocations,
+            workplace: preferredWorkplace,
+            salary: salaryFloor,
+          },
         }),
         prefer: "return=minimal",
       }).catch(() => {});
@@ -191,7 +217,8 @@ export async function POST(req: NextRequest) {
       linkedin_username: linkedinUsername(linkedin),
       follow_up_at: followUpAt,
       preferred_roles: preferredRoles,
-      location: preferredLocation,
+      preferred_locations: preferredLocations,
+      preferred_workplace: preferredWorkplace,
       comp_expectation: salaryFloor,
       role_ids: [],
       role_titles: [],
@@ -222,7 +249,7 @@ export async function POST(req: NextRequest) {
       email,
       linkedin,
       visa: "",
-      preferredLocations: [],
+      preferredLocations,
       roleIds: [],
       speculative: true,
       resumeBuf,
@@ -233,7 +260,7 @@ export async function POST(req: NextRequest) {
       applicationType: "Speculative",
       followUpAt,
       preferredRoles,
-      preferredLocation,
+      preferredWorkplace,
       salaryFloor,
     });
   });

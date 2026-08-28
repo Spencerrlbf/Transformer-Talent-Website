@@ -11,6 +11,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CompanyAbout from "@/components/board/CompanyAbout";
 import type { CompanyPage } from "@/lib/server/company-page";
+import {
+  ROLE_FOCUS_OPTIONS,
+  WORKPLACE_OPTIONS,
+  SALARY_BAND_OPTIONS,
+} from "@/lib/future-options";
 
 const MAX_ROLES = 3;
 const PAGE_SIZE = 25;
@@ -241,7 +246,10 @@ export default function BoardClient({
   // the slim strip under the banners and the "no fit" doors after the table.
   const [futOpen, setFutOpen] = useState(false);
   const [futMonths, setFutMonths] = useState("6");
-  const [futPrefsOpen, setFutPrefsOpen] = useState(false);
+  const [futRoles, setFutRoles] = useState<string[]>([]);
+  const [futWorkplace, setFutWorkplace] = useState<string[]>([]);
+  const [futLocs, setFutLocs] = useState<string[]>([]);
+  const [futSalary, setFutSalary] = useState("");
   const [futStatus, setFutStatus] = useState<
     { kind: "idle" | "sending" } | { kind: "ok"; when: string } | { kind: "error"; message: string }
   >({ kind: "idle" });
@@ -255,6 +263,10 @@ export default function BoardClient({
     if (scroll) futRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function toggleIn(list: string[], v: string): string[] {
+    return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+  }
+
   async function onFutureSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!recruiter) return;
@@ -262,6 +274,10 @@ export default function BoardClient({
     data.set("board", org.slug);
     data.set("recruiter", recruiter.id);
     data.set("months", futMonths);
+    for (const v of futRoles) data.append("prefRoles", v);
+    for (const v of futWorkplace) data.append("prefWorkplace", v);
+    for (const v of futLocs) data.append("prefLocations", v);
+    if (futSalary) data.set("prefSalary", futSalary);
     setFutStatus({ kind: "sending" });
     try {
       const res = await fetch("/api/future-interest", { method: "POST", body: data });
@@ -635,26 +651,63 @@ export default function BoardClient({
                       </button>
                     ))}
                   </div>
-                  {!futPrefsOpen ? (
-                    <button type="button" className="board-linkbtn" onClick={() => setFutPrefsOpen(true)}>
-                      What should {firstName} come back with? (optional)
-                    </button>
-                  ) : (
-                    <div className="board-fut-row">
-                      <label>
-                        Role types
-                        <input name="prefRoles" maxLength={200} placeholder="e.g. Staff backend, EM" />
-                      </label>
-                      <label>
-                        Location
-                        <input name="prefLocation" maxLength={120} placeholder="e.g. London or remote" />
-                      </label>
-                      <label>
-                        Salary floor
-                        <input name="prefSalary" maxLength={60} placeholder="e.g. £90k" />
-                      </label>
+                  <p className="board-fut-lbl">
+                    What should {firstName} come back with? <span>All optional — pick any that fit.</span>
+                  </p>
+                  <div className="board-fut-chips" role="group" aria-label="Role focus">
+                    {ROLE_FOCUS_OPTIONS.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={futRoles.includes(v)}
+                        className={futRoles.includes(v) ? "on" : ""}
+                        onClick={() => setFutRoles((cur) => toggleIn(cur, v))}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="board-fut-chips" role="group" aria-label="Workplace">
+                    {WORKPLACE_OPTIONS.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={futWorkplace.includes(v)}
+                        className={futWorkplace.includes(v) ? "on" : ""}
+                        onClick={() => setFutWorkplace((cur) => toggleIn(cur, v))}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {locations.length > 0 && (
+                    <div className="board-fut-chips" role="group" aria-label="Locations">
+                      {locations.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          aria-pressed={futLocs.includes(v)}
+                          className={futLocs.includes(v) ? "on" : ""}
+                          onClick={() => setFutLocs((cur) => toggleIn(cur, v))}
+                        >
+                          {v}
+                        </button>
+                      ))}
                     </div>
                   )}
+                  <div className="board-fut-chips" role="group" aria-label="Minimum salary">
+                    {SALARY_BAND_OPTIONS.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={futSalary === v}
+                        className={futSalary === v ? "on" : ""}
+                        onClick={() => setFutSalary((cur) => (cur === v ? "" : v))}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     name="website"
                     tabIndex={-1}

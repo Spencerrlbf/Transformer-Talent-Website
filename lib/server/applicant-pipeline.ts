@@ -49,10 +49,11 @@ export type ApplicantPipelineInput = {
   orgId: string | null;
   applicationType: "Applied" | "Speculative" | "Referral";
   /** Future-interest entries: the date the person asked to hear back, plus
-   *  what the outreach should be about. Mirrored onto the candidate record. */
+   *  what the outreach should be about. Mirrored onto the candidate record.
+   *  (Preferred locations ride in the shared preferredLocations field.) */
   followUpAt?: string | null;
   preferredRoles?: string[];
-  preferredLocation?: string | null;
+  preferredWorkplace?: string[];
   salaryFloor?: string | null;
 };
 
@@ -323,7 +324,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
           follow_up_at: p.followUpAt,
           role_preferences: {
             roles: p.preferredRoles || [],
-            location: p.preferredLocation || null,
+            locations: preferredLocations,
+            workplace: p.preferredWorkplace || [],
             salary: p.salaryFloor || null,
           },
         }),
@@ -396,7 +398,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         roleTitles,
         followUpAt: p.followUpAt || undefined,
         preferredRoles: p.preferredRoles,
-        preferredLocation: p.preferredLocation,
+        preferredLocations: p.followUpAt ? preferredLocations : undefined,
+        preferredWorkplace: p.preferredWorkplace,
         salaryFloor: p.salaryFloor,
         viaPage: Boolean(row?.recruiter_profile_id),
       });

@@ -68,7 +68,8 @@ export async function sendLeadNotification(args: {
   /** Present on future-interest entries: the date they asked to hear back. */
   followUpAt?: string;
   preferredRoles?: string[];
-  preferredLocation?: string | null;
+  preferredLocations?: string[];
+  preferredWorkplace?: string[];
   salaryFloor?: string | null;
   /** True when the entry came through a recruiter page. */
   viaPage: boolean;
@@ -89,7 +90,8 @@ export async function sendLeadNotification(args: {
       : "later";
     const wants = [
       (args.preferredRoles || []).join(", ") || null,
-      args.preferredLocation || null,
+      (args.preferredWorkplace || []).join("/") || null,
+      (args.preferredLocations || []).join(", ") || null,
       args.salaryFloor || null,
     ].filter(Boolean);
     subject = `Future interest: ${who} (reach out ${month})`;
