@@ -315,23 +315,36 @@ export default function CandidatesTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
 
-  // Self-refresh while an applicant on screen is still mid-pipeline
-  // ("Screening…"): enrichment finishes seconds after a lead lands, so
-  // quietly refetch every 10s until everything settles. Capped so a row
-  // stuck in "processing" can't poll forever; any filter change resets.
+  // Self-refresh, two speeds. Fast (10s): an applicant on screen is still
+  // mid-pipeline ("Screening…"), so refetch until it settles — capped so a
+  // stuck row can't poll forever; filter changes reset the cap. Ambient
+  // (45s): a lead that arrives AFTER the page loaded should appear on its
+  // own, so the visible tab re-checks quietly even when nothing is pending.
   useEffect(() => {
-    const pending = data?.items.some((r) => r.source === "applied" && r.screeningPending);
-    if (!pending || pollCount.current >= 30) return;
+    if (!data) return;
+    const pending = data.items.some((r) => r.source === "applied" && r.screeningPending);
+    const fast = pending && pollCount.current < 30;
     const t = setTimeout(() => {
-      pollCount.current += 1;
+      if (document.visibilityState !== "visible") return;
+      if (fast) pollCount.current += 1;
       silentRef.current = true;
       setBump((b) => b + 1);
-    }, 10000);
+    }, fast ? 10000 : 45000);
     return () => clearTimeout(t);
   }, [data]);
   useEffect(() => {
     pollCount.current = 0;
   }, [seg, effectiveJob, fit, debouncedQ, hideNotNow, past]);
+  // Coming back to a background tab: catch up immediately.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      silentRef.current = true;
+      setBump((b) => b + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   // Past tab: put a rejected candidate back into the active pipeline.
   async function restore(key: string) {
