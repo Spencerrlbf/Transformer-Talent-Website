@@ -8,6 +8,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
+import MultiSelect from "@/components/MultiSelect";
+import {
+  ROLE_FOCUS_OPTIONS,
+  WORKPLACE_OPTIONS,
+  SALARY_BAND_OPTIONS,
+} from "@/lib/future-options";
 
 type PipelineEntry = {
   jobId: string;
@@ -42,9 +48,11 @@ type Detail = {
   followUp: {
     at: string;
     due: boolean;
+    askedAt: string;
     roles: string[];
     workplace: string[];
     locations: string[];
+    locationOptions: string[];
     salary: string | null;
   } | null;
   pipeline: PipelineEntry[];
@@ -296,6 +304,15 @@ export default function CandidateDrawer({
   const [stageSaving, setStageSaving] = useState<string | null>(null);
   const [marking, setMarking] = useState(false);
   const [markedDone, setMarkedDone] = useState(false);
+  // Editable ask panel state; fields seeded from detail.followUp on Edit.
+  const [askEditing, setAskEditing] = useState(false);
+  const [askSaving, setAskSaving] = useState(false);
+  const [askErr, setAskErr] = useState("");
+  const [eAt, setEAt] = useState("");
+  const [eRoles, setERoles] = useState<string[]>([]);
+  const [eWp, setEWp] = useState<string[]>([]);
+  const [eLocs, setELocs] = useState<string[]>([]);
+  const [eSal, setESal] = useState("");
   const [editingContact, setEditingContact] = useState(false);
   const [openJob, setOpenJob] = useState<string | null>(null);
   // Pool person opened from the internal Network page: read-only extras
@@ -317,6 +334,8 @@ export default function CandidateDrawer({
     setOpenJob(null);
     setMarking(false);
     setMarkedDone(false);
+    setAskEditing(false);
+    setAskErr("");
     if (!candKey) return;
     fetch(`/api/dashboard/candidates/v2/${candKey}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -596,58 +615,198 @@ export default function CandidateDrawer({
                   </div>
                 )}
               </div>
+
+              {/* Their ask: compact editable panel beside the identity block.
+                  Absorbs the provenance line; Mark contacted clears the date
+                  and keeps the person in the pool. */}
+              {detail.followUp && (
+                <div className={`cv2d-ask${markedDone ? " done" : ""}`}>
+                  <div className="ca-top">
+                    <span className="ca-k">Their ask</span>
+                    {!markedDone && !askEditing && (
+                      <button
+                        type="button"
+                        className="ca-editlink"
+                        onClick={() => {
+                          const f = detail.followUp!;
+                          setEAt(f.at);
+                          setERoles([...f.roles]);
+                          setEWp([...f.workplace]);
+                          setELocs([...f.locations]);
+                          setESal(f.salary || "");
+                          setAskErr("");
+                          setAskEditing(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  {markedDone ? (
+                    <p className="ca-donenote">
+                      Contacted ✓ — follow-up cleared. They stay in your candidates.
+                    </p>
+                  ) : !askEditing ? (
+                    <>
+                      <div className="ca-rows">
+                        <div className="ca-r">
+                          <span className="ca-rk">Asked</span>
+                          <span className="ca-mut">
+                            {new Date(detail.followUp.askedAt).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}{" "}
+                            · via your page
+                          </span>
+                        </div>
+                        <div className="ca-r">
+                          <span className="ca-rk">Reach out</span>
+                          <b>
+                            {new Date(`${detail.followUp.at}T00:00:00Z`).toLocaleDateString("en-GB", {
+                              month: "long",
+                              year: "numeric",
+                              timeZone: "UTC",
+                            })}
+                            {detail.followUp.due ? " (due)" : ""}
+                          </b>
+                        </div>
+                        <div className="ca-r">
+                          <span className="ca-rk">Roles</span>
+                          <span>{detail.followUp.roles.join(", ") || "Any"}</span>
+                        </div>
+                        <div className="ca-r">
+                          <span className="ca-rk">Workplace</span>
+                          <span>{detail.followUp.workplace.join(", ") || "Any"}</span>
+                        </div>
+                        <div className="ca-r">
+                          <span className="ca-rk">Locations</span>
+                          <span>{detail.followUp.locations.join(", ") || "Any"}</span>
+                        </div>
+                        <div className="ca-r">
+                          <span className="ca-rk">Salary</span>
+                          <span>{detail.followUp.salary || "Any"}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="dw-mark"
+                        disabled={marking}
+                        onClick={async () => {
+                          setMarking(true);
+                          const res = await fetch(
+                            `/api/dashboard/candidates/v2/${candKey}/followup`,
+                            { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+                          ).catch(() => null);
+                          setMarking(false);
+                          if (res?.ok) setMarkedDone(true);
+                        }}
+                      >
+                        {marking ? "Saving…" : "Mark contacted"}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="ca-form">
+                      <label className="ca-fld">
+                        Reach out
+                        <input type="date" value={eAt} onChange={(e) => setEAt(e.target.value)} />
+                      </label>
+                      <MultiSelect
+                        label="Role focus"
+                        options={ROLE_FOCUS_OPTIONS}
+                        value={eRoles}
+                        onChange={setERoles}
+                      />
+                      <MultiSelect
+                        label="Workplace"
+                        options={WORKPLACE_OPTIONS}
+                        value={eWp}
+                        onChange={setEWp}
+                      />
+                      {detail.followUp.locationOptions.length > 0 && (
+                        <MultiSelect
+                          label="Locations"
+                          options={detail.followUp.locationOptions}
+                          value={eLocs}
+                          onChange={setELocs}
+                        />
+                      )}
+                      <label className="ca-fld">
+                        Min salary
+                        <select value={eSal} onChange={(e) => setESal(e.target.value)}>
+                          <option value="">Any</option>
+                          {SALARY_BAND_OPTIONS.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {askErr && <span className="cv2d-err">{askErr}</span>}
+                      <div className="ca-btns">
+                        <button
+                          type="button"
+                          className="cv2d-save"
+                          disabled={askSaving}
+                          onClick={async () => {
+                            setAskSaving(true);
+                            setAskErr("");
+                            const res = await fetch(
+                              `/api/dashboard/candidates/v2/${candKey}/followup`,
+                              {
+                                method: "PATCH",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  Authorization: `Bearer ${token}`,
+                                },
+                                body: JSON.stringify({
+                                  at: eAt,
+                                  roles: eRoles,
+                                  workplace: eWp,
+                                  locations: eLocs,
+                                  salary: eSal || null,
+                                }),
+                              }
+                            ).catch(() => null);
+                            setAskSaving(false);
+                            if (!res?.ok) {
+                              setAskErr("Couldn't save — check the date and retry.");
+                              return;
+                            }
+                            setDetail((d) =>
+                              d && d.followUp
+                                ? {
+                                    ...d,
+                                    followUp: {
+                                      ...d.followUp,
+                                      at: eAt,
+                                      due: eAt <= new Date().toISOString().slice(0, 10),
+                                      roles: eRoles,
+                                      workplace: eWp,
+                                      locations: eLocs,
+                                      salary: eSal || null,
+                                    },
+                                  }
+                                : d
+                            );
+                            setAskEditing(false);
+                          }}
+                        >
+                          {askSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button type="button" className="cv2d-cancel" onClick={() => setAskEditing(false)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className={`cv2d-provenance${detail.source === "applied" ? " applied" : ""}`}>
-              {detail.provenance}
-            </div>
-
-            {/* Their ask: an open "hear from me later" follow-up. Mark
-                contacted clears the date; the person stays in the pool. */}
-            {detail.followUp && (
-              <div className={`dw-ask${markedDone ? " done" : ""}`}>
-                <span className="k">Their ask</span>
-                {markedDone ? (
-                  <>Contacted ✓ — follow-up cleared. They stay in your candidates.</>
-                ) : (
-                  <>
-                    Reach out{" "}
-                    <b>
-                      {new Date(`${detail.followUp.at}T00:00:00Z`).toLocaleDateString("en-GB", {
-                        month: "long",
-                        year: "numeric",
-                        timeZone: "UTC",
-                      })}
-                      {detail.followUp.due ? " (due)" : ""}
-                    </b>
-                    {(() => {
-                      const wants = [
-                        detail.followUp.roles.join(", ") || null,
-                        detail.followUp.workplace.join("/") || null,
-                        detail.followUp.locations.join(", ") || null,
-                        detail.followUp.salary,
-                      ].filter(Boolean);
-                      return wants.length ? <> about {wants.join(" · ")}</> : null;
-                    })()}
-                    <br />
-                    <button
-                      type="button"
-                      className="dw-mark"
-                      disabled={marking}
-                      onClick={async () => {
-                        setMarking(true);
-                        const res = await fetch(
-                          `/api/dashboard/candidates/v2/${candKey}/followup`,
-                          { method: "POST", headers: { Authorization: `Bearer ${token}` } }
-                        ).catch(() => null);
-                        setMarking(false);
-                        if (res?.ok) setMarkedDone(true);
-                      }}
-                    >
-                      {marking ? "Saving…" : "Mark contacted"}
-                    </button>
-                  </>
-                )}
+            {!detail.followUp && (
+              <div className={`cv2d-provenance${detail.source === "applied" ? " applied" : ""}`}>
+                {detail.provenance}
               </div>
             )}
 
