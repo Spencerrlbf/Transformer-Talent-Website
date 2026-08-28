@@ -270,9 +270,14 @@ export default function CandidatesTable({
 
   const effectiveJob = jobId || roleFilter;
   const abortRef = useRef<AbortController | null>(null);
+  // Poll-triggered refetches skip the loading dim so the table doesn't
+  // flicker while it quietly re-asks.
+  const silentRef = useRef(false);
+  const pollCount = useRef(0);
 
   useEffect(() => {
-    setLoading(true);
+    setLoading(!silentRef.current);
+    silentRef.current = false;
     setError(false);
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -309,6 +314,24 @@ export default function CandidatesTable({
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
+
+  // Self-refresh while an applicant on screen is still mid-pipeline
+  // ("Screening…"): enrichment finishes seconds after a lead lands, so
+  // quietly refetch every 10s until everything settles. Capped so a row
+  // stuck in "processing" can't poll forever; any filter change resets.
+  useEffect(() => {
+    const pending = data?.items.some((r) => r.source === "applied" && r.screeningPending);
+    if (!pending || pollCount.current >= 30) return;
+    const t = setTimeout(() => {
+      pollCount.current += 1;
+      silentRef.current = true;
+      setBump((b) => b + 1);
+    }, 10000);
+    return () => clearTimeout(t);
+  }, [data]);
+  useEffect(() => {
+    pollCount.current = 0;
+  }, [seg, effectiveJob, fit, debouncedQ, hideNotNow, past]);
 
   // Past tab: put a rejected candidate back into the active pipeline.
   async function restore(key: string) {
