@@ -259,10 +259,20 @@ function LoginScreen() {
       <div className="dash-card">
         <h1>Company dashboard</h1>
         {state === "sent" ? (
-          <p className="dash-muted">
-            Check your email — we sent a sign-in link to <b>{email}</b>. The
-            link works once and expires in an hour.
-          </p>
+          <>
+            <div className="dash-sent">
+              <p>
+                Check your email — we sent a sign-in link to <b>{email}</b>. The
+                link works once and expires in an hour.
+              </p>
+            </div>
+            <p className="dash-authnote">
+              Wrong address?{" "}
+              <button type="button" className="dash-authagain" onClick={() => setState("idle")}>
+                Start again
+              </button>
+            </p>
+          </>
         ) : (
           <>
             <p className="dash-muted">
@@ -286,6 +296,9 @@ function LoginScreen() {
                 Couldn&apos;t send the link — wait a minute and try again.
               </p>
             )}
+            <p className="dash-authnote">
+              Access is granted by your admin. Invited by email? Use that address.
+            </p>
           </>
         )}
       </div>

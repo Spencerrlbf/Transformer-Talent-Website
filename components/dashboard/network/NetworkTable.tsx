@@ -1,9 +1,9 @@
 "use client";
-// Internal-only Network matches table: one row per pool person, their
-// matched roles as fit-colored chips, expandable per-role reviews, and the
+// Internal-only Network matches table (8a): one row per pool person, their
+// matched roles as stage-inset chips, expandable per-role reviews, and the
 // send-to-job flow. Person-first by design — filters replace clicking
 // through 96 jobs. Rendered only for the Transformer Talent org.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 
@@ -42,6 +42,11 @@ const TAG_CLASS: Record<string, string> = {
   stretch: "t-stretch",
 };
 const DOT_CLASS: Record<string, string> = { strong: "g", possible: "b", stretch: "a" };
+const FIT_LABEL: Record<string, string> = {
+  strong: "Strong fit",
+  possible: "Worth a look",
+  stretch: "Likely a stretch",
+};
 
 const AV_COLORS = ["#5B7FDB", "#4CA88C", "#C4736B", "#8A6FC2", "#C99242", "#5E9DB8", "#7A8699"];
 const avColor = (name: string) => {
@@ -102,6 +107,23 @@ export default function NetworkTable({
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState("");
 
+  // One Filters control (§2.3): button opens a grouped menu; a live row opens
+  // its option pane; active filters render as chips below the row.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPane, setMenuPane] = useState<"" | "role" | "company" | "fit">("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setMenuPane("");
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
+
   useEffect(() => {
     fetch("/api/dashboard/network", { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => {
@@ -152,6 +174,15 @@ export default function NetworkTable({
     (p) => new Date(p.latestMatchAt).getTime() >= dayAgo
   ).length;
 
+  const visibleMatches = useMemo(
+    () => filtered.reduce((s, p) => s + p.matches.filter(matchPasses).length, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered, role, company, fit]
+  );
+
+  const roleTitle = roleOptions.find(([id]) => id === role)?.[1] || "";
+  const activeCount = [role, company, fit, newOnly].filter(Boolean).length;
+
   async function send() {
     if (!confirm) return;
     setSending(true);
@@ -183,6 +214,21 @@ export default function NetworkTable({
     setConfirm(null);
   }
 
+  const menuRow = (label: string, value: string, onClick: () => void) => (
+    <div className="row" role="button" tabIndex={0} onClick={onClick}>
+      {label}
+      <span className="val">{value}</span>
+      <span className="car">›</span>
+    </div>
+  );
+
+  const paneOption = (label: string, on: boolean, pick: () => void) => (
+    <div key={label} className={`row${on ? " onopt" : ""}`} role="button" onClick={pick}>
+      {label}
+      {on && <span className="val">✓</span>}
+    </div>
+  );
+
   if (error)
     return <div className="dash-empty">Couldn&apos;t load network matches — refresh to retry.</div>;
   if (people === null) return <p className="dash-muted">Loading matches…</p>;
@@ -190,43 +236,160 @@ export default function NetworkTable({
   return (
     <div className="cv2">
       <div className="cv2-filters">
+        <div className="dash-filters-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className="dash-filters-btn"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setMenuOpen(!menuOpen);
+              setMenuPane("");
+            }}
+          >
+            ☰ Filters
+            {activeCount > 0 && <span className="count">{activeCount}</span>}
+            <span aria-hidden>▾</span>
+          </button>
+          {menuOpen && (
+            <div className="dash-filters-menu">
+              {menuPane === "" && (
+                <>
+                  <div className="head">Add filter…</div>
+                  <div className="group">Filters</div>
+                  {menuRow(
+                    "Role",
+                    roleTitle ? `${roleTitle} (#${role})` : "Any",
+                    () => setMenuPane("role")
+                  )}
+                  {companyOptions.length > 0 &&
+                    menuRow("Hiring company", company || "Any", () => setMenuPane("company"))}
+                  {menuRow("Fit", fit ? FIT_LABEL[fit] : "Any", () => setMenuPane("fit"))}
+                  {menuRow("Recency", newOnly ? "New this week" : "Any time", () =>
+                    setNewOnly(!newOnly)
+                  )}
+                </>
+              )}
+              {menuPane === "role" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Role
+                  </div>
+                  {paneOption(`All roles (${roleOptions.length})`, !role, () => {
+                    setRole("");
+                    setMenuOpen(false);
+                  })}
+                  {roleOptions.map(([id, title]) =>
+                    paneOption(`${title} (#${id})`, role === id, () => {
+                      setRole(id);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+              {menuPane === "company" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Hiring company
+                  </div>
+                  {paneOption("All hiring companies", !company, () => {
+                    setCompany("");
+                    setMenuOpen(false);
+                  })}
+                  {companyOptions.map((c) =>
+                    paneOption(c, company === c, () => {
+                      setCompany(c);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+              {menuPane === "fit" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Fit
+                  </div>
+                  {paneOption("All fits", !fit, () => {
+                    setFit("");
+                    setMenuOpen(false);
+                  })}
+                  {(["strong", "possible", "stretch"] as const).map((v) =>
+                    paneOption(FIT_LABEL[v], fit === v, () => {
+                      setFit(v);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         <input
           className="cv2-search"
           placeholder="Search name, title or company…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="">All roles ({roleOptions.length})</option>
-          {roleOptions.map(([id, title]) => (
-            <option key={id} value={id}>
-              {title} (#{id})
-            </option>
-          ))}
-        </select>
-        {companyOptions.length > 0 && (
-          <select value={company} onChange={(e) => setCompany(e.target.value)}>
-            <option value="">All hiring companies</option>
-            {companyOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        )}
-        <select value={fit} onChange={(e) => setFit(e.target.value)}>
-          <option value="">All fits</option>
-          <option value="strong">Strong fit</option>
-          <option value="possible">Worth a look</option>
-          <option value="stretch">Likely a stretch</option>
-        </select>
-        <label className="cv2-toggle">
-          <input type="checkbox" checked={newOnly} onChange={(e) => setNewOnly(e.target.checked)} />
-          New this week
-        </label>
         {newSinceYesterday > 0 && (
-          <span className="nw-fresh">● {newSinceYesterday} new since yesterday</span>
+          <span className="nw-fresh">
+            <i className="nw-newdot" /> {newSinceYesterday} new since yesterday
+          </span>
         )}
+        <span className="dash-sortnote">Newest match first</span>
+      </div>
+
+      <div className="dash-chips nw-countrow">
+        {role && (
+          <span className="dash-chip">
+            Role: <b>{roleTitle || `#${role}`}</b>
+            <button type="button" aria-label="Clear role filter" onClick={() => setRole("")}>
+              ✕
+            </button>
+          </span>
+        )}
+        {company && (
+          <span className="dash-chip">
+            Company: <b>{company}</b>
+            <button type="button" aria-label="Clear company filter" onClick={() => setCompany("")}>
+              ✕
+            </button>
+          </span>
+        )}
+        {fit && (
+          <span className="dash-chip">
+            Fit: <b>{FIT_LABEL[fit]}</b>
+            <button type="button" aria-label="Clear fit filter" onClick={() => setFit("")}>
+              ✕
+            </button>
+          </span>
+        )}
+        {newOnly && (
+          <span className="dash-chip">
+            Recency: <b>New this week</b>
+            <button type="button" aria-label="Clear recency filter" onClick={() => setNewOnly(false)}>
+              ✕
+            </button>
+          </span>
+        )}
+        {activeCount > 0 && (
+          <button
+            type="button"
+            className="clear"
+            onClick={() => {
+              setRole("");
+              setCompany("");
+              setFit("");
+              setNewOnly(false);
+            }}
+          >
+            Clear all
+          </button>
+        )}
+        <span className="u-spacer" />
+        <span className="nw-count">
+          {filtered.length} {filtered.length === 1 ? "person" : "people"} · {visibleMatches}{" "}
+          {visibleMatches === 1 ? "match" : "matches"}
+        </span>
       </div>
 
       {filtered.length === 0 && (
@@ -242,11 +405,9 @@ export default function NetworkTable({
             <thead>
               <tr>
                 <th>Candidate</th>
-                <th>Current role</th>
-                <th>Company</th>
                 <th>Location</th>
                 <th>Matched roles</th>
-                <th>Latest</th>
+                <th className="nw-th-latest">Latest</th>
                 <th className="cv2-th-icon">LinkedIn</th>
                 <th />
               </tr>
@@ -339,20 +500,22 @@ function PersonRows({
   onSend: (match: NetMatch) => void;
   onOpenJob: (jobId: string) => void;
 }) {
+  const meta = [person.currentTitle, person.currentCompany].filter(Boolean).join(" @ ");
   return (
     <>
       <tr className="cv2-click" onClick={() => onOpen?.(`net_${person.candidateId}`)}>
         <td>
           <span className="cv2-cand">
             <Avatar photoUrl={person.photoUrl} name={person.name} />
-            <span className="cv2-name">
-              {person.name}
-              {isNew && <i className="nw-newdot" title="New match since yesterday" />}
+            <span className="nw-who">
+              <span className="cv2-name">
+                {person.name}
+                {isNew && <i className="nw-newdot" title="New match since yesterday" />}
+              </span>
+              {meta && <span className="nw-pmeta">{meta}</span>}
             </span>
           </span>
         </td>
-        <td className="cv2-title">{person.currentTitle || <span className="cv2-dim">—</span>}</td>
-        <td className="cv2-company">{person.currentCompany || <span className="cv2-dim">—</span>}</td>
         <td className="cv2-loc">{person.location || <span className="cv2-dim">—</span>}</td>
         <td onClick={(e) => { e.stopPropagation(); onToggle(); }}>
           <span className="nw-chips">
@@ -373,7 +536,7 @@ function PersonRows({
             )}
           </span>
         </td>
-        <td className="cv2-added">{fmtDay(person.latestMatchAt)}</td>
+        <td className="cv2-added nw-latest">{fmtDay(person.latestMatchAt)}</td>
         <td className="cv2-icons">
           {person.linkedinUrl ? (
             <a href={person.linkedinUrl} target="_blank" rel="noreferrer" title="Open LinkedIn profile" onClick={(e) => e.stopPropagation()}>
@@ -389,7 +552,7 @@ function PersonRows({
       </tr>
       {expanded && (
         <tr className="nw-review-row">
-          <td colSpan={8}>
+          <td colSpan={6}>
             <div className="nw-reviews">
               {person.matches.map((m) => (
                 <div key={m.jobId} className={`nw-rv${m.tag === "strong" ? " best" : ""}`}>
