@@ -3896,3 +3896,12 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
 }
 .board-panel-x:hover { color: var(--ink); }
+
+/* Single-select popover rows (SingleSelect in MultiSelect.tsx) */
+.board-msel-pop .opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 9px;
+  padding: 7px 9px; border-radius: var(--r-control);
+  font-size: 13px; color: var(--ink); cursor: pointer;
+}
+.board-msel-pop .opt:hover { background: var(--surface); }
+.board-msel-pop .opt.on span { color: var(--accent-press); }

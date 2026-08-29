@@ -10,7 +10,7 @@
 // When embedded via widget.js it reports its height for iframe auto-resize.
 import { useEffect, useMemo, useRef, useState } from "react";
 import CompanyAbout from "@/components/board/CompanyAbout";
-import MultiSelect from "@/components/MultiSelect";
+import MultiSelect, { SingleSelect } from "@/components/MultiSelect";
 import type { CompanyPage } from "@/lib/server/company-page";
 import {
   ROLE_FOCUS_OPTIONS,
@@ -732,28 +732,20 @@ export default function BoardClient({
                         onChange={setFutLocs}
                       />
                     )}
-                    <div className="board-msel">
-                      <span className="board-msel-lbl">Minimum salary</span>
-                      <select value={futSalary} onChange={(e) => setFutSalary(e.target.value)}>
-                        <option value="">Any</option>
-                        {SALARY_BAND_OPTIONS.map((v) => (
-                          <option key={v} value={v}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="board-msel">
-                      <span className="board-msel-lbl">Visa status</span>
-                      <select value={futVisa} onChange={(e) => setFutVisa(e.target.value)}>
-                        <option value="">Select…</option>
-                        {VISA_OPTIONS.map((v) => (
-                          <option key={v} value={v}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SingleSelect
+                      label="Minimum salary"
+                      options={SALARY_BAND_OPTIONS}
+                      value={futSalary}
+                      onChange={setFutSalary}
+                      placeholder="Any"
+                    />
+                    <SingleSelect
+                      label="Visa status"
+                      options={VISA_OPTIONS}
+                      value={futVisa}
+                      onChange={setFutVisa}
+                      placeholder="Select…"
+                    />
                   </div>
                   <input
                     name="website"
