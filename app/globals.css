@@ -1,16 +1,3 @@
-:root {
-    --void: #06080B;
-    --panel: #0A0E13;
-    --line: rgba(155, 175, 190, 0.14);
-    --line-2: rgba(155, 175, 190, 0.07);
-    --fog: #C7D3DB;
-    --fog-60: rgba(199, 211, 219, 0.6);
-    --fog-30: rgba(199, 211, 219, 0.3);
-    --signal: #FF5A1F;
-    --signal-dim: rgba(255, 90, 31, 0.35);
-    --ok: #38C172;
-}
-
 * {
     margin: 0;
     padding: 0;
@@ -21,10 +8,9 @@ html {
     scroll-behavior: smooth;
 }
 
+/* Palette, type and the rest of body's look come from the redesign layer
+   below; these structural lines are the base the whole site was built on. */
 body {
-    background: var(--void);
-    color: var(--fog);
-    font-family: var(--font-mono), 'IBM Plex Mono', monospace;
     line-height: 1.6;
     min-height: 100vh;
     display: flex;
@@ -32,263 +18,7 @@ body {
     overflow-x: hidden;
 }
 
-/* Blueprint grid */
 
-main, .topbar-outer, footer {
-    position: relative;
-    z-index: 1;
-}
-
-a {
-    color: inherit;
-}
-
-.wrap {
-    width: 100%;
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 0 3rem;
-}
-
-.grot {
-    font-family: var(--font-grot), 'Archivo', sans-serif;
-}
-
-@keyframes boot {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: none; }
-}
-.b1 { animation: boot 0.6s 0.05s both; }
-.b2 { animation: boot 0.6s 0.2s both; }
-.b3 { animation: boot 0.6s 0.35s both; }
-.b4 { animation: boot 0.6s 0.5s both; }
-
-@keyframes blink {
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: 0; }
-}
-
-/* ---------- Top bar ---------- */
-
-
-/* ---------- Type & sections ---------- */
-
-
-.h-page span { color: var(--signal); }
-
-
-/* ---------- Buttons ---------- */
-
-
-.cta-row { display: flex; gap: 1.2rem; flex-wrap: wrap; }
-
-/* ---------- Terminal ---------- */
-
-
-.cursor {
-    display: inline-block;
-    width: 8px;
-    height: 14px;
-    background: var(--signal);
-    vertical-align: middle;
-    animation: blink 1s infinite;
-}
-
-/* ---------- Ticker / stats ---------- */
-
-.ticker {
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-}
-
-.tick { padding: 1.8rem; border-right: 1px solid var(--line); }
-.tick:last-child { border-right: 0; }
-
-.tick .n {
-    font-family: var(--font-grot), sans-serif;
-    font-weight: 800;
-    font-size: 2.1rem;
-    letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
-}
-
-.tick .n i { color: var(--signal); font-style: normal; }
-
-.tick .l {
-    font-size: 0.62rem;
-    color: var(--fog-30);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    margin-top: 0.35rem;
-}
-
-/* ---------- Log rows ---------- */
-
-
-/* ---------- Cells / panels ---------- */
-
-
-.op-photo {
-    aspect-ratio: 1;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    position: relative;
-    margin-bottom: 1.2rem;
-    overflow: hidden;
-}
-
-.op-photo .placeholder {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.65rem;
-    color: var(--fog-30);
-    letter-spacing: 0.2em;
-}
-
-/* ---------- Pipeline ---------- */
-
-.pipeline {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid var(--line);
-}
-
-.stage {
-    flex: 1;
-    padding: 1.8rem 1.6rem;
-    border-right: 1px dashed var(--line);
-    position: relative;
-}
-
-.stage:last-child { border-right: 0; }
-.stage .no { color: var(--signal); font-size: 0.68rem; letter-spacing: 0.15em; }
-
-.stage h4 {
-    font-family: var(--font-grot), sans-serif;
-    font-weight: 700;
-    font-size: 0.95rem;
-    text-transform: uppercase;
-    margin: 0.5rem 0 0.4rem;
-}
-
-.stage p { font-size: 0.75rem; color: var(--fog-60); }
-
-.stage::after {
-    content: '→';
-    position: absolute;
-    right: -9px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--signal);
-    background: var(--void);
-    z-index: 2;
-}
-
-.stage:last-child::after { content: ''; }
-
-/* ---------- Big CTA ---------- */
-
-
-.bigcta h2 span { color: var(--signal); }
-
-
-/* ---------- Forms ---------- */
-
-
-/* ---------- Match result cards ---------- */
-
-
-.tags { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-top: 0.6rem; }
-
-.tag {
-    font-size: 0.6rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fog-30);
-    border: 1px solid var(--line);
-    padding: 0.15rem 0.5rem;
-}
-
-/* ---------- Tables ---------- */
-
-
-.data-table td.hi { color: var(--fog); font-variant-numeric: tabular-nums; }
-
-/* ---------- FAQ ---------- */
-
-.faq { border: 1px solid var(--line); }
-
-.faq details { border-bottom: 1px solid var(--line); }
-.faq details:last-child { border-bottom: 0; }
-
-.faq summary {
-    cursor: pointer;
-    padding: 1.3rem 1.5rem;
-    font-family: var(--font-grot), sans-serif;
-    font-weight: 700;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    list-style: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: color 0.25s;
-}
-
-.faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: '+'; color: var(--signal); font-size: 1.1rem; }
-.faq details[open] summary::after { content: '−'; }
-.faq summary:hover { color: var(--signal); }
-.faq .a { padding: 0 1.5rem 1.4rem; color: var(--fog-60); font-size: 0.82rem; max-width: 72ch; }
-
-/* ---------- Footer ---------- */
-
-
-/* ---------- Page scaffold ---------- */
-
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 950px) {
-    .wrap { padding: 0 1.3rem; }
-    .ticker { grid-template-columns: 1fr 1fr; }
-    .tick { border-bottom: 1px solid var(--line); }
-    .grid2 { grid-template-columns: 1fr; }
-    .pipeline { flex-direction: column; }
-    .stage { border-right: 0; border-bottom: 1px dashed var(--line); }
-    .stage::after { content: ''; }
-    .log { grid-template-columns: 1fr 2fr; gap: 0.4rem 1rem; }
-    .log .t, .log .st { display: none; }
-    .topbar nav { gap: 1rem; flex-wrap: wrap; }
-    .topbar { flex-wrap: wrap; }
-    .status { display: none; }
-}
-
-/* ---------- Placement marquee ---------- */
-
-
-@keyframes marquee {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-}
-
-/* ---------- JD lists ---------- */
-
-
-/* ---------- apply checkout flow ---------- */
-.spec-banner p { color: var(--fog-60); font-size: 0.74rem; margin: 0; line-height: 1.5; }
-.spec-banner p b { color: var(--fog); font-weight: 500; }
-@media (max-width: 700px) {
-  .spec-banner { flex-direction: column; align-items: stretch; text-align: center; }
-}
-
-/* ---------- Company dashboard (Design A: precision light) ---------- */
 /* The dashboard is a separate light-themed surface inside the dark site
    shell; when a .dash-app is on the page, the marketing topbar/footer are
    hidden so the dashboard owns the viewport. */
@@ -300,25 +30,8 @@ body:has(.dash-app)::before {
 body:has(.dash-app) {
   background: #fff;
 }
-/* Sidebar */
-/* Settings */
 
-.dash-jobactions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
-.dash-row-link { cursor: pointer; }
-.dash-row-closed td { color: #8a919c; }
-.dash-sec { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a919c; font-weight: 600; margin: 18px 0 8px; }
-@media (max-width: 900px) { .dash-jobgrid { grid-template-columns: 1fr; } }
-/* Job form */
-/* Skills */
 
-/* Dashboard: job form v2 (upload, multi-selects, list rows, segmented skills) */
-.dash-seg { display: inline-flex; border: 1px solid #d3d7dd; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
-.dash-seg button { border: 0; background: #fff; color: #8a919c; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; padding: 5px 9px; cursor: pointer; }
-.dash-seg button + button { border-left: 1px solid #d3d7dd; }
-.dash-seg button.on { background: #111418; color: #fff; }
-.dash-seg button.on.nice { background: #6b7280; }
-
-/* ---------- Tenant job board (light mirror of the site roles board) ---------- */
 body:has(.board-app) .topbar-outer,
 body:has(.board-app) > footer,
 body:has(.board-app)::before {
@@ -328,132 +41,6 @@ body:has(.board-app) {
   background: var(--page);
 }
 
-/* Dashboard: candidates area (Task 6) */
-.dash-candfilters { display: flex; gap: 10px; margin-bottom: 16px; }
-.dash-candfilters select { border: 1px solid #d3d7dd; border-radius: 7px; padding: 8px 11px; font: inherit; font-size: 13px; color: #111418; background: #fff; }
-.dash-candlist { display: flex; flex-direction: column; gap: 12px; max-width: 780px; }
-.dash-cand { border: 1px solid #e6e8ec; border-radius: 10px; padding: 14px 16px; }
-.dash-cand-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
-.dash-cand-name { font-weight: 650; font-size: 14.5px; }
-.dash-cand-head small { display: block; color: #8a919c; font-size: 12px; margin-top: 2px; }
-.dash-cand-links { display: flex; gap: 12px; align-items: baseline; flex-shrink: 0; }
-.dash-cand-links a { color: #2a5bd7; font-size: 12.5px; font-weight: 550; }
-.dash-cand-date { color: #a2a8b3; font-size: 11.5px; }
-.dash-cand-role { display: flex; gap: 12px; align-items: flex-start; padding-top: 8px; }
-.dash-cand-role + .dash-cand-role { border-top: 1px solid #f2f4f7; margin-top: 8px; }
-.dash-cand-roletitle { font-size: 12.5px; font-weight: 650; color: #4a5160; display: block; }
-.dash-cand-roletitle em { font-style: normal; color: #a2a8b3; font-weight: 450; }
-.dash-cand-reason { margin: 3px 0 0; color: #3d434c; font-size: 13.5px; }
-/* Sourced section */
-.dash-sourced { border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 12px; padding: 18px 20px; max-width: 820px; }
-.dash-sourced .dash-sec { color: #2a5bd7; }
-.dash-cand-sourced { background: #fff; border-color: #dbe4f8; }
-.dash-sourcedbadge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #2a5bd7; border: 1px solid #c6d4f5; border-radius: 4px; padding: 1px 6px; margin-left: 8px; vertical-align: 2px; }
-
-
-.cv2-role { font-size: 12.5px; font-weight: 550; color: #3d434c; }
-.cv2-role em { font-style: normal; color: #a2a8b3; font-weight: 450; }
-.cv2-more { color: #2a5bd7; font-weight: 650; font-size: 11.5px; margin-left: 5px; }
-.cv2-snap { font-size: 12px; color: #8a919c; font-variant-numeric: tabular-nums; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
-/* Candidates v2: job-page count strip */
-.cv2d-preview-row .cv2d-pipe-detail { border-top: 0; }
-
-/* Job workspace: horizontal tabs (Overview · Pipeline · Sourcing · Past) */
-.jobws-linkbtn { appearance: none; background: none; border: 0; cursor: pointer; font: inherit; padding: 0; }
-.jobws-past-empty { border: 1px solid #e6e8ec; border-radius: 10px; padding: 26px 28px; max-width: 560px; }
-.jobws-past-empty b { font-size: 15px; }
-.jobws-past-empty p { color: #6b7280; margin: 8px 0 0; }
-
-/* Job workspace Task B: Overview ideal-companies editor + company name */
-.jobws-copicker { position: relative; }
-.jobws-cochips {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-  border: 1px solid #e6e8ec; border-radius: 8px; padding: 7px 9px; background: #fff;
-}
-.jobws-cochips:focus-within { border-color: #9aa2af; }
-.jobws-cochips input { border: 0; outline: 0; flex: 1; min-width: 120px; font: inherit; font-size: 12.5px; padding: 2px; }
-.jobws-cochip {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid #e6e8ec; border-radius: 99px; padding: 3px 6px 3px 4px;
-  font-size: 12.5px; background: #fafbfd;
-}
-.jobws-cochip img { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; background: #f6f7f9; }
-.jobws-cologo-fallback {
-  width: 18px; height: 18px; border-radius: 4px; background: #f1f3f6; color: #a2a8b3;
-  font-weight: 700; font-size: 10px; display: inline-flex; align-items: center; justify-content: center;
-}
-.jobws-cochip button { border: 0; background: none; cursor: pointer; color: #a2a8b3; font-size: 13px; line-height: 1; padding: 0 3px; }
-.jobws-cochip button:hover { color: #111418; }
-.jobws-conamerow { display: flex; align-items: center; gap: 10px; }
-.jobws-conameinput {
-  border: 1px solid #e6e8ec; border-radius: 8px; padding: 8px 10px; font: inherit;
-  font-size: 12.5px; background: #fff; width: 100%; max-width: 260px;
-}
-.jobws-conameinput:focus { border-color: #9aa2af; outline: none; }
-.jobws-savenote { font-size: 11.5px; color: #a2a8b3; font-weight: 500; text-transform: none; letter-spacing: 0; }
-.jobws-savenote.ok { color: #1d8a4b; }
-.jobws-savenote.err { color: #c2402a; }
-.jobws-hint { font-size: 11.5px; color: #a2a8b3; margin: 7px 0 0; line-height: 1.45; }
-
-/* Job workspace Task C: stage select (human pipeline status) */
-.cv2-stagesel {
-  appearance: none; -webkit-appearance: none; cursor: pointer; font: inherit;
-  font-size: 11.5px; font-weight: 650; color: #4a5160;
-  background: #f1f3f6 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%238a919c' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center;
-  border: 1px solid transparent; border-radius: 7px; padding: 4px 22px 4px 10px;
-}
-.cv2-stagesel:hover { border-color: #c9cfd8; }
-.cv2-stagesel:disabled { opacity: 0.55; cursor: wait; }
-.cv2-stagesel.st-contacted, .cv2-stagesel.st-replied { background-color: #eef2fb; color: #2a5bd7; }
-.cv2-stagesel.st-interviewing, .cv2-stagesel.st-offer { background-color: #f3eefb; color: #6b3fc2; }
-.cv2-stagesel.st-hired { background-color: #e8f6ee; color: #1d8a4b; }
-.cv2-stagesel.st-rejected { background-color: #fbeeec; color: #c2402a; }
-.cv2-stagecell { white-space: nowrap; }
-
-/* Job workspace Task D: Past tab restore */
-.cv2-restore {
-  appearance: none; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 650;
-  color: #2a5bd7; background: #eef2fb; border: 1px solid transparent; border-radius: 7px;
-  padding: 4px 12px; white-space: nowrap;
-}
-.cv2-restore:hover { border-color: #b9c8ef; }
-.cv2-restore:disabled { opacity: 0.55; cursor: wait; }
-.jobws-past-lead { margin: -6px 0 14px; }
-
-
-.cv2d-otheremails { font-size: 11.5px; color: #a2a8b3; margin-top: 4px; }
-/* Other emails: actionable list under the contact block */
-.cv2d-otheremails { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 11.8px; color: #6b7280; }
-.cv2d-oe { display: inline-flex; align-items: center; gap: 7px; }
-.cv2d-oe button { border: 0; background: none; cursor: pointer; font-size: 10.8px; font-weight: 650; color: #2a5bd7; padding: 0; }
-.cv2d-oe button:last-child { color: #a2a8b3; font-size: 11px; }
-.cv2d-oe button:hover { text-decoration: underline; }
-.cv2d-oe button:disabled { opacity: 0.5; cursor: wait; }
-.cv2d-ce-other { min-width: 260px; }
-
-/* ---------- My page (recruiter page settings) ---------- */
-
-/* ---------- Recruiter page header (board in recruiter mode) ---------- */
-
-/* ---------- Team (admin) ---------- */
-
-
-/* ---------- My page analytics ---------- */
-
-/* My page referral amount input */
-
-/* Top-of-page referral strip on recruiter pages */
-
-/* ---------- Interview stages (editor + cards) ---------- */
-
-
-/* ---------- Pipeline board (Kanban view) ---------- */
-/* Full-height columns: the whole vertical strip is a drop target, so dropping
-   into an empty column never means aiming at a small box near the top. */
-
-/* Card reject: ✕ on hover + in-card confirm */
-
-/* ---------- Company page (tenant board: strip, tabs, About) ---------- */
 
 @media (max-width: 820px) {
   .coab-problems, .coab-founders { grid-template-columns: 1fr; }
@@ -461,17 +48,6 @@ body:has(.board-app) {
   .coab-pstep { flex: 1 1 40%; margin-bottom: 14px; }
   .coab-pstep::before { display: none; }
 }
-
-/* Company page editor (Settings) */
-
-/* Company page revision: facts chips, section subtitles, round drawers */
-@media (max-width: 700px) {
-  .crd-row b { min-width: 0; }
-  .crd-hint { display: none; }
-}
-/* editor blocks */
-
-/* Client link card (TT jobs) + linked chip */
 
 
 /* ==========================================================================
@@ -595,17 +171,6 @@ body:has(.board-app) {
   --icon:           #4A5160;
   --icon-off:       #D3D7DD;
 
-  /* --- legacy aliases -------------------------------------------------- */
-  /* Re-pointed so unmigrated rules render in the new palette. Remove these
-     once no rule references them. */
-  --fog:      var(--ink);
-  --fog-60:   var(--body-2);
-  --fog-30:   var(--muted);
-  --signal:   var(--accent-press);
-  --panel:    var(--surface);
-  --line:     var(--hair);
-  --font-grot: var(--sans);
-  --font-mono: var(--sans);
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -1175,7 +740,7 @@ input, select, textarea, button { font-family: inherit; }
   align-items: center;
   gap: 10px;
   margin: 22px 0 12px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .dash-filters-btn {
@@ -2150,21 +1715,6 @@ footer a:hover { color: var(--ink); }
 .log .t { font-size: 12.5px; color: var(--muted); }
 .log .co { font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
 
-/* Marquee — if kept. Two identical halves, translate -50%. */
-.marquee-wrap { overflow: hidden; }
-.marquee { display: flex; width: max-content; animation: mk-drift 46s linear infinite; }
-@keyframes mk-drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.marquee-item { display: flex; align-items: baseline; gap: 9px; white-space: nowrap; }
-.marquee-item .co { font-size: 14px; font-weight: 600; }
-.marquee-item .role { font-size: 12.5px; color: var(--muted); }
-.marquee-item .st { display: none; }
-.marquee-sep { color: var(--faint); padding: 0 14px; }
-@media (prefers-reduced-motion: reduce) { .marquee { animation: none; } }
-
-/* Retired: the terminal-window hero block. Delete the markup, then these. */
-/* TEMP-SHIM: unhidden until the homepage rebuild drops the terminal.
-   Restore this rule when app/page.tsx migrates: .term, .term-head, .term-body { display: none; } */
-
 
 /* ==========================================================================
    15. MARKET INDEX
@@ -2228,7 +1778,6 @@ footer a:hover { color: var(--ink); }
 /* Staged reveal classes on the public pages (b1..b4) — kept as no-ops so
    existing markup does not break. Re-add motion here if you want it. */
 .b1, .b2, .b3, .b4 { animation: none; opacity: 1; transform: none; }
-.breakout { margin-inline: 0; }
 
 
 /* ==========================================================================
@@ -2362,35 +1911,6 @@ footer a:hover { color: var(--ink); }
 .crq-info em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 .crq-info small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
 .crq-linked { font-size: 13px; font-weight: 600; color: var(--accent-press); white-space: nowrap; }
-
-
-/* ==========================================================================
-   TEMP SHIM (2026-08-28) — interim compatibility patches so UNMIGRATED pages
-   render acceptably under the redesign layer. Every rule here is throwaway:
-   delete each as its screen is rebuilt. Nothing below changes behavior.
-   ========================================================================== */
-
-
-/* Old grid-plate trick behind the new rounded cards */
-.match-grid { background: none; border: 0; }
-@media (max-width: 950px) {
-  .grid2 { grid-template-columns: 1fr; }
-  .wrap { padding: 0 18px; }
-}
-
-/* /talent match results were near-black on near-black */
-.match-card { background: var(--paper); border: 1px solid rgba(0, 0, 0, .09); border-radius: 14px; }
-
-
-/* Filter rows on still-unmigrated tables (network, public board) hold many
-   controls and must wrap */
-.dash-filters, .cv2-filters, .board-filters { flex-wrap: wrap; }
-
-
-/* TEMP-SHIM cont. — /roles + /apply table gets a real scroll container
-   (RolesTable wrapper now carries .roles-scroll; floor rule already exists) */
-.roles-scroll { border: 1px solid rgba(0, 0, 0, .09); border-radius: 14px; overflow-x: auto; }
-.roles-scroll .data-table { border: 0; }
 
 
 /* ==========================================================================
@@ -3554,4 +3074,102 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   width: 100%; padding: 7px 10px;
   border: 1px solid var(--control-line); border-radius: var(--r-control);
   background: var(--paper); color: var(--ink); font: inherit; font-size: 13px;
+}
+
+/* --------------------------------------------------------------------------
+   final sweep — token passes for the last old-styled fragments, plus the
+   responsive rules that used to live in the pre-redesign base and TEMP shim
+   -------------------------------------------------------------------------- */
+
+/* market index: highlighted numeric cells */
+.data-table td.hi { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* role detail CTA row wraps on narrow screens */
+.rd-cta { flex-wrap: wrap; }
+
+/* job workspace: ideal-companies picker + company-name field (rail cards) */
+.jobws-copicker { position: relative; }
+.jobws-cochips {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 7px 9px; border: 1px solid var(--control-line); border-radius: var(--r-control);
+  background: var(--paper);
+}
+.jobws-cochips:focus-within { border-color: rgba(91,75,255,.45); }
+.jobws-cochips input { flex: 1; min-width: 120px; border: 0; outline: 0; background: none; font: inherit; font-size: 12.5px; padding: 2px; }
+.jobws-cochip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 4px; border-radius: 6px;
+  background: rgba(0,0,0,.06); font-size: 12.5px;
+}
+.jobws-cochip img { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; background: var(--paper); }
+.jobws-cologo-fallback {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+  background: var(--paper); color: var(--muted); font-size: 10px; font-weight: 700;
+}
+.jobws-cochip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; padding: 0 3px; }
+.jobws-cochip button:hover { color: var(--ink); }
+.jobws-conamerow { display: flex; align-items: center; gap: 10px; }
+.jobws-conameinput {
+  width: 100%; max-width: 260px; padding: 8px 10px;
+  border: 1px solid var(--control-line); border-radius: var(--r-control);
+  background: var(--paper); font: inherit; font-size: 12.5px;
+}
+.jobws-conameinput:focus { outline: none; border-color: rgba(91,75,255,.45); }
+.jobws-savenote { font-size: 11.5px; font-weight: 500; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.jobws-savenote.ok { color: var(--pos); }
+.jobws-savenote.err { color: var(--bad); }
+.jobws-hint { margin: 7px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.jobws-linkbtn { appearance: none; background: none; border: 0; cursor: pointer; font: inherit; padding: 0; font-size: 12.5px; font-weight: 600; color: var(--accent-press); }
+.jobws-past-empty { max-width: 560px; padding: 24px 26px; border: 1px solid var(--hair); border-radius: var(--r-panel); background: var(--surface); }
+.jobws-past-empty b { font-size: 15px; }
+.jobws-past-empty p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+.jobws-past-lead { margin: -6px 0 14px; }
+
+/* candidates: stage select (human pipeline status) */
+.cv2-stagesel {
+  appearance: none; -webkit-appearance: none; cursor: pointer; font: inherit;
+  font-size: 11.5px; font-weight: 600; color: var(--body-2);
+  background: rgba(0,0,0,.05) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%238A877F' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center;
+  border: 1px solid transparent; border-radius: 6px; padding: 4px 22px 4px 10px;
+}
+.cv2-stagesel:hover { border-color: var(--control-line); }
+.cv2-stagesel:disabled { opacity: .55; cursor: wait; }
+.cv2-stagesel.st-contacted, .cv2-stagesel.st-replied { background-color: var(--accent-wash); color: #3B2FB8; }
+.cv2-stagesel.st-interviewing, .cv2-stagesel.st-offer { background-color: #EAE7FF; color: #3B2FB8; }
+.cv2-stagesel.st-hired { background-color: var(--pos-bg); color: var(--pos); }
+.cv2-stagesel.st-rejected { background-color: var(--bad-bg); color: var(--bad); }
+.cv2-stagecell { white-space: nowrap; }
+
+/* candidates: past-tab restore */
+.cv2-restore {
+  appearance: none; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--accent-press); background: var(--accent-wash);
+  border: 1px solid transparent; border-radius: var(--r-pill); padding: 4px 12px; white-space: nowrap;
+}
+.cv2-restore:hover { border-color: rgba(91,75,255,.35); }
+.cv2-restore:disabled { opacity: .55; cursor: wait; }
+
+/* candidate drawer: other emails + preview row */
+.cv2d-otheremails { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.cv2d-oe { display: inline-flex; align-items: center; gap: 7px; }
+.cv2d-oe button { border: 0; background: none; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--accent-press); padding: 0; }
+.cv2d-oe button:last-child { color: var(--muted); }
+.cv2d-oe button:hover { text-decoration: underline; }
+.cv2d-oe button:disabled { opacity: .5; cursor: wait; }
+.cv2d-ce-other { min-width: 260px; }
+.cv2d-preview-row .cv2d-pipe-detail { border-top: 0; }
+
+/* responsive (replaces the old-base 950px block and the TEMP-shim copy) */
+@media (max-width: 950px) {
+  .wrap { padding: 0 18px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .topbar { flex-wrap: wrap; }
+  .topbar nav { gap: 12px; flex-wrap: wrap; }
+  .topbar .status { display: none; }
+}
+@media (max-width: 700px) {
+  .spec-banner { flex-direction: column; align-items: stretch; text-align: left; }
+  .crd-row b { min-width: 0; }
+  .crd-hint { display: none; }
 }
