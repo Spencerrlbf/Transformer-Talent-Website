@@ -61,13 +61,15 @@ export default function SettingsPage() {
       <h1 className="dash-h1">Settings</h1>
       <p className="dash-sub">Your company profile, job board, and sourcing credits.</p>
       <div className="dash-settings">
-        <div className="dash-setting">
-          <label>Company</label>
-          <div>{org.name}</div>
-        </div>
-        <div className="dash-setting">
-          <label>Signed in as</label>
-          <div>{email}</div>
+        <div className="dash-setting-duo">
+          <div className="dash-setting">
+            <label>Company</label>
+            <div className="val">{org.name}</div>
+          </div>
+          <div className="dash-setting">
+            <label>Signed in as</label>
+            <div className="val">{email}</div>
+          </div>
         </div>
         <div className="dash-setting">
           <label>Your job board</label>
