@@ -366,21 +366,10 @@ body:has(.dash-app) {
 .dash-setting small { display: block; color: #8a919c; font-size: 12.5px; margin-top: 4px; }
 
 .dash-jobactions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
-.dash-status { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; padding: 3px 9px; border-radius: 99px; vertical-align: 3px; margin-left: 6px; text-transform: uppercase; }
-.dash-status.open { background: #e7f6ed; color: #0a7a3d; }
-.dash-status.closed { background: #f1f3f6; color: #6b7280; }
 .dash-row-link { cursor: pointer; }
 .dash-row-closed td { color: #8a919c; }
 .dash-sec { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a919c; font-weight: 600; margin: 18px 0 8px; }
-.dash-body { margin: 0 0 6px; color: #3d434c; font-size: 13.5px; }
-.dash-list { margin: 0; padding-left: 18px; color: #3d434c; font-size: 13.5px; }
-.dash-list li { margin-bottom: 4px; }
-.dash-jobgrid { display: grid; grid-template-columns: 1fr 280px; gap: 40px; margin-top: 10px; }
 @media (max-width: 900px) { .dash-jobgrid { grid-template-columns: 1fr; } }
-.dash-skilltags { display: flex; flex-wrap: wrap; gap: 6px; }
-.dash-skilltag { border: 1px solid #d3d7dd; border-radius: 99px; padding: 3px 10px; font-size: 12px; color: #3d434c; }
-.dash-skilltag.must { border-color: #111418; font-weight: 600; color: #111418; }
-.dash-skilltag small { color: #8a919c; font-size: 10.5px; margin-left: 4px; }
 /* Job form */
 .dash-jobform { max-width: 720px; }
 .dash-prefill { border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 10px; padding: 16px 18px; margin-bottom: 24px; }
@@ -469,20 +458,6 @@ body:has(.board-app) {
 .dash-sourcedbadge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #2a5bd7; border: 1px solid #c6d4f5; border-radius: 4px; padding: 1px 6px; margin-left: 8px; vertical-align: 2px; }
 
 /* ---------- Sourcing tab (Option A: runs list + guided builder + run view) ---------- */
-.dash-src-empty { border: 1px solid #e6e8ec; border-radius: 10px; padding: 26px 28px; max-width: 560px; }
-.dash-src-empty b { font-size: 15px; }
-.dash-src-empty p { color: #6b7280; margin: 8px 0 16px; }
-.dash-src-runs { display: flex; flex-direction: column; gap: 8px; max-width: 860px; }
-.dash-src-runrow {
-  display: grid; grid-template-columns: 72px 1fr auto; gap: 16px; align-items: center;
-  border: 1px solid #e6e8ec; border-radius: 10px; padding: 12px 16px; background: #fff;
-  cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%;
-}
-.dash-src-runrow:hover { border-color: #c9cfd8; }
-.dash-src-runrow .when { font-size: 13px; font-weight: 650; }
-.dash-src-runrow .when small { display: block; font-weight: 450; color: #a2a8b3; font-size: 11.5px; }
-.dash-src-runrow .what span { font-size: 13.5px; display: block; }
-.dash-src-runrow .what small { color: #6b7280; font-size: 12px; }
 .dash-src-status { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 10px; border-radius: 99px; background: #f1f3f6; color: #6b7280; white-space: nowrap; }
 .dash-src-status.s-done { background: #e7f6ed; color: #0a7a3d; }
 .dash-src-status.s-failed { background: #fdecec; color: #b42323; }
@@ -573,8 +548,6 @@ body:has(.board-app) {
 .dash-src-pager { display: flex; gap: 8px; }
 
 /* ---------- Sourcing credits ---------- */
-.dash-src-credits { font-size: 12.5px; color: #6b7280; border: 1px solid #e6e8ec; border-radius: 99px; padding: 5px 13px; background: #fff; white-space: nowrap; }
-.dash-src-credits b { color: #111418; font-variant-numeric: tabular-nums; }
 .dash-src-balance { font-size: 17px; font-weight: 700; display: block; }
 .dash-src-history { list-style: none; margin: 12px 0 0; padding: 0; max-width: 460px; }
 .dash-src-history li { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; font-size: 12.5px; color: #3d434c; padding: 5px 0; border-top: 1px solid #eef0f3; }
@@ -601,36 +574,13 @@ body:has(.board-app) {
 .cv2-more { color: #2a5bd7; font-weight: 650; font-size: 11.5px; margin-left: 5px; }
 .cv2-snap { font-size: 12px; color: #8a919c; font-variant-numeric: tabular-nums; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
 /* Candidates v2: job-page count strip */
-.cv2-countstrip { display: flex; gap: 24px; align-items: center; border: 1px solid #e6e8ec; border-radius: 10px; padding: 13px 18px; margin: 14px 0 18px; background: #fff; }
-.cv2-countstrip .c { font-size: 12.5px; color: #8a919c; }
-.cv2-countstrip .c b { display: block; font-size: 19px; font-weight: 700; color: #111418; font-variant-numeric: tabular-nums; }
-.cv2-countstrip .c.dim b { color: #a2a8b3; }
-.cv2-countstrip .spacer { flex: 1; }
-.cv2-countstrip .link { font-size: 12.5px; color: #2a5bd7; font-weight: 600; text-decoration: none; }
 .cv2d-preview-row .cv2d-pipe-detail { border-top: 0; }
 
 /* Job workspace: horizontal tabs (Overview · Pipeline · Sourcing · Past) */
-.jobws-tabs { display: flex; gap: 4px; border-bottom: 1px solid #e6e8ec; margin: 26px 0 22px; }
-.jobws-tab {
-  appearance: none; background: none; border: 0; cursor: pointer; font: inherit;
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 9px 14px 11px; font-size: 13.5px; font-weight: 550; color: #6b7280;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.jobws-tab:hover { color: #111418; }
-.jobws-tab.on { color: #111418; font-weight: 650; border-bottom-color: #111418; }
-.jobws-tab .n {
-  font-size: 11px; font-weight: 700; color: #6b7280; background: #f1f3f6;
-  border-radius: 99px; padding: 1px 8px; font-variant-numeric: tabular-nums;
-}
-.jobws-tab.on .n { background: #111418; color: #fff; }
 .jobws-linkbtn { appearance: none; background: none; border: 0; cursor: pointer; font: inherit; padding: 0; }
 .jobws-past-empty { border: 1px solid #e6e8ec; border-radius: 10px; padding: 26px 28px; max-width: 560px; }
 .jobws-past-empty b { font-size: 15px; }
 .jobws-past-empty p { color: #6b7280; margin: 8px 0 0; }
-.dash-src-panelbar { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
-.dash-src-panelbar .spacer { flex: 1; }
-.dash-src-panelbar .dash-muted { font-size: 12.5px; }
 
 /* Job workspace Task B: Overview ideal-companies editor + company name */
 .jobws-copicker { position: relative; }
@@ -933,57 +883,10 @@ body:has(.board-app) {
 .stged-note { font-size: 11.5px; color: #8a919c; margin-top: 12px; }
 
 /* ---------- Pipeline board (Kanban view) ---------- */
-.pb-viewbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.pb-seg { display: inline-flex; border: 1px solid #d3d7dd; border-radius: 7px; overflow: hidden; }
-.pb-seg button { border: 0; background: #fff; color: #6b7280; font: inherit; font-size: 12px; font-weight: 650; padding: 6px 14px; cursor: pointer; }
-.pb-seg button.on { background: #111418; color: #fff; }
-.pb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.pb-count { font-size: 11.5px; color: #8a919c; letter-spacing: 0.06em; text-transform: uppercase; }
-.pb-edit { margin-left: auto; margin-bottom: 0; }
-.pb-wrap { overflow-x: auto; padding-bottom: 8px; }
-.pb-board { display: flex; gap: 10px; width: max-content; align-items: stretch; }
 /* Full-height columns: the whole vertical strip is a drop target, so dropping
    into an empty column never means aiming at a small box near the top. */
-.pb-col { width: 200px; flex: none; background: #f6f7f9; border: 1px solid #e6e8ec; border-radius: 10px; padding: 8px; height: 64vh; display: flex; flex-direction: column; }
-.pb-col.iv { background: #f3f6fd; border-color: #dbe4f8; }
-.pb-col.over { border-color: #2a5bd7; box-shadow: inset 0 0 0 1px #2a5bd7; }
-.pb-ivgroup { font-size: 9.5px; letter-spacing: 0.12em; color: #2a5bd7; font-weight: 700; margin: 0 4px 4px; }
-.pb-colhead { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 4px 8px; }
-.pb-colhead b { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #4a5160; }
-.pb-col.iv .pb-colhead b { color: #2a5bd7; }
-.pb-colhead span { font-size: 11px; color: #8a919c; font-weight: 650; }
-.pb-cards { flex: 1; min-height: 0; overflow-y: auto; }
-.pb-card {
-  background: #fff; border: 1px solid #e6e8ec; border-radius: 8px; padding: 9px 10px;
-  margin-bottom: 7px; box-shadow: 0 1px 2px rgba(17,20,24,0.04); cursor: grab;
-}
-.pb-card:hover { border-color: #c9cfd8; }
-.pb-card.dragging { opacity: 0.45; border-color: #2a5bd7; }
-.pb-nm { font-weight: 650; font-size: 12.5px; display: flex; align-items: center; gap: 7px; color: #111418; }
-.pb-av { width: 20px; height: 20px; border-radius: 50%; background: #eef2fb; color: #2a5bd7; font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
-.pb-tt { font-size: 11px; color: #8a919c; margin: 3px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pb-ft { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.pb-ft .dash-tag { font-size: 10px; padding: 1px 8px; }
-.pb-days { font-size: 10.5px; color: #a2a8b3; flex: none; }
-.pb-empty { font-size: 11px; color: #a2a8b3; text-align: center; padding: 14px 4px; }
-.pb-reject {
-  margin-top: 12px; border: 2px dashed #f2b8b5; background: #fef3f2; color: #b42318;
-  border-radius: 10px; padding: 12px; text-align: center; font-size: 12.5px; font-weight: 650;
-}
 
 /* Card reject: ✕ on hover + in-card confirm */
-.pb-nmtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pb-x {
-  border: 0; background: none; color: #c3c9d2; font-size: 12px; cursor: pointer;
-  padding: 0 2px; flex: none;
-}
-.pb-x:hover { color: #b42318; }
-.pb-confirm { border-color: #f2b8b5; background: #fef3f2; cursor: default; }
-.pb-confirm-q { font-weight: 650; font-size: 12.5px; color: #b42318; }
-.pb-confirm-btns { display: flex; gap: 8px; margin: 8px 0 6px; }
-.pb-confirm-yes { border: 0; background: #b42318; color: #fff; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 700; padding: 5px 12px; cursor: pointer; }
-.pb-confirm-no { border: 1px solid #d3d7dd; background: #fff; color: #111418; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 650; padding: 5px 12px; cursor: pointer; }
-.pb-confirm-note { font-size: 10.5px; color: #8a919c; }
 
 /* ---------- Company page (tenant board: strip, tabs, About) ---------- */
 
@@ -3662,4 +3565,94 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 }
 @media (max-width: 560px) {
   .mk-placements { grid-template-columns: 1fr; }
+}
+
+
+/* ==========================================================================
+   REDESIGN — screen 7 additions (job workspace)
+   ========================================================================== */
+
+/* Header pills */
+.dash-status { margin-left: 10px; padding: 3px 9px; border-radius: var(--r-pill); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; vertical-align: 4px; }
+.dash-status.open { background: var(--pos-bg); color: var(--pos); }
+.dash-status.closed { background: rgba(0,0,0,.06); color: var(--muted); }
+.dash-h1 .dash-linkchip { margin-left: 8px; vertical-align: 4px; }
+.jobws-tabs { margin: 24px 0 24px; }
+
+/* Overview */
+.dash-jobgrid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 36px; margin-top: 4px; }
+.dash-body { margin: 0 0 8px; font-size: 14.5px; line-height: 1.65; color: var(--body); text-wrap: pretty; }
+.dash-list { display: flex; flex-direction: column; gap: 9px; margin: 0 0 6px; padding: 0; list-style: none; }
+.dash-list li { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.55; color: var(--body); text-wrap: pretty; }
+.dash-list li::before { content: "—"; color: var(--faint); flex: none; }
+.jw-rail { display: flex; flex-direction: column; gap: 14px; }
+.jw-card { padding: 16px 18px; border: 1px solid var(--hair); border-radius: var(--r-panel); background: var(--paper); }
+.jw-card .dash-sec:first-child { margin-top: 0; }
+.jw-card .dash-sec { margin: 0 0 10px; }
+.dash-skilltags { display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-skilltag { padding: 4px 11px; border-radius: var(--r-pill); background: rgba(0,0,0,.05); font-size: 12px; color: var(--body); }
+.dash-skilltag.must { background: var(--accent-wash); color: var(--accent-press); font-weight: 600; }
+.dash-skilltag small { margin-left: 4px; font-size: 10.5px; color: var(--muted); }
+.dash-skilltag.must small { color: var(--stage-replied); }
+
+/* Pipeline count strip */
+.cv2-countstrip {
+  display: flex; align-items: center; gap: 24px;
+  margin: 0 0 16px; padding: 14px 18px;
+  border-radius: var(--r-panel); background: var(--surface);
+  border: 1px solid var(--hair);
+}
+.cv2-countstrip .c { font-size: 12.5px; color: var(--muted); }
+.cv2-countstrip .c b { display: block; font-size: 19px; font-weight: 600; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cv2-countstrip .c.dim b { color: var(--disabled); }
+.cv2-countstrip .spacer { flex: 1; }
+.cv2-countstrip .link { font-size: 12.5px; font-weight: 600; color: var(--accent-press); }
+.jobws-linkbtn { appearance: none; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+
+/* Board chrome around the layer's pb- rules */
+.pb-viewbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.pb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.pb-count { font-size: 12.5px; color: var(--muted); }
+.pb-edit { margin-left: auto; }
+.pb-col.over { border-color: var(--accent); }
+.pb-col .nm-row { display: flex; align-items: center; gap: 7px; }
+.pb-av {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex: none; border-radius: var(--r-pill);
+  background: rgba(0,0,0,.08); font-size: 9.5px; font-weight: 700; color: var(--body-2);
+}
+.pb-card .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-card .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-ft { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pb-ft .dash-tag { height: 20px; padding: 0 8px; font-size: 10.5px; }
+.pb-days { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pb-cards { min-height: 24px; }
+.pb-confirm { cursor: default; }
+.pb-confirm-q { font-size: 12.5px; font-weight: 600; }
+.pb-confirm-btns { display: flex; gap: 6px; margin-top: 8px; }
+.pb-confirm-yes { height: 26px; padding: 0 11px; border: 0; border-radius: var(--r-control); background: var(--bad); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.pb-confirm-no { height: 26px; padding: 0 11px; border: 1px solid var(--control-line); border-radius: var(--r-control); background: var(--paper); font-size: 11.5px; cursor: pointer; }
+.pb-confirm-note { margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+
+/* Sourcing tab: searches list */
+.dash-src-panelbar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.dash-src-panelbar .spacer { flex: 1; }
+.dash-src-credits { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dash-src-runs { display: flex; flex-direction: column; gap: 8px; max-width: 900px; }
+.dash-src-runrow {
+  display: flex; align-items: center; gap: 18px; width: 100%;
+  padding: 13px 17px; border: 1px solid rgba(0,0,0,.09); border-radius: var(--r-menu);
+  background: var(--paper); font: inherit; text-align: left; cursor: pointer;
+}
+.dash-src-runrow:hover { background: var(--surface); }
+.dash-src-runrow .when { flex: none; font-size: 13px; font-weight: 600; }
+.dash-src-runrow .when small { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.dash-src-runrow .what { flex: 1; min-width: 0; }
+.dash-src-runrow .what span { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-src-runrow .what small { font-size: 12px; color: var(--muted); }
+.dash-src-empty { max-width: 560px; padding: 24px 26px; border: 1px solid rgba(0,0,0,.09); border-radius: var(--r-panel); background: var(--surface); }
+.dash-src-empty b { font-size: 15px; }
+.dash-src-empty p { margin: 8px 0 16px; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+@media (max-width: 1100px) {
+  .dash-jobgrid { grid-template-columns: 1fr; }
 }

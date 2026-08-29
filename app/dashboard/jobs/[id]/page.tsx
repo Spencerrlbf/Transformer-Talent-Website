@@ -129,6 +129,7 @@ function JobWorkspace({ id }: { id: string }) {
           <h1 className="dash-h1">
             {job.title}{" "}
             <span className={`dash-status ${job.status}`}>{job.status}</span>
+            {job.linkedOrgRole && <span className="dash-linkchip">linked</span>}
           </h1>
           <p className="dash-sub">
             #{job.id}
@@ -160,11 +161,11 @@ function JobWorkspace({ id }: { id: string }) {
         </div>
       </div>
 
-      <nav className="jobws-tabs" aria-label="Job sections">
+      <nav className="dash-tabs jobws-tabs" aria-label="Job sections">
         {TABS.map((t) => (
           <button
             key={t.id}
-            className={`jobws-tab ${tab === t.id ? "on" : ""}`}
+            className={tab === t.id ? "on" : ""}
             onClick={() => switchTab(t.id)}
           >
             {t.label}
@@ -207,18 +208,25 @@ function JobWorkspace({ id }: { id: string }) {
               <p className="dash-muted">No job description on file yet.</p>
             )}
           </section>
-          <aside>
+          <aside className="jw-rail">
+            <div className="jw-card">
             <CompanyNameField
               jobId={job.id}
               initial={job.companyName}
               onSaved={(companyName) => setJob({ ...job, companyName })}
             />
+            </div>
+            <div className="jw-card">
             <IdealCompanies
               jobId={job.id}
               initial={job.targetCompanies}
               onSaved={(targetCompanies) => setJob({ ...job, targetCompanies })}
             />
-            <InterviewStagesCard jobId={job.id} />
+            </div>
+            <div className="jw-card">
+              <InterviewStagesCard jobId={job.id} />
+            </div>
+            <div className="jw-card">
             {org.slug === "transformer-talent" ? (
               <ClientLinkCard
                 jobId={job.id}
@@ -228,8 +236,9 @@ function JobWorkspace({ id }: { id: string }) {
             ) : (
               <SourcingHelpCard jobId={job.id} initial={job.sourcingRequested} />
             )}
+            </div>
             {job.skills.length > 0 && (
-              <>
+              <div className="jw-card">
                 <div className="dash-sec">Skills</div>
                 <div className="dash-skilltags">
                   {job.skills.map((s, i) => (
@@ -239,13 +248,13 @@ function JobWorkspace({ id }: { id: string }) {
                     </span>
                   ))}
                 </div>
-              </>
+              </div>
             )}
             {job.visa && (
-              <>
+              <div className="jw-card">
                 <div className="dash-sec">Visa</div>
                 <p className="dash-body">{job.visa}</p>
-              </>
+              </div>
             )}
           </aside>
         </div>
@@ -287,7 +296,7 @@ function JobWorkspace({ id }: { id: string }) {
           </div>
         )}
         <div className="pb-viewbar">
-          <div className="pb-seg" role="tablist" aria-label="Pipeline view">
+          <div className="dash-seg" role="tablist" aria-label="Pipeline view">
             {(["table", "board"] as const).map((v) => (
               <button
                 key={v}

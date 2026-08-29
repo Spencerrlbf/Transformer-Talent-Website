@@ -227,14 +227,14 @@ export default function PipelineBoard({
         </button>
       </div>
       {error && <p className="dash-error">{error}</p>}
-      <div className="pb-wrap">
-        <div className="pb-board">
+      <div className="pb-scroll">
+        <>
           {columns.map((col) => {
             const items = byCol.get(col.key) || [];
             return (
               <div
                 key={col.key}
-                className={`pb-col${col.iv ? " iv" : ""}${overCol === col.key ? " over" : ""}`}
+                className={`pb-col${col.iv ? " is-stage" : ""}${overCol === col.key ? " over" : ""}`}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setOverCol(col.key);
@@ -252,13 +252,13 @@ export default function PipelineBoard({
                 }}
               >
                 {col.iv && (
-                  <div className="pb-ivgroup">
+                  <div className="kicker">
                     INTERVIEWING · {col.ivIndex}/{col.ivTotal}
                   </div>
                 )}
-                <div className="pb-colhead">
+                <div className="pb-col-head">
                   <b>{col.label}</b>
-                  <span>{items.length}</span>
+                  <span className="n">{items.length}</span>
                 </div>
                 <div className="pb-cards">
                   {items.map((r) =>
@@ -305,12 +305,12 @@ export default function PipelineBoard({
                         }}
                         onClick={() => onOpen(r.key)}
                       >
-                        <div className="pb-nm">
+                        <div className="nm-row">
                           <span className="pb-av">{initials(r.name || "?")}</span>
-                          <span className="pb-nmtext">{r.name}</span>
+                          <span className="nm">{r.name}</span>
                           <button
                             type="button"
-                            className="pb-x"
+                            className="x"
                             title="Reject candidate"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -320,7 +320,7 @@ export default function PipelineBoard({
                             ✕
                           </button>
                         </div>
-                        <div className="pb-tt">
+                        <div className="meta">
                           {[r.currentTitle, r.currentCompany].filter(Boolean).join(" @ ") || "—"}
                         </div>
                         <div className="pb-ft">
@@ -343,7 +343,7 @@ export default function PipelineBoard({
               </div>
             );
           })}
-        </div>
+        </>
       </div>
       {dragKey && (
         <div
