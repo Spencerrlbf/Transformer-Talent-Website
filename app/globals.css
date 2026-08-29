@@ -70,154 +70,39 @@ a {
 
 /* ---------- Top bar ---------- */
 
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.4rem 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.72rem;
-    gap: 1rem;
-}
 
-.brand {
-    font-family: var(--font-grot), sans-serif;
-    font-weight: 900;
-    letter-spacing: 0.06em;
-    font-size: 0.95rem;
-    text-transform: uppercase;
-    text-decoration: none;
-    white-space: nowrap;
-}
 
-.brand b { color: var(--signal); }
 
-.topbar nav {
-    display: flex;
-    gap: 2rem;
-    align-items: center;
-}
 
-.topbar nav a {
-    color: var(--fog-60);
-    text-decoration: none;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    transition: color 0.25s;
-}
 
-.topbar nav a:hover { color: var(--signal); }
 
-.topbar nav a.run {
-    color: var(--void);
-    background: var(--signal);
-    padding: 0.55rem 1.1rem;
-    font-weight: 600;
-    transition: background 0.25s;
-}
 
-.topbar nav a.run:hover { background: var(--fog); color: var(--void); }
 
-.status {
-    color: var(--ok);
-    font-size: 0.62rem;
-    white-space: nowrap;
-}
 
-.status::before {
-    content: '●';
-    margin-right: 0.4rem;
-    animation: blink 2s infinite;
-}
 
 /* ---------- Type & sections ---------- */
 
-.h-display {
-    font-family: var(--font-grot), sans-serif;
-    font-weight: 900;
-    font-size: clamp(2.4rem, 5.4vw, 4.4rem);
-    line-height: 0.98;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
-}
 
-.h-display span { color: var(--signal); }
 
 
 .h-page span { color: var(--signal); }
 
-.sec-label {
-    font-size: 0.66rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--fog-30);
-    padding: 3.4rem 0 1.3rem;
-}
 
-.sec-label b { color: var(--signal); font-weight: 400; }
 
-.sub {
-    color: var(--fog-60);
-    font-size: 0.92rem;
-    max-width: 52ch;
-}
 
-.sub b { color: var(--fog); font-weight: 500; }
 
 /* ---------- Buttons ---------- */
 
-.btn {
-    display: inline-block;
-    font-family: var(--font-mono), monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.06em;
-    text-decoration: none;
-    padding: 1rem 1.6rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.25s;
-    border: 0;
-}
 
-.btn.hot { background: var(--signal); color: var(--void); }
-.btn.hot:hover { background: var(--fog); }
-.btn.cold { border: 1px solid var(--line); color: var(--fog); background: transparent; }
-.btn.cold:hover { border-color: var(--signal); color: var(--signal); }
-.btn:disabled { opacity: 0.5; cursor: wait; }
 
 .cta-row { display: flex; gap: 1.2rem; flex-wrap: wrap; }
 
 /* ---------- Terminal ---------- */
 
-.term {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-}
 
-.term-head {
-    display: flex;
-    gap: 0.45rem;
-    padding: 0.8rem 1rem;
-    border-bottom: 1px solid var(--line);
-}
 
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
-.dot.r { background: #E0443E; }
-.dot.y { background: #DEA123; }
-.dot.g { background: #1AAB29; }
 
-.term-body {
-    padding: 1.4rem;
-    font-size: 0.78rem;
-    line-height: 1.9;
-    min-height: 260px;
-}
 
-.term-body .c { color: var(--fog-30); }
-.term-body .p { color: var(--signal); }
-.term-body .ok { color: var(--ok); }
-.term-body .out { color: var(--fog-60); }
 
 .cursor {
     display: inline-block;
@@ -264,8 +149,6 @@ a {
 
 
 
-.log .st { color: var(--ok); font-size: 0.66rem; text-align: right; }
-.log .st::before { content: '✓ '; }
 
 /* ---------- Cells / panels ---------- */
 
@@ -408,22 +291,10 @@ a {
 
 /* ---------- Footer ---------- */
 
-footer {
-    border-top: 1px solid var(--line);
-    padding: 2.2rem 0;
-    margin-top: 4.5rem;
-    font-size: 0.68rem;
-    color: var(--fog-30);
-}
 
-footer .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-footer a { color: var(--signal); text-decoration: none; }
 
 /* ---------- Page scaffold ---------- */
 
-.page { flex: 1; padding: 4rem 0 2rem; }
-.page-intro { color: var(--fog-60); font-size: 0.9rem; max-width: 58ch; margin-bottom: 2.6rem; }
-.page-intro b { color: var(--fog); font-weight: 500; }
 
 /* ---------- Responsive ---------- */
 
@@ -444,45 +315,11 @@ footer a { color: var(--signal); text-decoration: none; }
 
 /* ---------- Placement marquee ---------- */
 
-.marquee-wrap {
-    overflow: hidden;
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
-}
 
-.marquee {
-    display: flex;
-    gap: 3.5rem;
-    width: max-content;
-    padding: 1.3rem 0;
-    animation: marquee 40s linear infinite;
-}
 
-.marquee:hover { animation-play-state: paused; }
 
-.marquee-item {
-    display: flex;
-    align-items: baseline;
-    gap: 0.8rem;
-    white-space: nowrap;
-    font-size: 0.78rem;
-    text-decoration: none;
-}
 
-.marquee-item .co {
-    font-family: var(--font-grot), sans-serif;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--fog);
-}
 
-.marquee-item .role { color: var(--fog-60); }
-.marquee-item .st { color: var(--ok); font-size: 0.64rem; }
-.marquee-item .st::before { content: '✓ '; }
-.marquee-sep { color: var(--signal); opacity: 0.5; align-self: center; }
 
 @keyframes marquee {
     0% { transform: translateX(0); }
@@ -3104,22 +2941,7 @@ footer a:hover { color: var(--ink); }
    delete each as its screen is rebuilt. Nothing below changes behavior.
    ========================================================================== */
 
-/* Legacy vars the redesign :root did not re-point */
-:root {
-  --void: #FFFFFF;
-  --signal-dim: rgba(91, 75, 255, .3);
-  --ok: #1F7A4C;
-  --line-2: rgba(0, 0, 0, .05);
-}
 
-/* Public chrome: single hairline, static status dot, no shouting caps */
-.topbar { border-bottom: 0; padding: 0; }
-.topbar .status::before { animation: none; }
-.brand, .h-display { text-transform: none; }
-
-/* Hot CTAs: ink on white, never purple/near-black */
-.btn.hot { background: var(--ink); color: #fff; }
-.btn.hot:hover { background: #000; color: #fff; }
 
 /* Old grid-plate trick behind the new rounded cards */
 .match-grid { background: none; border: 0; }
@@ -3137,8 +2959,6 @@ footer a:hover { color: var(--ink); }
    controls and must wrap */
 .dash-filters, .cv2-filters, .board-filters { flex-wrap: wrap; }
 
-/* Homepage terminal: unhidden above; drop its dark-theme shadow */
-.term { box-shadow: none; border-radius: 14px; }
 
 /* TEMP-SHIM cont. — /roles + /apply table gets a real scroll container
    (RolesTable wrapper now carries .roles-scroll; floor rule already exists) */
@@ -3806,4 +3626,40 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   .tal-row2 .tal-field:first-child { margin-top: 0; }
   .tal-match { flex-direction: column; }
   .tal-match .tal-badge { margin-top: 10px; }
+}
+
+
+/* ==========================================================================
+   REDESIGN — screen 6 additions (homepage, Agency Home 11a)
+   ========================================================================== */
+
+.mk-home { background: var(--paper); }
+.mk-home .wrap { padding: 0; }
+.mk-hero h1 { margin: 0 auto; max-width: 920px; }
+.mk-sub { margin: 24px auto 0; max-width: 640px; font-size: 17.5px; line-height: 1.6; color: var(--body); text-wrap: pretty; }
+.mk-sub b { font-weight: 600; color: var(--ink); }
+.mk-band { padding: 44px 34px; }
+.mk-kick { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.mk-textlink { font-size: 13px; font-weight: 600; }
+.mk-headrow { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.mk-h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+.mk-headsub { font-size: 13px; color: var(--muted); }
+.mk-placement .co i { font-style: normal; color: var(--faint); font-size: 12px; }
+.mk-duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 44px; align-items: start; }
+.mk-h3 { margin: 11px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -.022em; text-wrap: pretty; }
+.mk-teaser-sub { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--body-2); text-wrap: pretty; }
+.mk-teaser { margin: 16px 0 14px; padding: 18px 20px; border: 1px solid rgba(0, 0, 0, .09); border-radius: var(--r-panel); }
+.mk-cta { display: block; }
+.mk-cta-in { display: flex; align-items: center; gap: 26px; }
+.mk-cta-in h2 span { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 1.07em; letter-spacing: 0; }
+@media (max-width: 960px) {
+  .mk-doors, .mk-duo { grid-template-columns: 1fr; }
+  .mk-placements { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mk-cta-in { flex-direction: column; align-items: flex-start; }
+  .mk-cta-in .btn { margin-left: 0; }
+  .mk-hero { padding: 56px 20px 40px; }
+  .mk-band { padding: 32px 20px; }
+}
+@media (max-width: 560px) {
+  .mk-placements { grid-template-columns: 1fr; }
 }
