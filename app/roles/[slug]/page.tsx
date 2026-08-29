@@ -103,30 +103,23 @@ export default async function RolePage({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
         />
-        <p className="sec-label" style={{ paddingTop: 0 }}>
-          <Link href="/roles" style={{ color: "var(--fog-30)", textDecoration: "none" }}>
-            /roles
-          </Link>{" "}
-          <b>— ROLE_{role.jobId}</b>
+        <p className="rd-crumb">
+          <Link href="/roles">/roles</Link> <b>— ROLE_{role.jobId}</b>
         </p>
         <h1 className="h-page b1">{role.title}</h1>
         <p className="page-intro b2">{role.description}</p>
 
         <div className="grid2 b3">
           <div className="cell">
-            <h3>
-              The <span>role</span>
-            </h3>
+            <h3>The role</h3>
             <dl className="kv">
               {facts.map(([k, v]) => (
                 <FactRow key={k} k={k} v={v} />
               ))}
             </dl>
           </div>
-          <div className="cell">
-            <h3>
-              The <span>company</span>
-            </h3>
+          <div className="cell cell-fill">
+            <h3>The company</h3>
             {c ? (
               <>
                 <p>{c.blurb}</p>
@@ -146,22 +139,16 @@ export default async function RolePage({
         </div>
 
         {role.jd && (
-          <>
-            <div className="sec-label">
+          <section className="rd-jd">
+            <p className="rd-kicker">
               <b>JD</b> — the work
-            </div>
+            </p>
+            <h3 className="rd-about-h">About the role</h3>
+            <p className="rd-about">{role.jd.about}</p>
             <div className="grid2">
-              <div className="cell" style={{ gridColumn: "1 / -1" }}>
-                <h3>
-                  About the <span>role</span>
-                </h3>
-                <p style={{ maxWidth: "72ch" }}>{role.jd.about}</p>
-              </div>
               {role.jd.doing && role.jd.doing.length > 0 && (
                 <div className="cell">
-                  <h3>
-                    What you&apos;ll <span>do</span>
-                  </h3>
+                  <h3>What you&apos;ll do</h3>
                   <ul className="jd-list">
                     {role.jd.doing.map((d) => (
                       <li key={d}>{d}</li>
@@ -171,42 +158,36 @@ export default async function RolePage({
               )}
               {role.jd.needs && role.jd.needs.length > 0 && (
                 <div className="cell">
-                  <h3>
-                    What they&apos;re <span>looking for</span>
-                  </h3>
+                  <h3>What they&apos;re looking for</h3>
                   <ul className="jd-list">
                     {role.jd.needs.map((d) => (
                       <li key={d}>{d}</li>
                     ))}
                   </ul>
                   {role.jd.bonus && role.jd.bonus.length > 0 && (
-                    <>
-                      <p style={{ color: "var(--signal)", fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", margin: "1rem 0 0.4rem" }}>
-                        Nice to have
-                      </p>
+                    <div className="rd-bonus">
+                      <p>Nice to have</p>
                       <ul className="jd-list">
                         {role.jd.bonus.map((d) => (
                           <li key={d}>{d}</li>
                         ))}
                       </ul>
-                    </>
+                    </div>
                   )}
                 </div>
               )}
             </div>
-          </>
+          </section>
         )}
 
-        <div className="cta-row" style={{ marginTop: "2.4rem" }}>
-          <Link
-            className="btn hot"
-            href={`/apply?role=${role.jobId}`}
-          >
+        <div className="cta-row rd-cta">
+          <Link className="board-btn" href={`/apply?role=${role.jobId}`}>
             APPLY FOR THIS ROLE →
           </Link>
           <Link className="btn cold" href="/roles">
             All open roles
           </Link>
+          <span className="rd-note">One application covers up to 3 roles.</span>
         </div>
       </div>
     </main>

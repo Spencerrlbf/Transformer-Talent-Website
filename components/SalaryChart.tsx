@@ -44,6 +44,7 @@ export default function SalaryChart({ compact = false }: { compact?: boolean }) 
   return (
     <figure style={{ margin: 0 }}>
       <svg
+        className="mi-chart"
         viewBox={`0 0 ${W} ${height}`}
         role="img"
         aria-label="Median base salary bands by role family, San Francisco vs New York"
@@ -51,21 +52,22 @@ export default function SalaryChart({ compact = false }: { compact?: boolean }) 
       >
         {/* legend */}
         <g fontFamily="var(--font-mono), monospace" fontSize="10">
-          <rect x={H_LABEL} y={4} width={10} height={10} rx={2} fill={SF} />
+          <rect x={H_LABEL} y={4} width={10} height={10} rx={2} fill={SF} className="bar-sf" />
           <text x={H_LABEL + 15} y={13} fill={INK}>San Francisco</text>
-          <rect x={H_LABEL + 110} y={4} width={10} height={10} rx={2} fill={NY} />
+          <rect x={H_LABEL + 110} y={4} width={10} height={10} rx={2} fill={NY} className="bar-nyc" />
           <text x={H_LABEL + 125} y={13} fill={INK}>New York</text>
         </g>
         {/* grid */}
         {gridVals.map((v) => (
           <g key={v}>
-            <line x1={x(v)} y1={topPad - 4} x2={x(v)} y2={height - 26} stroke={GRID} strokeWidth={1} />
+            <line x1={x(v)} y1={topPad - 4} x2={x(v)} y2={height - 26} stroke={GRID} strokeWidth={1} className="grid" />
             <text
               x={x(v)}
               y={height - 12}
               fill={INK_MUTED}
               fontSize="9"
               fontFamily="var(--font-mono), monospace"
+              className="axis"
               textAnchor="middle"
             >
               ${v}k
@@ -99,6 +101,7 @@ export default function SalaryChart({ compact = false }: { compact?: boolean }) 
                       height={8}
                       rx={4}
                       fill={r.color}
+                      className={r.city === "San Francisco" ? "bar-sf" : "bar-nyc"}
                     />
                     {!compact && (
                       <text
