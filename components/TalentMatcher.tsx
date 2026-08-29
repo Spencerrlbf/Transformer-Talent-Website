@@ -1,4 +1,9 @@
 "use client";
+// The JD-to-matches lead magnet (/talent). Behavior is load-bearing: field
+// names, the 200-char validation, /api/talent wiring, and the states (idle /
+// sending / done / error, with lowConfidence swapping only the closing line)
+// carry over from the pre-redesign component untouched. The numeric score the
+// API returns is never rendered — plain-English fit reads only.
 
 import { useState } from "react";
 
@@ -30,6 +35,7 @@ type Status =
 
 export default function TalentMatcher() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [jdFileName, setJdFileName] = useState("");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -63,68 +69,67 @@ export default function TalentMatcher() {
   if (status.kind === "done") {
     const { roleTitle, matches, lowConfidence } = status.result;
     return (
-      <div style={{ width: "100%" }}>
-        <div className="sec-label" style={{ paddingTop: 0 }}>
-          <b>OUT</b> — matches for: {roleTitle}
-        </div>
+      <div className="tal-results">
+        <p className="tal-out">
+          <b>OUT</b> - matches for: {roleTitle}
+        </p>
         {matches.length > 0 && (
-          <div className="match-grid" style={{ marginBottom: "1.8rem" }}>
+          <div className="tal-matches">
             {matches.map((m) => (
-              <div key={m.ref} className="match-card">
-                <div className="ref-row">
-                  <span className="ref">{m.ref}</span>
-                </div>
-                <h4>{m.title}</h4>
-                <div className="meta">
-                  {[
-                    m.yearsExperience ? `${m.yearsExperience}y` : null,
-                    m.location,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+              <div key={m.ref} className="tal-match">
+                <div className="tal-main">
+                  <div className="tal-toprow">
+                    <span className="tal-ref">{m.ref}</span>
+                    <span className="tal-title">{m.title}</span>
+                  </div>
+                  <div className="tal-meta">
+                    {[m.yearsExperience ? `${m.yearsExperience}y` : null, m.location]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                  {m.previousCompanies.length > 0 && (
+                    <p className="tal-prev">
+                      prev: <b>{m.previousCompanies.join(", ")}</b>
+                    </p>
+                  )}
+                  {m.education.length > 0 && <p className="tal-prev">{m.education.join(" · ")}</p>}
+                  {m.fit && (
+                    <p className="tal-fit">
+                      <span className="ok">✓ {m.fit.strengths}</span>
+                      {m.fit.verify && <span className="verify"> · verify: {m.fit.verify}</span>}
+                    </p>
+                  )}
+                  {m.skills.length > 0 && (
+                    <div className="tal-tags">
+                      {m.skills.map((s) => (
+                        <span key={s} className="tal-tag">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {m.applied ? (
-                  <span className="badge">● applied to us directly</span>
+                  <span className="tal-badge applied">
+                    <i />applied to us directly
+                  </span>
                 ) : m.engaged ? (
-                  <span className="badge">● in conversation with us</span>
+                  <span className="tal-badge engaged">
+                    <i />in conversation with us
+                  </span>
                 ) : null}
-                {m.previousCompanies.length > 0 && (
-                  <p className="prev">
-                    prev: <b>{m.previousCompanies.join(", ")}</b>
-                  </p>
-                )}
-                {m.education.length > 0 && (
-                  <p className="prev">{m.education.join(" · ")}</p>
-                )}
-                {m.fit && (
-                  <p className="prev" style={{ marginTop: "0.4rem" }}>
-                    <span style={{ color: "var(--ok)" }}>✓ {m.fit.strengths}</span>
-                    {m.fit.verify && (
-                      <span style={{ color: "var(--fog-30)" }}> · verify: {m.fit.verify}</span>
-                    )}
-                  </p>
-                )}
-                {m.skills.length > 0 && (
-                  <div className="tags">
-                    {m.skills.map((s) => (
-                      <span key={s} className="tag">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
           </div>
         )}
-        <p className="page-intro" style={{ marginBottom: "1.6rem" }}>
+        <p className="tal-after">
           {lowConfidence
             ? "These are our closest instant matches — your JD is with the team, and we'll hand-pick a stronger shortlist from the full network and reply within 24 hours."
             : "Profiles are anonymized. Introductions, full profiles, and comp expectations take one conversation."}
         </p>
         <a
-          href="mailto:spencer@transformertalent.com?subject=Intro%20request%20%E2%80%94%20matched%20candidates"
-          className="btn hot"
+          href="mailto:spencer@transformertalent.com?subject=Intro%20request%20-%20matched%20candidates"
+          className="board-btn tal-cta"
         >
           GET INTRODUCTIONS →
         </a>
@@ -133,17 +138,19 @@ export default function TalentMatcher() {
   }
 
   return (
-    <form className="form" onSubmit={onSubmit} style={{ maxWidth: 680 }}>
-      <label>
-        work_email
-        <input name="email" type="email" required maxLength={254} autoComplete="email" />
-      </label>
-      <label>
-        company
-        <input name="company" required maxLength={200} autoComplete="organization" />
-      </label>
-      <label>
-        your_linkedin
+    <form className="tal-card" onSubmit={onSubmit}>
+      <div className="tal-row2">
+        <label className="tal-field">
+          <span className="tal-lbl">Work email</span>
+          <input name="email" type="email" required maxLength={254} autoComplete="email" />
+        </label>
+        <label className="tal-field">
+          <span className="tal-lbl">Company</span>
+          <input name="company" required maxLength={200} autoComplete="organization" />
+        </label>
+      </div>
+      <label className="tal-field">
+        <span className="tal-lbl">Your LinkedIn</span>
         <input
           name="linkedin"
           type="url"
@@ -152,9 +159,12 @@ export default function TalentMatcher() {
           placeholder="https://www.linkedin.com/in/…"
           autoComplete="url"
         />
+        <span className="tal-hint">
+          Required. So we know who&apos;s asking before we share anonymized profiles.
+        </span>
       </label>
-      <label>
-        job_description
+      <label className="tal-field">
+        <span className="tal-lbl">Job description</span>
         <textarea
           name="jdText"
           rows={12}
@@ -162,9 +172,26 @@ export default function TalentMatcher() {
           placeholder="Paste the full job description here… or upload it as a PDF below."
         />
       </label>
-      <label>
-        jd_pdf (optional)
-        <input name="jdFile" type="file" accept="application/pdf,.pdf" />
+      <label className="tal-field">
+        <span className="tal-lbl">JD PDF (optional)</span>
+        <span className={`tal-dz${jdFileName ? " has" : ""}`}>
+          <input
+            name="jdFile"
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => setJdFileName(e.target.files?.[0]?.name || "")}
+          />
+          {jdFileName ? (
+            <span>
+              <b>{jdFileName}</b>
+            </span>
+          ) : (
+            <span>
+              <b>Choose a PDF</b> or drop it here
+            </span>
+          )}
+        </span>
+        <span className="tal-hint">PDF only.</span>
       </label>
       <input
         name="website"
@@ -173,13 +200,14 @@ export default function TalentMatcher() {
         style={{ position: "absolute", left: "-9999px" }}
         aria-hidden="true"
       />
-      <button type="submit" className="btn hot" disabled={status.kind === "sending"}>
-        {status.kind === "sending"
-          ? "FINDING POTENTIAL MATCHES…"
-          : "SEE POTENTIAL MATCHES →"}
+      <button type="submit" className="tal-submit" disabled={status.kind === "sending"}>
+        {status.kind === "sending" ? "FINDING POTENTIAL MATCHES…" : "SEE POTENTIAL MATCHES →"}
       </button>
       {status.kind === "error" && (
-        <p className="form-status error">{status.message}</p>
+        <p className="tal-error">
+          <span aria-hidden>⚠</span>
+          <span>{status.message}</span>
+        </p>
       )}
     </form>
   );
