@@ -116,6 +116,19 @@ const FIT_OPTIONS: [string, string][] = [
   ["pending", "Screening…"],
 ];
 
+// Proposed filters shown greyed in the menu (§9.5, approved): each needs a
+// new query param on /candidates/v2 before it can go live.
+const SOON_FILTERS = [
+  "Location",
+  "Stage",
+  "Years of experience",
+  "Skills",
+  "Visa",
+  "Sourcing run",
+  "Shortlisted",
+  "Network match",
+];
+
 const AV_COLORS = ["#5B7FDB", "#4CA88C", "#C4736B", "#8A6FC2", "#C99242", "#5E9DB8", "#7A8699"];
 const avColor = (name: string) => {
   let h = 0;
@@ -164,13 +177,13 @@ const InIcon = () => (
   </svg>
 );
 const MailIcon = ({ active }: { active: boolean }) => (
-  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={active ? "#4a5160" : "#d3d7dd"} strokeWidth="1.8" aria-hidden>
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={active ? "#4A5160" : "#D3D7DD"} strokeWidth="1.8" aria-hidden>
     <rect x="3" y="5" width="18" height="14" rx="2" />
     <path d="m3 7 9 6 9-6" />
   </svg>
 );
 const PhoneIcon = ({ active }: { active: boolean }) => (
-  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={active ? "#4a5160" : "#d3d7dd"} strokeWidth="1.8" aria-hidden>
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={active ? "#4A5160" : "#D3D7DD"} strokeWidth="1.8" aria-hidden>
     <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z" />
   </svg>
 );
@@ -213,6 +226,12 @@ function ContactIcon({
 }
 
 type SortKey = "fit" | "added" | "name" | "followup";
+const SORT_LABEL: Record<SortKey, string> = {
+  fit: "fit",
+  added: "date added",
+  name: "name",
+  followup: "reach-out date",
+};
 
 export default function CandidatesTable({
   jobId,
@@ -252,12 +271,29 @@ export default function CandidatesTable({
 
   const [roles, setRoles] = useState<[string, string][]>([]);
 
+  // One Filters control (§2.3): button opens a grouped menu; a live row opens
+  // its option pane; active filters render as chips below the row.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPane, setMenuPane] = useState<"" | "role" | "fit">("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setMenuPane("");
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q.trim()), 300);
     return () => clearTimeout(t);
   }, [q]);
 
-  // Role dropdown (pool view only) from the org's jobs.
+  // Role pane options (pool view only) from the org's jobs.
   useEffect(() => {
     if (jobId) return;
     fetch("/api/dashboard/jobs", { headers: { Authorization: `Bearer ${token}` } })
@@ -391,9 +427,9 @@ export default function CandidatesTable({
     setPage(1);
   }, [seg, effectiveJob, fit, debouncedQ, hideNotNow]);
 
-  const header = (key: SortKey, label: string) => (
+  const header = (key: SortKey, label: string, cls?: string) => (
     <th
-      className={sort === key ? "cv2-sorted" : ""}
+      className={`${cls || ""}${sort === key ? " cv2-sorted" : ""}`}
       onClick={() => {
         if (sort === key) setDir(dir === "desc" ? "asc" : "desc");
         else {
@@ -414,12 +450,30 @@ export default function CandidatesTable({
   const to = data ? Math.min(data.total, data.page * data.pageSize) : 0;
 
   const pool = !jobId;
+  const roleTitle = roles.find(([id]) => id === roleFilter)?.[1] || "";
+  const fitLabel = FIT_OPTIONS.find(([v]) => v === fit)?.[1] || "";
+  const activeCount = [roleFilter && pool, fit, hideNotNow && !past].filter(Boolean).length;
+
+  const menuRow = (label: string, value: string, onClick: () => void) => (
+    <div className="row" role="button" tabIndex={0} onClick={onClick}>
+      {label}
+      <span className="val">{value}</span>
+      <span className="car">›</span>
+    </div>
+  );
+
+  const paneOption = (label: string, on: boolean, pick: () => void) => (
+    <div key={label} className={`row${on ? " onopt" : ""}`} role="button" onClick={pick}>
+      {label}
+      {on && <span className="val">✓</span>}
+    </div>
+  );
 
   return (
     <div className="cv2">
       <div className="cv2-filters">
         {pool && counts && (
-          <span className="cv2-seg">
+          <span className="dash-seg">
             {(
               [
                 ["", `All ${counts.all + (hideNotNow ? 0 : counts.notNow)}`],
@@ -436,41 +490,134 @@ export default function CandidatesTable({
             ))}
           </span>
         )}
-        {pool && roles.length > 0 && (
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-            <option value="">All roles</option>
-            {roles.map(([id, title]) => (
-              <option key={id} value={id}>
-                {title} (#{id})
-              </option>
-            ))}
-          </select>
-        )}
-        <select value={fit} onChange={(e) => setFit(e.target.value)}>
-          <option value="">All fits</option>
-          {FIT_OPTIONS.map(([v, label]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </select>
+
+        <div className="dash-filters-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className="dash-filters-btn"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setMenuOpen(!menuOpen);
+              setMenuPane("");
+            }}
+          >
+            ☰ Filters
+            {activeCount > 0 && <span className="count">{activeCount}</span>}
+            <span aria-hidden>▾</span>
+          </button>
+          {menuOpen && (
+            <div className="dash-filters-menu">
+              {menuPane === "" && (
+                <>
+                  <div className="head">Add filter…</div>
+                  <div className="group">Filters</div>
+                  {pool &&
+                    roles.length > 0 &&
+                    menuRow("Role", roleTitle || "Any", () => setMenuPane("role"))}
+                  {menuRow("Fit", fitLabel || "Any", () => setMenuPane("fit"))}
+                  {!past &&
+                    (counts?.notNow ?? 0) > 0 &&
+                    menuRow("“Not now”", hideNotNow ? "Hidden" : "Shown", () =>
+                      setHideNotNow(!hideNotNow)
+                    )}
+                  <div className="group">Coming soon</div>
+                  {SOON_FILTERS.map((f) => (
+                    <div key={f} className="row soon">
+                      {f}
+                      <span className="val">soon</span>
+                    </div>
+                  ))}
+                  <div className="note">
+                    Greyed filters need new support on /candidates/v2 first.
+                  </div>
+                </>
+              )}
+              {menuPane === "role" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Role
+                  </div>
+                  {paneOption("Any", !roleFilter, () => {
+                    setRoleFilter("");
+                    setMenuOpen(false);
+                  })}
+                  {roles.map(([id, title]) =>
+                    paneOption(`${title} (#${id})`, roleFilter === id, () => {
+                      setRoleFilter(id);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+              {menuPane === "fit" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Fit
+                  </div>
+                  {paneOption("Any", !fit, () => {
+                    setFit("");
+                    setMenuOpen(false);
+                  })}
+                  {FIT_OPTIONS.map(([v, label]) =>
+                    paneOption(label, fit === v, () => {
+                      setFit(v);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         <input
           className="cv2-search"
-          placeholder="Search name, title or company…"
+          placeholder="Search candidates by name, title or company…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {counts != null && counts.notNow > 0 && !fit && !past && (
-          <label className="cv2-toggle">
-            <input
-              type="checkbox"
-              checked={hideNotNow}
-              onChange={(e) => setHideNotNow(e.target.checked)}
-            />
-            Hide &ldquo;Not now&rdquo; ({counts.notNow})
-          </label>
-        )}
+        <span className="dash-sortnote">Sorted by {SORT_LABEL[sort]}</span>
       </div>
+
+      {activeCount > 0 && (
+        <div className="dash-chips">
+          {pool && roleFilter && (
+            <span className="dash-chip">
+              Role: <b>{roleTitle || `#${roleFilter}`}</b>
+              <button type="button" aria-label="Clear role filter" onClick={() => setRoleFilter("")}>
+                ✕
+              </button>
+            </span>
+          )}
+          {fit && (
+            <span className="dash-chip">
+              Fit: <b>{fitLabel}</b>
+              <button type="button" aria-label="Clear fit filter" onClick={() => setFit("")}>
+                ✕
+              </button>
+            </span>
+          )}
+          {hideNotNow && !past && (
+            <span className="dash-chip">
+              “Not now”: <b>Hidden{counts ? ` (${counts.notNow})` : ""}</b>
+              <button type="button" aria-label="Show Not now" onClick={() => setHideNotNow(false)}>
+                ✕
+              </button>
+            </span>
+          )}
+          <button
+            type="button"
+            className="clear"
+            onClick={() => {
+              setRoleFilter("");
+              setFit("");
+              setHideNotNow(past ? hideNotNow : false);
+            }}
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* Follow-ups due: surfaced above the table so nobody has to remember
           to check. Clicking through applies the Follow-ups view. */}
@@ -506,16 +653,14 @@ export default function CandidatesTable({
             <thead>
               <tr>
                 {header("name", "Candidate")}
-                <th>Source</th>
-                {header("fit", "Fit")}
-                {jobId && <th>{past ? "" : "Stage"}</th>}
+                <th className="w-src">Source</th>
+                {header("fit", "Fit", "w-fit")}
+                {jobId && <th className="w-stage">{past ? "" : "Stage"}</th>}
                 <th>Current role</th>
-                <th>Company</th>
-                <th>Location</th>
-                <th className="cv2-th-icon">LinkedIn</th>
-                <th className="cv2-th-icon">Contact</th>
-                {pool && header("followup", "Reach out")}
-                {header("added", "Added")}
+                <th className="cv2-th-icon w-in">LinkedIn</th>
+                <th className="cv2-th-icon w-ct">Contact</th>
+                {pool && header("followup", "Reach out", "w-fu")}
+                {header("added", "Added", "w-added")}
               </tr>
             </thead>
             <tbody>
@@ -530,7 +675,7 @@ export default function CandidatesTable({
                       <RowAvatar photoUrl={r.photoUrl} name={r.name} />
                       <span className="cv2-name">
                         {r.name}
-                        {r.viaTT && <span className="cv2-tt">⚡ Via Transformer Talent</span>}
+                        {r.viaTT && <span className="cv2-via">Via TT</span>}
                       </span>
                     </span>
                   </td>
@@ -578,42 +723,51 @@ export default function CandidatesTable({
                       )}
                     </td>
                   )}
-                  <td className="cv2-title">{r.currentTitle || <span className="cv2-dim">—</span>}</td>
-                  <td className="cv2-company">{r.currentCompany || <span className="cv2-dim">—</span>}</td>
-                  <td className="cv2-loc">{r.location || <span className="cv2-dim">—</span>}</td>
-                  <td className="cv2-icons">
-                    {r.linkedinUrl ? (
-                      <a
-                        href={r.linkedinUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="Open LinkedIn profile"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <InIcon />
-                      </a>
-                    ) : (
-                      <span className="cv2-ic-off" title="No LinkedIn on file">
-                        <InIcon />
-                      </span>
+                  <td className="cv2-rolecell">
+                    <div className="cv2-role-t">
+                      {r.currentTitle || <span className="cv2-dim">—</span>}
+                    </div>
+                    {(r.currentCompany || r.location) && (
+                      <div className="cv2-role-m">
+                        {[r.currentCompany, r.location].filter(Boolean).join(" · ")}
+                      </div>
                     )}
                   </td>
                   <td className="cv2-icons">
-                    <ContactIcon value={r.contact.email} emptyHint="No email — add it in the profile">
-                      <MailIcon active={!!r.contact.email} />
-                    </ContactIcon>
-                    <ContactIcon value={r.contact.phone} emptyHint="No phone — add it in the profile">
-                      <PhoneIcon active={!!r.contact.phone} />
-                    </ContactIcon>
+                    <span className="cv2-icwrap">
+                      {r.linkedinUrl ? (
+                        <a
+                          href={r.linkedinUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Open LinkedIn profile"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <InIcon />
+                        </a>
+                      ) : (
+                        <span className="cv2-ic-off" title="No LinkedIn on file">
+                          <InIcon />
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="cv2-icons">
+                    <span className="cv2-icwrap">
+                      <ContactIcon value={r.contact.email} emptyHint="No email — add it in the profile">
+                        <MailIcon active={!!r.contact.email} />
+                      </ContactIcon>
+                      <ContactIcon value={r.contact.phone} emptyHint="No phone — add it in the profile">
+                        <PhoneIcon active={!!r.contact.phone} />
+                      </ContactIcon>
+                    </span>
                   </td>
                   {pool && (
                     <td className="cv2-reach">
                       {r.followUpAt ? (
-                        r.followUpAt <= TODAY ? (
-                          <span className="cv2-fu due">{fuLabel(r.followUpAt)}</span>
-                        ) : (
-                          fuLabel(r.followUpAt)
-                        )
+                        <span className={`cv2-fu${r.followUpAt <= TODAY ? " due" : ""}`}>
+                          {fuLabel(r.followUpAt)}
+                        </span>
                       ) : (
                         <span className="cv2-dim">—</span>
                       )}
@@ -628,24 +782,36 @@ export default function CandidatesTable({
       )}
 
       {!error && data && data.total > 0 && (
-        <div className="cv2-foot">
+        <div className="pager">
           <span>
             Showing {from}–{to} of {data.total}
           </span>
           {totalPages > 1 && (
-            <span className="cv2-pager">
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <span className="pages">
+              <button className="pg-btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>
                 ‹
               </button>
-              <span>
+              <span className="pg-label">
                 Page {data.page} of {totalPages}
               </span>
-              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+              <button
+                className="pg-btn"
+                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+              >
                 ›
               </button>
             </span>
           )}
         </div>
+      )}
+
+      {pool && !past && !error && data && data.total > 0 && (
+        <p className="cv2-caption">
+          Fit tags come from screening and stay client-safe — a tag and a plain-English reason,
+          never the underlying scorecard. Contact icons copy on click; greyed means nothing on
+          file. &ldquo;Via TT&rdquo; marks someone who came through the Transformer Talent network.
+        </p>
       )}
     </div>
   );
