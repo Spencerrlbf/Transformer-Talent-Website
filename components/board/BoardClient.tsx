@@ -77,14 +77,22 @@ const yoeMin = (r: BoardRoleView) => {
 };
 
 type SortKey = "id" | "title" | "location" | "workplace" | "yoe" | "salary";
-const HEADERS: { key: SortKey; label: string }[] = [
-  { key: "id", label: "ID" },
+// Office and experience fold into the role's meta line (§4.8); they stay
+// sortable through the Sorted-by note even without their own columns.
+const HEADERS: { key: SortKey; label: string; cls?: string }[] = [
+  { key: "id", label: "ID", cls: "w-id" },
   { key: "title", label: "Role" },
-  { key: "location", label: "Location" },
-  { key: "workplace", label: "Office" },
-  { key: "yoe", label: "Experience" },
-  { key: "salary", label: "Base salary" },
+  { key: "location", label: "Location", cls: "w-loc" },
+  { key: "salary", label: "Base salary", cls: "w-sal" },
 ];
+const SORT_NOTE: Record<SortKey, string> = {
+  id: "ID",
+  title: "role",
+  location: "location",
+  workplace: "office",
+  yoe: "experience",
+  salary: "salary",
+};
 
 // Recruiter mode: the same board rendered as a person's public page — banner
 // header, first-person resume banner, mandatory resume, and attribution.
@@ -189,6 +197,53 @@ export default function BoardClient({
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [formError, setFormError] = useState("");
   const railRef = useRef<HTMLElement>(null);
+
+  // One Filters control (§2.3): button opens a grouped menu; picking from a
+  // pane sets the filter and closes; active filters render as chips.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPane, setMenuPane] = useState<"" | "loc" | "office" | "type" | "visa">("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setMenuPane("");
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
+  const activeFilterCount = [loc, office, type, visaF].filter(Boolean).length;
+  const filterMenuRow = (label: string, value: string, open: () => void) => (
+    <div className="row" role="button" tabIndex={0} onClick={open}>
+      {label}
+      <span className="val">{value}</span>
+      <span className="car">›</span>
+    </div>
+  );
+  const filterPane = (label: string, options: string[], current: string, set: (v: string) => void) => (
+    <>
+      <div className="head back" role="button" onClick={() => setMenuPane("")}>
+        ‹ {label}
+      </div>
+      {options.map((o) => (
+        <div
+          key={o || "any"}
+          className={`row${current === o ? " onopt" : ""}`}
+          role="button"
+          onClick={() => {
+            set(o);
+            setMenuOpen(false);
+            setMenuPane("");
+          }}
+        >
+          {o || "Any"}
+          {current === o && <span className="val">✓</span>}
+        </div>
+      ))}
+    </>
+  );
 
   // Booking + contact actions (recruiter mode): header row on desktop, a
   // bottom-pinned bar on phones — same buttons, position by screen width.
@@ -718,38 +773,81 @@ export default function BoardClient({
       )}
 
       <div className="board-filters">
+        <div className="dash-filters-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className="dash-filters-btn"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setMenuOpen(!menuOpen);
+              setMenuPane("");
+            }}
+          >
+            ☰ Filters
+            {activeFilterCount > 0 && <span className="count">{activeFilterCount}</span>}
+            <span aria-hidden>▾</span>
+          </button>
+          {menuOpen && (
+            <div className="dash-filters-menu">
+              {menuPane === "" && (
+                <>
+                  <div className="head">Add filter…</div>
+                  {filterMenuRow("Location", loc || "Any", () => setMenuPane("loc"))}
+                  {offices.length > 0 && filterMenuRow("Office", office || "Any", () => setMenuPane("office"))}
+                  {types.length > 0 && filterMenuRow("Role type", type || "Any", () => setMenuPane("type"))}
+                  {filterMenuRow("Visa", visaF || "Any", () => setMenuPane("visa"))}
+                </>
+              )}
+              {menuPane === "loc" && filterPane("Location", ["", ...locations], loc, setLoc)}
+              {menuPane === "office" && filterPane("Office", ["", ...offices], office, setOffice)}
+              {menuPane === "type" && filterPane("Role type", ["", ...types], type, setType)}
+              {menuPane === "visa" &&
+                filterPane("Visa", ["", "Visa transfers OK", "No sponsorship"], visaF, setVisaF)}
+            </div>
+          )}
+        </div>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder='search: python, go -java · "machine learning" · comma = OR, minus = exclude'
           aria-label="Search roles"
         />
-        <select value={loc} onChange={(e) => setLoc(e.target.value)} aria-label="Filter by location">
-          <option value="">all locations</option>
-          {locations.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </select>
-        <select value={office} onChange={(e) => setOffice(e.target.value)} aria-label="Filter by office type">
-          <option value="">all office types</option>
-          {offices.map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
-        {types.length > 0 && (
-          <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by role type">
-            <option value="">all role types</option>
-            {types.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        )}
-        <select value={visaF} onChange={(e) => setVisaF(e.target.value)} aria-label="Filter by visa">
-          <option value="">any visa status</option>
-          <option value="Visa transfers OK">Visa transfers OK</option>
-          <option value="No sponsorship">No sponsorship</option>
-        </select>
+        <span className="dash-sortnote">Sorted by {SORT_NOTE[sort]}</span>
       </div>
+
+      {activeFilterCount > 0 && (
+        <div className="dash-chips">
+          {(
+            [
+              ["Location", loc, () => setLoc("")],
+              ["Office", office, () => setOffice("")],
+              ["Role type", type, () => setType("")],
+              ["Visa", visaF, () => setVisaF("")],
+            ] as [string, string, () => void][]
+          )
+            .filter(([, v]) => v)
+            .map(([label, v, clear]) => (
+              <span key={label} className="dash-chip">
+                {label}: <b>{v}</b>
+                <button type="button" aria-label={`Clear ${label}`} onClick={clear}>
+                  ✕
+                </button>
+              </span>
+            ))}
+          <button
+            type="button"
+            className="clear"
+            onClick={() => {
+              setLoc("");
+              setOffice("");
+              setType("");
+              setVisaF("");
+            }}
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       <p className="board-count">
         {shown.length} of {roles.length} roles
@@ -765,6 +863,7 @@ export default function BoardClient({
                   {HEADERS.map((h) => (
                     <th
                       key={h.key}
+                      className={h.cls}
                       onClick={() => clickSort(h.key)}
                       style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
                       aria-sort={sort === h.key ? (dir === 1 ? "ascending" : "descending") : "none"}
@@ -773,17 +872,18 @@ export default function BoardClient({
                       <span className="board-sort">{sort === h.key ? (dir === 1 ? "▲" : "▼") : ""}</span>
                     </th>
                   ))}
-                  <th className="board-apcell" style={{ whiteSpace: "nowrap" }}>Apply</th>
+                  <th className="board-apcell w-ap" style={{ whiteSpace: "nowrap" }}>Apply</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r) => {
                   const isSel = selected.includes(r.jobId);
                   const isOpen = expanded === r.jobId;
+                  const meta = [r.workplace, r.yoe].filter(Boolean).join(" · ");
                   return [
                     <tr key={r.jobId} className={isOpen ? "row-open" : ""}>
                       <td className="board-id">#{r.jobId}</td>
-                      <td style={{ minWidth: 220 }}>
+                      <td className="board-rolecol">
                         <button
                           className="board-rolebtn"
                           onClick={() => {
@@ -793,19 +893,14 @@ export default function BoardClient({
                           aria-expanded={isOpen}
                         >
                           <span className="t">{r.title}</span>
-                          <span className="d">
-                            {(r.about || "").slice(0, 110)}
-                            {(r.about || "").length > 110 ? "…" : ""}
-                          </span>
+                          <span className="d">{meta || "—"}</span>
                         </button>
                       </td>
-                      <td style={{ fontSize: "12.5px", minWidth: 110 }}>
+                      <td className="board-loccol">
                         {r.locations.length > 3
                           ? `${r.locations.slice(0, 3).join(" · ")} +${r.locations.length - 3}`
                           : r.locations.join(" · ") || "—"}
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>{r.workplace || "—"}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{r.yoe || "—"}</td>
                       <td className="board-salary" style={{ whiteSpace: "nowrap" }}>
                         {r.salary || "On request"}
                       </td>
@@ -822,7 +917,7 @@ export default function BoardClient({
                     </tr>,
                     isOpen ? (
                       <tr key={`${r.jobId}-detail`} className="board-detail-row">
-                        <td colSpan={7}>
+                        <td colSpan={5}>
                           <div className="board-jdcard">
                             <div className="jd-chips">
                               {r.salary && <span className="jd-chip money">{r.salary}</span>}
@@ -952,7 +1047,7 @@ export default function BoardClient({
                 )}
               </div>
             ) : (
-              <>
+              <div className="board-panel">
                 <div className="board-panel-label">
                   {isSpeculative ? (
                     <>GENERAL APPLICATION</>
@@ -1078,7 +1173,7 @@ export default function BoardClient({
                         : `SUBMIT — ${selected.length} ROLE${selected.length > 1 ? "S" : ""} →`}
                   </button>
                 </form>
-              </>
+              </div>
             )}
           </aside>
         )}
