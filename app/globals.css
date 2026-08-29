@@ -3972,6 +3972,11 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 
 /* --- Drawer ----------------------------------------------------------- */
 .cv2d-overlay { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: flex-end; background: rgba(17,17,16,.32); }
+/* Owner call: the drawer gets most of the page while open (75vw), not the
+   design's 760px; head keeps clearance so content never runs under the X. */
+.cv2d { width: min(75vw, 1480px); min-width: 760px; }
+.cv2d-head { padding-right: 64px; }
+.cv2d-ask { max-width: 400px; }
 .cv2d-loading { padding: 60px 28px; color: var(--muted); font-size: 13.5px; }
 .cv2d-head { display: flex; gap: 16px; flex-wrap: wrap; }
 .cv2d-head .cv2d-id { flex: 1; min-width: 250px; }
