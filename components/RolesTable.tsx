@@ -207,7 +207,7 @@ export default function RolesTable({
 
       <div className={`roles-layout${showSelectionUI && selected.length > 0 ? " with-panel" : ""}`}>
       <div style={{ minWidth: 0 }}>
-      <div style={{ overflowX: "auto" }}>
+      <div className="roles-scroll">
         <table className="data-table">
           <thead>
             <tr>

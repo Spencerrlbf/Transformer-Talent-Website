@@ -4113,3 +4113,18 @@ body::before { content: none; }
 
 /* Homepage terminal: unhidden above; drop its dark-theme shadow */
 .term { box-shadow: none; border-radius: 14px; }
+
+/* TEMP-SHIM cont. — /roles + /apply table gets a real scroll container
+   (RolesTable wrapper now carries .roles-scroll; floor rule already exists) */
+.roles-scroll { border: 1px solid rgba(0, 0, 0, .09); border-radius: 14px; overflow-x: auto; }
+.roles-scroll .data-table { border: 0; }
+
+/* TEMP-SHIM cont. — native file inputs: align the Choose File button inside
+   the restyled input (/talent, /apply resume) */
+.form input[type="file"] { height: auto; padding: 6px 8px; line-height: 1.4; }
+.form input[type="file"]::file-selector-button {
+  height: 26px; padding: 0 10px; margin-right: 10px;
+  border: 1px solid rgba(0, 0, 0, .12); border-radius: 8px;
+  background: #FBFAF8; color: #111110;
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
