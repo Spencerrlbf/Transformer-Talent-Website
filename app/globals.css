@@ -4092,8 +4092,17 @@ body::before { content: none; }
 /* /talent match results were near-black on near-black */
 .match-card { background: var(--paper); border: 1px solid rgba(0, 0, 0, .09); border-radius: 14px; }
 
-/* /roles table overhang (old width hack half-neutralized) */
-.breakout { width: auto; }
+/* /roles + /apply full-width breakout, restored: the redesign layer's
+   margin-inline:0 broke its viewport centering, which clipped the table.
+   The table deserves the whole page while the old markup lives. */
+.breakout {
+  width: min(calc(100vw - 4rem), 1680px);
+  margin-left: calc((100% - min(100vw - 4rem, 1680px)) / 2);
+  margin-right: 0;
+}
+@media (max-width: 700px) {
+  .breakout { width: 100%; margin-left: 0; }
+}
 
 /* Roles selection rail + mobile bar: old purple/orange, high-specificity */
 .side-panel { border-color: rgba(0, 0, 0, .1); border-radius: 14px; }
