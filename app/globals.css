@@ -823,164 +823,7 @@ body:has(.dash-app)::before {
 body:has(.dash-app) {
   background: #fff;
 }
-.dash-app {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 100vh;
-  background: #fff;
-  color: #111418;
-  font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  text-transform: none;
-  letter-spacing: normal;
-}
-.dash-app a { text-decoration: none; }
-.dash-center {
-  grid-template-columns: 1fr;
-  align-items: center;
-  justify-items: center;
-}
-.dash-card {
-  border: 1px solid #e6e8ec;
-  border-radius: 10px;
-  padding: 28px 30px;
-  max-width: 420px;
-  width: 100%;
-  background: #fff;
-}
-.dash-card h1 {
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  margin: 0 0 10px;
-  font-family: inherit;
-}
-.dash-card p { margin: 0 0 16px; }
-.dash-card a { color: #2a5bd7; }
-.dash-muted { color: #6b7280; font-size: 13.5px; }
-.dash-error { color: #b42318; font-size: 13px; margin-top: 10px; }
-.dash-login-form { display: flex; flex-direction: column; gap: 10px; }
-.dash-login-form input {
-  border: 1px solid #d3d7dd;
-  border-radius: 7px;
-  padding: 9px 12px;
-  font: inherit;
-  color: #111418;
-  background: #fff;
-}
-.dash-login-form input:focus { outline: 2px solid #2a5bd7; outline-offset: -1px; border-color: #2a5bd7; }
-.dash-btn {
-  background: #111418;
-  color: #fff;
-  border: 0;
-  border-radius: 7px;
-  padding: 9px 16px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.dash-btn:disabled { opacity: 0.6; cursor: default; }
 /* Sidebar */
-.dash-side {
-  border-right: 1px solid #e6e8ec;
-  padding: 20px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-}
-.dash-org {
-  font-weight: 650;
-  font-size: 15px;
-  padding: 6px 10px 18px;
-  letter-spacing: -0.01em;
-}
-.dash-org small {
-  display: block;
-  color: #8a919c;
-  font-weight: 450;
-  font-size: 11.5px;
-  margin-top: 2px;
-}
-.dash-nav a {
-  display: block;
-  padding: 7px 10px;
-  border-radius: 6px;
-  color: #3d434c;
-  font-weight: 480;
-}
-.dash-nav a.on { background: #f1f3f6; color: #111418; font-weight: 600; }
-.dash-nav a:hover:not(.on) { background: #f6f7f9; }
-.dash-side-foot {
-  margin-top: auto;
-  padding: 10px;
-  font-size: 11.5px;
-  color: #a2a8b3;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.dash-side-foot button {
-  background: none;
-  border: 0;
-  padding: 0;
-  color: #2a5bd7;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.dash-side-foot em { font-style: normal; }
-/* Main */
-/* Wide enough for the candidates table; content sections carry their own
-   narrower max-widths so text-heavy pages don't sprawl. */
-.dash-main { padding: 28px 40px; max-width: 1560px; width: 100%; }
-.dash-h1 {
-  font-size: 21px;
-  letter-spacing: -0.02em;
-  font-weight: 650;
-  margin: 0;
-  font-family: inherit;
-}
-.dash-sub { color: #6b7280; font-size: 13px; margin: 6px 0 26px; }
-.dash-empty {
-  border: 1px dashed #d3d7dd;
-  border-radius: 10px;
-  padding: 26px;
-  color: #6b7280;
-  font-size: 13.5px;
-  max-width: 560px;
-}
-/* Table */
-.dash-table { width: 100%; border-collapse: collapse; }
-.dash-table th {
-  text-align: left;
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #8a919c;
-  font-weight: 600;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e6e8ec;
-}
-.dash-table td {
-  padding: 13px 12px;
-  border-bottom: 1px solid #eef0f3;
-  vertical-align: top;
-}
-.dash-table tr:hover td { background: #fafbfc; }
-.dash-name { font-weight: 600; }
-.dash-name + small,
-.dash-table td small {
-  display: block;
-  font-weight: 450;
-  color: #8a919c;
-  font-size: 12px;
-  margin-top: 1px;
-}
-.dash-num { text-align: right; }
 /* Settings */
 .dash-settings { display: flex; flex-direction: column; gap: 18px; max-width: 560px; }
 .dash-setting label {
@@ -994,23 +837,8 @@ body:has(.dash-app) {
 }
 .dash-setting a { color: #2a5bd7; }
 .dash-setting small { display: block; color: #8a919c; font-size: 12.5px; margin-top: 4px; }
-@media (max-width: 760px) {
-  .dash-app { grid-template-columns: 1fr; }
-  .dash-side { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; }
-  .dash-side-foot { margin-top: 0; margin-left: auto; }
-  .dash-main { padding: 20px; }
-}
 
-/* Dashboard: jobs area (Task 4) */
-.dash-crumb { font-size: 12.5px; color: #8a919c; margin-bottom: 6px; }
-.dash-crumb a { color: #8a919c; }
-.dash-crumb a:hover { color: #111418; }
-.dash-jobhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.dash-jobhead .dash-btn { flex-shrink: 0; }
 .dash-jobactions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
-.dash-btn-2 { background: #fff; color: #111418; border: 1px solid #d3d7dd; }
-.dash-btn-2:hover { background: #f6f7f9; }
-a.dash-btn { display: inline-block; }
 .dash-status { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; padding: 3px 9px; border-radius: 99px; vertical-align: 3px; margin-left: 6px; text-transform: uppercase; }
 .dash-status.open { background: #e7f6ed; color: #0a7a3d; }
 .dash-status.closed { background: #f1f3f6; color: #6b7280; }
@@ -1813,12 +1641,6 @@ body:has(.board-app) {
 .cv2d-ce-other { min-width: 260px; }
 
 /* ---------- My page (recruiter page settings) ---------- */
-.dash-nav-nudge {
-  display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase; color: #b54708;
-  background: #fffaeb; border: 1px solid #fedf89; border-radius: 999px; padding: 1px 7px;
-  vertical-align: 1px;
-}
 .dash-mypage-photo { display: flex; gap: 18px; align-items: center; margin-bottom: 22px; }
 .dash-mypage-photo img {
   width: 84px; height: 84px; border-radius: 50%; object-fit: cover;
@@ -2334,15 +2156,6 @@ body:has(.board-app) {
 }
 
 /* Client requests block + sourcing help card */
-.crq { border: 1px solid #dbe4f8; background: #f7f9fe; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; }
-.crq-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
-.crq-head b { font-size: 13px; }
-.crq-head span { font-size: 11px; background: #2a5bd7; color: #fff; border-radius: 999px; padding: 1px 8px; font-weight: 700; }
-.crq-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; border-top: 1px solid #e6ebf7; flex-wrap: wrap; }
-.crq-info { font-size: 13.5px; }
-.crq-info em { color: #8a919c; font-style: normal; }
-.crq-info small { display: block; color: #8a919c; font-size: 12px; }
-.crq-linked { font-size: 12.5px; font-weight: 650; color: #6941c6; text-decoration: none; white-space: nowrap; }
 .shc { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
 .shc-state { font-size: 13px; margin: 0; }
 .shc-state.on { color: #067647; font-weight: 650; }
@@ -4104,3 +3917,136 @@ footer a:hover { color: var(--ink); }
    existing markup does not break. Re-add motion here if you want it. */
 .b1, .b2, .b3, .b4 { animation: none; opacity: 1; transform: none; }
 .breakout { margin-inline: 0; }
+
+
+/* ==========================================================================
+   REDESIGN — screen 1 additions (shell + Jobs list). Markup that redesign.css
+   expected but did not style directly: org tile, footer identity, scroll
+   containers, jobs grid table, filter pills, client-requests banner.
+   ========================================================================== */
+
+/* Scroll model: the main region is the only page-level scroller (README §2.1) */
+.dash-app:not(.dash-center) { height: 100vh; }
+.dash-side { overflow-y: auto; }
+.dash-col { display: flex; flex-direction: column; min-width: 0; }
+.dash-main { flex: 1; overflow-y: auto; }
+
+/* Org block */
+.dash-orgrow { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dash-orgtile {
+  width: 30px; height: 30px; flex: none; border-radius: 9px;
+  background: var(--ink); color: #fff; font-size: 13px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dash-org { min-width: 0; }
+
+/* Sidebar footer identity */
+.dash-foot-id { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.dash-foot-ava {
+  width: 26px; height: 26px; flex: none; border-radius: var(--r-pill);
+  background: var(--accent-wash); color: var(--accent-press);
+  font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dash-foot-who { display: flex; flex-direction: column; min-width: 0; }
+.dash-foot-who span { font-size: 12.5px; color: var(--body-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-foot-who em { font-style: normal; font-size: 11px; color: var(--muted); }
+
+.dash-error { color: var(--bad); font-size: 13px; margin-top: 10px; }
+
+/* Page header row */
+.dash-jobhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dash-jobhead-actions, .dash-jobactions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+/* Round filter pills (Jobs list scope) */
+.dash-fpills { display: flex; align-items: center; gap: 8px; margin-top: 22px; }
+.dash-fpill {
+  appearance: none; display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 13px; border: 1px solid var(--hair);
+  border-radius: var(--r-pill); background: var(--paper); color: var(--body-2);
+  font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.dash-fpill .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.dash-fpill.on { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
+.dash-fpill.on .n { color: rgba(255,255,255,.55); }
+.dash-fpills .dash-sortnote { margin-left: auto; }
+
+/* Pipeline legend refinements */
+.dash-legend { margin: 18px 0 10px; }
+.dash-legend .lbl { font-weight: 600; color: var(--body-2); }
+.dash-legend > span { display: inline-flex; align-items: center; }
+.dash-legend .hint { margin-left: auto; font-size: 13px; }
+
+/* Stage swatches shared by legend + tooltip */
+.sw.seg-screening { background: var(--stage-screening); }
+.sw.seg-replied   { background: var(--stage-replied); }
+.sw.seg-interview { background: var(--stage-interview); }
+.sw.seg-offer     { background: var(--stage-offer); }
+
+/* Jobs table as sibling row-grids (mock-identical; fr + px only, README §8.1) */
+.dash-jgrid {
+  display: grid;
+  grid-template-columns: 2.4fr 1.4fr 1.2fr .7fr .9fr 1.5fr;
+  gap: 16px;
+  align-items: center;
+  padding: 15px 20px;
+}
+.dash-jhead {
+  padding: 11px 20px;
+  background: var(--surface);
+  border-radius: 13px 13px 0 0;
+  border-bottom: 1px solid rgba(0,0,0,.09);
+  font-size: 11px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--muted);
+}
+.dash-jhead .num { text-align: right; }
+.dash-jrow { border-bottom: 1px solid var(--row-line); cursor: pointer; }
+.dash-jrow:last-child { border-bottom: none; }
+.dash-jrow:hover { background: var(--surface); }
+.dash-jgrid .num { text-align: right; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.dash-jgrid .num.strong { font-size: 14px; font-weight: 600; }
+.dash-jgrid .jc { font-size: 13.5px; color: var(--body); }
+.dash-jgrid .jc.tab { font-variant-numeric: tabular-nums; }
+.dash-jgrid .jc.dim { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.dash-jname {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
+}
+.dash-jrow.closed .dash-jname { color: var(--body-2); }
+.dash-jrow.closed .jc, .dash-jrow.closed .num { color: var(--muted); }
+.dash-jmeta { margin-top: 3px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dash-linkchip {
+  font-size: 10.5px; font-weight: 600; color: var(--accent-press);
+  background: var(--accent-wash); border-radius: var(--r-pill); padding: 2px 8px;
+  white-space: nowrap;
+}
+.dash-sec {
+  margin: 26px 0 10px; font-size: 11px; font-weight: 600;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+}
+.dash-jempty { padding: 18px 20px; font-size: 13.5px; color: var(--muted); }
+
+/* Pipeline tooltip text rows */
+.dash-pipe-tip .tt { font-size: 12.5px; font-weight: 600; }
+.dash-pipe-tip .row { color: rgba(255,255,255,.72); }
+.dash-pipe-tip .row b { color: #fff; font-variant-numeric: tabular-nums; }
+
+/* Client-requests banner (README §4.1) */
+.crq {
+  border: 1px solid var(--hair); border-radius: var(--r-panel);
+  background: var(--surface-accent); padding: 16px 18px; margin-bottom: 24px;
+}
+.crq-head { display: flex; align-items: center; gap: 11px; font-size: 14px; color: var(--ink); }
+.crq-head b { font-weight: 600; }
+.crq-head span {
+  order: -1; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 9px;
+  background: var(--accent-wash); color: var(--accent-press);
+  font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.crq-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; }
+.crq-info { font-size: 13px; color: var(--body-2); }
+.crq-info b { color: var(--ink); font-weight: 600; font-size: 14px; }
+.crq-info em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.crq-info small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.crq-linked { font-size: 13px; font-weight: 600; color: var(--accent-press); white-space: nowrap; }

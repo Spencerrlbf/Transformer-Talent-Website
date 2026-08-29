@@ -29,6 +29,26 @@ const NAV = [
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
+// Breadcrumb label for the top bar, from the deepest matching section.
+const CRUMBS: [string, string][] = [
+  ["/dashboard/candidates", "Candidates"],
+  ["/dashboard/network", "Network"],
+  ["/dashboard/my-page", "My page"],
+  ["/dashboard/team", "Team"],
+  ["/dashboard/settings", "Settings"],
+  ["/dashboard/jobs/new", "New job"],
+  ["/dashboard/jobs", "Jobs"],
+  ["/dashboard", "Jobs"],
+];
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
 export default function DashShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // undefined = still resolving; null = signed out
@@ -107,9 +127,12 @@ export default function DashShell({ children }: { children: ReactNode }) {
     >
       <div className="dash-app">
         <aside className="dash-side">
-          <div className="dash-org">
-            {me.org.name}
-            <small>{me.org.slug} · board/{me.org.slug}</small>
+          <div className="dash-orgrow">
+            <span className="dash-orgtile" aria-hidden="true">{initials(me.org.name)}</span>
+            <div className="dash-org">
+              {me.org.name}
+              <small>board/{me.org.slug}</small>
+            </div>
           </div>
           <nav className="dash-nav">
             {NAV.map((item) => (
@@ -145,15 +168,74 @@ export default function DashShell({ children }: { children: ReactNode }) {
               </span>
             ))}
           </nav>
+          <CreditsBlock token={session.access_token} />
           <div className="dash-side-foot">
-            <span>{me.email}</span>
+            <div className="dash-foot-id">
+              <span className="dash-foot-ava" aria-hidden="true">
+                {me.email[0]?.toUpperCase()}
+              </span>
+              <div className="dash-foot-who">
+                <span>{me.email}</span>
+                <em>
+                  {(me.memberRole || "member").charAt(0).toUpperCase() +
+                    (me.memberRole || "member").slice(1)}
+                </em>
+              </div>
+            </div>
             <button onClick={() => supabaseBrowser().auth.signOut()}>Sign out</button>
-            <em>Powered by Transformer Talent</em>
           </div>
         </aside>
-        <main className="dash-main">{children}</main>
+        <div className="dash-col">
+          <header className="dash-topbar">
+            <span className="dash-crumb">
+              {me.org.name} <span className="sep">/</span>{" "}
+              <span className="cur">
+                {CRUMBS.find(([p]) => pathname === p || pathname.startsWith(p + "/"))?.[1] ??
+                  "Jobs"}
+              </span>
+            </span>
+          </header>
+          <main className="dash-main">{children}</main>
+        </div>
       </div>
     </Ctx.Provider>
+  );
+}
+
+// Sidebar sourcing-credits block (README §9.1 — approved). Balance from the
+// existing credits endpoint; hidden until it resolves, and entirely for orgs
+// that have never been granted credits.
+function CreditsBlock({ token }: { token: string }) {
+  const [sum, setSum] = useState<{ available: number; granted: number; held: number } | null>(
+    null
+  );
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dashboard/credits", { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.summary) setSum(data.summary);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+  if (!sum || sum.granted <= 0) return null;
+  const pct = Math.max(0, Math.min(100, (sum.available / sum.granted) * 100));
+  return (
+    <div className="dash-credits">
+      <div className="lbl">Sourcing credits</div>
+      <div className="val">{sum.available.toLocaleString()}</div>
+      <div className="bar" aria-hidden="true">
+        <i style={{ width: `${pct}%` }} />
+      </div>
+      <p className="note">
+        {sum.held > 0
+          ? `${sum.held.toLocaleString()} reserved by runs in progress`
+          : "1 credit = 1 candidate imported and reviewed"}
+      </p>
+    </div>
   );
 }
 
