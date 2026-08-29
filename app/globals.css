@@ -816,7 +816,7 @@ footer a { color: var(--signal); text-decoration: none; }
    shell; when a .dash-app is on the page, the marketing topbar/footer are
    hidden so the dashboard owns the viewport. */
 body:has(.dash-app) .topbar-outer,
-body:has(.dash-app) footer,
+body:has(.dash-app) > footer,
 body:has(.dash-app)::before {
   display: none;
 }
@@ -906,12 +906,12 @@ body:has(.dash-app) {
 
 /* ---------- Tenant job board (light mirror of the site roles board) ---------- */
 body:has(.board-app) .topbar-outer,
-body:has(.board-app) footer,
+body:has(.board-app) > footer,
 body:has(.board-app)::before {
   display: none;
 }
 body:has(.board-app) {
-  background: #fff;
+  background: var(--page);
 }
 
 /* Dashboard: candidates area (Task 6) */
@@ -3724,33 +3724,57 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 
 
 /* ==========================================================================
-   REDESIGN — screen 3 additions (public board + recruiter pages). The layer
-   assumes full-bleed sections; the app keeps a centered container, so section
-   side-paddings are neutralized here. Plus the pieces the layer left out:
-   board-head, form fields, MultiSelect internals, sticky Apply cell.
+   REDESIGN — screen 3 additions (public board + recruiter pages).
+   The board is a white radius-16 shell floating on the page ground (§4.8
+   prototype); full-bleed sections keep their 34px paddings, the jobs content
+   lives in .board-body. Plus the pieces the layer left out.
    ========================================================================== */
 
 .board-app {
   min-width: 0;
   width: 100%;
   max-width: 1280px;
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 26px 34px 24px;
+  margin: 28px auto;
   display: flex;
   flex-direction: column;
+  background: var(--paper);
+  border: 1px solid rgba(0, 0, 0, .1);
+  border-radius: var(--r-shell);
   color: var(--ink);
   font-size: 14px;
   line-height: 1.55;
 }
-.co-strip { padding: 4px 0 0; }
-.co-tabs { padding: 20px 0 0; }
-.rp-head { padding: 6px 0 24px; }
-.board-foot { margin-top: auto; padding: 18px 0; background: none; }
+@media (max-width: 1320px) {
+  .board-app { margin: 20px 16px; width: auto; }
+}
+.board-body { padding: 0 34px 40px; }
+.co-tabs { margin-bottom: 0; }
+.co-tabs + .board-body, .rp-head + .board-body, .board-body:first-child { padding-top: 24px; }
+.board-foot {
+  margin-top: auto;
+  padding: 18px 34px;
+  border-top: 1px solid rgba(0, 0, 0, .09);
+  background: var(--surface);
+  border-radius: 0 0 var(--r-shell) var(--r-shell);
+  text-align: center;
+}
+.co-tabs button:focus { outline: none; }
+.co-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Plain org boards (no company page) */
+.board-head { padding-top: 24px; }
 .board-head h1 { margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -.025em; }
 .board-head p { margin: 4px 0 22px; font-size: 13.5px; color: var(--muted); }
+
+/* Search field with the round lead glyph */
+.board-filters input[aria-label="Search roles"] {
+  padding-left: 34px;
+  background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Ccircle cx='6.5' cy='6.5' r='5.5' fill='none' stroke='%238A877F' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat 13px center;
+}
+
+/* Chips row carries the result count at its right edge */
+.board-chipsrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.board-chipsrow .board-count { margin: 0 0 0 auto; }
 
 /* Table columns (§4.8 grid, as th widths) */
 .board-table .w-id { width: 56px; }
@@ -3758,12 +3782,12 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .board-table .w-sal { width: 120px; }
 .board-table .w-ap { width: 96px; }
 .board-rolecol { min-width: 220px; }
+.board-rolebtn .d { white-space: normal; }
 .board-loccol { font-size: 12.5px; }
 .board-table tr.row-open td { border-bottom: 0; }
 
 /* Sticky Apply cell survives the horizontal scroller */
 .board-apcell { position: sticky; right: 0; z-index: 1; background: var(--paper); }
-.board-apcell::before { content: ""; position: absolute; left: -12px; top: 0; bottom: 0; width: 12px; background: linear-gradient(90deg, transparent, rgba(17,17,16,.05)); pointer-events: none; }
 .board-table tbody tr:hover .board-apcell, .board-table tr.row-open .board-apcell { background: var(--surface); }
 
 /* Rail: the single panel card (children of .board-rail get the card look) */
@@ -3832,9 +3856,9 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .board-msel-pop input { accent-color: var(--ink); }
 
 /* Banners row + narrow-screen select bar visibility */
-.board-banners { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.board-banners { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .board-banners .board-spec { flex: 1 1 380px; }
-.board-futwrap { margin-bottom: 16px; scroll-margin-top: 12px; }
+.board-futwrap { margin-bottom: 20px; scroll-margin-top: 12px; }
 .board-selbar { display: none; }
 @media (max-width: 1100px) {
   .board-selbar { display: flex; }
@@ -3844,7 +3868,14 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .rp-abtn b { color: #0A66C2; font-weight: 800; }
 .rp-bkhead button { border: 0; background: none; padding: 2px 6px; font-size: 16px; color: var(--muted); cursor: pointer; }
 
-/* About tab: the three classes the layer missed */
+/* About tab: pieces the layer missed */
 .coab-eyebrow { margin-bottom: 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--accent-press); }
 .coab-mission { padding: 10px 0 30px; max-width: 760px; }
 .coab-pnote { margin-top: 14px; }
+.coab-cta button {
+  appearance: none; flex: none; height: 36px; padding: 0 15px;
+  border: none; border-radius: var(--r-control);
+  background: var(--ink); color: #fff;
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.coab-cta button:hover { background: #000; }

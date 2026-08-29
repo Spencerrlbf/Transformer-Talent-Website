@@ -593,6 +593,7 @@ export default function BoardClient({
         </header>
       )}
 
+      <div className="board-body">
       {/* Org boards keep the plain resume banner. */}
       {!recruiter && !railVisible && (
         <div className="board-banners">
@@ -815,44 +816,45 @@ export default function BoardClient({
         <span className="dash-sortnote">Sorted by {SORT_NOTE[sort]}</span>
       </div>
 
-      {activeFilterCount > 0 && (
-        <div className="dash-chips">
-          {(
-            [
-              ["Location", loc, () => setLoc("")],
-              ["Office", office, () => setOffice("")],
-              ["Role type", type, () => setType("")],
-              ["Visa", visaF, () => setVisaF("")],
-            ] as [string, string, () => void][]
-          )
-            .filter(([, v]) => v)
-            .map(([label, v, clear]) => (
-              <span key={label} className="dash-chip">
-                {label}: <b>{v}</b>
-                <button type="button" aria-label={`Clear ${label}`} onClick={clear}>
-                  ✕
-                </button>
-              </span>
-            ))}
-          <button
-            type="button"
-            className="clear"
-            onClick={() => {
-              setLoc("");
-              setOffice("");
-              setType("");
-              setVisaF("");
-            }}
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      <p className="board-count">
-        {shown.length} of {roles.length} roles
-        {shown.length > PAGE_SIZE ? ` · page ${page} of ${pageCount}` : ""}
-      </p>
+      <div className="board-chipsrow">
+        {activeFilterCount > 0 && (
+          <>
+            {(
+              [
+                ["Location", loc, () => setLoc("")],
+                ["Office", office, () => setOffice("")],
+                ["Role type", type, () => setType("")],
+                ["Visa", visaF, () => setVisaF("")],
+              ] as [string, string, () => void][]
+            )
+              .filter(([, v]) => v)
+              .map(([label, v, clear]) => (
+                <span key={label} className="dash-chip">
+                  {label}: <b>{v}</b>
+                  <button type="button" aria-label={`Clear ${label}`} onClick={clear}>
+                    ✕
+                  </button>
+                </span>
+              ))}
+            <button
+              type="button"
+              className="clear"
+              onClick={() => {
+                setLoc("");
+                setOffice("");
+                setType("");
+                setVisaF("");
+              }}
+            >
+              Clear all
+            </button>
+          </>
+        )}
+        <p className="board-count">
+          {shown.length} of {roles.length} roles
+          {shown.length > PAGE_SIZE ? ` · page ${page} of ${pageCount}` : ""}
+        </p>
+      </div>
 
       <div className={`board-layout${railVisible ? " with-panel" : ""}`}>
         <div style={{ minWidth: 0 }}>
@@ -879,7 +881,8 @@ export default function BoardClient({
                 {shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r) => {
                   const isSel = selected.includes(r.jobId);
                   const isOpen = expanded === r.jobId;
-                  const meta = [r.workplace, r.yoe].filter(Boolean).join(" · ");
+                  const tease = (r.about || "").slice(0, 90) + ((r.about || "").length > 90 ? "…" : "");
+                  const meta = [r.workplace, r.yoe, tease].filter(Boolean).join(" · ");
                   return [
                     <tr key={r.jobId} className={isOpen ? "row-open" : ""}>
                       <td className="board-id">#{r.jobId}</td>
@@ -1192,6 +1195,7 @@ export default function BoardClient({
           </button>
         </div>
       )}
+      </div>
 
       <footer className="board-foot">
         <a href="https://www.transformertalent.com" target="_blank" rel="noreferrer">
