@@ -3851,7 +3851,8 @@ footer a:hover { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .marquee { animation: none; } }
 
 /* Retired: the terminal-window hero block. Delete the markup, then these. */
-.term, .term-head, .term-body { display: none; }
+/* TEMP-SHIM: unhidden until the homepage rebuild drops the terminal.
+   Restore this rule when app/page.tsx migrates: .term, .term-head, .term-body { display: none; } */
 
 
 /* ==========================================================================
@@ -4050,3 +4051,65 @@ footer a:hover { color: var(--ink); }
 .crq-info em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 .crq-info small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
 .crq-linked { font-size: 13px; font-weight: 600; color: var(--accent-press); white-space: nowrap; }
+
+
+/* ==========================================================================
+   TEMP SHIM (2026-08-28) — interim compatibility patches so UNMIGRATED pages
+   render acceptably under the redesign layer. Every rule here is throwaway:
+   delete each as its screen is rebuilt. Nothing below changes behavior.
+   ========================================================================== */
+
+/* Legacy vars the redesign :root did not re-point */
+:root {
+  --void: #FFFFFF;
+  --signal-dim: rgba(91, 75, 255, .3);
+  --ok: #1F7A4C;
+  --line-2: rgba(0, 0, 0, .05);
+}
+
+/* Dark-theme blueprint grid overlay */
+body::before { content: none; }
+
+/* Public chrome: single hairline, static status dot, no shouting caps */
+.topbar { border-bottom: 0; padding: 0; }
+.topbar .status::before { animation: none; }
+.brand, .h-display, .h-page, .cell h3, .bigcta h2 { text-transform: none; }
+.cell h3 span { color: inherit; }
+
+/* Hot CTAs: ink on white, never purple/near-black */
+.btn.hot { background: var(--ink); color: #fff; }
+.btn.hot:hover { background: #000; color: #fff; }
+
+/* Old grid-plate trick behind the new rounded cards */
+.grid2, .match-grid { background: none; border: 0; }
+.logs { border: none; }
+.log:last-child { border-bottom: 1px solid rgba(0, 0, 0, .09); }
+@media (max-width: 950px) {
+  .grid2 { grid-template-columns: 1fr; }
+  .wrap { padding: 0 18px; }
+}
+
+/* /talent match results were near-black on near-black */
+.match-card { background: var(--paper); border: 1px solid rgba(0, 0, 0, .09); border-radius: 14px; }
+
+/* /roles table overhang (old width hack half-neutralized) */
+.breakout { width: auto; }
+
+/* Roles selection rail + mobile bar: old purple/orange, high-specificity */
+.side-panel { border-color: rgba(0, 0, 0, .1); border-radius: 14px; }
+.side-panel .sp-role { background: var(--surface); border: 1px solid rgba(0, 0, 0, .09); }
+.side-panel .sp-role .t { font-size: 13.5px; color: var(--ink); }
+.sel-bar { border: 0; border-top: 1px solid rgba(0, 0, 0, .1); box-shadow: none; }
+.spec-banner { border-color: rgba(0, 0, 0, .09); border-radius: 14px; background: var(--surface-accent); }
+.form select[multiple] { height: auto; padding: 5px 7px; }
+
+/* Candidates table: redesign flex rule broke table-cell layout; filter rows
+   must wrap while old rows still hold many controls */
+.cv2-table td.cv2-icons { display: table-cell; }
+.dash-filters, .cv2-filters, .board-filters { flex-wrap: wrap; }
+
+/* Via-TT badge: old orange chip -> accent pill until candidates migrates */
+.cv2-tt { background: var(--accent-wash); color: var(--accent-press); border: 0; border-radius: 999px; }
+
+/* Homepage terminal: unhidden above; drop its dark-theme shadow */
+.term { box-shadow: none; border-radius: 14px; }

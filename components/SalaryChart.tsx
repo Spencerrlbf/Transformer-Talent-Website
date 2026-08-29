@@ -1,12 +1,12 @@
 import { allBands } from "@/lib/market";
 
-// Two-series categorical palette validated (CVD + contrast) against the
-// site surface #06080B: SF #ED5514, NYC #25A3CC.
-const SF = "#ED5514";
-const NY = "#25A3CC";
-const INK = "#C7D3DB";
-const INK_MUTED = "rgba(199,211,219,0.35)";
-const GRID = "rgba(155,175,190,0.12)";
+// Two-series categorical palette (redesign tokens, hue-distinct for CVD and
+// greyscale): SF #5B4BFF, NYC #C4621B, on the light page surface.
+const SF = "#5B4BFF";
+const NY = "#C4621B";
+const INK = "#111110";
+const INK_MUTED = "rgba(17,17,16,0.45)";
+const GRID = "rgba(0,0,0,0.08)";
 
 const SHORT: Record<string, string> = {
   "Forward Deployed Engineering": "Forward Deployed",
