@@ -3879,3 +3879,12 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .coab-cta button:hover { background: #000; }
+
+/* screen 3 follow-ups: door buttons breathe, LinkedIn glyph gap, rail close */
+.board-doorbtn, .board-refstrip-btn { display: inline-flex; align-items: center; padding: 0 14px; }
+.rp-abtn { gap: 7px; }
+.board-panel-x {
+  margin-left: auto; border: 0; background: none; padding: 0 2px;
+  color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
+}
+.board-panel-x:hover { color: var(--ink); }

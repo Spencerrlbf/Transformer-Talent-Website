@@ -615,8 +615,9 @@ export default function BoardClient({
       )}
 
       {/* Recruiter pages: one block, three doors — resume now, hear from me
-          later, refer someone. Each opens its own form. */}
-      {recruiter && !railVisible && (
+          later, refer someone. Stays visible while the application rail is
+          open so nobody loses the other two doors after picking one. */}
+      {recruiter && (
         <div className="board-futwrap" ref={futRef}>
           <div className="board-triple">
             <p>
@@ -1059,6 +1060,19 @@ export default function BoardClient({
                       <b>{selected.length}/{MAX_ROLES}</b> ROLES SELECTED
                     </>
                   )}
+                  <button
+                    type="button"
+                    className="board-panel-x"
+                    aria-label="Close the application form"
+                    onClick={() => {
+                      setSelected([]);
+                      setSpeculative(false);
+                      setFormError("");
+                      setStatus({ kind: "idle" });
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
                 {isSpeculative ? (
                   <p className="board-instr">
