@@ -25,6 +25,7 @@ export function useDash(): DashContext {
 const NAV = [
   { href: "/dashboard", label: "Jobs" },
   { href: "/dashboard/candidates", label: "Candidates" },
+  { href: "/dashboard/tasks", label: "Tasks" },
   { href: "/dashboard/my-page", label: "My page" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
@@ -32,6 +33,7 @@ const NAV = [
 // Breadcrumb label for the top bar, from the deepest matching section.
 const CRUMBS: [string, string][] = [
   ["/dashboard/candidates", "Candidates"],
+  ["/dashboard/tasks", "Tasks"],
   ["/dashboard/network", "Network"],
   ["/dashboard/my-page", "My page"],
   ["/dashboard/team", "Team"],

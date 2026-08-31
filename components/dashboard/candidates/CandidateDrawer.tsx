@@ -2,13 +2,14 @@
 // Candidates v2 profile drawer: slides in over the table. Profile tab is the
 // pure LinkedIn-style profile (header, editable contact, experience grouped
 // by employer, education, skills); fit reviews live ONLY in the Pipeline tab,
-// one expandable row per role. Resume renders inline when on file (upload
-// arrives with the resume task); Notes is a placeholder.
+// one expandable row per role. Resume renders inline when on file. Notes is
+// the shared timeline: team notes, tasks, and the candidate's own ask.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 import MultiSelect from "@/components/MultiSelect";
+import NotesTab from "@/components/dashboard/tasks/NotesTab";
 import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
@@ -1042,10 +1043,12 @@ export default function CandidateDrawer({
                 </>
               )}
 
-              {tab === "notes" && (
+              {tab === "notes" && !isNet && candKey && (
+                <NotesTab candKey={candKey} name={detail.name} />
+              )}
+              {tab === "notes" && isNet && (
                 <div className="cv2d-notes">
-                  <textarea disabled placeholder="Add a note about this candidate…" />
-                  <p>Notes are coming soon — they&apos;ll be shared with your teammates and kept alongside the candidate.</p>
+                  <p>Notes live on your own candidates — this is a network profile.</p>
                 </div>
               )}
             </div>
