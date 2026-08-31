@@ -3193,20 +3193,26 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .board-spec2 .board-spec { align-items: flex-start; flex-direction: column; }
 @media (max-width: 860px) { .board-spec2 { grid-template-columns: 1fr; } }
 
-/* About tab: on-this-page section index */
-.coab-nav {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
-  margin-bottom: 26px; padding-bottom: 18px; border-bottom: 1px solid var(--row-line);
+/* About tab: on-this-page rail with reading progress (mock D). The accent
+   bar fills as the visitor scrolls; passed sections fade, the current one
+   reads in accent. */
+.coab-wrap { display: grid; grid-template-columns: minmax(0,1fr) 200px; gap: 44px; align-items: start; }
+.coab-rail { position: sticky; top: 20px; display: flex; gap: 14px; }
+.coab-track { position: relative; flex: none; align-self: stretch; width: 3px; border-radius: var(--r-pill); background: rgba(0,0,0,.08); }
+.coab-track i { position: absolute; left: 0; top: 0; width: 3px; border-radius: var(--r-pill); background: var(--accent); transition: height .15s linear; }
+@media (prefers-reduced-motion: reduce) { .coab-track i { transition: none; } }
+.coab-rail-items { display: flex; flex-direction: column; min-width: 0; }
+.coab-rail-kick { margin-bottom: 12px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.coab-rail-items button {
+  appearance: none; border: 0; background: none; padding: 6px 0; text-align: left;
+  font: inherit; font-size: 13.5px; color: var(--body-2); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.coab-nav-kick {
-  margin-right: 5px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--muted);
+.coab-rail-items button:hover { color: var(--ink); }
+.coab-rail-items button.on { color: var(--accent-press); font-weight: 600; }
+.coab-rail-items button.past { color: var(--faint); }
+@media (max-width: 860px) {
+  .coab-wrap { grid-template-columns: 1fr; gap: 0; }
+  .coab-rail { position: static; order: -1; margin-bottom: 22px; }
+  .coab-track { display: none; }
 }
-.coab-nav button {
-  appearance: none; display: inline-flex; align-items: center; height: 30px; padding: 0 13px;
-  border: 1px solid var(--control-line); border-radius: var(--r-pill); background: var(--paper);
-  color: var(--body); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
-  white-space: nowrap;
-}
-.coab-nav button:hover { border-color: rgba(91,75,255,.45); color: var(--accent-press); }

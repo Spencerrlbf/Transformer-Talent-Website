@@ -2,7 +2,11 @@
 // The company page proper: the About tab on a tenant board. Every section
 // renders only when its content exists. Facts live in the identity strip
 // (BoardClient); this component is the story: mission, free-form sections,
-// founders, and the interview rounds with click-down drawers.
+// founders, and the interview rounds with click-down drawers. A sticky
+// right-hand rail lists the sections with a reading-progress track: the
+// accent bar fills as the visitor scrolls, passed sections fade, the
+// current one reads in accent.
+import { useEffect, useState } from "react";
 import type { CompanyPage } from "@/lib/server/company-page";
 
 const initials = (name: string) =>
@@ -19,7 +23,7 @@ export default function CompanyAbout({
 }) {
   const p = company.profile;
 
-  // Section index: one jump chip per section that actually exists, so a
+  // Section index: one rail entry per section that actually exists, so a
   // visitor sees the page's shape at a glance. Rendered only when there are
   // at least two destinations to jump between.
   const anchors: { id: string; label: string }[] = [
@@ -28,22 +32,55 @@ export default function CompanyAbout({
     ...(p.founders.length > 0 ? [{ id: "about-founders", label: "Founders" }] : []),
     ...(p.rounds.length > 0 ? [{ id: "about-hiring", label: "Interview process" }] : []),
   ];
+  const anchorKey = anchors.map((a) => a.id).join("|");
   const jump = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-  return (
-    <div className="coab">
-      {anchors.length >= 2 && (
-        <nav className="coab-nav" aria-label="On this page">
-          <span className="coab-nav-kick">On this page</span>
-          {anchors.map((a) => (
-            <button key={a.id} type="button" onClick={() => jump(a.id)}>
-              {a.label}
-            </button>
-          ))}
-        </nav>
-      )}
+  // Scrollspy + reading progress. The current section is the last one whose
+  // top has crossed a line 30% down the viewport; progress maps the scroll
+  // position across the span from the first section to the last.
+  const [activeId, setActiveId] = useState(anchors[0]?.id ?? "");
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (anchors.length < 2) return;
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const line = window.innerHeight * 0.3;
+      let current = anchors[0].id;
+      for (const a of anchors) {
+        const el = document.getElementById(a.id);
+        if (el && el.getBoundingClientRect().top <= line) current = a.id;
+      }
+      setActiveId(current);
+      const first = document.getElementById(anchors[0].id);
+      const last = document.getElementById(anchors[anchors.length - 1].id);
+      if (first && last) {
+        const start = first.getBoundingClientRect().top + window.scrollY - line;
+        const end = last.getBoundingClientRect().bottom + window.scrollY - window.innerHeight;
+        const pct = end > start ? (window.scrollY - start) / (end - start) : 1;
+        setProgress(Math.max(0, Math.min(1, pct)));
+      }
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
+    measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchorKey]);
 
+  const activeIndex = anchors.findIndex((a) => a.id === activeId);
+
+  return (
+    <div className={anchors.length >= 2 ? "coab-wrap" : undefined}>
+    <div className="coab">
       {(p.missionHeadline || p.missionDetail) && (
         <div className="coab-mission" id="about-mission">
           <div className="coab-eyebrow">Our mission</div>
@@ -130,6 +167,28 @@ export default function CompanyAbout({
           See {rolesCount} open role{rolesCount === 1 ? "" : "s"} →
         </button>
       </div>
+    </div>
+
+    {anchors.length >= 2 && (
+      <aside className="coab-rail" aria-label="On this page">
+        <div className="coab-track" aria-hidden="true">
+          <i style={{ height: `${Math.round(progress * 100)}%` }} />
+        </div>
+        <nav className="coab-rail-items">
+          <span className="coab-rail-kick">On this page</span>
+          {anchors.map((a, i) => (
+            <button
+              key={a.id}
+              type="button"
+              className={a.id === activeId ? "on" : i < activeIndex ? "past" : ""}
+              onClick={() => jump(a.id)}
+            >
+              {a.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+    )}
     </div>
   );
 }
