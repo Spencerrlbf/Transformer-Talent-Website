@@ -292,10 +292,15 @@ export default function CandidateDrawer({
   candKey,
   roleContext,
   onClose,
+  navKeys,
+  onNavigate,
 }: {
   candKey: string | null;
   roleContext?: string;
   onClose: () => void;
+  /** The list's current row order — enables ‹ › stepping without closing. */
+  navKeys?: string[];
+  onNavigate?: (key: string) => void;
 }) {
   const { token } = useDash();
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -389,12 +394,28 @@ export default function CandidateDrawer({
       );
   }
 
+  // Prev/next within the list that opened the drawer (current page's order).
+  const navIndex = candKey && navKeys ? navKeys.indexOf(candKey) : -1;
+  const navPrev = navIndex > 0 ? navKeys![navIndex - 1] : null;
+  const navNext = navIndex >= 0 && navIndex < (navKeys?.length ?? 0) - 1 ? navKeys![navIndex + 1] : null;
+
   const escClose = useCallback(
     (e: KeyboardEvent) => {
       // Esc peels the top layer: job panel first, then the drawer itself.
-      if (e.key === "Escape") setOpenJob((j) => (j ? null : (onClose(), null)));
+      if (e.key === "Escape") {
+        if (openJob) setOpenJob(null);
+        else onClose();
+      }
+      // Arrow keys step through the list — but never while typing.
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onNavigate) {
+        const t = e.target as HTMLElement | null;
+        const tag = t?.tagName || "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+        const to = e.key === "ArrowLeft" ? navPrev : navNext;
+        if (to) onNavigate(to);
+      }
     },
-    [onClose]
+    [onClose, openJob, onNavigate, navPrev, navNext]
   );
   useEffect(() => {
     if (!candKey) return;
@@ -499,6 +520,29 @@ export default function CandidateDrawer({
     <div className="cv2d-overlay" onClick={onClose}>
       <JobDrawer jobId={openJob} onClose={() => setOpenJob(null)} />
       <aside className="cv2d" onClick={(e) => e.stopPropagation()}>
+        {onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 && (
+          <span className="cv2d-nav">
+            <button
+              type="button"
+              disabled={!navPrev}
+              aria-label="Previous candidate"
+              onClick={() => navPrev && onNavigate(navPrev)}
+            >
+              ‹
+            </button>
+            <span className="cv2d-navpos">
+              {navIndex + 1} of {navKeys!.length}
+            </span>
+            <button
+              type="button"
+              disabled={!navNext}
+              aria-label="Next candidate"
+              onClick={() => navNext && onNavigate(navNext)}
+            >
+              ›
+            </button>
+          </span>
+        )}
         <button className="cv2d-close" onClick={onClose} aria-label="Close">
           ✕
         </button>

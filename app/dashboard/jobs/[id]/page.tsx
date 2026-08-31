@@ -65,6 +65,7 @@ function JobWorkspace({ id }: { id: string }) {
     rejected: number;
   } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [rowKeys, setRowKeys] = useState<string[]>([]);
   // Bumped when a Past-tab restore happens so the (mounted) Pipeline table refetches.
   const [pipelineRefresh, setPipelineRefresh] = useState(0);
   // Pipeline view: the table and the board are the same data in two shapes.
@@ -323,6 +324,7 @@ function JobWorkspace({ id }: { id: string }) {
             refreshKey={pipelineRefresh}
             onCounts={setCounts}
             onOpen={setOpenKey}
+            onKeys={setRowKeys}
           />
         </div>
         {view === "board" && (
@@ -347,12 +349,19 @@ function JobWorkspace({ id }: { id: string }) {
             jobId={job.id}
             past
             onOpen={setOpenKey}
+            onKeys={setRowKeys}
             onRestored={() => setPipelineRefresh((n) => n + 1)}
           />
         </>
       )}
 
-      <CandidateDrawer candKey={openKey} roleContext={job.id} onClose={() => setOpenKey(null)} />
+      <CandidateDrawer
+        candKey={openKey}
+        roleContext={job.id}
+        onClose={() => setOpenKey(null)}
+        navKeys={rowKeys}
+        onNavigate={setOpenKey}
+      />
     </>
   );
 }

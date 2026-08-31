@@ -14,6 +14,7 @@ export default function CandidatesPage() {
     notNow: number;
   } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [rowKeys, setRowKeys] = useState<string[]>([]);
 
   return (
     <>
@@ -25,8 +26,13 @@ export default function CandidatesPage() {
             } sourced${counts.notNow ? ` · ${counts.notNow} tagged "Not now"` : ""}`
           : "Everyone in your pipeline — applicants and sourced candidates."}
       </p>
-      <CandidatesTable onCounts={setCounts} onOpen={setOpenKey} />
-      <CandidateDrawer candKey={openKey} onClose={() => setOpenKey(null)} />
+      <CandidatesTable onCounts={setCounts} onOpen={setOpenKey} onKeys={setRowKeys} />
+      <CandidateDrawer
+        candKey={openKey}
+        onClose={() => setOpenKey(null)}
+        navKeys={rowKeys}
+        onNavigate={setOpenKey}
+      />
     </>
   );
 }

@@ -6,6 +6,7 @@
 // a person can be on many roles. Rows open the profile drawer via onOpen.
 import { useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
+import { downloadCsv } from "@/lib/csv";
 
 export type Cv2Role = {
   jobId: string;
@@ -37,6 +38,8 @@ export type Cv2Row = {
   stageUpdatedAt?: string | null;
   screeningPending?: boolean;
   followUpAt?: string | null;
+  skills?: string[] | null;
+  visa?: string | null;
 };
 
 type Cv2List = {
@@ -44,6 +47,7 @@ type Cv2List = {
   total: number;
   counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
   followups?: { total: number; due: number; dueNames: string[] };
+  filters?: { locations: string[]; skills: string[]; visas: string[] };
   page: number;
   pageSize: number;
 };
@@ -118,15 +122,11 @@ const FIT_OPTIONS: [string, string][] = [
 
 // Proposed filters shown greyed in the menu (§9.5, approved): each needs a
 // new query param on /candidates/v2 before it can go live.
-const SOON_FILTERS = [
-  "Location",
-  "Stage",
-  "Years of experience",
-  "Skills",
-  "Visa",
-  "Sourcing run",
-  "Shortlisted",
-  "Network match",
+const YOE_OPTIONS: [string, string][] = [
+  ["0-3", "0–3 years"],
+  ["4-7", "4–7 years"],
+  ["8-12", "8–12 years"],
+  ["13plus", "13+ years"],
 ];
 
 const AV_COLORS = ["#5B7FDB", "#4CA88C", "#C4736B", "#8A6FC2", "#C99242", "#5E9DB8", "#7A8699"];
@@ -241,6 +241,7 @@ export default function CandidatesTable({
   onOpen,
   onCounts,
   onRestored,
+  onKeys,
 }: {
   jobId?: string;
   defaultHideNotNow?: boolean;
@@ -251,6 +252,8 @@ export default function CandidatesTable({
   onOpen?: (key: string) => void;
   onCounts?: (counts: Cv2List["counts"]) => void;
   onRestored?: () => void;
+  /** Current page's row keys in display order — drives drawer prev/next. */
+  onKeys?: (keys: string[]) => void;
 }) {
   const { token } = useDash();
   const [data, setData] = useState<Cv2List | null>(null);
@@ -260,6 +263,12 @@ export default function CandidatesTable({
   const [seg, setSeg] = useState<"" | "applied" | "sourced" | "followups">("");
   const [roleFilter, setRoleFilter] = useState("");
   const [fit, setFit] = useState("");
+  const [loc, setLoc] = useState("");
+  const [stageF, setStageF] = useState("");
+  const [yoe, setYoe] = useState("");
+  const [skill, setSkill] = useState("");
+  const [visa, setVisa] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [hideNotNow, setHideNotNow] = useState(defaultHideNotNow);
@@ -274,7 +283,9 @@ export default function CandidatesTable({
   // One Filters control (§2.3): button opens a grouped menu; a live row opens
   // its option pane; active filters render as chips below the row.
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPane, setMenuPane] = useState<"" | "role" | "fit">("");
+  const [menuPane, setMenuPane] = useState<
+    "" | "role" | "fit" | "loc" | "stage" | "yoe" | "skill" | "visa"
+  >("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!menuOpen) return;
@@ -323,6 +334,11 @@ export default function CandidatesTable({
     else if (seg) params.set("source", seg);
     if (effectiveJob) params.set("job", effectiveJob);
     if (fit) params.set("fit", fit);
+    if (loc) params.set("loc", loc);
+    if (stageF) params.set("stage", stageF);
+    if (yoe) params.set("yoe", yoe);
+    if (skill) params.set("skill", skill);
+    if (visa) params.set("visa", visa);
     if (debouncedQ) params.set("q", debouncedQ);
     if (hideNotNow && !past) params.set("hideNotNow", "1");
     if (past) params.set("past", "1");
@@ -341,6 +357,7 @@ export default function CandidatesTable({
         setData(d);
         setLoading(false);
         onCounts?.(d.counts);
+        onKeys?.(d.items.map((r) => r.key));
       })
       .catch((e: unknown) => {
         if ((e as Error).name === "AbortError") return;
@@ -349,7 +366,7 @@ export default function CandidatesTable({
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, seg, effectiveJob, fit, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
+  }, [token, seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
 
   // Self-refresh, two speeds. Fast (10s): an applicant on screen is still
   // mid-pipeline ("Screening…"), so refetch until it settles — capped so a
@@ -370,7 +387,7 @@ export default function CandidatesTable({
   }, [data]);
   useEffect(() => {
     pollCount.current = 0;
-  }, [seg, effectiveJob, fit, debouncedQ, hideNotNow, past]);
+  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, debouncedQ, hideNotNow, past]);
   // Coming back to a background tab: catch up immediately.
   useEffect(() => {
     const onVisible = () => {
@@ -425,7 +442,85 @@ export default function CandidatesTable({
   // Any filter change goes back to page 1.
   useEffect(() => {
     setPage(1);
-  }, [seg, effectiveJob, fit, debouncedQ, hideNotNow]);
+  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, debouncedQ, hideNotNow]);
+
+  // Download the CURRENT filtered view (all pages) as a CSV — the stop-gap
+  // for people carrying data into an ATS until a real integration exists.
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const all: Cv2Row[] = [];
+      for (let p = 1; p <= 50; p++) {
+        const params = new URLSearchParams();
+        if (seg === "followups") params.set("followups", "1");
+        else if (seg) params.set("source", seg);
+        if (effectiveJob) params.set("job", effectiveJob);
+        if (fit) params.set("fit", fit);
+        if (loc) params.set("loc", loc);
+        if (stageF) params.set("stage", stageF);
+        if (yoe) params.set("yoe", yoe);
+        if (skill) params.set("skill", skill);
+        if (visa) params.set("visa", visa);
+        if (debouncedQ) params.set("q", debouncedQ);
+        if (hideNotNow && !past) params.set("hideNotNow", "1");
+        if (past) params.set("past", "1");
+        params.set("sort", sort);
+        params.set("dir", dir);
+        params.set("page", String(p));
+        params.set("pageSize", "100");
+        const res = await fetch(`/api/dashboard/candidates/v2?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const d = (await res.json()) as Cv2List;
+        all.push(...d.items);
+        if (all.length >= d.total || d.items.length === 0) break;
+      }
+      const header = [
+        "Name",
+        "Current title",
+        "Company",
+        "Location",
+        "Years of experience",
+        "Email",
+        "Phone",
+        "LinkedIn",
+        "Source",
+        "Fit",
+        "Roles",
+        ...(jobId ? ["Stage"] : []),
+        "Skills",
+        "Visa",
+        "Follow up",
+        "Added",
+      ];
+      const rows = all.map((r) => [
+        r.name,
+        r.currentTitle,
+        r.currentCompany,
+        r.location,
+        r.yearsExperience,
+        r.contact.email,
+        r.contact.phone,
+        r.linkedinUrl,
+        r.source,
+        r.bestTagLabel,
+        r.roles.map((x) => x.title).join("; "),
+        ...(jobId ? [r.stage || "new"] : []),
+        (r.skills || []).join("; "),
+        r.visa,
+        r.followUpAt,
+        r.addedAt.slice(0, 10),
+      ]);
+      const day = new Date().toISOString().slice(0, 10);
+      downloadCsv(jobId ? `applicants-job-${jobId}-${day}.csv` : `candidates-${day}.csv`, header, rows);
+    } catch {
+      // No toast system here; the button simply re-enables for a retry.
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const header = (key: SortKey, label: string, cls?: string) => (
     <th
@@ -452,7 +547,11 @@ export default function CandidatesTable({
   const pool = !jobId;
   const roleTitle = roles.find(([id]) => id === roleFilter)?.[1] || "";
   const fitLabel = FIT_OPTIONS.find(([v]) => v === fit)?.[1] || "";
-  const activeCount = [roleFilter && pool, fit, hideNotNow && !past].filter(Boolean).length;
+  const stageLabel = STAGE_OPTIONS.find(([v]) => v === stageF)?.[1] || "";
+  const yoeLabel = YOE_OPTIONS.find(([v]) => v === yoe)?.[1] || "";
+  const activeCount = [roleFilter && pool, fit, loc, stageF, yoe, skill, visa, hideNotNow && !past].filter(
+    Boolean
+  ).length;
 
   const menuRow = (label: string, value: string, onClick: () => void) => (
     <div className="row" role="button" tabIndex={0} onClick={onClick}>
@@ -517,16 +616,100 @@ export default function CandidatesTable({
                     menuRow("“Not now”", hideNotNow ? "Hidden" : "Shown", () =>
                       setHideNotNow(!hideNotNow)
                     )}
-                  <div className="group">Coming soon</div>
-                  {SOON_FILTERS.map((f) => (
-                    <div key={f} className="row soon">
-                      {f}
-                      <span className="val">soon</span>
-                    </div>
-                  ))}
-                  <div className="note">
-                    Greyed filters need new support on /candidates/v2 first.
+                  {menuRow("Stage", stageLabel || "Any", () => setMenuPane("stage"))}
+                  {!!(data?.filters?.locations.length || loc) &&
+                    menuRow("Location", loc || "Any", () => setMenuPane("loc"))}
+                  {menuRow("Years of experience", yoeLabel || "Any", () => setMenuPane("yoe"))}
+                  {!!(data?.filters?.skills.length || skill) &&
+                    menuRow("Skills", skill || "Any", () => setMenuPane("skill"))}
+                  {!!(data?.filters?.visas.length || visa) &&
+                    menuRow("Visa", visa || "Any", () => setMenuPane("visa"))}
+                </>
+              )}
+              {menuPane === "stage" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Stage
                   </div>
+                  {paneOption("Any", !stageF, () => {
+                    setStageF("");
+                    setMenuOpen(false);
+                  })}
+                  {STAGE_OPTIONS.map(([v, label]) =>
+                    paneOption(label, stageF === v, () => {
+                      setStageF(v);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+              {menuPane === "loc" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Location
+                  </div>
+                  {paneOption("Any", !loc, () => {
+                    setLoc("");
+                    setMenuOpen(false);
+                  })}
+                  {(data?.filters?.locations || []).map((v) =>
+                    paneOption(v, loc === v, () => {
+                      setLoc(v);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+              {menuPane === "yoe" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Years of experience
+                  </div>
+                  {paneOption("Any", !yoe, () => {
+                    setYoe("");
+                    setMenuOpen(false);
+                  })}
+                  {YOE_OPTIONS.map(([v, label]) =>
+                    paneOption(label, yoe === v, () => {
+                      setYoe(v);
+                      setMenuOpen(false);
+                    })
+                  )}
+                  <div className="note">Years come from enrichment; people without a value are left out.</div>
+                </>
+              )}
+              {menuPane === "skill" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Skills
+                  </div>
+                  {paneOption("Any", !skill, () => {
+                    setSkill("");
+                    setMenuOpen(false);
+                  })}
+                  {(data?.filters?.skills || []).map((v) =>
+                    paneOption(v, skill === v, () => {
+                      setSkill(v);
+                      setMenuOpen(false);
+                    })
+                  )}
+                </>
+              )}
+              {menuPane === "visa" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Visa
+                  </div>
+                  {paneOption("Any", !visa, () => {
+                    setVisa("");
+                    setMenuOpen(false);
+                  })}
+                  {(data?.filters?.visas || []).map((v) =>
+                    paneOption(v, visa === v, () => {
+                      setVisa(v);
+                      setMenuOpen(false);
+                    })
+                  )}
                 </>
               )}
               {menuPane === "role" && (
@@ -574,6 +757,15 @@ export default function CandidatesTable({
           onChange={(e) => setQ(e.target.value)}
         />
         <span className="dash-sortnote">Sorted by {SORT_LABEL[sort]}</span>
+        <button
+          type="button"
+          className="dash-filters-btn cv2-export"
+          onClick={exportCsv}
+          disabled={exporting || !data || data.total === 0}
+          title="Download the current view as a CSV"
+        >
+          {exporting ? "Preparing…" : "⇩ CSV"}
+        </button>
       </div>
 
       {activeCount > 0 && (
@@ -594,6 +786,46 @@ export default function CandidatesTable({
               </button>
             </span>
           )}
+          {stageF && (
+            <span className="dash-chip">
+              Stage: <b>{stageLabel}</b>
+              <button type="button" aria-label="Clear stage filter" onClick={() => setStageF("")}>
+                ✕
+              </button>
+            </span>
+          )}
+          {loc && (
+            <span className="dash-chip">
+              Location: <b>{loc}</b>
+              <button type="button" aria-label="Clear location filter" onClick={() => setLoc("")}>
+                ✕
+              </button>
+            </span>
+          )}
+          {yoe && (
+            <span className="dash-chip">
+              Years: <b>{yoeLabel}</b>
+              <button type="button" aria-label="Clear years filter" onClick={() => setYoe("")}>
+                ✕
+              </button>
+            </span>
+          )}
+          {skill && (
+            <span className="dash-chip">
+              Skill: <b>{skill}</b>
+              <button type="button" aria-label="Clear skill filter" onClick={() => setSkill("")}>
+                ✕
+              </button>
+            </span>
+          )}
+          {visa && (
+            <span className="dash-chip">
+              Visa: <b>{visa}</b>
+              <button type="button" aria-label="Clear visa filter" onClick={() => setVisa("")}>
+                ✕
+              </button>
+            </span>
+          )}
           {hideNotNow && !past && (
             <span className="dash-chip">
               “Not now”: <b>Hidden{counts ? ` (${counts.notNow})` : ""}</b>
@@ -608,6 +840,11 @@ export default function CandidatesTable({
             onClick={() => {
               setRoleFilter("");
               setFit("");
+              setLoc("");
+              setStageF("");
+              setYoe("");
+              setSkill("");
+              setVisa("");
               setHideNotNow(past ? hideNotNow : false);
             }}
           >

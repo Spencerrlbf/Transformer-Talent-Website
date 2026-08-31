@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
 import ClientRequestsBlock from "@/components/dashboard/ClientRequestsBlock";
+import { downloadCsv } from "@/lib/csv";
 
 type Pipe = {
   total: number;
@@ -178,6 +179,32 @@ export default function JobsPage() {
           </p>
         </div>
         <div className="dash-jobhead-actions">
+          {jobs && jobs.length > 0 && (
+            <button
+              type="button"
+              className="dash-btn dash-btn-2"
+              title="Download all jobs as a CSV"
+              onClick={() =>
+                downloadCsv(
+                  `jobs-${new Date().toISOString().slice(0, 10)}.csv`,
+                  ["ID", "Title", "Status", "Company", "Locations", "Workplace", "Salary", "Years", "Candidates"],
+                  jobs.map((j) => [
+                    j.id,
+                    j.title,
+                    j.status,
+                    j.company,
+                    j.locations.join("; "),
+                    j.workplace,
+                    j.salary,
+                    j.yoe,
+                    j.applicants,
+                  ])
+                )
+              }
+            >
+              ⇩ CSV
+            </button>
+          )}
           <Link className="dash-btn dash-btn-2" href="/dashboard/jobs/new">
             Import a JD
           </Link>

@@ -14,6 +14,7 @@ function NetworkPage() {
   const { org } = useDash();
   const search = useSearchParams();
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [rowKeys, setRowKeys] = useState<string[]>([]);
 
   if (org.slug !== TT_SLUG) return <p className="dash-muted">Page not found.</p>;
 
@@ -27,8 +28,13 @@ function NetworkPage() {
         LinkedIn; when they&apos;re interested, send them to the job — they&apos;ll appear in its
         pipeline marked ⚡ Via Transformer Talent.
       </p>
-      <NetworkTable jobId={search.get("job") || undefined} onOpen={setOpenKey} />
-      <CandidateDrawer candKey={openKey} onClose={() => setOpenKey(null)} />
+      <NetworkTable jobId={search.get("job") || undefined} onOpen={setOpenKey} onKeys={setRowKeys} />
+      <CandidateDrawer
+        candKey={openKey}
+        onClose={() => setOpenKey(null)}
+        navKeys={rowKeys}
+        onNavigate={setOpenKey}
+      />
     </>
   );
 }
