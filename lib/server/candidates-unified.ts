@@ -5,6 +5,7 @@
 // modified. Everything client-facing goes through client-reason or the
 // stored judge reasons; raw verdicts and internal scores never cross here.
 import { sbRest } from "./supabase";
+import { loadLinksByKey } from "./tracked-links";
 import { signResumeUrl } from "./applicants";
 import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
 import { poolEmails } from "./network";
@@ -100,6 +101,8 @@ export type UnifiedRow = {
   skills: string[] | null;
   /** Visa status as stated by the applicant (applied people). */
   visa: string | null;
+  /** Tracked outreach link, when one has been minted for this person. */
+  link?: { path: string; openCount: number; lastOpenedAt: string | null } | null;
 };
 
 // Human pipeline statuses — distinct from the AI fit tag. "rejected" moves a
@@ -139,6 +142,8 @@ export type UnifiedListParams = {
   skill?: string;
   /** Exact match on stated visa status. */
   visa?: string;
+  /** Tracked-link opens: "1" = opened at least once, "0" = has a link, never opened. */
+  opened?: string;
   sort?: "fit" | "added" | "name" | "years" | "followup";
   dir?: "asc" | "desc";
   page?: number;
@@ -640,11 +645,12 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
 
-  const [apps, pairings, memberships, roleIndex] = await Promise.all([
+  const [apps, pairings, memberships, roleIndex, linksByKey] = await Promise.all([
     fetchApplicants(orgId),
     orgVerdictPairings(orgId),
     fetchMemberships(orgId),
     orgRoleIndex(orgId),
+    loadLinksByKey(orgId),
   ]);
   const roleIdx = roleIndex.byId;
   const byPerson = newestPerPersonRole(memberships);
@@ -737,6 +743,11 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       skills: p.skills && p.skills.length ? p.skills : null,
       visa: null,
     });
+  }
+
+  for (const r of rows) {
+    const l = linksByKey.get(r.key);
+    if (l) r.link = { path: l.path, openCount: l.openCount, lastOpenedAt: l.lastOpenedAt };
   }
 
   // ---- filters ----
@@ -845,6 +856,8 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     const visa = params.visa.toLowerCase();
     filtered = filtered.filter((r) => (r.visa || "").toLowerCase() === visa);
   }
+  if (params.opened === "1") filtered = filtered.filter((r) => (r.link?.openCount ?? 0) > 0);
+  if (params.opened === "0") filtered = filtered.filter((r) => r.link && r.link.openCount === 0);
   if (params.stage && (STAGES as readonly string[]).includes(params.stage)) {
     if (params.jobId) {
       filtered = filtered.filter((r) => r.stage === params.stage);

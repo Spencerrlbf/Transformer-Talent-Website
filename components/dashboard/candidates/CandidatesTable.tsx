@@ -40,6 +40,7 @@ export type Cv2Row = {
   followUpAt?: string | null;
   skills?: string[] | null;
   visa?: string | null;
+  link?: { path: string; openCount: number; lastOpenedAt: string | null } | null;
 };
 
 type Cv2List = {
@@ -268,7 +269,10 @@ export default function CandidatesTable({
   const [yoe, setYoe] = useState("");
   const [skill, setSkill] = useState("");
   const [visa, setVisa] = useState("");
+  const [openedF, setOpenedF] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [hideNotNow, setHideNotNow] = useState(defaultHideNotNow);
@@ -284,7 +288,7 @@ export default function CandidatesTable({
   // its option pane; active filters render as chips below the row.
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPane, setMenuPane] = useState<
-    "" | "role" | "fit" | "loc" | "stage" | "yoe" | "skill" | "visa"
+    "" | "role" | "fit" | "loc" | "stage" | "yoe" | "skill" | "visa" | "opened"
   >("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -339,6 +343,7 @@ export default function CandidatesTable({
     if (yoe) params.set("yoe", yoe);
     if (skill) params.set("skill", skill);
     if (visa) params.set("visa", visa);
+    if (openedF) params.set("opened", openedF);
     if (debouncedQ) params.set("q", debouncedQ);
     if (hideNotNow && !past) params.set("hideNotNow", "1");
     if (past) params.set("past", "1");
@@ -366,7 +371,7 @@ export default function CandidatesTable({
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
+  }, [token, seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
 
   // Self-refresh, two speeds. Fast (10s): an applicant on screen is still
   // mid-pipeline ("Screening…"), so refetch until it settles — capped so a
@@ -387,7 +392,7 @@ export default function CandidatesTable({
   }, [data]);
   useEffect(() => {
     pollCount.current = 0;
-  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, debouncedQ, hideNotNow, past]);
+  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, debouncedQ, hideNotNow, past]);
   // Coming back to a background tab: catch up immediately.
   useEffect(() => {
     const onVisible = () => {
@@ -442,7 +447,46 @@ export default function CandidatesTable({
   // Any filter change goes back to page 1.
   useEffect(() => {
     setPage(1);
-  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, debouncedQ, hideNotNow]);
+  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, debouncedQ, hideNotNow]);
+
+  // Copy a candidate's tracked link, minting it on first use. The URL is
+  // stable afterwards (one link per person), so CSV and button agree.
+  async function copyLink(r: Cv2Row) {
+    if (linkBusy) return;
+    let path = r.link?.path;
+    if (!path) {
+      setLinkBusy(r.key);
+      const res = await fetch("/api/dashboard/tracked-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ keys: [r.key] }),
+      }).catch(() => null);
+      const json = res?.ok ? await res.json().catch(() => null) : null;
+      setLinkBusy(null);
+      const minted = json?.links?.[r.key];
+      if (!minted) return;
+      path = minted.path as string;
+      setData((d) =>
+        d
+          ? {
+              ...d,
+              items: d.items.map((x) =>
+                x.key === r.key
+                  ? { ...x, link: { path: path!, openCount: minted.openCount ?? 0, lastOpenedAt: null } }
+                  : x
+              ),
+            }
+          : d
+      );
+    }
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+      setCopiedKey(r.key);
+      setTimeout(() => setCopiedKey((k) => (k === r.key ? null : k)), 1500);
+    } catch {
+      /* clipboard blocked; nothing sensible to do silently */
+    }
+  }
 
   // Download the CURRENT filtered view (all pages) as a CSV — the stop-gap
   // for people carrying data into an ATS until a real integration exists.
@@ -462,6 +506,7 @@ export default function CandidatesTable({
         if (yoe) params.set("yoe", yoe);
         if (skill) params.set("skill", skill);
         if (visa) params.set("visa", visa);
+        if (openedF) params.set("opened", openedF);
         if (debouncedQ) params.set("q", debouncedQ);
         if (hideNotNow && !past) params.set("hideNotNow", "1");
         if (past) params.set("past", "1");
@@ -476,6 +521,22 @@ export default function CandidatesTable({
         const d = (await res.json()) as Cv2List;
         all.push(...d.items);
         if (all.length >= d.total || d.items.length === 0) break;
+      }
+      // Pool export: every row gets its tracked link minted, so the CSV can
+      // go straight into a sourcing tool with the link as a merge column.
+      if (pool && all.length) {
+        const res = await fetch("/api/dashboard/tracked-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ keys: all.map((r) => r.key) }),
+        }).catch(() => null);
+        const json = res?.ok ? await res.json().catch(() => null) : null;
+        if (json?.links) {
+          for (const r of all) {
+            const l = json.links[r.key];
+            if (l) r.link = { path: l.path, openCount: l.openCount ?? 0, lastOpenedAt: l.lastOpenedAt ?? null };
+          }
+        }
       }
       const header = [
         "Name",
@@ -493,6 +554,7 @@ export default function CandidatesTable({
         "Skills",
         "Visa",
         "Follow up",
+        ...(pool ? ["Tracking link", "Link opens"] : []),
         "Added",
       ];
       const rows = all.map((r) => [
@@ -511,6 +573,9 @@ export default function CandidatesTable({
         (r.skills || []).join("; "),
         r.visa,
         r.followUpAt,
+        ...(pool
+          ? [r.link ? `${window.location.origin}${r.link.path}` : "", r.link?.openCount ?? ""]
+          : []),
         r.addedAt.slice(0, 10),
       ]);
       const day = new Date().toISOString().slice(0, 10);
@@ -549,9 +614,17 @@ export default function CandidatesTable({
   const fitLabel = FIT_OPTIONS.find(([v]) => v === fit)?.[1] || "";
   const stageLabel = STAGE_OPTIONS.find(([v]) => v === stageF)?.[1] || "";
   const yoeLabel = YOE_OPTIONS.find(([v]) => v === yoe)?.[1] || "";
-  const activeCount = [roleFilter && pool, fit, loc, stageF, yoe, skill, visa, hideNotNow && !past].filter(
-    Boolean
-  ).length;
+  const activeCount = [
+    roleFilter && pool,
+    fit,
+    loc,
+    stageF,
+    yoe,
+    skill,
+    visa,
+    openedF,
+    hideNotNow && !past,
+  ].filter(Boolean).length;
 
   const menuRow = (label: string, value: string, onClick: () => void) => (
     <div className="row" role="button" tabIndex={0} onClick={onClick}>
@@ -624,6 +697,12 @@ export default function CandidatesTable({
                     menuRow("Skills", skill || "Any", () => setMenuPane("skill"))}
                   {!!(data?.filters?.visas.length || visa) &&
                     menuRow("Visa", visa || "Any", () => setMenuPane("visa"))}
+                  {pool &&
+                    menuRow(
+                      "Link opened",
+                      openedF === "1" ? "Opened" : openedF === "0" ? "Not yet" : "Any",
+                      () => setMenuPane("opened")
+                    )}
                 </>
               )}
               {menuPane === "stage" && (
@@ -710,6 +789,28 @@ export default function CandidatesTable({
                       setMenuOpen(false);
                     })
                   )}
+                </>
+              )}
+              {menuPane === "opened" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ Link opened
+                  </div>
+                  {paneOption("Any", !openedF, () => {
+                    setOpenedF("");
+                    setMenuOpen(false);
+                  })}
+                  {paneOption("Opened at least once", openedF === "1", () => {
+                    setOpenedF("1");
+                    setMenuOpen(false);
+                  })}
+                  {paneOption("Has a link, not opened yet", openedF === "0", () => {
+                    setOpenedF("0");
+                    setMenuOpen(false);
+                  })}
+                  <div className="note">
+                    Opens are a signal, not proof — some mail scanners open links before people do.
+                  </div>
                 </>
               )}
               {menuPane === "role" && (
@@ -826,6 +927,14 @@ export default function CandidatesTable({
               </button>
             </span>
           )}
+          {openedF && (
+            <span className="dash-chip">
+              Link: <b>{openedF === "1" ? "Opened" : "Not opened yet"}</b>
+              <button type="button" aria-label="Clear link filter" onClick={() => setOpenedF("")}>
+                ✕
+              </button>
+            </span>
+          )}
           {hideNotNow && !past && (
             <span className="dash-chip">
               “Not now”: <b>Hidden{counts ? ` (${counts.notNow})` : ""}</b>
@@ -845,6 +954,7 @@ export default function CandidatesTable({
               setYoe("");
               setSkill("");
               setVisa("");
+              setOpenedF("");
               setHideNotNow(past ? hideNotNow : false);
             }}
           >
@@ -878,6 +988,7 @@ export default function CandidatesTable({
                 <th className="cv2-th-icon w-in">LinkedIn</th>
                 <th className="cv2-th-icon w-ct">Contact</th>
                 {pool && header("followup", "Reach out", "w-fu")}
+                {pool && <th className="w-link">Link</th>}
                 {header("added", "Added", "w-added")}
               </tr>
             </thead>
@@ -990,6 +1101,40 @@ export default function CandidatesTable({
                       ) : (
                         <span className="cv2-dim">—</span>
                       )}
+                    </td>
+                  )}
+                  {pool && (
+                    <td className="cv2-linkcell" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="cv2-linkbtn"
+                        disabled={linkBusy === r.key}
+                        title={
+                          r.link
+                            ? "Copy this person's tracked link"
+                            : "Create and copy a tracked link — opens show here"
+                        }
+                        onClick={() => copyLink(r)}
+                      >
+                        {linkBusy === r.key ? "…" : copiedKey === r.key ? "Copied ✓" : "Copy"}
+                      </button>
+                      {r.link &&
+                        (r.link.openCount > 0 ? (
+                          <span
+                            className="cv2-opened"
+                            title={
+                              r.link.lastOpenedAt
+                                ? `Opened ${r.link.openCount}× · last ${fmtDay(r.link.lastOpenedAt)}`
+                                : `Opened ${r.link.openCount}×`
+                            }
+                          >
+                            ✓ {r.link.openCount}
+                          </span>
+                        ) : (
+                          <span className="cv2-dim" title="Link created — not opened yet">
+                            0
+                          </span>
+                        ))}
                     </td>
                   )}
                   <td className="cv2-added">{fmtDay(r.addedAt)}</td>
