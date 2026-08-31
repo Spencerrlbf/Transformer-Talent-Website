@@ -10,6 +10,8 @@ import type {
   CompanyProfile,
   CompanyRound,
 } from "@/lib/server/company-page";
+import { SOCIAL_KEYS, SOCIAL_LABELS, SOCIAL_PLACEHOLDERS, type SocialKey } from "@/lib/socials";
+import { SOCIAL_GLYPHS } from "@/components/board/SocialIcons";
 import type { StageDef } from "@/components/dashboard/jobs/StageEditor";
 
 type PageData = {
@@ -18,6 +20,7 @@ type PageData = {
   logoPath: string | null;
   logoUrl: string | null;
   stages: StageDef[];
+  website: string;
   canEdit: boolean;
   boardUrl: string;
 };
@@ -32,6 +35,7 @@ export default function CompanyPageEditor() {
   const [p, setP] = useState<CompanyProfile | null>(null);
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [website, setWebsite] = useState("");
   const [published, setPublished] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -62,6 +66,7 @@ export default function CompanyPageEditor() {
         setP(profile);
         setLogoPath(d.logoPath);
         setLogoUrl(d.logoUrl);
+        setWebsite(d.website || "");
         setPublished(d.published);
       })
       .catch(() => {});
@@ -80,6 +85,7 @@ export default function CompanyPageEditor() {
         body: JSON.stringify({
           profile: p,
           logoPath,
+          website,
           published: nextPublished === undefined ? published : nextPublished,
         }),
       });
@@ -231,6 +237,41 @@ export default function CompanyPageEditor() {
           <input value={p.offices} maxLength={60} placeholder="SF · NYC" onChange={(e) => setField("offices", e.target.value)} />
           <input value={p.workEnv} maxLength={40} placeholder="Hybrid / Remote / On-site" onChange={(e) => setField("workEnv", e.target.value)} />
         </div>
+
+        <div className="cpe-sub">Social links (icons in your board&apos;s header; each optional)</div>
+        <div className="cpe-socgrid">
+          <div className="cpe-socfield">
+            <label>
+              <span className="cpe-socglyph">{SOCIAL_GLYPHS.website.node}</span>Website
+            </label>
+            <input
+              value={website}
+              maxLength={300}
+              placeholder="https://yourcompany.com"
+              onChange={(e) => { setWebsite(e.target.value); setSaved(false); }}
+            />
+          </div>
+          {SOCIAL_KEYS.map((k: SocialKey) => (
+            <div key={k} className="cpe-socfield">
+              <label>
+                <span className="cpe-socglyph">{SOCIAL_GLYPHS[k].node}</span>
+                {SOCIAL_LABELS[k]}
+              </label>
+              <input
+                value={p.socials[k] || ""}
+                maxLength={300}
+                placeholder={SOCIAL_PLACEHOLDERS[k]}
+                onChange={(e) =>
+                  setField("socials", { ...p.socials, [k]: e.target.value })
+                }
+              />
+            </div>
+          ))}
+        </div>
+        <p className="jobws-hint">
+          Icons appear on your job board only for the links you fill in. The website renders as the
+          globe icon.
+        </p>
 
         <div className="dash-field"><label>Mission headline (the big statement)</label>
           <textarea value={p.missionHeadline} rows={2} maxLength={220} onChange={(e) => setField("missionHeadline", e.target.value)} />

@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EE;font-family:'Instrument Sans',system-ui,sans-serif;color:#111110;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#4536E8;text-decoration:none}
+  a:hover{color:#2E22B8}
+  input,select,textarea,button{font-family:inherit}
+</style>
+</helmet>
+
+<section style="padding:44px 48px 90px">
+  <div id="9a" style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">9a</span>
+      <span style="font-size:13px;color:#5d5b56">The site&rsquo;s own board — <b style="font-weight:600">/roles</b>, <b style="font-weight:600">/roles/[slug]</b>, <b style="font-weight:600">/apply</b>. Selection is shared across all three via localStorage.</span>
+    </div>
+
+    <div style="display:flex;gap:3px;padding:3px;background:rgba(0,0,0,.06);border-radius:999px;width:max-content;margin:0 0 18px">
+      <button type="button" onClick="{{ goIndex }}" style="{{ tIndex }}">Roles index</button>
+      <button type="button" onClick="{{ goDetail }}" style="{{ tDetail }}">Role detail</button>
+      <button type="button" onClick="{{ goApply }}" style="{{ tApply }}">Apply</button>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:22px;height:60px;padding:0 30px;border-bottom:1px solid rgba(0,0,0,.08)">
+        <a href="#9a" style="display:flex;align-items:baseline;font-size:15px;font-weight:600;letter-spacing:-.015em;color:#111110">Transformer<b style="color:#5B4BFF">_</b>Talent</a>
+        <div style="flex:1"></div>
+        <nav style="display:flex;align-items:center;gap:20px">
+          <a href="#9a" style="font-size:12.5px;color:#5d5b56">/about</a>
+          <a href="#9a" style="font-size:12.5px;color:#5d5b56">/market-index</a>
+          <a href="#9a" onClick="{{ goIndex }}" style="{{ navRoles }}">/roles</a>
+          <a href="#9a" onClick="{{ goApply }}" style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.07em">UPLOAD JD →</a>
+        </nav>
+        <span style="display:flex;align-items:center;gap:7px;margin-left:20px;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:#1F7A4C;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block"></span>SYSTEM LIVE</span>
+      </div>
+
+      <sc-if value="{{ isIndex }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:30px 30px 40px">
+          <h1 style="margin:0;font-size:34px;font-weight:600;letter-spacing:-.03em">Open roles</h1>
+          <p style="margin:9px 0 0;max-width:660px;font-size:15px;line-height:1.6;color:#3b3934;text-wrap:pretty"><b style="font-weight:600">128 live roles</b> with VC-backed startups we work with directly. Apply once — we&rsquo;ll consider you for everything we&rsquo;re working on, including roles that never get posted.</p>
+
+          <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:20px;margin-top:22px;padding:17px 20px;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#FBFAFF">
+              <p style="margin:0;flex:1;font-size:13.5px;line-height:1.55;color:#3b3934;text-wrap:pretty"><b style="font-weight:600">Nothing that fits?</b> Upload your resume — we&rsquo;ll match you against every open role and reach out when the right one arrives.</p>
+              <button type="button" onClick="{{ goSpeculative }}" style="appearance:none;height:34px;padding:0 14px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer;flex:none;white-space:nowrap">UPLOAD RESUME →</button>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:20px">
+            <button type="button" onClick="{{ toggleFilters }}" style="{{ filtersBtnStyle }}">
+              <span style="font-size:12px">☰</span>Filters
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#5B4BFF;color:#fff;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums">1</span>
+              <span style="font-size:11px;color:#8a877f">▾</span>
+            </button>
+            <div style="flex:1;display:flex;align-items:center;gap:9px;height:36px;padding:0 13px;border:1px solid rgba(0,0,0,.12);border-radius:8px;color:#8a877f;font-size:13.5px;min-width:0">
+              <span style="width:13px;height:13px;border:1.5px solid #8a877f;border-radius:999px;flex:none;display:block"></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">search: python, go -java · &ldquo;machine learning&rdquo; · comma = OR, minus = exclude</span>
+            </div>
+            <span style="font-size:12.5px;color:#8a877f;flex:none;white-space:nowrap">Sorted by ID</span>
+          </div>
+
+          <sc-if value="{{ filtersOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px 16px;border:1px solid rgba(0,0,0,.1);border-radius:12px;background:#FBFAF8;margin-top:12px">
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Location
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>all locations</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Office
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>all office types</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Role type
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>all role types</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Visa
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Visa transfers OK</option><option>any visa status</option></select>
+              </label>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border:1px solid rgba(91,75,255,.32);background:#F6F4FF;border-radius:8px;font-size:12.5px;color:#4536E8;white-space:nowrap">Visa: <b style="font-weight:600">Transfers OK</b><span style="color:#9C93FF;font-size:13px">×</span></span>
+            <a href="#9a" style="display:inline-flex;align-items:center;height:30px;padding:0 10px;font-size:12.5px;font-weight:600;color:#8a877f">Clear all</a>
+            <div style="flex:1"></div>
+            <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">5 of 128 roles · page 1 of 6</span>
+          </div>
+
+          <div style="display:grid;gap:24px;margin-top:16px;{{ layoutCols }}">
+            <div style="min-width:0">
+              <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow-x:auto">
+                <div style="min-width:700px">
+                  <div style="display:grid;grid-template-columns:56px minmax(180px,2.6fr) 150px 120px 96px;gap:14px;padding:11px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+                    <span>ID</span><span>Role</span><span>Location</span><span>Base salary</span><span style="text-align:right">Apply</span>
+                  </div>
+                  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+                    <div style="display:grid;grid-template-columns:56px minmax(180px,2.6fr) 150px 120px 96px;gap:14px;padding:14px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+                      <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">{{ r.hash }}</span>
+                      <button type="button" onClick="{{ goDetail }}" style="appearance:none;border:none;background:none;padding:0;text-align:left;cursor:pointer;min-width:0">
+                        <span style="display:block;font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:#111110">{{ r.title }}</span>
+                        <span style="display:block;margin-top:3px;font-size:12.5px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.workplace }} · {{ r.yoe }} · {{ r.blurb }}</span>
+                      </button>
+                      <span style="font-size:12.5px;color:#3b3934">{{ r.locations }}</span>
+                      <span style="font-size:13px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums">{{ r.salary }}</span>
+                      <button type="button" onClick="{{ r.toggleSel }}" style="{{ r.applyStyle }}">{{ r.applyLabel }}</button>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:16px;margin-top:14px">
+                <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">showing 1–5 of 128 roles</span>
+                <div style="flex:1"></div>
+                <div style="display:flex;gap:5px">
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(0,0,0,.12);border-radius:8px;font-size:12.5px;color:#c2bfb8">‹</span>
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #111110;background:#111110;border-radius:8px;font-size:12.5px;color:#fff;font-weight:600">1</span>
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(0,0,0,.12);border-radius:8px;font-size:12.5px;color:#3b3934">2</span>
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(0,0,0,.12);border-radius:8px;font-size:12.5px;color:#3b3934">3</span>
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(0,0,0,.12);border-radius:8px;font-size:12.5px;color:#3b3934">›</span>
+                </div>
+              </div>
+
+              <p style="margin:26px 0 0;max-width:640px;font-size:14px;line-height:1.65;color:#5d5b56;text-wrap:pretty">No fit above? <a href="#9a" onClick="{{ goSpeculative }}" style="font-weight:600">Send us your profile anyway</a> — many of our placements come from roles that never get posted.</p>
+            </div>
+
+            <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+              <aside style="width:322px;flex:none">
+                <div style="position:sticky;top:20px;border:1px solid rgba(0,0,0,.1);border-radius:14px;overflow:hidden">
+                  <div style="padding:13px 17px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#5d5b56">{{ cartLabel }}</div>
+                  <div style="padding:16px 17px">
+                    <sc-for list="{{ cart }}" as="c" hint-placeholder-count="1">
+                      <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8;margin-bottom:8px">
+                        <div style="flex:1;min-width:0">
+                          <div style="font-size:13.5px;font-weight:600;letter-spacing:-.01em">{{ c.title }}</div>
+                          <div style="font-size:12.5px;color:#8a877f;margin-top:2px;font-variant-numeric:tabular-nums">{{ c.meta }}</div>
+                        </div>
+                        <button type="button" onClick="{{ c.remove }}" style="appearance:none;border:none;background:none;padding:0;font-size:13px;color:#8a877f;cursor:pointer;flex:none">✕</button>
+                      </div>
+                    </sc-for>
+                    <sc-if value="{{ showSlots }}" hint-placeholder-val="{{ false }}">
+                      <div style="padding:10px 13px;border:1px dashed rgba(0,0,0,.16);border-radius:10px;font-size:12.5px;color:#8a877f;text-wrap:pretty">{{ slotsLabel }}</div>
+                    </sc-if>
+                    <button type="button" onClick="{{ goApply }}" style="appearance:none;width:100%;height:40px;margin-top:14px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.06em;cursor:pointer">CONTINUE TO APPLY →</button>
+                    <p style="margin:11px 0 0;font-size:12px;line-height:1.5;color:#8a877f;text-wrap:pretty">Your selection follows you to the apply page and survives a refresh.</p>
+                  </div>
+                </div>
+              </aside>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 30px 40px;max-width:960px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">
+            <a href="#9a" onClick="{{ goIndex }}" style="color:#8a877f">/roles</a>
+            <span style="color:#c2bfb8">—</span>
+            <b style="color:#111110;font-variant-numeric:tabular-nums">ROLE_1042</b>
+          </div>
+          <h1 style="margin:14px 0 0;font-size:34px;font-weight:600;letter-spacing:-.03em;text-wrap:pretty">Senior Fleet Software Engineer</h1>
+          <p style="margin:10px 0 0;max-width:680px;font-size:15px;line-height:1.6;color:#3b3934;text-wrap:pretty">Own the planner that routes 400 robots across a live warehouse floor without stopping the building.</p>
+
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:26px">
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+              <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em">The role</h3>
+              <div style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px 14px;margin-top:15px">
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Comp</span><span style="font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums">$185k–$220k</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Equity</span><span style="font-size:13.5px;color:#3b3934">0.05–0.12%</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Location</span><span style="font-size:13.5px;color:#3b3934">Austin · Boston</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Workplace</span><span style="font-size:13.5px;color:#3b3934">Hybrid, 3 days</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Experience</span><span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">6–9 yrs</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Visa</span><span style="font-size:13.5px;color:#3b3934">Transfers OK</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Stack</span><span style="font-size:13.5px;color:#3b3934">Rust, Go, ROS2, Kubernetes</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Industry</span><span style="font-size:13.5px;color:#3b3934">Warehouse automation</span>
+              </div>
+            </div>
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px;background:#FBFAF8">
+              <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em">The company</h3>
+              <p style="margin:12px 0 0;font-size:13.5px;line-height:1.6;color:#3b3934;text-wrap:pretty">Warehouse automation for mid-market distributors — two hundred live sites across eleven states, and a system that pays for itself inside a quarter. Named during the process, not before.</p>
+              <div style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px 14px;margin-top:15px">
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Stage</span><span style="font-size:13.5px;color:#3b3934">Series C</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Funding</span><span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">$140M raised</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Team</span><span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">180 people, 42 engineers</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Founded</span><span style="font-size:13.5px;color:#3b3934;font-variant-numeric:tabular-nums">2019</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Backing</span><span style="font-size:13.5px;color:#3b3934">Tier-one crossover fund, two strategics</span>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f;padding-top:2px">Note</span><span style="font-size:13.5px;color:#3b3934">Profitable on a unit basis since Q2</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:32px;padding-top:26px;border-top:1px solid rgba(0,0,0,.09)">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f"><b style="color:#111110">JD</b> — the work</div>
+            <h3 style="margin:14px 0 0;font-size:19px;font-weight:600;letter-spacing:-.02em">About the role</h3>
+            <p style="margin:10px 0 0;max-width:72ch;font-size:14.5px;line-height:1.7;color:#3b3934;text-wrap:pretty">The fleet planner decides what every robot in a building does next. You will own it end to end: the solver, the simulation harness it is tested against, and the rollout to two hundred live sites. It is the highest-leverage system the company runs and it cannot go down.</p>
+
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:24px">
+              <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+                <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em">What you&rsquo;ll do</h3>
+                <div style="display:flex;flex-direction:column;gap:9px;margin-top:13px">
+                  <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">Own the planner service — solver, replanning loop, and the failure paths when a robot drops off the network mid-task.</span></div>
+                  <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">Build the simulation harness the team ships against; every change is proven against a week of recorded floor traffic first.</span></div>
+                  <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">Work directly with site operations on the two hardest buildings, then generalise what you learn.</span></div>
+                </div>
+              </div>
+              <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+                <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em">What they&rsquo;re looking for</h3>
+                <div style="display:flex;flex-direction:column;gap:9px;margin-top:13px">
+                  <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">Six or more years on systems where correctness under load matters — scheduling, routing, trading, telemetry.</span></div>
+                  <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">Deep comfort in Rust, C++ or Go, and the judgement to know when the simple algorithm wins.</span></div>
+                  <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">Experience owning a service in production, on call for it, and improving it rather than rewriting it.</span></div>
+                </div>
+                <div style="margin-top:18px;padding-top:15px;border-top:1px solid rgba(0,0,0,.08)">
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#5B4BFF">Nice to have</div>
+                  <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+                    <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span>Robotics, warehouse or logistics background.</span></div>
+                    <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.6;color:#3b3934"><span style="color:#c2bfb8;flex:none">—</span><span>You have written a simulator you actually trusted.</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:30px;flex-wrap:wrap">
+            <button type="button" onClick="{{ applyThis }}" style="appearance:none;height:42px;padding:0 20px;border-radius:9px;border:none;background:#111110;color:#fff;font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer;white-space:nowrap">APPLY FOR THIS ROLE →</button>
+            <button type="button" onClick="{{ goIndex }}" style="appearance:none;height:42px;padding:0 20px;border-radius:9px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:13px;font-weight:600;color:#111110;cursor:pointer;white-space:nowrap">All open roles</button>
+            <span style="font-size:12.5px;color:#8a877f">One application covers up to 3 roles.</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isApply }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 30px 40px">
+          <div style="display:grid;gap:26px;{{ applyCols }}">
+            <sc-if value="{{ notSpeculative }}" hint-placeholder-val="{{ true }}">
+              <div style="min-width:0">
+                <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Add roles to your application</h2>
+                <p style="margin:5px 0 0;font-size:13.5px;color:#8a877f">Up to 3. The same table as the board — search, filter and sort still work here.</p>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:16px">
+                  <span style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border-radius:8px;border:1px solid rgba(0,0,0,.12);background:#fff;font-size:13.5px;font-weight:600;white-space:nowrap"><span style="font-size:12px">☰</span>Filters<span style="font-size:11px;color:#8a877f">▾</span></span>
+                  <div style="flex:1;display:flex;align-items:center;gap:9px;height:36px;padding:0 13px;border:1px solid rgba(0,0,0,.12);border-radius:8px;color:#8a877f;font-size:13.5px;min-width:0">
+                    <span style="width:13px;height:13px;border:1.5px solid #8a877f;border-radius:999px;flex:none;display:block"></span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Search roles</span>
+                  </div>
+                </div>
+                <div style="margin-top:14px;border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow-x:auto">
+                  <div style="min-width:560px">
+                    <div style="display:grid;grid-template-columns:56px minmax(160px,2.6fr) 120px 96px;gap:14px;padding:11px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+                      <span>ID</span><span>Role</span><span>Base salary</span><span style="text-align:right">Apply</span>
+                    </div>
+                    <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+                      <div style="display:grid;grid-template-columns:56px minmax(160px,2.6fr) 120px 96px;gap:14px;padding:13px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+                        <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">{{ r.hash }}</span>
+                        <span style="min-width:0">
+                          <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-.01em">{{ r.title }}</span>
+                          <span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.locations }} · {{ r.workplace }}</span>
+                        </span>
+                        <span style="font-size:13px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums">{{ r.salary }}</span>
+                        <button type="button" onClick="{{ r.toggleSel }}" style="{{ r.applyStyle }}">{{ r.applyLabel }}</button>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <aside style="{{ railWidth }}">
+              <div style="position:sticky;top:20px;display:flex;flex-direction:column;gap:14px">
+
+                <sc-if value="{{ subOk }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:1px solid rgba(31,122,76,.3);border-radius:14px;background:#F4FAF6;padding:22px 20px">
+                    <b style="font-size:16px;font-weight:600;color:#111110;letter-spacing:-.015em">{{ thanksTitle }}</b>
+                    <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#2F5C46;text-wrap:pretty">{{ thanksBody }}</p>
+                    <button type="button" onClick="{{ resetSub }}" style="appearance:none;margin-top:14px;border:none;background:none;padding:0;font-size:13px;font-weight:600;color:#1F7A4C;cursor:pointer;text-decoration:underline">Start another application</button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ subForm }}" hint-placeholder-val="{{ true }}">
+                  <div style="border:1px solid rgba(0,0,0,.1);border-radius:14px;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:10px;padding:13px 17px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09)">
+                      <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#5d5b56">Your application</span>
+                      <div style="flex:1"></div>
+                      <span style="{{ cartCountStyle }}">{{ cartCount }}</span>
+                    </div>
+                    <div style="padding:16px 17px">
+                      <sc-for list="{{ cart }}" as="c" hint-placeholder-count="1">
+                        <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8;margin-bottom:8px">
+                          <div style="flex:1;min-width:0">
+                            <a href="#9a" style="font-size:13.5px;font-weight:600;letter-spacing:-.01em;color:#111110;border-bottom:1px dotted rgba(0,0,0,.28)">{{ c.title }}</a>
+                            <span style="font-size:11px;color:#8a877f"> ↗</span>
+                            <div style="font-size:12.5px;color:#8a877f;margin-top:3px;font-variant-numeric:tabular-nums">{{ c.meta }}</div>
+                          </div>
+                          <button type="button" onClick="{{ c.remove }}" style="appearance:none;border:none;background:none;padding:0;font-size:13px;color:#8a877f;cursor:pointer;flex:none">✕</button>
+                        </div>
+                      </sc-for>
+                      <sc-if value="{{ isSpeculative }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:13px;border:1px dashed rgba(0,0,0,.22);border-radius:10px;font-size:12.5px;line-height:1.55;color:#5d5b56;text-wrap:pretty"><b style="font-weight:600;color:#111110">No role selected? No problem.</b><br>Send your resume and we will consider you for all 128 open roles, and for new ones as they arrive.</div>
+                      </sc-if>
+                      <sc-if value="{{ cartEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:13px;border:1px dashed rgba(0,0,0,.16);border-radius:10px;font-size:12.5px;line-height:1.55;color:#8a877f;text-wrap:pretty">nothing selected yet — hit <b style="font-weight:600;color:#5d5b56">APPLY +</b> on up to 3 roles in the table, or <button type="button" onClick="{{ goSpeculative }}" style="appearance:none;border:none;background:none;padding:0;font-size:12.5px;color:#5d5b56;cursor:pointer;text-decoration:underline">just drop your resume</button></div>
+                      </sc-if>
+                      <sc-if value="{{ showSlots }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:10px 13px;border:1px dashed rgba(0,0,0,.16);border-radius:10px;font-size:12.5px;color:#8a877f;text-wrap:pretty">{{ slotsLabel }}</div>
+                      </sc-if>
+                    </div>
+                  </div>
+
+                  <div style="border:1px solid rgba(0,0,0,.1);border-radius:14px;padding:18px 17px">
+                    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#5d5b56">Your details</div>
+                    <p style="margin:8px 0 14px;font-size:12.5px;line-height:1.55;color:#8a877f;text-wrap:pretty">{{ detailsIntro }}</p>
+                    <div style="display:flex;flex-direction:column;gap:11px">
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Name
+                        <input style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+                      </label>
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Email
+                        <input type="email" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+                      </label>
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">LinkedIn URL <span style="color:#9A5B14">required</span>
+                        <input placeholder="https://linkedin.com/in/…" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+                      </label>
+                      <div>
+                        <div style="font-size:11.5px;font-weight:600;color:#5d5b56">Resume — PDF, {{ resumeReq }}</div>
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:5px;padding:11px 13px;border:1px dashed rgba(0,0,0,.2);border-radius:10px;background:#FBFAF8">
+                          <span style="display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:5px;background:#FBEAE7;color:#B3402F;font-size:10px;font-weight:700;letter-spacing:.05em;flex:none">PDF</span>
+                          <span style="font-size:12.5px;color:#8a877f;flex:1">Drop a file or choose one</span>
+                          <span style="font-size:12px;font-weight:600;color:#4536E8">Browse</span>
+                        </div>
+                      </div>
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Locations you&rsquo;re open to <span style="font-weight:400;color:#8a877f">optional — several allowed; empty uses your profile location, remote always considered</span>
+                        <select multiple size="4" style="display:block;width:100%;margin-top:5px;padding:5px 7px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff">
+                          <option selected>SF / Bay Area</option><option selected>NYC</option><option>Miami</option><option>Seattle</option><option>Chicago</option><option>Washington DC</option><option>Austin</option><option>Boston</option><option>Los Angeles</option><option>Canada</option>
+                        </select>
+                      </label>
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Visa status
+                        <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>select…</option><option>None needed (US citizen / green card)</option><option>H-1B</option><option>STEM OPT</option><option>TN</option><option>O-1</option><option>Other</option></select>
+                      </label>
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Anything else
+                        <textarea rows="2" style="display:block;width:100%;margin-top:5px;padding:8px 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;resize:vertical"></textarea>
+                      </label>
+                    </div>
+                    <button type="button" onClick="{{ submit }}" style="{{ submitStyle }}">{{ submitLabel }}</button>
+                    <sc-if value="{{ subError }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;gap:10px;margin-top:12px;padding:11px 13px;border:1px solid rgba(179,64,47,.28);border-radius:10px;background:#FBEAE7">
+                        <span style="color:#B3402F;font-size:13px;font-weight:700;flex:none">!</span>
+                        <p style="margin:0;font-size:13px;line-height:1.55;color:#8A3527">{{ errorMessage }}</p>
+                      </div>
+                    </sc-if>
+                    <p style="margin:11px 0 0;font-size:12px;line-height:1.5;color:#8a877f;text-wrap:pretty">Every application is read by a person. You&rsquo;ll hear back within 48 hours.</p>
+                  </div>
+                </sc-if>
+
+                <div style="border:1px dashed rgba(0,0,0,.18);border-radius:12px;padding:11px 13px">
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#a9a6a0">Review only — rail states</div>
+                  <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
+                    <button type="button" onClick="{{ setIdle }}" style="{{ rs0 }}">Idle</button>
+                    <button type="button" onClick="{{ setSending }}" style="{{ rs1 }}">Sending</button>
+                    <button type="button" onClick="{{ setError }}" style="{{ rs2 }}">Missing resume</button>
+                    <button type="button" onClick="{{ setNetErr }}" style="{{ rs3 }}">Network error</button>
+                    <button type="button" onClick="{{ setSubmitted }}" style="{{ rs4 }}">Submitted</button>
+                    <button type="button" onClick="{{ setDupe }}" style="{{ rs5 }}">Already applied</button>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;align-items:center;gap:16px;padding:16px 30px;border-top:1px solid rgba(0,0,0,.09);background:#FBFAF8">
+        <span style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#8a877f">© 2026 TRANSFORMER TALENT — &ldquo;TALENT IS ALL YOU NEED&rdquo;</span>
+        <div style="flex:1"></div>
+        <a href="#9a" style="font-size:12.5px;color:#8a877f">spencer@transformertalent.com</a>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:20px 22px;max-width:1000px">
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">For implementation</div>
+      <p style="margin:9px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">One <b style="font-weight:600;color:#111110">RolesTable</b> serves both <code style="font-size:12.5px">/roles</code> (<code style="font-size:12.5px">showSelectionUI</code> true — spec banner, side rail, mobile bar) and <code style="font-size:12.5px">/apply</code> (false — table only, the external rail owns the cart). Selection is the shared <code style="font-size:12.5px">applySelection</code> localStorage module, capped at <b style="font-weight:600">3</b>, synced via its change subscription — that is why the count is identical on all three views here. <code style="font-size:12.5px">/apply?role=1042</code> preselects one role; <code style="font-size:12.5px">/apply?speculative=1</code> hides the table entirely and makes the resume required.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Search semantics are unchanged and worth preserving: comma = OR groups, spaces = AND, <code style="font-size:12.5px">-term</code> excludes, <code style="font-size:12.5px">&ldquo;quoted phrase&rdquo;</code> is literal. Sort keys stay <code style="font-size:12.5px">id · title · location · workplace · yoe · salary</code>, 25 per page. Role detail keeps its <code style="font-size:12.5px">JobPosting</code> JSON-LD and the two fact tables — the confidential-company framing (&ldquo;named during the process&rdquo;) is the commercial rule, not placeholder copy.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Changed from the current site: Office and Experience fold into the role cell&rsquo;s meta line (five columns, no horizontal scroll at desktop width), the four filter selects become the Filters menu + chips used by every table in this system, and role detail gains an explicit &ldquo;One application covers up to 3 roles&rdquo; line next to the CTA.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">The rail is <b style="font-weight:600;color:#111110">ApplyForm</b>, deliberately self-contained (roles in, one endpoint out) — two panels, <b style="font-weight:600">Your application</b> then <b style="font-weight:600">Your details</b>, with the intro line changing by state. Cart titles link to <code style="font-size:12.5px">/roles/[slug]</code> in a new tab, which is why each role is passed its <code style="font-size:12.5px">slug</code>. Submit posts <code style="font-size:12.5px">FormData</code> to <code style="font-size:12.5px">/api/apply</code> with <code style="font-size:12.5px">roleIds</code> (plus <code style="font-size:12.5px">speculative=1</code>); on success it resets the form, calls <code style="font-size:12.5px">clearSelection()</code> and replaces the whole rail with the thank-you. Six states sit in the review switcher: idle, sending, the client-side missing-resume error, a network/server error, submitted (roles named back), and <code style="font-size:12.5px">alreadyApplied</code>. No suggested-matches list here — that belongs to the tenant board, not <code style="font-size:12.5px">/apply</code>.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Selection is <code style="font-size:12.5px">applySelection.ts</code>: localStorage key <code style="font-size:12.5px">tt-apply-roles</code>, capped at <code style="font-size:12.5px">MAX_ROLES = 3</code>, broadcasting <code style="font-size:12.5px">tt-apply-roles-changed</code> for same-tab sync and listening to <code style="font-size:12.5px">storage</code> for cross-tab. A fourth add is a silent no-op — the <code style="font-size:12.5px">n/3</code> counter is what explains it, so keep the counter visible wherever APPLY + appears. <code style="font-size:12.5px">?role=</code> merges into the stored selection rather than replacing it.</p>
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const MAX = 3;
+
+const ROLES = [
+  { id: "1042", title: "Senior Fleet Software Engineer", blurb: "Warehouse automation, 200 live sites, Series C.", locations: "Austin · Boston", workplace: "Hybrid", yoe: "6–9 yrs", salary: "$185k–$220k" },
+  { id: "1039", title: "Perception Engineer", blurb: "Cameras on robots in dusty buildings with bad light.", locations: "Austin", workplace: "On-site", yoe: "4–8 yrs", salary: "$175k–$205k" },
+  { id: "1036", title: "Staff Platform Engineer", blurb: "Deploy path and observability for forty engineers.", locations: "Remote, US", workplace: "Remote", yoe: "5–8 yrs", salary: "$190k–$225k" },
+  { id: "1031", title: "Applied ML Engineer", blurb: "Demand forecasting for a profitable freight marketplace.", locations: "NYC · Remote", workplace: "Hybrid", yoe: "4–7 yrs", salary: "$180k–$210k" },
+  { id: "1024", title: "Founding Backend Engineer", blurb: "Seed-stage payments infrastructure, four engineers.", locations: "SF / Bay Area", workplace: "On-site", yoe: "5+ yrs", salary: "$170k–$200k + 0.8%" },
+];
+
+class Component extends DCLogic {
+  state = { view: "index", sel: ["1042"], spec: false, filters: false, sub: "idle" };
+
+  chip(on) {
+    return "appearance:none;height:26px;padding:0 10px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;border:1px solid " +
+      (on ? "#111110;background:#111110;color:#fff" : "rgba(0,0,0,.14);background:#fff;color:#5d5b56");
+  }
+
+  seg(on) {
+    return "appearance:none;height:30px;padding:0 15px;border-radius:999px;border:none;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;" +
+      (on ? "background:#fff;color:#111110;box-shadow:0 1px 3px rgba(0,0,0,.14)" : "background:none;color:#5d5b56");
+  }
+
+  renderVals() {
+    const s = this.state;
+    const spec = s.spec && s.sel.length === 0;
+    const left = MAX - s.sel.length;
+
+    const toggleSel = (id) => this.setState((p) => ({
+      spec: false,
+      sel: p.sel.includes(id) ? p.sel.filter((x) => x !== id) : p.sel.length >= MAX ? p.sel : [...p.sel, id],
+    }));
+
+    const rows = ROLES.map((r) => {
+      const isSel = s.sel.includes(r.id);
+      return {
+        ...r,
+        hash: "#" + r.id,
+        toggleSel: () => toggleSel(r.id),
+        applyLabel: isSel ? "✓ " + (s.sel.indexOf(r.id) + 1) + "/" + MAX : "APPLY +",
+        applyStyle:
+          "appearance:none;justify-self:end;height:30px;padding:0 12px;border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;cursor:pointer;white-space:nowrap;" +
+          (isSel ? "border:1px solid #111110;background:#111110;color:#fff" : "border:1px solid rgba(0,0,0,.14);background:#fff;color:#111110"),
+      };
+    });
+
+    const cart = s.sel.map((id) => {
+      const r = ROLES.find((x) => x.id === id);
+      return { title: r.title, meta: r.salary + " · #" + r.id, remove: () => toggleSel(id) };
+    });
+
+    return {
+      isIndex: s.view === "index",
+      isDetail: s.view === "detail",
+      isApply: s.view === "apply",
+      goIndex: () => this.setState({ view: "index", spec: false }),
+      goDetail: () => this.setState({ view: "detail" }),
+      goApply: () => this.setState({ view: "apply" }),
+      goSpeculative: () => this.setState({ view: "apply", spec: true, sel: [] }),
+      applyThis: () => this.setState((p) => ({ view: "apply", spec: false, sel: p.sel.includes("1042") ? p.sel : [...p.sel, "1042"].slice(0, MAX) })),
+      tIndex: this.seg(s.view === "index"),
+      tDetail: this.seg(s.view === "detail"),
+      tApply: this.seg(s.view === "apply"),
+      navRoles: "font-size:13px;font-weight:600;color:" + (s.view === "index" ? "#111110" : "#5d5b56"),
+
+      rows,
+      cart,
+      hasSelection: s.sel.length > 0,
+      noSelection: s.sel.length === 0,
+      layoutCols: s.sel.length > 0 ? "grid-template-columns:minmax(0,1fr) 322px" : "grid-template-columns:minmax(0,1fr)",
+      cartLabel: spec ? "GENERAL APPLICATION" : s.sel.length + "/" + MAX + " ROLES SELECTED",
+      showSlots: !spec && left > 0,
+      slotsLabel: "+ " + left + " slot" + (left > 1 ? "s" : "") + " left — hit APPLY + in the table",
+
+      isSpeculative: spec,
+      notSpeculative: !spec,
+      applyCols: spec ? "grid-template-columns:minmax(0,1fr)" : "grid-template-columns:minmax(0,1fr) 352px",
+      railWidth: spec ? "max-width:520px;margin:0 auto" : "width:352px;flex:none",
+      resumeReq: spec ? "required" : "optional but recommended",
+      submitLabel: s.sub === "sending"
+        ? "SUBMITTING…"
+        : s.sel.length > 0
+          ? "SUBMIT (" + s.sel.length + " ROLE" + (s.sel.length > 1 ? "S" : "") + ") →"
+          : "SUBMIT APPLICATION →",
+
+      cartCount: spec ? "speculative" : s.sel.length + "/" + MAX + " roles",
+      cartCountStyle: "font-size:12px;font-variant-numeric:tabular-nums;" + (spec ? "color:#4536E8;font-weight:600" : "color:#8a877f"),
+      cartEmpty: !spec && s.sel.length === 0,
+      detailsIntro: spec
+        ? "Complete this form and attach your resume. We will be in touch within 48 hours."
+        : s.sel.length > 0
+          ? "Complete this form to finish your application for the " + s.sel.length + " selected role" + (s.sel.length > 1 ? "s" : "") + " — one form covers them all."
+          : "Pick roles from the table, then complete this form to apply.",
+
+      subForm: s.sub !== "ok" && s.sub !== "dupe",
+      subOk: s.sub === "ok" || s.sub === "dupe",
+      subError: s.sub === "error" || s.sub === "neterr",
+      errorMessage: s.sub === "error"
+        ? "A resume is required for a speculative application — it's what we match you with."
+        : "Network error — please try again.",
+      thanksTitle: s.sub === "dupe"
+        ? "You've already applied."
+        : spec || s.sel.length === 0
+          ? "Thank you for your application."
+          : "Thank you for applying to " + cart.map((c) => c.title).join(", ") + ".",
+      thanksBody: s.sub === "dupe"
+        ? "We are reviewing your application and will reach out within 48 hours."
+        : "We will be in touch within 48 hours.",
+      submit: () => {
+        this.setState({ sub: "sending" });
+        setTimeout(() => this.setState({ sub: "ok" }), 700);
+      },
+      submitStyle:
+        "appearance:none;width:100%;height:40px;margin-top:16px;border-radius:8px;border:none;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:#fff;" +
+        (s.sub === "sending" ? "background:#5d5b56;cursor:default" : "background:#111110;cursor:pointer"),
+      resetSub: () => this.setState({ sub: "idle", sel: [], spec: false, view: "index" }),
+      setIdle: () => this.setState({ sub: "idle" }),
+      setSending: () => this.setState({ sub: "sending" }),
+      setError: () => this.setState({ sub: "error" }),
+      setNetErr: () => this.setState({ sub: "neterr" }),
+      setSubmitted: () => this.setState({ sub: "ok" }),
+      setDupe: () => this.setState({ sub: "dupe" }),
+      rs0: this.chip(s.sub === "idle"), rs1: this.chip(s.sub === "sending"),
+      rs2: this.chip(s.sub === "error"), rs3: this.chip(s.sub === "neterr"),
+      rs4: this.chip(s.sub === "ok"), rs5: this.chip(s.sub === "dupe"),
+
+      filtersOpen: s.filters,
+      toggleFilters: () => this.setState((p) => ({ filters: !p.filters })),
+      filtersBtnStyle:
+        "appearance:none;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border-radius:8px;font-size:13.5px;font-weight:600;color:#111110;cursor:pointer;flex:none;white-space:nowrap;border:1px solid " +
+        (s.filters ? "rgba(91,75,255,.45);background:#F6F4FF" : "rgba(0,0,0,.12);background:#fff"),
+    };
+  }
+}
+</script>
+</body>
+</html>

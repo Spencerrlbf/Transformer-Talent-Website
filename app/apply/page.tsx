@@ -33,10 +33,11 @@ export default async function ApplyPage({
       <div className="wrap">
         {/* No hero here — visitors arrive to finish an application; the
             table + rail start immediately. */}
-        <div className={`b1${speculative === "1" ? "" : " breakout apply-layout"}`} style={{ paddingTop: "1.6rem" }}>
+        <div className={`b1${speculative === "1" ? "" : " apply-layout"}`} style={{ paddingTop: "1.6rem" }}>
           {speculative !== "1" && (
             <div style={{ minWidth: 0 }}>
-              <RolesTable roles={roles} showSelectionUI={false} />
+              <h1 className="apply-h">Add roles to your application</h1>
+              <RolesTable roles={roles} showSelectionUI={false} variant="apply" />
             </div>
           )}
           <aside className={speculative === "1" ? "apply-rail-solo" : "apply-rail"}>

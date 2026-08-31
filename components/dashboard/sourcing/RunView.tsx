@@ -143,7 +143,7 @@ export default function RunView({
       )}
 
       {active && stage && (
-        <div className="dash-src-prog">
+        <div className="dash-run-progress">
           <div className="dash-src-progtop">
             <b>{stage}</b>
             <span>
@@ -151,7 +151,7 @@ export default function RunView({
               started {new Date(run.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </span>
           </div>
-          <div className="dash-src-bar"><i style={{ width: `${pct}%` }} /></div>
+          <div className="bar"><i style={{ width: `${pct}%` }} /></div>
         </div>
       )}
 
@@ -167,11 +167,11 @@ export default function RunView({
 
       {(run.status === "done" || run.status === "screening" || run.status === "ranking") && (
         <>
-          <div className="dash-src-filters">
+          <div className="dash-seg dash-src-seg" role="tablist" aria-label="Review filter">
             {(["all", "strong", "yes", "message", "shortlisted"] as const).map((f) => (
               <button
                 key={f}
-                className={`dash-src-fchip ${filter === f ? "on" : ""}`}
+                className={filter === f ? "on" : ""}
                 onClick={() => { setFilter(f); setPage(1); }}
               >
                 {f === "all" ? `All ${total || importedSoFar}`

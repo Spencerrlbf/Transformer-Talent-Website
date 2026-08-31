@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EE;font-family:'Instrument Sans',system-ui,sans-serif;color:#111110;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#4536E8;text-decoration:none}
+  a:hover{color:#2E22B8}
+  input,select,textarea,button{font-family:inherit}
+</style>
+</helmet>
+
+<section style="padding:44px 48px 90px">
+  <div id="7a" style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">7a</span>
+      <span style="font-size:13px;color:#5d5b56">Search builder — <b style="font-weight:600">Job Detail → Sourcing → New search</b>. Edit a field, then hit Preview matches.</span>
+    </div>
+
+    <div style="display:flex;gap:3px;padding:3px;background:rgba(0,0,0,.06);border-radius:999px;width:max-content;margin:0 0 18px">
+      <button type="button" onClick="{{ pickIdle }}" style="{{ s0 }}">Building</button>
+      <button type="button" onClick="{{ pickOk }}" style="{{ s1 }}">Ready to import</button>
+      <button type="button" onClick="{{ pickCredits }}" style="{{ s2 }}">Not enough credits</button>
+      <button type="button" onClick="{{ pickBroad }}" style="{{ s3 }}">Too broad</button>
+      <button type="button" onClick="{{ pickNone }}" style="{{ s4 }}">No matches</button>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:14px;height:56px;padding:0 28px;border-bottom:1px solid rgba(0,0,0,.08)">
+        <span style="font-size:13px;color:#8a877f">Northwind Robotics</span>
+        <span style="font-size:13px;color:#c2bfb8">/</span>
+        <a href="#7a" style="font-size:13px;color:#5d5b56">Senior Fleet Software Engineer</a>
+        <span style="font-size:13px;color:#c2bfb8">/</span>
+        <span style="font-size:13px;color:#111110;font-weight:500">Sourcing</span>
+        <div style="flex:1"></div>
+        <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">Credits <b style="font-weight:600;color:#111110">2,140</b></span>
+      </div>
+
+      <div style="padding:26px 28px 38px">
+        <div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:22px">
+          <div style="flex:1;min-width:0">
+            <a href="#7a" style="font-size:12.5px;font-weight:600;color:#5d5b56">← All searches</a>
+            <h1 style="margin:8px 0 0;font-size:26px;font-weight:600;letter-spacing:-.025em">New search</h1>
+            <p style="margin:5px 0 0;font-size:13.5px;color:#8a877f">Everyone who matches is imported and reviewed against this role. 1 credit per candidate, review included.</p>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:26px;align-items:start">
+          <div>
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:22px 24px">
+
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Job titles</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:7px 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;min-height:38px">
+                <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 10px;border-radius:6px;background:rgba(0,0,0,.06);font-size:12.5px">Senior Fleet Software Engineer<span style="color:#8a877f;cursor:pointer">×</span></span>
+                <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 10px;border-radius:6px;background:rgba(0,0,0,.06);font-size:12.5px">Robotics Software Engineer<span style="color:#8a877f;cursor:pointer">×</span></span>
+                <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 10px;border-radius:6px;background:rgba(0,0,0,.06);font-size:12.5px">Motion Planning Engineer<span style="color:#8a877f;cursor:pointer">×</span></span>
+                <input placeholder="Add a title, then Enter" style="flex:1;min-width:150px;height:26px;border:none;outline:none;font-size:13px;background:none">
+              </div>
+
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f;margin-top:20px">Locations</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:7px 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;min-height:38px">
+                <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 10px;border-radius:6px;background:rgba(0,0,0,.06);font-size:12.5px">Austin<span style="color:#8a877f;cursor:pointer">×</span></span>
+                <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 10px;border-radius:6px;background:rgba(0,0,0,.06);font-size:12.5px">Boston<span style="color:#8a877f;cursor:pointer">×</span></span>
+                <input placeholder="New York, San Francisco…" style="flex:1;min-width:150px;height:26px;border:none;outline:none;font-size:13px;background:none">
+              </div>
+
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f;margin-top:20px">Ideal companies <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:12px">currently there</span></div>
+              <div style="position:relative;margin-top:8px">
+                <div onClick="{{ toggleDrop }}" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px 9px;border:1px solid rgba(91,75,255,.45);border-radius:8px;min-height:38px;cursor:text">
+                  <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 6px;border-radius:6px;background:#EFEDFF;color:#3B2FB8;font-size:12.5px"><span style="width:18px;height:18px;border-radius:4px;background:#fff;border:1px solid rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#5d5b56">L</span>Locus Robotics<span style="color:#9C93FF;cursor:pointer">×</span></span>
+                  <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 6px;border-radius:6px;background:#EFEDFF;color:#3B2FB8;font-size:12.5px"><span style="width:18px;height:18px;border-radius:4px;background:#fff;border:1px solid rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#5d5b56">S</span>Symbotic<span style="color:#9C93FF;cursor:pointer">×</span></span>
+                  <input value="berk" onChange="{{ noop }}" placeholder="Type a company name…" style="flex:1;min-width:120px;height:26px;border:none;outline:none;font-size:13px;background:none">
+                </div>
+                <sc-if value="{{ dropOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;box-shadow:0 18px 44px -20px rgba(17,17,16,.4);padding:6px;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;cursor:pointer;background:#FBFAF8">
+                      <span style="width:28px;height:28px;border-radius:6px;background:#F0EFEC;border:1px solid rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#5d5b56;flex:none">B</span>
+                      <span style="min-width:0"><b style="display:block;font-size:13.5px;font-weight:600">Berkshire Grey</b><small style="display:block;font-size:11.5px;color:#8a877f">Bedford, MA · 18K followers</small></span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;cursor:pointer" style-hover="background:#FBFAF8">
+                      <span style="width:28px;height:28px;border-radius:6px;background:#F0EFEC;border:1px solid rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#5d5b56;flex:none">B</span>
+                      <span style="min-width:0"><b style="display:block;font-size:13.5px;font-weight:600">Berkeley Robotics Lab</b><small style="display:block;font-size:11.5px;color:#8a877f">Berkeley, CA · 4K followers</small></span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;cursor:pointer" style-hover="background:#FBFAF8">
+                      <span style="width:28px;height:28px;border-radius:6px;background:#F0EFEC;border:1px solid rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#5d5b56;flex:none">B</span>
+                      <span style="min-width:0"><b style="display:block;font-size:13.5px;font-weight:600">Berkano Systems</b><small style="display:block;font-size:11.5px;color:#8a877f">Austin, TX · 900 followers</small></span>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f;margin-top:20px">Ideal companies <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:12px">worked there before</span></div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:7px 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;min-height:38px">
+                <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 6px;border-radius:6px;background:#EFEDFF;color:#3B2FB8;font-size:12.5px"><span style="width:18px;height:18px;border-radius:4px;background:#fff;border:1px solid rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#5d5b56">A</span>Amazon Robotics<span style="color:#9C93FF;cursor:pointer">×</span></span>
+                <input placeholder="Type a company name…" style="flex:1;min-width:150px;height:26px;border:none;outline:none;font-size:13px;background:none">
+              </div>
+
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f;margin-top:20px">Keywords</div>
+              <input value="motion planning, ROS2, fleet" onChange="{{ noop }}" style="display:block;width:100%;height:38px;margin-top:8px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+              <p style="margin:7px 0 0;font-size:12px;color:#8a877f">Free text matched against headline, skills and experience.</p>
+
+              <button type="button" onClick="{{ toggleMore }}" style="{{ moreBtnStyle }}">{{ moreCaret }} More filters — experience, company size, schools, exclusions</button>
+
+              <sc-if value="{{ moreOpen }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:14px;padding:18px 20px;border:1px solid rgba(0,0,0,.09);border-radius:12px;background:#FBFAF8">
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Years of experience</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                    <sc-for list="{{ yoe }}" as="b" hint-placeholder-count="5">
+                      <button type="button" onClick="{{ b.toggle }}" style="{{ b.style }}">{{ b.label }}</button>
+                    </sc-for>
+                  </div>
+
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f;margin-top:20px">Company size</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                    <sc-for list="{{ sizes }}" as="b" hint-placeholder-count="8">
+                      <button type="button" onClick="{{ b.toggle }}" style="{{ b.style }}">{{ b.label }}</button>
+                    </sc-for>
+                  </div>
+
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f;margin-top:20px">Schools</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:7px 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;background:#fff;min-height:38px">
+                    <input placeholder="Stanford University, MIT…" style="flex:1;min-width:150px;height:26px;border:none;outline:none;font-size:13px;background:none">
+                  </div>
+
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9A5B14;margin-top:20px">Exclude companies</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:7px 9px;border:1px solid rgba(154,91,20,.28);border-radius:8px;background:#fff;min-height:38px">
+                    <span style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 8px 0 6px;border-radius:6px;background:#FBF1E6;color:#9A5B14;font-size:12.5px"><span style="width:18px;height:18px;border-radius:4px;background:#fff;border:1px solid rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#9A5B14">N</span>Northwind Robotics<span style="cursor:pointer">×</span></span>
+                    <input placeholder="Type a company name…" style="flex:1;min-width:150px;height:26px;border:none;outline:none;font-size:13px;background:none">
+                  </div>
+                  <p style="margin:7px 0 0;font-size:12px;color:#8a877f">Your own company is excluded by default so you don&rsquo;t source your own team.</p>
+
+                  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9A5B14;margin-top:20px">Exclude locations</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:7px 9px;border:1px solid rgba(154,91,20,.28);border-radius:8px;background:#fff;min-height:38px">
+                    <input placeholder="Add a location to exclude…" style="flex:1;min-width:150px;height:26px;border:none;outline:none;font-size:13px;background:none">
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="display:flex;align-items:center;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid rgba(0,0,0,.08)">
+                <button type="button" onClick="{{ preview }}" style="appearance:none;height:38px;padding:0 16px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex:none">{{ previewLabel }}</button>
+                <button type="button" style="appearance:none;height:38px;padding:0 16px;border-radius:8px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:13px;font-weight:600;color:#111110;cursor:pointer;white-space:nowrap;flex:none">Cancel</button>
+                <div style="flex:1"></div>
+                <span style="font-size:12.5px;color:#8a877f;white-space:nowrap">{{ dirtyNote }}</span>
+              </div>
+            </div>
+
+            <sc-if value="{{ showOk }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:20px;margin-top:14px;padding:18px 20px;border:1px solid rgba(31,122,76,.3);border-radius:14px;background:#F4FAF6">
+                <div style="flex:1">
+                  <b style="font-size:15px;font-weight:600;color:#111110">This search matches ~840 candidates</b>
+                  <div style="margin-top:4px;font-size:13px;color:#3b5c4a;font-variant-numeric:tabular-nums">Everyone who matches is imported and reviewed — 840 credits (you have 2,140). Balance after this run: 1,300.</div>
+                </div>
+                <button type="button" style="appearance:none;height:38px;padding:0 16px;border-radius:8px;border:none;background:#1F7A4C;color:#fff;font-size:13px;font-weight:600;cursor:pointer;flex:none;white-space:nowrap">Import all 840</button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showCredits }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:14px;padding:18px 20px;border:1px solid rgba(154,91,20,.3);border-radius:14px;background:#FBF1E6">
+                <b style="font-size:15px;font-weight:600;color:#111110">This search matches ~3,480 candidates — you have 2,140 credits</b>
+                <p style="margin:6px 0 0;max-width:560px;font-size:13px;line-height:1.6;color:#584634;text-wrap:pretty">Importing costs 1 credit per candidate, review included. Narrow the search to fit your balance, or contact us to top up.</p>
+                <div style="display:flex;gap:8px;margin-top:14px">
+                  <button type="button" style="appearance:none;height:34px;padding:0 14px;border-radius:8px;border:none;background:#9A5B14;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer">Request more credits</button>
+                  <button type="button" onClick="{{ pickIdle }}" style="appearance:none;height:34px;padding:0 14px;border-radius:8px;border:1px solid rgba(154,91,20,.3);background:#fff;color:#9A5B14;font-size:12.5px;font-weight:600;cursor:pointer">Narrow the search</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showBroad }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:14px;padding:18px 20px;border:1px solid rgba(154,91,20,.3);border-radius:14px;background:#FBF1E6">
+                <b style="font-size:15px;font-weight:600;color:#111110">Too broad — 12,400 matches</b>
+                <p style="margin:6px 0 0;max-width:580px;font-size:13px;line-height:1.6;color:#584634;text-wrap:pretty">Narrow the search to 5,000 or fewer so every match can be imported and ranked. Try adding a location, an experience band, or a company-size filter.</p>
+                <div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap">
+                  <span style="display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;border:1px solid rgba(154,91,20,.3);background:#fff;font-size:12.5px;font-weight:600;color:#9A5B14;cursor:pointer">+ Add 6–10 yrs</span>
+                  <span style="display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;border:1px solid rgba(154,91,20,.3);background:#fff;font-size:12.5px;font-weight:600;color:#9A5B14;cursor:pointer">+ Limit to Austin</span>
+                  <span style="display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;border:1px solid rgba(154,91,20,.3);background:#fff;font-size:12.5px;font-weight:600;color:#9A5B14;cursor:pointer">+ 51–200 people</span>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showNone }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:14px;padding:18px 20px;border:1px solid rgba(0,0,0,.12);border-radius:14px;background:#FBFAF8">
+                <b style="font-size:15px;font-weight:600;color:#111110">No matches</b>
+                <p style="margin:6px 0 0;font-size:13px;line-height:1.6;color:#5d5b56">Try removing a filter or loosening the titles.</p>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="position:sticky;top:20px;display:flex;flex-direction:column;gap:12px">
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:16px 18px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">This search</div>
+              <p style="margin:9px 0 0;font-size:13.5px;line-height:1.55;color:#3b3934;text-wrap:pretty">Senior Fleet Software Engineer, Robotics Software Engineer, Motion Planning Engineer · Austin, Boston · Locus Robotics + Symbotic + Amazon Robotics · &ldquo;motion planning, ROS2, fleet&rdquo;</p>
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.07);display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#8a877f">Titles</span><span style="font-variant-numeric:tabular-nums">3</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#8a877f">Locations</span><span style="font-variant-numeric:tabular-nums">2</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#8a877f">Companies</span><span style="font-variant-numeric:tabular-nums">3</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#8a877f">Exclusions</span><span style="font-variant-numeric:tabular-nums">1</span></div>
+              </div>
+            </div>
+
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:16px 18px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Credits</div>
+              <div style="margin-top:8px;font-size:24px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums">2,140</div>
+              <div style="height:4px;margin-top:9px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden"><div style="width:62%;height:100%;background:#5B4BFF"></div></div>
+              <p style="margin:9px 0 0;font-size:12px;line-height:1.5;color:#8a877f;text-wrap:pretty">180 reserved by 2 runs in progress. 1 credit per candidate imported; candidates already in your pool are free.</p>
+            </div>
+
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:16px 18px;background:#FBFAF8">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">What happens next</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:11px">
+                <div style="display:flex;gap:10px;font-size:12.5px;line-height:1.5;color:#5d5b56"><span style="font-weight:600;color:#111110;flex:none">1</span><span>Every match is imported into this job&rsquo;s pipeline.</span></div>
+                <div style="display:flex;gap:10px;font-size:12.5px;line-height:1.5;color:#5d5b56"><span style="font-weight:600;color:#111110;flex:none">2</span><span>Each one is reviewed against the JD and tagged with a client-safe reason.</span></div>
+                <div style="display:flex;gap:10px;font-size:12.5px;line-height:1.5;color:#5d5b56"><span style="font-weight:600;color:#111110;flex:none">3</span><span>You get a ranked list, best match first. Shortlist or dismiss from there.</span></div>
+              </div>
+            </div>
+
+            <div style="border:1px dashed rgba(0,0,0,.16);border-radius:14px;padding:14px 16px">
+              <div style="font-size:12.5px;font-weight:600;color:#111110">Reuse a past search</div>
+              <p style="margin:5px 0 0;font-size:12px;line-height:1.5;color:#8a877f">Duplicate an earlier run and edit it instead of starting from nothing.</p>
+              <a href="#7a" style="display:inline-block;margin-top:8px;font-size:12.5px;font-weight:600">3 searches for this job →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:20px 22px;max-width:1000px">
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">For implementation — where each state comes from</div>
+      <p style="margin:9px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">The switcher above is review scaffolding only — do not build it. Each state is a response from <b style="font-weight:600;color:#111110">POST /api/dashboard/sourcing/preview</b> with <code style="font-size:12.5px">{ jobId, query }</code>, held in one <code style="font-size:12.5px">preview</code> state variable. Any edit to any field resets it to <code style="font-size:12.5px">idle</code>, so a run can never start against a stale count.</p>
+      <div style="margin-top:16px;border:1px solid rgba(0,0,0,.09);border-radius:12px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:10px 16px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+          <span>State</span><span>API response</span><span>What renders</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+          <span style="font-size:13px;font-weight:600">Building</span>
+          <span style="font-size:12.5px;color:#5d5b56">no request yet, or any field edited</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Form only. No banner, no way to start a run.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+          <span style="font-size:13px;font-weight:600">Checking…</span>
+          <span style="font-size:12.5px;color:#5d5b56">request in flight</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Preview button reads &ldquo;Checking…&rdquo; and is disabled.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+          <span style="font-size:13px;font-weight:600">Ready to import</span>
+          <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">ok: true</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Green banner when <code style="font-size:12.5px">creditsAvailable &ge; total</code>. &ldquo;Import all N&rdquo; POSTs to <code style="font-size:12.5px">/sourcing/runs</code> with <code style="font-size:12.5px">matchEstimate</code>, then routes to the run view.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+          <span style="font-size:13px;font-weight:600">Not enough credits</span>
+          <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">ok: true</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Same response, <code style="font-size:12.5px">creditsAvailable &lt; total</code>. Also reached when <code style="font-size:12.5px">/sourcing/runs</code> returns <b style="font-weight:600">402</b> — take <code style="font-size:12.5px">available</code> from that body. No start button.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+          <span style="font-size:13px;font-weight:600">Too broad</span>
+          <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">code: "too_broad"</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Hard stop above <code style="font-size:12.5px">maxImport</code>. Amber banner; no start button. The three narrowing chips are new — each applies its filter and re-previews.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07);align-items:baseline">
+          <span style="font-size:13px;font-weight:600">No matches</span>
+          <span style="font-size:12.5px;color:#5d5b56;font-family:ui-monospace,monospace">code: "no_matches"</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Neutral banner, loosen-the-filters copy.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:150px 210px minmax(0,1fr);gap:14px;padding:12px 16px;align-items:baseline">
+          <span style="font-size:13px;font-weight:600">Error</span>
+          <span style="font-size:12.5px;color:#5d5b56">non-2xx, or network failure</span>
+          <span style="font-size:13px;color:#3b3934;text-wrap:pretty">Same neutral banner shell: &ldquo;Something went wrong / The preview couldn&rsquo;t run. Try again in a moment.&rdquo;</span>
+        </div>
+      </div>
+      <p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Query shape, the label map and the one-line run summary are already in <b style="font-weight:600">sourcing/types.ts</b> (<code style="font-size:12px">QueryDraft</code>, <code style="font-size:12px">queryFromDraft</code>, <code style="font-size:12px">draftFromParams</code>, <code style="font-size:12px">summarizeParams</code>) — reuse them rather than re-deriving. The company typeahead is <code style="font-size:12px">GET /sourcing/companies?q=</code>, debounced 300ms at 2+ characters, storing the LinkedIn URL as the value and the display name in <code style="font-size:12px">companyLabels</code>.</p>
+    </div>
+
+    <p style="margin:16px 0 0;max-width:900px;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">The preview is the guardrail: no run can start until a count comes back, and any edit invalidates the count. Too broad is a hard stop above the import ceiling; not enough credits is a soft stop with a top-up path. The three suggestion chips on the too-broad state are new — they apply the filter that would bring the count down.</p>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const YOE = [
+  { id: "1", label: "Under 1 yr" },
+  { id: "2", label: "1–2 yrs" },
+  { id: "3", label: "3–5 yrs" },
+  { id: "4", label: "6–10 yrs" },
+  { id: "5", label: "10+ yrs" },
+];
+const SIZES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5001-10000", "10001+"];
+
+class Component extends DCLogic {
+  state = { view: "idle", more: false, yoe: ["4"], sizes: ["51-200", "201-500"], loading: false, drop: false };
+
+  seg(on) {
+    return "appearance:none;height:30px;padding:0 14px;border-radius:999px;border:none;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;" +
+      (on ? "background:#fff;color:#111110;box-shadow:0 1px 3px rgba(0,0,0,.14)" : "background:none;color:#5d5b56");
+  }
+  check(on) {
+    return "appearance:none;height:30px;padding:0 12px;border-radius:8px;font-size:12.5px;cursor:pointer;font-variant-numeric:tabular-nums;border:1px solid " +
+      (on ? "#111110;background:#111110;color:#fff;font-weight:600" : "rgba(0,0,0,.14);background:#fff;color:#3b3934;font-weight:500");
+  }
+  set(view) { this.setState({ view, loading: false }); }
+  toggleList(key, id) {
+    this.setState((p) => ({
+      view: "idle",
+      [key]: p[key].includes(id) ? p[key].filter((x) => x !== id) : [...p[key], id],
+    }));
+  }
+
+  renderVals() {
+    const v = this.state.view;
+    return {
+      noop: () => {},
+      dropOpen: this.state.drop,
+      toggleDrop: () => this.setState((p) => ({ drop: !p.drop })),
+      s0: this.seg(v === "idle"), s1: this.seg(v === "ok"), s2: this.seg(v === "credits"),
+      s3: this.seg(v === "broad"), s4: this.seg(v === "none"),
+      pickIdle: () => this.set("idle"), pickOk: () => this.set("ok"),
+      pickCredits: () => this.set("credits"), pickBroad: () => this.set("broad"),
+      pickNone: () => this.set("none"),
+
+      moreOpen: this.state.more,
+      moreCaret: this.state.more ? "▾" : "▸",
+      toggleMore: () => this.setState((p) => ({ more: !p.more })),
+      moreBtnStyle:
+        "appearance:none;display:block;width:100%;text-align:left;margin-top:20px;padding:11px 13px;border-radius:8px;border:1px solid rgba(0,0,0,.1);background:" +
+        (this.state.more ? "#FBFAF8" : "#fff") +
+        ";font-size:13px;font-weight:600;color:#111110;cursor:pointer",
+
+      yoe: YOE.map((b) => ({
+        label: b.label,
+        style: this.check(this.state.yoe.includes(b.id)),
+        toggle: () => this.toggleList("yoe", b.id),
+      })),
+      sizes: SIZES.map((h) => ({
+        label: h,
+        style: this.check(this.state.sizes.includes(h)),
+        toggle: () => this.toggleList("sizes", h),
+      })),
+
+      preview: () => {
+        this.setState({ loading: true });
+        setTimeout(() => this.setState({ view: "ok", loading: false }), 600);
+      },
+      previewLabel: this.state.loading ? "Checking…" : "Preview matches",
+      dirtyNote: v === "idle" ? "No count yet — preview before importing" : "Count is live for this search",
+
+      showOk: v === "ok",
+      showCredits: v === "credits",
+      showBroad: v === "broad",
+      showNone: v === "none",
+    };
+  }
+}
+</script>
+</body>
+</html>

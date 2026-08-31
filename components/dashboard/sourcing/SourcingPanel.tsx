@@ -3,7 +3,7 @@
 // tab: runs list (home) → guided search builder → run workspace.
 import { useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
-import SearchBuilder from "@/components/dashboard/sourcing/SearchBuilder";
+import SearchBuilder, { type CreditSummary } from "@/components/dashboard/sourcing/SearchBuilder";
 import RunView from "@/components/dashboard/sourcing/RunView";
 import {
   draftFromParams,
@@ -27,7 +27,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobTitle: string }) {
   const { token } = useDash();
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
-  const [credits, setCredits] = useState<number | null>(null);
+  const [credits, setCredits] = useState<CreditSummary | null>(null);
   const [view, setView] = useState<View>({ kind: "list" });
 
   const loadRuns = useCallback(() => {
@@ -42,7 +42,7 @@ export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobT
   useEffect(() => {
     fetch("/api/dashboard/credits", { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => (r.ok ? r.json() : null))
-      .then((d) => setCredits(d?.summary?.available ?? null))
+      .then((d) => setCredits(d?.summary ?? null))
       .catch(() => {});
     loadRuns();
   }, [token, loadRuns, view.kind]);
@@ -61,7 +61,7 @@ export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobT
             </span>
             <span className="spacer" />
             {credits !== null && (
-              <span className="dash-src-credits">Credits: <b>{credits.toLocaleString()}</b></span>
+              <span className="dash-src-credits">Credits: <b>{credits.available.toLocaleString()}</b></span>
             )}
             <button className="dash-btn" onClick={() => setView({ kind: "builder", initial: null })}>
               New search
@@ -107,6 +107,8 @@ export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobT
           jobId={jobId}
           jobTitle={jobTitle}
           initial={view.initial}
+          credits={credits}
+          runsCount={runs?.length ?? 0}
           onStarted={(runId) => { setView({ kind: "run", runId }); loadRuns(); }}
           onCancel={() => setView({ kind: "list" })}
         />

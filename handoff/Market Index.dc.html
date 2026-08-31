@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EE;font-family:'Instrument Sans',system-ui,sans-serif;color:#111110;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#4536E8;text-decoration:none}
+  a:hover{color:#2E22B8}
+  input,select,textarea,button{font-family:inherit}
+</style>
+</helmet>
+
+<section style="padding:44px 48px 90px">
+  <div id="10a" style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">10a</span>
+      <span style="font-size:13px;color:#5d5b56">Market index — <b style="font-weight:600">/market-index</b> and <b style="font-weight:600">/market-index/[family]</b>. Real bands from <b style="font-weight:600">data/market-index.json</b>, 123 searches.</span>
+    </div>
+
+    <div style="display:flex;gap:3px;padding:3px;background:rgba(0,0,0,.06);border-radius:999px;width:max-content;margin:0 0 18px">
+      <button type="button" onClick="{{ goIndex }}" style="{{ tIndex }}">Index</button>
+      <button type="button" onClick="{{ goFamily }}" style="{{ tFamily }}">Family guide</button>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:22px;height:60px;padding:0 30px;border-bottom:1px solid rgba(0,0,0,.08)">
+        <a href="#10a" style="display:flex;align-items:baseline;font-size:15px;font-weight:600;letter-spacing:-.015em;color:#111110">Transformer<b style="color:#5B4BFF">_</b>Talent</a>
+        <div style="flex:1"></div>
+        <nav style="display:flex;align-items:center;gap:20px">
+          <a href="#10a" style="font-size:12.5px;color:#5d5b56">/about</a>
+          <a href="#10a" style="font-size:12.5px;font-weight:600;color:#111110">/market-index</a>
+          <a href="#10a" style="font-size:12.5px;color:#5d5b56">/roles</a>
+          <a href="#10a" style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.07em">UPLOAD JD →</a>
+        </nav>
+        <span style="display:flex;align-items:center;gap:7px;margin-left:20px;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:#1F7A4C;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block"></span>SYSTEM LIVE</span>
+      </div>
+
+      <sc-if value="{{ isIndex }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:32px 30px 40px">
+          <h1 style="margin:0;font-size:34px;font-weight:600;letter-spacing:-.03em">Market index</h1>
+          <p style="margin:10px 0 0;max-width:680px;font-size:15px;line-height:1.65;color:#3b3934;text-wrap:pretty">Base-salary bands computed from <b style="font-weight:600">123 live searches</b> we have run for VC-backed startups — not scraped job posts, not survey self-reports. Figures are median band floor and ceiling per role family; &ldquo;top of market&rdquo; is the highest ceiling we&rsquo;ve carried.</p>
+
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:24px">
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:15px 17px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f">Searches</div>
+              <div style="margin-top:6px;font-size:25px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums">123</div>
+            </div>
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:15px 17px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f">Role families</div>
+              <div style="margin-top:6px;font-size:25px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums">4</div>
+            </div>
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:15px 17px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f">Strongest band</div>
+              <div style="margin-top:6px;font-size:25px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums">$192–252k</div>
+              <div style="margin-top:3px;font-size:12px;color:#8a877f">SF infra / backend</div>
+            </div>
+            <div style="border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:15px 17px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a877f">Top of market</div>
+              <div style="margin-top:6px;font-size:25px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums">$600k</div>
+              <div style="margin-top:3px;font-size:12px;color:#8a877f">Staff-plus infra, SF</div>
+            </div>
+          </div>
+
+          <div style="margin-top:30px;padding-top:24px;border-top:1px solid rgba(0,0,0,.09)">
+            <div style="display:flex;align-items:baseline;gap:12px">
+              <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Median bands at a glance</h2>
+              <span style="font-size:12.5px;color:#8a877f">San Francisco vs New York · base salary, $k/year</span>
+            </div>
+
+            <div style="margin-top:16px;border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:22px 24px;overflow-x:auto">
+              <div style="min-width:640px">
+                <svg viewBox="0 0 760 306" role="img" aria-label="Median base salary bands by role family, San Francisco versus New York" style="width:100%;height:auto;display:block">
+                  <g font-family="Instrument Sans, sans-serif" font-size="11">
+                    <rect x="150" y="3" width="10" height="10" rx="3" fill="#5B4BFF"></rect>
+                    <text x="166" y="12" fill="#3b3934">San Francisco</text>
+                    <rect x="266" y="3" width="10" height="10" rx="3" fill="#C4621B"></rect>
+                    <text x="282" y="12" fill="#3b3934">New York</text>
+                  </g>
+
+                  <g stroke="rgba(0,0,0,.08)" stroke-width="1">
+                    <line x1="150" y1="26" x2="150" y2="280"></line>
+                    <line x1="285" y1="26" x2="285" y2="280"></line>
+                    <line x1="420" y1="26" x2="420" y2="280"></line>
+                    <line x1="555" y1="26" x2="555" y2="280"></line>
+                    <line x1="690" y1="26" x2="690" y2="280"></line>
+                  </g>
+                  <g font-family="Instrument Sans, sans-serif" font-size="10.5" fill="#a9a6a0" text-anchor="middle">
+                    <text x="150" y="296">$100k</text>
+                    <text x="285" y="296">$150k</text>
+                    <text x="420" y="296">$200k</text>
+                    <text x="555" y="296">$250k</text>
+                    <text x="690" y="296">$300k</text>
+                  </g>
+
+                  <g font-family="Instrument Sans, sans-serif" font-size="12" fill="#111110" font-weight="600">
+                    <text x="0" y="56">Forward Deployed</text>
+                    <text x="0" y="122">Infra / Backend</text>
+                    <text x="0" y="188">ML / AI</text>
+                    <text x="0" y="254">Product / Full-Stack</text>
+                  </g>
+
+                  <g font-family="Instrument Sans, sans-serif" font-size="10.5" fill="#8a877f">
+                    <g><title>Forward Deployed Engineering — San Francisco: median band $140k–$180k (from 11 searches)</title><rect x="258" y="36.5" width="108" height="9" rx="4.5" fill="#5B4BFF"></rect></g>
+                    <text x="374" y="45">140–180</text>
+                    <g><title>Forward Deployed Engineering — New York: median band $150k–$220k (from 9 searches)</title><rect x="285" y="58.5" width="189" height="9" rx="4.5" fill="#C4621B"></rect></g>
+                    <text x="482" y="67">150–220</text>
+
+                    <g><title>Infrastructure / Backend — San Francisco: median band $192k–$252k (from 8 searches)</title><rect x="398" y="102.5" width="162" height="9" rx="4.5" fill="#5B4BFF"></rect></g>
+                    <text x="568" y="111">192–252</text>
+                    <g><title>Infrastructure / Backend — New York: median band $160k–$240k (from 4 searches)</title><rect x="312" y="124.5" width="216" height="9" rx="4.5" fill="#C4621B"></rect></g>
+                    <text x="536" y="133">160–240</text>
+
+                    <g><title>ML / AI Engineering &amp; Research — San Francisco: median band $160k–$300k (from 7 searches)</title><rect x="312" y="168.5" width="378" height="9" rx="4.5" fill="#5B4BFF"></rect></g>
+                    <text x="698" y="177">160–300</text>
+                    <g><title>ML / AI Engineering &amp; Research — New York: median band $150k–$250k (from 9 searches)</title><rect x="285" y="190.5" width="270" height="9" rx="4.5" fill="#C4621B"></rect></g>
+                    <text x="563" y="199">150–250</text>
+
+                    <g><title>Product / Full-Stack — San Francisco: median band $170k–$255k (from 34 searches)</title><rect x="339" y="234.5" width="230" height="9" rx="4.5" fill="#5B4BFF"></rect></g>
+                    <text x="577" y="243">170–255</text>
+                    <g><title>Product / Full-Stack — New York: median band $150k–$225k (from 15 searches)</title><rect x="285" y="256.5" width="203" height="9" rx="4.5" fill="#C4621B"></rect></g>
+                    <text x="496" y="265">150–225</text>
+                  </g>
+                </svg>
+                <p style="margin:14px 0 0;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a9a6a0">Median authorized base bands, $k/year — from our live searches, 2026</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:30px;padding-top:24px;border-top:1px solid rgba(0,0,0,.09)">
+            <div style="display:flex;align-items:baseline;gap:12px">
+              <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">The index</h2>
+              <span style="font-size:12.5px;color:#8a877f">base salary, $k/year · SF, NYC and remote</span>
+            </div>
+            <div style="margin-top:14px;border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow-x:auto">
+              <div style="min-width:640px">
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 130px 80px 140px 110px;gap:14px;padding:11px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+                  <span>Role family</span><span>Market</span><span style="text-align:right">Searches</span><span style="text-align:right">Median band</span><span style="text-align:right">Top of market</span>
+                </div>
+                <sc-for list="{{ bands }}" as="b" hint-placeholder-count="12">
+                  <div style="{{ b.rowStyle }}">
+                    <span style="font-size:13.5px;font-weight:600;letter-spacing:-.01em">{{ b.family }}</span>
+                    <span style="display:flex;align-items:center;gap:7px;font-size:13px;color:#3b3934"><span style="{{ b.dotStyle }}"></span>{{ b.city }}</span>
+                    <span style="font-size:13px;color:#8a877f;text-align:right;font-variant-numeric:tabular-nums">{{ b.roles }}</span>
+                    <span style="font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ b.band }}</span>
+                    <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">{{ b.top }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <p style="margin:13px 0 0;max-width:700px;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Base salary only — equity excluded. Bands reflect what companies authorized us to offer, updated as searches run. Last computed 2026-08.</p>
+          </div>
+
+          <div style="margin-top:30px;padding-top:24px;border-top:1px solid rgba(0,0,0,.09)">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">What the data says</h2>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px">
+              <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+                <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em">SF pays for infra.</h3>
+                <p style="margin:10px 0 0;font-size:14px;line-height:1.65;color:#3b3934;text-wrap:pretty">Infrastructure and backend carries the strongest bands in San Francisco — median $192–252k with outliers to $600k. If you&rsquo;re hiring infra in SF on a $180k ceiling, the market will outbid you weekly.</p>
+              </div>
+              <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+                <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em">FDE is the arbitrage.</h3>
+                <p style="margin:10px 0 0;font-size:14px;line-height:1.65;color:#3b3934;text-wrap:pretty">Forward-deployed bands start lower ($140–180k median in SF) but top out at $300–400k for senior operators — the widest spread of any family. Titles are unstandardized; great FDEs are priced by impact, not by band.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:30px;padding-top:24px;border-top:1px solid rgba(0,0,0,.09)">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Per-role salary guides</h2>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+              <sc-for list="{{ guides }}" as="g" hint-placeholder-count="4">
+                <button type="button" onClick="{{ goFamily }}" style="appearance:none;display:grid;grid-template-columns:minmax(0,1fr) 130px 70px;gap:14px;align-items:center;width:100%;text-align:left;padding:14px 17px;border:1px solid rgba(0,0,0,.09);border-radius:12px;background:#fff;cursor:pointer" style-hover="background:#FBFAF8;border-color:rgba(0,0,0,.18)">
+                  <span style="font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:#111110">{{ g.title }}</span>
+                  <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">{{ g.searches }}</span>
+                  <span style="font-size:11px;font-weight:700;letter-spacing:.07em;color:#4536E8;text-align:right">READ →</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:24px;margin-top:32px;padding:26px 28px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#FBFAF8">
+            <div style="flex:1;min-width:0">
+              <h2 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-.025em;text-wrap:pretty">Wondering what your role should pay?</h2>
+              <p style="margin:8px 0 0;max-width:560px;font-size:14px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Upload the JD — the matches show you real candidates at real experience levels, and we&rsquo;ll tell you if the band is off. No call required.</p>
+            </div>
+            <a href="#10a" style="display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:9px;background:#111110;color:#fff;font-size:12px;font-weight:700;letter-spacing:.06em;flex:none;white-space:nowrap">SEE POTENTIAL MATCHES →</a>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFamily }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 30px 40px;max-width:980px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">
+            <a href="#10a" onClick="{{ goIndex }}" style="color:#8a877f">/market-index</a>
+            <span style="color:#c2bfb8">—</span>
+            <b style="color:#111110">FORWARD DEPLOYED ENGINEERING</b>
+          </div>
+          <h1 style="margin:14px 0 0;font-size:34px;font-weight:600;letter-spacing:-.03em;text-wrap:pretty">Forward Deployed Engineer Salary Guide</h1>
+          <p style="margin:12px 0 0;max-width:700px;font-size:15px;line-height:1.65;color:#3b3934;text-wrap:pretty">Forward Deployed Engineers (FDEs) sit between engineering and the customer — shipping real solutions on top of a product, in the field. Comp data below comes from live FDE searches we have run for VC-backed startups, not from scraped job posts.</p>
+
+          <div style="display:flex;align-items:baseline;gap:12px;margin-top:28px">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">The bands</h2>
+            <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">base salary, $k/year · from 23 live searches</span>
+          </div>
+
+          <div style="margin-top:14px;border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow-x:auto">
+            <div style="min-width:560px">
+              <div style="display:grid;grid-template-columns:minmax(160px,1.4fr) 90px 150px 120px;gap:14px;padding:11px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+                <span>Market</span><span style="text-align:right">Searches</span><span style="text-align:right">Median band</span><span style="text-align:right">Top of market</span>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(160px,1.4fr) 90px 150px 120px;gap:14px;padding:14px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+                <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600"><span style="width:8px;height:8px;border-radius:999px;background:#C4621B;display:block;flex:none"></span>New York</span>
+                <span style="font-size:13px;color:#8a877f;text-align:right;font-variant-numeric:tabular-nums">9</span>
+                <span style="font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">$150k – $220k</span>
+                <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">$400k</span>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(160px,1.4fr) 90px 150px 120px;gap:14px;padding:14px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+                <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600"><span style="width:8px;height:8px;border-radius:999px;background:#5B4BFF;display:block;flex:none"></span>San Francisco</span>
+                <span style="font-size:13px;color:#8a877f;text-align:right;font-variant-numeric:tabular-nums">11</span>
+                <span style="font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">$140k – $180k</span>
+                <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">$300k</span>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(160px,1.4fr) 90px 150px 120px;gap:14px;padding:14px 18px;align-items:center">
+                <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600"><span style="width:8px;height:8px;border-radius:999px;background:#c2bfb8;display:block;flex:none"></span>Remote / other</span>
+                <span style="font-size:13px;color:#8a877f;text-align:right;font-variant-numeric:tabular-nums">3</span>
+                <span style="font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums">$150k – $220k</span>
+                <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">$230k</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:26px;padding:22px 24px;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#FBFAF8">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">What the data says</div>
+            <p style="margin:11px 0 0;max-width:74ch;font-size:15px;line-height:1.7;color:#3b3934;text-wrap:pretty">FDE bands have the widest spread of any engineering family we place. Entry bands start well below product engineering, but senior operators who own major accounts clear $300–400k base — titles are unstandardized, so great FDEs are priced by impact, not by band.</p>
+            <p style="margin:12px 0 0;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Base salary only, equity excluded. Bands reflect what companies authorized us to offer. Last computed 2026-08.</p>
+          </div>
+
+          <h2 style="margin:30px 0 0;font-size:19px;font-weight:600;letter-spacing:-.02em">Live forward deployed roles</h2>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+            <a href="#10a" style="display:grid;grid-template-columns:60px minmax(0,1fr) 160px 130px;gap:14px;align-items:center;padding:13px 17px;border:1px solid rgba(0,0,0,.09);border-radius:12px" style-hover="background:#FBFAF8">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1044</span>
+              <span style="font-size:14px;font-weight:600;color:#111110;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Forward Deployed Engineer</span>
+              <span style="font-size:12.5px;color:#5d5b56">NYC · Hybrid</span>
+              <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">$170k–$210k</span>
+            </a>
+            <a href="#10a" style="display:grid;grid-template-columns:60px minmax(0,1fr) 160px 130px;gap:14px;align-items:center;padding:13px 17px;border:1px solid rgba(0,0,0,.09);border-radius:12px" style-hover="background:#FBFAF8">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1029</span>
+              <span style="font-size:14px;font-weight:600;color:#111110;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Senior Forward Deployed Engineer</span>
+              <span style="font-size:12.5px;color:#5d5b56">SF / Bay Area</span>
+              <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">$190k–$240k</span>
+            </a>
+            <a href="#10a" style="display:grid;grid-template-columns:60px minmax(0,1fr) 160px 130px;gap:14px;align-items:center;padding:13px 17px;border:1px solid rgba(0,0,0,.09);border-radius:12px" style-hover="background:#FBFAF8">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1011</span>
+              <span style="font-size:14px;font-weight:600;color:#111110;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Deployment Strategist</span>
+              <span style="font-size:12.5px;color:#5d5b56">Remote, US</span>
+              <span style="font-size:13px;font-weight:600;color:#4536E8;text-align:right;font-variant-numeric:tabular-nums">$155k–$185k</span>
+            </a>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:24px;margin-top:32px;padding:26px 28px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#FBFAF8">
+            <div style="flex:1;min-width:0">
+              <h2 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-.025em;text-wrap:pretty">Upload your JD. We&rsquo;ll share potential matches.</h2>
+              <p style="margin:8px 0 0;max-width:560px;font-size:14px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Anonymized profiles of engineers we&rsquo;d put in front of you — and an honest read on whether your band clears the market.</p>
+            </div>
+            <a href="#10a" style="display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:9px;background:#111110;color:#fff;font-size:12px;font-weight:700;letter-spacing:.06em;flex:none;white-space:nowrap">SEE POTENTIAL MATCHES →</a>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;align-items:center;gap:16px;padding:16px 30px;border-top:1px solid rgba(0,0,0,.09);background:#FBFAF8">
+        <span style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#8a877f">© 2026 TRANSFORMER TALENT — &ldquo;TALENT IS ALL YOU NEED&rdquo;</span>
+        <div style="flex:1"></div>
+        <a href="#10a" style="font-size:12.5px;color:#8a877f">spencer@transformertalent.com</a>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:20px 22px;max-width:1000px">
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">For implementation</div>
+      <p style="margin:9px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Every number here is the real <code style="font-size:12.5px">data/market-index.json</code> — twelve rows, four families × SF / New York / Other-Remote, totalling 123 searches. Guide pages come from <code style="font-size:12.5px">FAMILY_PAGES</code> in <code style="font-size:12.5px">lib/market.ts</code> (slug, family, title, keyword, intro, read) with bands via <code style="font-size:12.5px">bandsFor(family)</code>; both pages are static, so no fetching or loading states exist. Keep the intro and read copy verbatim — they are SEO landing pages targeting specific queries.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty"><b style="font-weight:600;color:#111110">SalaryChart</b> stays a server-rendered inline SVG with no chart library: a horizontal range bar per family × city, x domain clamped to $100k–$320k, gridlines every $50k, and a <code style="font-size:12.5px">&lt;title&gt;</code> per bar for the native tooltip (<code style="font-size:12.5px">&ldquo;family — city: median band $Xk–$Yk (from N searches)&rdquo;</code>). It keeps its <code style="font-size:12.5px">compact</code> prop for tighter rows. Only two changes: the palette moves to this system&rsquo;s ink-on-paper values with <b style="font-weight:600;color:#4536E8">SF #5B4BFF</b> and <b style="font-weight:600;color:#C4621B">NYC #C4621B</b> (hue-distinct, so it survives colour-blind viewing and greyscale printing), and the chart is wrapped in a horizontal scroller with a 640px floor rather than squeezing on narrow screens.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Added, and worth a decision: the four headline stats above the chart (searches, families, strongest band, top of market) are derived, not new data — <code style="font-size:12.5px">reduce</code> over the same JSON. The index table gains a market dot matching the chart legend so the two read as one system, and the guide list shows each family&rsquo;s search count so the sample size is visible before the click.</p>
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const RAW = [
+  ["Forward Deployed Engineering", "New York", 9, 150, 220, 400],
+  ["Forward Deployed Engineering", "San Francisco", 11, 140, 180, 300],
+  ["Forward Deployed Engineering", "Remote / other", 3, 150, 220, 230],
+  ["Infrastructure / Backend", "New York", 4, 160, 240, 250],
+  ["Infrastructure / Backend", "San Francisco", 8, 192, 252, 600],
+  ["Infrastructure / Backend", "Remote / other", 4, 177, 242, 275],
+  ["ML / AI Engineering & Research", "New York", 9, 150, 250, 300],
+  ["ML / AI Engineering & Research", "San Francisco", 7, 160, 300, 450],
+  ["ML / AI Engineering & Research", "Remote / other", 6, 150, 217, 270],
+  ["Product / Full-Stack", "New York", 15, 150, 225, 400],
+  ["Product / Full-Stack", "San Francisco", 34, 170, 255, 500],
+  ["Product / Full-Stack", "Remote / other", 13, 175, 224, 323],
+];
+
+const DOT = { "San Francisco": "#5B4BFF", "New York": "#C4621B", "Remote / other": "#c2bfb8" };
+
+const GUIDES = [
+  { title: "Forward Deployed Engineer Salary Guide", searches: "23 searches" },
+  { title: "ML & AI Engineer Salary Guide", searches: "22 searches" },
+  { title: "Backend & Infrastructure Engineer Salary Guide", searches: "16 searches" },
+  { title: "Startup Software Engineer Salary Guide", searches: "62 searches" },
+];
+
+class Component extends DCLogic {
+  state = { view: "index" };
+
+  seg(on) {
+    return "appearance:none;height:30px;padding:0 15px;border-radius:999px;border:none;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;" +
+      (on ? "background:#fff;color:#111110;box-shadow:0 1px 3px rgba(0,0,0,.14)" : "background:none;color:#5d5b56");
+  }
+
+  renderVals() {
+    const v = this.state.view;
+    return {
+      isIndex: v === "index",
+      isFamily: v === "family",
+      goIndex: () => this.setState({ view: "index" }),
+      goFamily: () => this.setState({ view: "family" }),
+      tIndex: this.seg(v === "index"),
+      tFamily: this.seg(v === "family"),
+      guides: GUIDES,
+      bands: RAW.map((r, i) => ({
+        family: r[0],
+        city: r[1],
+        roles: r[2],
+        band: "$" + r[3] + "k – $" + r[4] + "k",
+        top: "$" + r[5] + "k",
+        dotStyle: "width:8px;height:8px;border-radius:999px;flex:none;display:block;background:" + DOT[r[1]],
+        rowStyle:
+          "display:grid;grid-template-columns:minmax(0,2fr) 130px 80px 140px 110px;gap:14px;padding:13px 18px;align-items:center;" +
+          (i < RAW.length - 1 ? "border-bottom:1px solid rgba(0,0,0,.07);" : "") +
+          (i % 3 === 0 && i > 0 ? "border-top:1px solid rgba(0,0,0,.07);" : ""),
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

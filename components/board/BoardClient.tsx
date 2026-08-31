@@ -10,7 +10,8 @@
 // When embedded via widget.js it reports its height for iframe auto-resize.
 import { useEffect, useMemo, useRef, useState } from "react";
 import CompanyAbout from "@/components/board/CompanyAbout";
-import MultiSelect from "@/components/MultiSelect";
+import SocialIcons from "@/components/board/SocialIcons";
+import MultiSelect, { SingleSelect } from "@/components/MultiSelect";
 import type { CompanyPage } from "@/lib/server/company-page";
 import {
   ROLE_FOCUS_OPTIONS,
@@ -77,14 +78,22 @@ const yoeMin = (r: BoardRoleView) => {
 };
 
 type SortKey = "id" | "title" | "location" | "workplace" | "yoe" | "salary";
-const HEADERS: { key: SortKey; label: string }[] = [
-  { key: "id", label: "ID" },
+// Office and experience fold into the role's meta line (§4.8); they stay
+// sortable through the Sorted-by note even without their own columns.
+const HEADERS: { key: SortKey; label: string; cls?: string }[] = [
+  { key: "id", label: "ID", cls: "w-id" },
   { key: "title", label: "Role" },
-  { key: "location", label: "Location" },
-  { key: "workplace", label: "Office" },
-  { key: "yoe", label: "Experience" },
-  { key: "salary", label: "Base salary" },
+  { key: "location", label: "Location", cls: "w-loc" },
+  { key: "salary", label: "Base salary", cls: "w-sal" },
 ];
+const SORT_NOTE: Record<SortKey, string> = {
+  id: "ID",
+  title: "role",
+  location: "location",
+  workplace: "office",
+  yoe: "experience",
+  salary: "salary",
+};
 
 // Recruiter mode: the same board rendered as a person's public page — banner
 // header, first-person resume banner, mandatory resume, and attribution.
@@ -157,7 +166,7 @@ export default function BoardClient({
   company,
   initialTab = "jobs",
 }: {
-  org: { slug: string; name: string };
+  org: { slug: string; name: string; referralAmount?: number };
   roles: BoardRoleView[];
   recruiter?: RecruiterHead;
   /** Published company page content; undefined = plain board (as ever). */
@@ -189,6 +198,53 @@ export default function BoardClient({
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [formError, setFormError] = useState("");
   const railRef = useRef<HTMLElement>(null);
+
+  // One Filters control (§2.3): button opens a grouped menu; picking from a
+  // pane sets the filter and closes; active filters render as chips.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPane, setMenuPane] = useState<"" | "loc" | "office" | "type" | "visa">("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setMenuPane("");
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
+  const activeFilterCount = [loc, office, type, visaF].filter(Boolean).length;
+  const filterMenuRow = (label: string, value: string, open: () => void) => (
+    <div className="row" role="button" tabIndex={0} onClick={open}>
+      {label}
+      <span className="val">{value}</span>
+      <span className="car">›</span>
+    </div>
+  );
+  const filterPane = (label: string, options: string[], current: string, set: (v: string) => void) => (
+    <>
+      <div className="head back" role="button" onClick={() => setMenuPane("")}>
+        ‹ {label}
+      </div>
+      {options.map((o) => (
+        <div
+          key={o || "any"}
+          className={`row${current === o ? " onopt" : ""}`}
+          role="button"
+          onClick={() => {
+            set(o);
+            setMenuOpen(false);
+            setMenuPane("");
+          }}
+        >
+          {o || "Any"}
+          {current === o && <span className="val">✓</span>}
+        </div>
+      ))}
+    </>
+  );
 
   // Booking + contact actions (recruiter mode): header row on desktop, a
   // bottom-pinned bar on phones — same buttons, position by screen width.
@@ -456,11 +512,11 @@ export default function BoardClient({
                 ) : null;
               })()}
             </div>
-            {company.website && (
-              <a className="co-site" href={company.website} target="_blank" rel="noreferrer">
-                {company.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")} ↗
-              </a>
-            )}
+            <SocialIcons
+              website={company.website}
+              socials={company.profile.socials}
+              orgName={org.name}
+            />
           </div>
           <div className="co-tabs">
             <button
@@ -538,29 +594,59 @@ export default function BoardClient({
         </header>
       )}
 
-      {/* Org boards keep the plain resume banner. */}
+      <div className="board-body">
+      {/* Org boards: resume drop and refer-an-engineer side by side. */}
       {!recruiter && !railVisible && (
         <div className="board-banners">
-          <div className="board-spec">
-            <p>
-              <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
-              {org.name}&apos;s open roles and reach out when the right one arrives.
-            </p>
-            <button
-              className="board-btn"
-              onClick={() => {
-                setSpeculative(true);
-              }}
-            >
-              UPLOAD RESUME →
-            </button>
+          <div className="board-spec2">
+            <div className="board-spec">
+              <p>
+                <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
+                {org.name}&apos;s open roles and reach out when the right one arrives.
+              </p>
+              <button
+                className="board-btn"
+                onClick={() => {
+                  setSpeculative(true);
+                }}
+              >
+                UPLOAD RESUME →
+              </button>
+            </div>
+            <div className="board-spec">
+              <p>
+                <b>Know someone great?</b>{" "}
+                {org.referralAmount ? (
+                  <>
+                    Refer an engineer for {org.name}&apos;s open roles and receive{" "}
+                    <b>${org.referralAmount.toLocaleString()}</b> if we place them.
+                  </>
+                ) : (
+                  <>
+                    Refer an engineer for {org.name}&apos;s open roles and we&apos;ll take it from
+                    there.
+                  </>
+                )}
+              </p>
+              <button
+                className="board-btn"
+                onClick={() =>
+                  document
+                    .getElementById("refer")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                REFER AN ENGINEER →
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Recruiter pages: one block, three doors — resume now, hear from me
-          later, refer someone. Each opens its own form. */}
-      {recruiter && !railVisible && (
+          later, refer someone. Stays visible while the application rail is
+          open so nobody loses the other two doors after picking one. */}
+      {recruiter && (
         <div className="board-futwrap" ref={futRef}>
           <div className="board-triple">
             <p>
@@ -675,28 +761,20 @@ export default function BoardClient({
                         onChange={setFutLocs}
                       />
                     )}
-                    <div className="board-msel">
-                      <span className="board-msel-lbl">Minimum salary</span>
-                      <select value={futSalary} onChange={(e) => setFutSalary(e.target.value)}>
-                        <option value="">Any</option>
-                        {SALARY_BAND_OPTIONS.map((v) => (
-                          <option key={v} value={v}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="board-msel">
-                      <span className="board-msel-lbl">Visa status</span>
-                      <select value={futVisa} onChange={(e) => setFutVisa(e.target.value)}>
-                        <option value="">Select…</option>
-                        {VISA_OPTIONS.map((v) => (
-                          <option key={v} value={v}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SingleSelect
+                      label="Minimum salary"
+                      options={SALARY_BAND_OPTIONS}
+                      value={futSalary}
+                      onChange={setFutSalary}
+                      placeholder="Any"
+                    />
+                    <SingleSelect
+                      label="Visa status"
+                      options={VISA_OPTIONS}
+                      value={futVisa}
+                      onChange={setFutVisa}
+                      placeholder="Select…"
+                    />
                   </div>
                   <input
                     name="website"
@@ -718,43 +796,87 @@ export default function BoardClient({
       )}
 
       <div className="board-filters">
+        <div className="dash-filters-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className="dash-filters-btn"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setMenuOpen(!menuOpen);
+              setMenuPane("");
+            }}
+          >
+            ☰ Filters
+            {activeFilterCount > 0 && <span className="count">{activeFilterCount}</span>}
+            <span aria-hidden>▾</span>
+          </button>
+          {menuOpen && (
+            <div className="dash-filters-menu">
+              {menuPane === "" && (
+                <>
+                  <div className="head">Add filter…</div>
+                  {filterMenuRow("Location", loc || "Any", () => setMenuPane("loc"))}
+                  {offices.length > 0 && filterMenuRow("Office", office || "Any", () => setMenuPane("office"))}
+                  {types.length > 0 && filterMenuRow("Role type", type || "Any", () => setMenuPane("type"))}
+                  {filterMenuRow("Visa", visaF || "Any", () => setMenuPane("visa"))}
+                </>
+              )}
+              {menuPane === "loc" && filterPane("Location", ["", ...locations], loc, setLoc)}
+              {menuPane === "office" && filterPane("Office", ["", ...offices], office, setOffice)}
+              {menuPane === "type" && filterPane("Role type", ["", ...types], type, setType)}
+              {menuPane === "visa" &&
+                filterPane("Visa", ["", "Visa transfers OK", "No sponsorship"], visaF, setVisaF)}
+            </div>
+          )}
+        </div>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder='search: python, go -java · "machine learning" · comma = OR, minus = exclude'
           aria-label="Search roles"
         />
-        <select value={loc} onChange={(e) => setLoc(e.target.value)} aria-label="Filter by location">
-          <option value="">all locations</option>
-          {locations.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </select>
-        <select value={office} onChange={(e) => setOffice(e.target.value)} aria-label="Filter by office type">
-          <option value="">all office types</option>
-          {offices.map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
-        {types.length > 0 && (
-          <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by role type">
-            <option value="">all role types</option>
-            {types.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        )}
-        <select value={visaF} onChange={(e) => setVisaF(e.target.value)} aria-label="Filter by visa">
-          <option value="">any visa status</option>
-          <option value="Visa transfers OK">Visa transfers OK</option>
-          <option value="No sponsorship">No sponsorship</option>
-        </select>
+        <span className="dash-sortnote">Sorted by {SORT_NOTE[sort]}</span>
       </div>
 
-      <p className="board-count">
-        {shown.length} of {roles.length} roles
-        {shown.length > PAGE_SIZE ? ` · page ${page} of ${pageCount}` : ""}
-      </p>
+      <div className="board-chipsrow">
+        {activeFilterCount > 0 && (
+          <>
+            {(
+              [
+                ["Location", loc, () => setLoc("")],
+                ["Office", office, () => setOffice("")],
+                ["Role type", type, () => setType("")],
+                ["Visa", visaF, () => setVisaF("")],
+              ] as [string, string, () => void][]
+            )
+              .filter(([, v]) => v)
+              .map(([label, v, clear]) => (
+                <span key={label} className="dash-chip">
+                  {label}: <b>{v}</b>
+                  <button type="button" aria-label={`Clear ${label}`} onClick={clear}>
+                    ✕
+                  </button>
+                </span>
+              ))}
+            <button
+              type="button"
+              className="clear"
+              onClick={() => {
+                setLoc("");
+                setOffice("");
+                setType("");
+                setVisaF("");
+              }}
+            >
+              Clear all
+            </button>
+          </>
+        )}
+        <p className="board-count">
+          {shown.length} of {roles.length} roles
+          {shown.length > PAGE_SIZE ? ` · page ${page} of ${pageCount}` : ""}
+        </p>
+      </div>
 
       <div className={`board-layout${railVisible ? " with-panel" : ""}`}>
         <div style={{ minWidth: 0 }}>
@@ -765,6 +887,7 @@ export default function BoardClient({
                   {HEADERS.map((h) => (
                     <th
                       key={h.key}
+                      className={h.cls}
                       onClick={() => clickSort(h.key)}
                       style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
                       aria-sort={sort === h.key ? (dir === 1 ? "ascending" : "descending") : "none"}
@@ -773,17 +896,19 @@ export default function BoardClient({
                       <span className="board-sort">{sort === h.key ? (dir === 1 ? "▲" : "▼") : ""}</span>
                     </th>
                   ))}
-                  <th className="board-apcell" style={{ whiteSpace: "nowrap" }}>Apply</th>
+                  <th className="board-apcell w-ap" style={{ whiteSpace: "nowrap" }}>Apply</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r) => {
                   const isSel = selected.includes(r.jobId);
                   const isOpen = expanded === r.jobId;
+                  const tease = (r.about || "").slice(0, 90) + ((r.about || "").length > 90 ? "…" : "");
+                  const meta = [r.workplace, r.yoe, tease].filter(Boolean).join(" · ");
                   return [
                     <tr key={r.jobId} className={isOpen ? "row-open" : ""}>
                       <td className="board-id">#{r.jobId}</td>
-                      <td style={{ minWidth: 220 }}>
+                      <td className="board-rolecol">
                         <button
                           className="board-rolebtn"
                           onClick={() => {
@@ -793,19 +918,14 @@ export default function BoardClient({
                           aria-expanded={isOpen}
                         >
                           <span className="t">{r.title}</span>
-                          <span className="d">
-                            {(r.about || "").slice(0, 110)}
-                            {(r.about || "").length > 110 ? "…" : ""}
-                          </span>
+                          <span className="d">{meta || "—"}</span>
                         </button>
                       </td>
-                      <td style={{ fontSize: "12.5px", minWidth: 110 }}>
+                      <td className="board-loccol">
                         {r.locations.length > 3
                           ? `${r.locations.slice(0, 3).join(" · ")} +${r.locations.length - 3}`
                           : r.locations.join(" · ") || "—"}
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>{r.workplace || "—"}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{r.yoe || "—"}</td>
                       <td className="board-salary" style={{ whiteSpace: "nowrap" }}>
                         {r.salary || "On request"}
                       </td>
@@ -822,7 +942,7 @@ export default function BoardClient({
                     </tr>,
                     isOpen ? (
                       <tr key={`${r.jobId}-detail`} className="board-detail-row">
-                        <td colSpan={7}>
+                        <td colSpan={5}>
                           <div className="board-jdcard">
                             <div className="jd-chips">
                               {r.salary && <span className="jd-chip money">{r.salary}</span>}
@@ -952,7 +1072,7 @@ export default function BoardClient({
                 )}
               </div>
             ) : (
-              <>
+              <div className="board-panel">
                 <div className="board-panel-label">
                   {isSpeculative ? (
                     <>GENERAL APPLICATION</>
@@ -961,6 +1081,19 @@ export default function BoardClient({
                       <b>{selected.length}/{MAX_ROLES}</b> ROLES SELECTED
                     </>
                   )}
+                  <button
+                    type="button"
+                    className="board-panel-x"
+                    aria-label="Close the application form"
+                    onClick={() => {
+                      setSelected([]);
+                      setSpeculative(false);
+                      setFormError("");
+                      setStatus({ kind: "idle" });
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
                 {isSpeculative ? (
                   <p className="board-instr">
@@ -1078,7 +1211,7 @@ export default function BoardClient({
                         : `SUBMIT — ${selected.length} ROLE${selected.length > 1 ? "S" : ""} →`}
                   </button>
                 </form>
-              </>
+              </div>
             )}
           </aside>
         )}
@@ -1086,6 +1219,13 @@ export default function BoardClient({
 
       {recruiter && recruiter.referralAmount != null && (
         <ReferralBlock recruiterId={recruiter.id} amount={recruiter.referralAmount} />
+      )}
+      {!recruiter && (
+        <ReferralBlock
+          orgSlug={org.slug}
+          orgName={org.name}
+          amount={org.referralAmount || undefined}
+        />
       )}
 
       {/* Narrow screens: rail stacks under the table; bar jumps to it. */}
@@ -1097,6 +1237,7 @@ export default function BoardClient({
           </button>
         </div>
       )}
+      </div>
 
       <footer className="board-foot">
         <a href="https://www.transformertalent.com" target="_blank" rel="noreferrer">
@@ -1146,10 +1287,21 @@ export default function BoardClient({
   );
 }
 
-// The referral offer at the bottom of a recruiter page. Self-contained:
-// four fields to /api/referral, generic thank-you either way (the response
-// never reveals whether we already know the person).
-function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: number }) {
+// The referral offer at the bottom of a recruiter page or org board.
+// Self-contained: four fields to /api/referral, generic thank-you either way
+// (the response never reveals whether we already know the person). Recruiter
+// pages carry the bounty; org boards make no dollar promise.
+function ReferralBlock({
+  recruiterId,
+  orgSlug,
+  orgName,
+  amount,
+}: {
+  recruiterId?: string;
+  orgSlug?: string;
+  orgName?: string;
+  amount?: number;
+}) {
   const [state, setState] = useState<"idle" | "sending" | "ok" | "error">("idle");
   const [error, setError] = useState("");
 
@@ -1163,7 +1315,7 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          recruiter: recruiterId,
+          ...(recruiterId ? { recruiter: recruiterId } : { org: orgSlug }),
           referrerName: data.get("referrerName"),
           referrerEmail: data.get("referrerEmail"),
           candidateLinkedin: data.get("candidateLinkedin"),
@@ -1183,14 +1335,20 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
     }
   }
 
-  const money = `$${amount.toLocaleString()}`;
   return (
     <section className="board-referral" id="refer">
       <h2>Not looking right now? Refer an engineer.</h2>
-      <p className="board-referral-sub">
-        If we place someone you refer, you receive <b>{money}</b>. Paid when
-        the placement completes.
-      </p>
+      {amount != null ? (
+        <p className="board-referral-sub">
+          If we place someone you refer, you receive <b>${amount.toLocaleString()}</b>. Paid when
+          the placement completes.
+        </p>
+      ) : (
+        <p className="board-referral-sub">
+          Know someone who would be a great fit{orgName ? ` for ${orgName}` : ""}? We review every
+          referral and reach out to them directly if there is a match.
+        </p>
+      )}
       {state === "ok" ? (
         <div>
           <p className="board-referral-thanks">
@@ -1233,7 +1391,11 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
           />
           <div className="board-referral-foot">
             <button type="submit" className="board-btn" disabled={state === "sending"}>
-              {state === "sending" ? "SENDING…" : `REFER THEM FOR ${money} →`}
+              {state === "sending"
+                ? "SENDING…"
+                : amount != null
+                  ? `REFER THEM FOR $${amount.toLocaleString()} →`
+                  : "SEND REFERRAL →"}
             </button>
             {state === "error" && <span className="board-error" style={{ margin: 0 }}>{error}</span>}
           </div>

@@ -11,21 +11,19 @@ export default function AboutPage() {
   return (
     <main className="page">
       <div className="wrap">
-        <h1 className="h-page b1">
-          How we <span>work</span>
-        </h1>
-        <p className="page-intro b2">
-          A specialist search firm for teams that treat engineering hiring as
-          seriously as engineering itself.
-        </p>
+        <div className="ab-head">
+          <h1 className="h-page">
+            How we <span>work</span>
+          </h1>
+          <p className="page-intro">
+            A specialist search firm for teams that treat engineering hiring as
+            seriously as engineering itself.
+          </p>
+        </div>
 
-        <div className="grid2 b3">
+        <div className="grid2 ab-values">
           <div className="cell">
-            <h3>
-              Specialists,
-              <br />
-              <span>not generalists.</span>
-            </h3>
+            <h3>Specialists, not generalists.</h3>
             <p>
               Transformer Talent does one thing: AI/ML and software
               engineering search for venture-backed start-ups. IC to
@@ -33,15 +31,11 @@ export default function AboutPage() {
             </p>
             <p>
               Placements at companies backed by <b>Sequoia, 8VC, Felicis,
-              Y Combinator, and a16z</b>.
+              Y&nbsp;Combinator, and a16z</b>.
             </p>
           </div>
           <div className="cell">
-            <h3>
-              Partners,
-              <br />
-              <span>not vendors.</span>
-            </h3>
+            <h3>Partners, not vendors.</h3>
             <p>
               We work as an extension of your team, from brief to signed
               offer. We believe working together is how the best hires get
@@ -50,15 +44,8 @@ export default function AboutPage() {
             </p>
             <p>Most of our clients come back for their next hire.</p>
           </div>
-        </div>
-
-        <div className="grid2">
           <div className="cell">
-            <h3>
-              Technologists
-              <br />
-              <span>at heart.</span>
-            </h3>
+            <h3>Technologists at heart.</h3>
             <p>
               Founded by a former software engineer to bridge the gap between
               recruitment and technical understanding. We speak both
@@ -71,11 +58,7 @@ export default function AboutPage() {
             </p>
           </div>
           <div className="cell">
-            <h3>
-              Senior-led,
-              <br />
-              <span>end to end.</span>
-            </h3>
+            <h3>Senior-led, end to end.</h3>
             <p>
               Every search is run by senior recruiters, from the first
               conversation about the brief to the signed offer. No handoff to
@@ -84,46 +67,47 @@ export default function AboutPage() {
           </div>
         </div>
 
-        <div className="sec-label">
-          <b>REF</b> — what clients say
-        </div>
-        <div className="grid2">
-          <div className="cell">
-            <p style={{ fontSize: "1rem", color: "var(--fog)" }}>
-              &ldquo;Five key hires over the last two years. We now only work with
-              Transformer Talent.&rdquo;
-            </p>
-            <p style={{ fontSize: "0.68rem", color: "var(--fog-30)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-              CTO · Series B Fintech
-            </p>
+        <section className="ab-quotes-sec">
+          <h2 className="ab-h2">What clients say</h2>
+          <div className="grid2 ab-quotes">
+            <div className="qcard">
+              <div className="qmark" aria-hidden>
+                &ldquo;
+              </div>
+              <blockquote>
+                Five key hires over the last two years. We now only work with
+                Transformer Talent.
+              </blockquote>
+              <div className="qattr">CTO · Series B Fintech</div>
+            </div>
+            <div className="qcard">
+              <div className="qmark" aria-hidden>
+                &ldquo;
+              </div>
+              <blockquote>
+                The only recruiters we&apos;ve used who actually understood the
+                role before sending profiles.
+              </blockquote>
+              <div className="qattr">Founder · Applied AI, Seed</div>
+            </div>
           </div>
-          <div className="cell">
-            <p style={{ fontSize: "1rem", color: "var(--fog)" }}>
-              &ldquo;The only recruiters we&apos;ve used who actually understood the
-              role before sending profiles.&rdquo;
-            </p>
-            <p style={{ fontSize: "0.68rem", color: "var(--fog-30)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-              Founder · Applied AI, Seed
-            </p>
-          </div>
-        </div>
+        </section>
 
-        <div className="sec-label">
-          <b>NEXT</b> — talk to us
-        </div>
-        <div className="bigcta">
-          <h2>
-            Hiring engineers? <span>Let&apos;s talk.</span>
-          </h2>
-          <p>
-            Upload a job description for instant potential matches, or email
-            us and we&apos;ll take it from there.
-          </p>
-          <div className="cta-row" style={{ marginTop: "1.4rem" }}>
-            <Link className="btn hot" href="/talent">
+        <div className="ab-cta">
+          <div className="ab-cta-copy">
+            <h2>
+              Hiring engineers? Let&apos;s <span>talk.</span>
+            </h2>
+            <p>
+              Upload a job description for instant potential matches, or email
+              us and we&apos;ll take it from there.
+            </p>
+          </div>
+          <div className="ab-cta-row">
+            <Link className="ab-cta-btn" href="/talent">
               SEE POTENTIAL MATCHES →
             </Link>
-            <a className="btn cold" href="mailto:spencer@transformertalent.com">
+            <a className="ab-cta-cold" href="mailto:spencer@transformertalent.com">
               spencer@transformertalent.com
             </a>
           </div>

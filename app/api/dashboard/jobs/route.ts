@@ -13,11 +13,14 @@ export async function GET(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
-  const [rolesRes, appsRes] = await Promise.all([
+  const [rolesRes, appsRes, stagesRes] = await Promise.all([
     sbRest(
-      `org_roles?organization_id=eq.${member.org.id}&select=external_id,title,status,salary,locations,workplace,yoe,updated_at,linked_org_role&order=status.asc,title.asc`
+      `org_roles?organization_id=eq.${member.org.id}&select=external_id,title,status,salary,locations,workplace,yoe,updated_at,linked_org_role,company_name&order=status.asc,title.asc`
     ),
     sbRest(`website_applications?organization_id=eq.${member.org.id}&select=role_ids`),
+    sbRest(
+      `candidate_role_statuses?organization_id=eq.${member.org.id}&select=job_id,candidate_key,status`
+    ),
   ]);
   if (!rolesRes.ok) return NextResponse.json({ error: "roles_unavailable" }, { status: 502 });
 
@@ -31,6 +34,7 @@ export async function GET(req: NextRequest) {
     yoe: string | null;
     updated_at: string;
     linked_org_role: unknown;
+    company_name: string | null;
   }[];
   const apps = appsRes.ok ? ((await appsRes.json()) as { role_ids: string[] | null }[]) : [];
 
@@ -38,18 +42,59 @@ export async function GET(req: NextRequest) {
   for (const a of apps)
     for (const id of a.role_ids || []) counts.set(id, (counts.get(id) || 0) + 1);
 
+  // Per-job pipeline stage counts for the list's pipeline bar. Applicants
+  // with no status row sit at "new" (not contacted); sourced people only
+  // enter a job's pipeline once a status row exists for them, so src_ rows
+  // grow the total. Rejected candidates live on the Past tab, not the bar.
+  const stageRows = stagesRes.ok
+    ? ((await stagesRes.json()) as { job_id: string; candidate_key: string; status: string }[])
+    : [];
+  type Pipe = { total: number; screening: number; replied: number; interview: number; offer: number; hired: number };
+  const pipes = new Map<string, Pipe>();
+  const pipeFor = (jobId: string): Pipe => {
+    let p = pipes.get(jobId);
+    if (!p) {
+      p = { total: 0, screening: 0, replied: 0, interview: 0, offer: 0, hired: 0 };
+      pipes.set(jobId, p);
+    }
+    return p;
+  };
+  const appRejected = new Map<string, number>();
+  for (const row of stageRows) {
+    if (row.status === "rejected") {
+      if (row.candidate_key.startsWith("app_"))
+        appRejected.set(row.job_id, (appRejected.get(row.job_id) || 0) + 1);
+      continue;
+    }
+    const p = pipeFor(row.job_id);
+    if (row.candidate_key.startsWith("src_")) p.total += 1;
+    if (row.status === "contacted") p.screening += 1;
+    else if (row.status === "replied") p.replied += 1;
+    else if (row.status === "interviewing") p.interview += 1;
+    else if (row.status === "offer") p.offer += 1;
+    else if (row.status === "hired") p.hired += 1;
+  }
+
   return NextResponse.json({
-    jobs: roles.map((r) => ({
-      id: r.external_id,
-      title: r.title,
-      status: r.status,
-      salary: r.salary || "",
-      locations: r.locations || [],
-      workplace: r.workplace || "",
-      yoe: r.yoe || "",
-      applicants: counts.get(r.external_id) || 0,
-      linked: !!r.linked_org_role,
-    })),
+    jobs: roles.map((r) => {
+      const applicants = counts.get(r.external_id) || 0;
+      const p = pipeFor(r.external_id);
+      p.total += Math.max(0, applicants - (appRejected.get(r.external_id) || 0));
+      return {
+        id: r.external_id,
+        title: r.title,
+        status: r.status,
+        salary: r.salary || "",
+        locations: r.locations || [],
+        workplace: r.workplace || "",
+        yoe: r.yoe || "",
+        applicants,
+        linked: !!r.linked_org_role,
+        company: r.company_name || "",
+        updatedAt: r.updated_at,
+        pipeline: p,
+      };
+    }),
   });
 }
 

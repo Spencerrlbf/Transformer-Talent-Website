@@ -1,12 +1,12 @@
 import { allBands } from "@/lib/market";
 
-// Two-series categorical palette validated (CVD + contrast) against the
-// site surface #06080B: SF #ED5514, NYC #25A3CC.
-const SF = "#ED5514";
-const NY = "#25A3CC";
-const INK = "#C7D3DB";
-const INK_MUTED = "rgba(199,211,219,0.35)";
-const GRID = "rgba(155,175,190,0.12)";
+// Two-series categorical palette (redesign tokens, hue-distinct for CVD and
+// greyscale): SF #5B4BFF, NYC #C4621B, on the light page surface.
+const SF = "#5B4BFF";
+const NY = "#C4621B";
+const INK = "#111110";
+const INK_MUTED = "rgba(17,17,16,0.45)";
+const GRID = "rgba(0,0,0,0.08)";
 
 const SHORT: Record<string, string> = {
   "Forward Deployed Engineering": "Forward Deployed",
@@ -44,6 +44,7 @@ export default function SalaryChart({ compact = false }: { compact?: boolean }) 
   return (
     <figure style={{ margin: 0 }}>
       <svg
+        className="mi-chart"
         viewBox={`0 0 ${W} ${height}`}
         role="img"
         aria-label="Median base salary bands by role family, San Francisco vs New York"
@@ -51,21 +52,22 @@ export default function SalaryChart({ compact = false }: { compact?: boolean }) 
       >
         {/* legend */}
         <g fontFamily="var(--font-mono), monospace" fontSize="10">
-          <rect x={H_LABEL} y={4} width={10} height={10} rx={2} fill={SF} />
+          <rect x={H_LABEL} y={4} width={10} height={10} rx={2} fill={SF} className="bar-sf" />
           <text x={H_LABEL + 15} y={13} fill={INK}>San Francisco</text>
-          <rect x={H_LABEL + 110} y={4} width={10} height={10} rx={2} fill={NY} />
+          <rect x={H_LABEL + 110} y={4} width={10} height={10} rx={2} fill={NY} className="bar-nyc" />
           <text x={H_LABEL + 125} y={13} fill={INK}>New York</text>
         </g>
         {/* grid */}
         {gridVals.map((v) => (
           <g key={v}>
-            <line x1={x(v)} y1={topPad - 4} x2={x(v)} y2={height - 26} stroke={GRID} strokeWidth={1} />
+            <line x1={x(v)} y1={topPad - 4} x2={x(v)} y2={height - 26} stroke={GRID} strokeWidth={1} className="grid" />
             <text
               x={x(v)}
               y={height - 12}
               fill={INK_MUTED}
               fontSize="9"
               fontFamily="var(--font-mono), monospace"
+              className="axis"
               textAnchor="middle"
             >
               ${v}k
@@ -99,6 +101,7 @@ export default function SalaryChart({ compact = false }: { compact?: boolean }) 
                       height={8}
                       rx={4}
                       fill={r.color}
+                      className={r.city === "San Francisco" ? "bar-sf" : "bar-nyc"}
                     />
                     {!compact && (
                       <text

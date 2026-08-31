@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EE;font-family:'Instrument Sans',system-ui,sans-serif;color:#111110;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#4536E8;text-decoration:none}
+  a:hover{color:#2E22B8}
+  input,select,textarea,button{font-family:inherit}
+</style>
+</helmet>
+
+<section style="padding:44px 48px 90px">
+  <div id="6a" style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">6a</span>
+      <span style="font-size:13px;color:#5d5b56">Public board — <b style="font-weight:600">/board/[slug]</b> and <b style="font-weight:600">/r/[slug]</b>, one component. Switch mode, open a role, hit APPLY +.</span>
+    </div>
+
+    <div style="display:flex;gap:3px;padding:3px;background:rgba(0,0,0,.06);border-radius:999px;width:max-content;margin:0 0 18px">
+      <button type="button" onClick="{{ setBoard }}" style="{{ modeBoardStyle }}">Company board</button>
+      <button type="button" onClick="{{ setRecruiter }}" style="{{ modeRecruiterStyle }}">Recruiter page</button>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+
+      <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:flex-start;gap:16px;padding:30px 34px 0">
+          <div style="width:52px;height:52px;border-radius:12px;background:#111110;color:#fff;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;flex:none">N</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:23px;font-weight:600;letter-spacing:-.02em">Northwind Robotics</div>
+            <div style="margin-top:4px;font-size:14.5px;color:#5d5b56">Warehouse automation that pays for itself in a quarter.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px">
+              <span style="display:inline-flex;align-items:center;height:25px;padding:0 10px;border-radius:999px;background:rgba(0,0,0,.05);font-size:12px;color:#3b3934">180 people</span>
+              <span style="display:inline-flex;align-items:center;height:25px;padding:0 10px;border-radius:999px;background:rgba(0,0,0,.05);font-size:12px;color:#3b3934">Founded 2019</span>
+              <span style="display:inline-flex;align-items:center;height:25px;padding:0 10px;border-radius:999px;background:rgba(0,0,0,.05);font-size:12px;color:#3b3934">Series C</span>
+              <span style="display:inline-flex;align-items:center;height:25px;padding:0 10px;border-radius:999px;background:rgba(0,0,0,.05);font-size:12px;color:#3b3934">$140M raised</span>
+              <span style="display:inline-flex;align-items:center;height:25px;padding:0 10px;border-radius:999px;background:rgba(0,0,0,.05);font-size:12px;color:#3b3934">Austin · Boston</span>
+              <span style="display:inline-flex;align-items:center;height:25px;padding:0 10px;border-radius:999px;background:rgba(0,0,0,.05);font-size:12px;color:#3b3934">Hybrid, 3 days</span>
+            </div>
+          </div>
+          <a href="#6a" style="font-size:13px;color:#5d5b56;flex:none;padding-top:6px" style-hover="color:#111110">northwindrobotics.com ↗</a>
+        </div>
+
+        <div style="display:flex;gap:22px;padding:22px 34px 0;border-bottom:1px solid rgba(0,0,0,.09);margin-bottom:24px">
+          <button type="button" onClick="{{ setJobs }}" style="{{ jobsTabStyle }}">Jobs<span style="margin-left:7px;font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">5</span></button>
+          <button type="button" onClick="{{ setAbout }}" style="{{ aboutTabStyle }}">About</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isRecruiter }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:flex-start;gap:20px;padding:32px 34px 26px;border-bottom:1px solid rgba(0,0,0,.09)">
+          <div style="width:76px;height:76px;border-radius:999px;background:#EFEDFF;color:#4536E8;display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:600;flex:none">PR</div>
+          <div style="flex:1;min-width:0">
+            <h1 style="margin:0;font-size:25px;font-weight:600;letter-spacing:-.022em">Priya Raman</h1>
+            <p style="margin:4px 0 0;font-size:13.5px;color:#8a877f">Recruiter · <b style="font-weight:600;color:#3b3934">Northwind Robotics</b></p>
+            <p style="margin:11px 0 0;max-width:640px;font-size:14.5px;line-height:1.6;color:#3b3934;text-wrap:pretty">I hire the robotics and platform teams at Northwind. Nine years of engineering recruiting, four of them in warehouse automation. I read every application myself and reply either way.</p>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button type="button" style="appearance:none;height:36px;padding:0 15px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Book a call</button>
+              <button type="button" style="appearance:none;height:36px;padding:0 15px;border-radius:8px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:13px;font-weight:600;color:#111110;cursor:pointer">Email</button>
+              <a href="#6a" style="display:inline-flex;align-items:center;height:36px;padding:0 15px;border-radius:8px;border:1px solid rgba(0,0,0,.14);font-size:13px;font-weight:600;color:#111110">in&nbsp;&nbsp;LinkedIn</a>
+            </div>
+          </div>
+          <div style="flex:none;text-align:right">
+            <a href="#6a" style="font-size:13px;color:#5d5b56" style-hover="color:#111110">northwindrobotics.com</a>
+            <div style="margin-top:10px;font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#8a877f">5 OPEN ROLES</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showAbout }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:6px 34px 40px;max-width:860px">
+          <div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a877f">Our mission</div>
+          <p style="margin:12px 0 0;font-size:26px;line-height:1.3;font-weight:500;letter-spacing:-.02em;text-wrap:pretty">Every warehouse in America should run like the best one does.</p>
+          <p style="margin:14px 0 0;font-size:15px;line-height:1.65;color:#3b3934;text-wrap:pretty">We build the perception stack, fleet planner and floor software that let a 200,000 sq ft building move twice the volume with the same people. Two hundred sites, eleven states, no forklift certification required.</p>
+
+          <div style="margin-top:38px;padding-top:30px;border-top:1px solid rgba(0,0,0,.09)">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">How we work</h2>
+            <div style="margin-top:4px;font-size:13px;color:#8a877f">Small teams, long tenures, deployed hardware</div>
+            <p style="margin:12px 0 0;font-size:14.5px;line-height:1.65;color:#3b3934;text-wrap:pretty">Teams are four to six engineers with a product owner embedded. Every engineer visits a live site in their first month — you cannot write a fleet planner from a desk. We ship to production every day and to hardware every two weeks.</p>
+          </div>
+
+          <div style="margin-top:34px;padding-top:30px;border-top:1px solid rgba(0,0,0,.09)">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Founders</h2>
+            <div style="display:flex;flex-direction:column;gap:22px;margin-top:18px">
+              <div style="display:flex;gap:15px">
+                <div style="width:56px;height:56px;border-radius:999px;background:#E9F5EE;color:#1F7A4C;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;flex:none">DO</div>
+                <div>
+                  <div style="font-size:15.5px;font-weight:600">Dara Osei</div>
+                  <div style="font-size:13px;color:#8a877f;margin-top:2px">Co-founder &amp; CEO</div>
+                  <p style="margin:8px 0 0;max-width:560px;font-size:13.5px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Ran fulfilment engineering for a national grocer before starting Northwind. Still does a site visit most weeks.</p>
+                  <a href="#6a" style="display:inline-block;margin-top:7px;font-size:12.5px;font-weight:600">in&nbsp;&nbsp;LinkedIn</a>
+                </div>
+              </div>
+              <div style="display:flex;gap:15px">
+                <div style="width:56px;height:56px;border-radius:999px;background:#EFEDFF;color:#4536E8;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;flex:none">JL</div>
+                <div>
+                  <div style="font-size:15.5px;font-weight:600">Joanna Lieu</div>
+                  <div style="font-size:13px;color:#8a877f;margin-top:2px">Co-founder &amp; CTO</div>
+                  <p style="margin:8px 0 0;max-width:560px;font-size:13.5px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Perception and controls. Built the first Northwind planner on a laptop in a Fort Worth warehouse office.</p>
+                  <a href="#6a" style="display:inline-block;margin-top:7px;font-size:12.5px;font-weight:600">in&nbsp;&nbsp;LinkedIn</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:34px;padding-top:30px;border-top:1px solid rgba(0,0,0,.09)">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a877f">How we hire</div>
+            <h2 style="margin:11px 0 0;font-size:19px;font-weight:600;letter-spacing:-.02em">The rounds we draw from.</h2>
+            <p style="margin:9px 0 0;max-width:600px;font-size:13.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">The exact steps vary by role; your recruiter confirms the process up front. Click a round for the full detail.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+              <details style="border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8">
+                <summary style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;list-style:none">
+                  <span style="width:22px;height:22px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;flex:none">1</span>
+                  <b style="font-size:14px;font-weight:600">Recruiter call</b>
+                  <span style="font-size:12.5px;color:#8a877f">what you want next, honestly</span>
+                  <span style="margin-left:auto;font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">30 min</span>
+                </summary>
+                <div style="padding:0 16px 15px 50px;font-size:13.5px;line-height:1.6;color:#5d5b56">A conversation, not a screen. We cover the role, the comp band, the team you would join and what would make you say no. You leave knowing whether to continue.</div>
+              </details>
+              <details style="border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8">
+                <summary style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;list-style:none">
+                  <span style="width:22px;height:22px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;flex:none">2</span>
+                  <b style="font-size:14px;font-weight:600">Technical deep dive</b>
+                  <span style="font-size:12.5px;color:#8a877f">your work, not a puzzle</span>
+                  <span style="margin-left:auto;font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">75 min</span>
+                </summary>
+                <div style="padding:0 16px 15px 50px;font-size:13.5px;line-height:1.6;color:#5d5b56">Bring a system you built. Two engineers go deep on the decisions you made and what you would change. No live coding, no take-home.</div>
+              </details>
+              <details style="border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8">
+                <summary style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;list-style:none">
+                  <span style="width:22px;height:22px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;flex:none">3</span>
+                  <b style="font-size:14px;font-weight:600">Site day</b>
+                  <span style="font-size:12.5px;color:#8a877f">a real building, a real fleet</span>
+                  <span style="margin-left:auto;font-size:12px;color:#8a877f;font-variant-numeric:tabular-nums">half day</span>
+                </summary>
+                <div style="padding:0 16px 15px 50px;font-size:13.5px;line-height:1.6;color:#5d5b56">You spend a morning at a customer site with the team, then meet your future manager and one founder. Expenses covered, remote alternative available.</div>
+              </details>
+            </div>
+            <p style="margin:16px 0 0;max-width:600px;font-size:13px;line-height:1.6;color:#8a877f;text-wrap:pretty">Offers go out within 48 hours of the site day. We never ask for unpaid work and we will tell you where you stand at every step.</p>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:20px;margin-top:38px;padding:22px 24px;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#FBFAF8">
+            <div style="flex:1">
+              <h3 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.015em">We&rsquo;re hiring.</h3>
+              <p style="margin:5px 0 0;font-size:13.5px;color:#5d5b56">5 open roles, every application reviewed by a real recruiter.</p>
+            </div>
+            <button type="button" onClick="{{ setJobs }}" style="appearance:none;height:38px;padding:0 17px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:13px;font-weight:600;cursor:pointer;flex:none">See 5 open roles →</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showJobs }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:0 34px 40px">
+
+          <sc-if value="{{ showBoardBanner }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:20px;padding:17px 20px;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#FBFAFF;margin-bottom:20px">
+              <p style="margin:0;flex:1;font-size:13.5px;line-height:1.55;color:#3b3934;text-wrap:pretty"><b style="font-weight:600">Nothing that fits?</b> Upload your resume — we&rsquo;ll match you against Northwind Robotics&rsquo; open roles and reach out when the right one arrives.</p>
+              <button type="button" onClick="{{ startSpeculative }}" style="appearance:none;height:34px;padding:0 14px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer;flex:none">UPLOAD RESUME →</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showRecruiterBanner }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:18px 20px;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#FBFAFF;margin-bottom:20px">
+              <p style="margin:0;font-size:13.5px;line-height:1.55;color:#3b3934;max-width:760px;text-wrap:pretty"><b style="font-weight:600">Not applying today?</b> Upload your resume for matching, ask Priya to come back to you later, or refer someone great and receive $2,000 if we place them.</p>
+              <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+                <button type="button" onClick="{{ startSpeculative }}" style="appearance:none;height:34px;padding:0 14px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer">UPLOAD RESUME →</button>
+                <button type="button" onClick="{{ toggleFuture }}" style="{{ futureBtnStyle }}">HEAR FROM PRIYA LATER</button>
+                <a href="#refer" style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;border:1px solid rgba(31,122,76,.35);background:#E9F5EE;color:#1F7A4C;font-size:11px;font-weight:700;letter-spacing:.06em">REFER AN ENGINEER →</a>
+              </div>
+
+              <sc-if value="{{ futureOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:18px;padding-top:18px;border-top:1px solid rgba(0,0,0,.09)">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <label style="display:block;font-size:12px;font-weight:600;color:#5d5b56">Email
+                      <input type="email" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;background:#fff">
+                    </label>
+                    <label style="display:block;font-size:12px;font-weight:600;color:#5d5b56">LinkedIn URL
+                      <input placeholder="linkedin.com/in/…" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;background:#fff">
+                    </label>
+                  </div>
+                  <p style="margin:16px 0 0;font-size:12px;font-weight:600;color:#5d5b56">When should Priya get back to you?</p>
+                  <div style="display:flex;gap:6px;margin-top:8px">
+                    <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:12.5px;color:#3b3934">3 months</span>
+                    <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid #111110;background:#111110;color:#fff;font-size:12.5px;font-weight:600">6 months</span>
+                    <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:12.5px;color:#3b3934">9 months</span>
+                    <span style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border-radius:999px;border:1px solid rgba(0,0,0,.14);background:#fff;font-size:12.5px;color:#3b3934">12 months</span>
+                  </div>
+                  <p style="margin:16px 0 0;font-size:12px;font-weight:600;color:#5d5b56">What should Priya come back with? <span style="font-weight:400;color:#8a877f">All optional.</span></p>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px">
+                    <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Role focus
+                      <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>2 selected</option></select>
+                    </label>
+                    <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Workplace
+                      <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Any</option></select>
+                    </label>
+                    <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Minimum salary
+                      <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>$180k+</option></select>
+                    </label>
+                  </div>
+                  <button type="button" style="appearance:none;height:36px;margin-top:16px;padding:0 15px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer">ASK TO HEAR BACK LATER →</button>
+                  <p style="margin:10px 0 0;font-size:12px;color:#8a877f">Nothing before then. No newsletter, no spam, one recruiter.</p>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <button type="button" onClick="{{ toggleFilters }}" style="{{ filtersBtnStyle }}">
+              <span style="font-size:12px">☰</span>Filters
+              <sc-if value="{{ hasFilters }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#5B4BFF;color:#fff;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums">2</span></sc-if>
+              <span style="font-size:11px;color:#8a877f">▾</span>
+            </button>
+            <div style="flex:1;display:flex;align-items:center;gap:9px;height:36px;padding:0 13px;border:1px solid rgba(0,0,0,.12);border-radius:8px;color:#8a877f;font-size:13.5px;min-width:0">
+              <span style="width:13px;height:13px;border:1.5px solid #8a877f;border-radius:999px;flex:none;display:block"></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">search: python, go -java · &ldquo;machine learning&rdquo; · comma = OR, minus = exclude</span>
+            </div>
+            <span style="font-size:12.5px;color:#8a877f;flex:none">Sorted by ID</span>
+          </div>
+
+          <sc-if value="{{ filtersOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 16px;border:1px solid rgba(0,0,0,.1);border-radius:12px;background:#FBFAF8;margin-bottom:12px">
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Location
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Austin</option><option>all locations</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Office
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>all office types</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Role type
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>all role types</option></select>
+              </label>
+              <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8a877f">Visa
+                <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Visa transfers OK</option><option>any visa status</option></select>
+              </label>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border:1px solid rgba(91,75,255,.32);background:#F6F4FF;border-radius:8px;font-size:12.5px;color:#4536E8;white-space:nowrap">Location: <b style="font-weight:600">Austin</b><span style="color:#9C93FF;font-size:13px">×</span></span>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border:1px solid rgba(91,75,255,.32);background:#F6F4FF;border-radius:8px;font-size:12.5px;color:#4536E8;white-space:nowrap">Visa: <b style="font-weight:600">Transfers OK</b><span style="color:#9C93FF;font-size:13px">×</span></span>
+            <a href="#6a" style="display:inline-flex;align-items:center;height:30px;padding:0 10px;font-size:12.5px;font-weight:600;color:#8a877f">Clear all</a>
+            <div style="flex:1"></div>
+            <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">5 of 5 roles</span>
+          </div>
+
+          <div style="display:grid;gap:24px;{{ layoutCols }}">
+            <div style="min-width:0">
+              <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow-x:auto">
+                <div style="min-width:700px">
+                <div style="display:grid;grid-template-columns:56px minmax(180px,2.6fr) 150px 120px 96px;gap:14px;padding:11px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+                  <span>ID</span><span>Role</span><span>Location</span><span>Base salary</span><span style="text-align:right">Apply</span>
+                </div>
+                <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+                  <div style="{{ r.rowStyle }}">
+                    <div style="display:grid;grid-template-columns:56px minmax(180px,2.6fr) 150px 120px 96px;gap:14px;padding:14px 18px;align-items:center">
+                      <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">{{ r.hash }}</span>
+                      <button type="button" onClick="{{ r.toggleOpen }}" style="appearance:none;border:none;background:none;padding:0;text-align:left;cursor:pointer;min-width:0">
+                        <span style="display:block;font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:#111110">{{ r.title }}</span>
+                        <span style="display:block;margin-top:3px;font-size:12.5px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.workplace }} · {{ r.yoe }} · {{ r.blurb }}</span>
+                      </button>
+                      <span style="font-size:12.5px;color:#3b3934">{{ r.locations }}</span>
+                      <span style="font-size:13px;font-weight:600;color:#111110;white-space:nowrap;font-variant-numeric:tabular-nums">{{ r.salary }}</span>
+                      <button type="button" onClick="{{ r.toggleSel }}" style="{{ r.applyStyle }}">{{ r.applyLabel }}</button>
+                    </div>
+                    <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                      <div style="padding:2px 18px 20px">
+                        <div style="padding:18px 20px;border:1px solid rgba(0,0,0,.09);border-radius:12px;background:#FBFAF8">
+                          <div style="display:flex;flex-wrap:wrap;gap:6px">
+                            <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#EFEDFF;color:#4536E8;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.salary }}</span>
+                            <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.1);font-size:12px;color:#3b3934">{{ r.locations }}</span>
+                            <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.1);font-size:12px;color:#3b3934">{{ r.workplace }}</span>
+                            <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.1);font-size:12px;color:#3b3934">{{ r.yoe }}</span>
+                            <span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.1);font-size:12px;color:#3b3934">{{ r.visa }}</span>
+                          </div>
+                          <p style="margin:14px 0 0;max-width:660px;font-size:14px;line-height:1.65;color:#3b3934;text-wrap:pretty">{{ r.about }}</p>
+                          <h4 style="margin:20px 0 0;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">What you&rsquo;ll do</h4>
+                          <div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">
+                            <sc-for list="{{ r.doing }}" as="d" hint-placeholder-count="3">
+                              <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.55;color:#3b3934;max-width:660px"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">{{ d }}</span></div>
+                            </sc-for>
+                          </div>
+                          <h4 style="margin:20px 0 0;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">What they&rsquo;re looking for</h4>
+                          <div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">
+                            <sc-for list="{{ r.needs }}" as="d" hint-placeholder-count="3">
+                              <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.55;color:#3b3934;max-width:660px"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">{{ d }}</span></div>
+                            </sc-for>
+                          </div>
+                          <h4 style="margin:20px 0 0;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Nice to have</h4>
+                          <div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">
+                            <sc-for list="{{ r.bonus }}" as="d" hint-placeholder-count="2">
+                              <div style="display:flex;gap:10px;font-size:13.5px;line-height:1.55;color:#3b3934;max-width:660px"><span style="color:#c2bfb8;flex:none">—</span><span style="text-wrap:pretty">{{ d }}</span></div>
+                            </sc-for>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:14px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(0,0,0,.09)">
+                            <button type="button" onClick="{{ r.toggleSel }}" style="appearance:none;height:36px;padding:0 15px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer">{{ r.jdApplyLabel }}</button>
+                            <button type="button" onClick="{{ r.toggleOpen }}" style="appearance:none;border:none;background:none;font-size:12.5px;color:#8a877f;cursor:pointer;text-decoration:underline">close</button>
+                          </div>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <sc-if value="{{ railVisible }}" hint-placeholder-val="{{ false }}">
+              <aside style="width:352px;flex:none">
+                <div style="position:sticky;top:20px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;overflow:hidden">
+                  <sc-if value="{{ showThanks }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:24px">
+                      <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Application received.</h2>
+                      <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Every application is screened and reviewed — you&rsquo;ll hear back when there&rsquo;s a fit.</p>
+                      <button type="button" onClick="{{ reset }}" style="appearance:none;margin-top:14px;border:none;background:none;padding:0;font-size:13px;font-weight:600;color:#4536E8;cursor:pointer;text-decoration:underline">Submit another application</button>
+                      <h3 style="margin:22px 0 0;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">You also look like a fit for</h3>
+                      <div style="display:flex;flex-direction:column;gap:9px;margin-top:11px">
+                        <div style="padding:11px 13px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8"><b style="font-size:13.5px;font-weight:600">Fleet Software Engineer</b><div style="font-size:12.5px;color:#8a877f;margin-top:2px;font-variant-numeric:tabular-nums">$165k–$195k</div></div>
+                        <div style="padding:11px 13px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8"><b style="font-size:13.5px;font-weight:600">Platform Engineer</b><div style="font-size:12.5px;color:#8a877f;margin-top:2px;font-variant-numeric:tabular-nums">$150k–$180k</div></div>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ showForm }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:14px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#5d5b56">{{ cartLabel }}</div>
+                    <div style="padding:16px 18px 0">
+                      <sc-if value="{{ isSpeculative }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty"><b style="font-weight:600;color:#111110">No role selected — we&rsquo;ll do the matching.</b> Drop your resume and we&rsquo;ll screen you against Northwind Robotics&rsquo; roles, now and as new ones open. <button type="button" onClick="{{ reset }}" style="appearance:none;border:none;background:none;padding:0;font-size:13px;font-weight:600;color:#4536E8;cursor:pointer;text-decoration:underline">back to roles</button></p>
+                      </sc-if>
+                      <sc-for list="{{ cart }}" as="c" hint-placeholder-count="0">
+                        <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#FBFAF8;margin-bottom:8px">
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:13.5px;font-weight:600;letter-spacing:-.01em">{{ c.title }}</div>
+                            <div style="font-size:12.5px;color:#8a877f;margin-top:2px;font-variant-numeric:tabular-nums">{{ c.meta }}</div>
+                          </div>
+                          <button type="button" onClick="{{ c.remove }}" style="appearance:none;border:none;background:none;padding:0;font-size:13px;color:#8a877f;cursor:pointer;flex:none">✕</button>
+                        </div>
+                      </sc-for>
+                      <sc-if value="{{ showSlots }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:10px 13px;border:1px dashed rgba(0,0,0,.16);border-radius:10px;font-size:12.5px;color:#8a877f;text-wrap:pretty">{{ slotsLabel }}</div>
+                      </sc-if>
+                    </div>
+
+                    <div style="padding:18px">
+                      <h3 style="margin:0 0 12px;font-size:15px;font-weight:600;letter-spacing:-.015em">Your details</h3>
+                      <div style="display:flex;flex-direction:column;gap:11px">
+                        <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Name
+                          <input style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;background:#fff">
+                        </label>
+                        <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Email
+                          <input type="email" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;background:#fff">
+                        </label>
+                        <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">LinkedIn URL <span style="color:#9A5B14">required</span>
+                          <input placeholder="https://linkedin.com/in/…" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;background:#fff">
+                        </label>
+                        <div>
+                          <div style="font-size:11.5px;font-weight:600;color:#5d5b56">Resume — PDF, {{ resumeReq }}</div>
+                          <div style="display:flex;align-items:center;gap:10px;margin-top:5px;padding:11px 13px;border:1px dashed rgba(0,0,0,.2);border-radius:10px;background:#FBFAF8">
+                            <span style="display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:5px;background:#FBEAE7;color:#B3402F;font-size:10px;font-weight:700;letter-spacing:.05em;flex:none">PDF</span>
+                            <span style="font-size:12.5px;color:#8a877f;flex:1">Drop a file or choose one</span>
+                            <span style="font-size:12px;font-weight:600;color:#4536E8">Browse</span>
+                          </div>
+                        </div>
+                        <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Locations you&rsquo;re open to <span style="font-weight:400;color:#8a877f">optional</span>
+                          <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>Austin, Boston</option><option>Empty — use my profile location</option></select>
+                        </label>
+                        <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Visa status
+                          <select style="display:block;width:100%;height:34px;margin-top:5px;padding:0 9px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13px;background:#fff"><option>select…</option><option>None needed (US citizen / green card)</option><option>H-1B</option><option>STEM OPT</option><option>TN</option><option>O-1</option></select>
+                        </label>
+                        <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Anything else
+                          <textarea rows="2" style="display:block;width:100%;margin-top:5px;padding:8px 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px;background:#fff;resize:vertical"></textarea>
+                        </label>
+                      </div>
+                      <button type="button" onClick="{{ submit }}" style="appearance:none;width:100%;height:40px;margin-top:16px;border-radius:8px;border:none;background:#111110;color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.06em;cursor:pointer">{{ submitLabel }}</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </aside>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ isRecruiter }}" hint-placeholder-val="{{ false }}">
+            <div id="refer" style="margin-top:34px;padding:24px 26px;border:1px solid rgba(31,122,76,.28);border-radius:14px;background:#F4FAF6">
+              <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Know someone better suited? Refer them.</h2>
+              <p style="margin:7px 0 0;max-width:620px;font-size:13.5px;line-height:1.6;color:#3b5c4a;text-wrap:pretty">$2,000 when we place someone you refer. Paid on their start date, no cap on referrals. I contact them directly and never mention your name without asking first.</p>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px;max-width:660px">
+                <label style="display:block;font-size:11.5px;font-weight:600;color:#3b5c4a">Your name
+                  <input style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(31,122,76,.25);border-radius:8px;font-size:13.5px;background:#fff">
+                </label>
+                <label style="display:block;font-size:11.5px;font-weight:600;color:#3b5c4a">Your email
+                  <input type="email" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(31,122,76,.25);border-radius:8px;font-size:13.5px;background:#fff">
+                </label>
+                <label style="display:block;font-size:11.5px;font-weight:600;color:#3b5c4a">Their name
+                  <input style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(31,122,76,.25);border-radius:8px;font-size:13.5px;background:#fff">
+                </label>
+                <label style="display:block;font-size:11.5px;font-weight:600;color:#3b5c4a">Their LinkedIn
+                  <input placeholder="https://linkedin.com/in/…" style="display:block;width:100%;height:34px;margin-top:5px;padding:0 11px;border:1px solid rgba(31,122,76,.25);border-radius:8px;font-size:13.5px;background:#fff">
+                </label>
+              </div>
+              <button type="button" style="appearance:none;height:38px;margin-top:16px;padding:0 16px;border-radius:8px;border:none;background:#1F7A4C;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer">SEND REFERRAL →</button>
+            </div>
+          </sc-if>
+
+        </div>
+      </sc-if>
+
+      <div style="padding:18px 34px;border-top:1px solid rgba(0,0,0,.09);background:#FBFAF8;text-align:center">
+        <a href="#6a" style="font-size:12.5px;color:#8a877f" style-hover="color:#111110">Powered by Transformer Talent</a>
+      </div>
+    </div>
+
+    <p style="margin:16px 0 0;max-width:900px;font-size:12.5px;line-height:1.6;color:#8a877f;text-wrap:pretty">Both routes render the same component. The company board adds the identity strip and the Jobs/About tabs; the recruiter page swaps in the person header, makes a resume mandatory, and adds the three doors and the referral block. Selection caps at 3 roles.</p>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const MAX = 3;
+
+const ROLES = [
+  {
+    id: "1042", title: "Senior Fleet Software Engineer",
+    blurb: "Own the planner that routes 400 robots across a live floor without stopping the building.",
+    locations: "Austin · Boston", workplace: "Hybrid", yoe: "6–9 yrs", salary: "$185k–$220k",
+    visa: "Visa transfers OK",
+    about: "The fleet planner decides what every robot in a building does next. You will own it end to end: the solver, the simulation harness it is tested against, and the rollout to two hundred live sites. It is the highest-leverage system we run and it cannot go down.",
+    doing: [
+      "Own the planner service — solver, replanning loop, and the failure paths when a robot drops off the network mid-task.",
+      "Build the simulation harness the team ships against; every planner change is proven against a week of recorded floor traffic first.",
+      "Work directly with site operations on the two hardest buildings, then generalise what you learn."
+    ],
+    needs: [
+      "Six or more years on systems where correctness under load matters — scheduling, routing, trading, telemetry.",
+      "Deep comfort in one of Rust, C++ or Go, and the judgement to know when the simple algorithm wins.",
+      "Experience owning a service in production, on call for it, and improving it rather than rewriting it."
+    ],
+    bonus: [
+      "Robotics, warehouse or logistics background.",
+      "You have written a simulator you actually trusted."
+    ]
+  },
+  {
+    id: "1039", title: "Perception Engineer",
+    blurb: "Make the cameras reliable in a dusty building with bad light and forklifts.",
+    locations: "Austin", workplace: "On-site", yoe: "4–8 yrs", salary: "$175k–$205k",
+    visa: "Visa transfers OK",
+    about: "Our robots navigate by camera, in buildings that are dusty, badly lit and full of moving people. Perception is the difference between a system operators trust and one they switch off. You will own detection and tracking from data collection to the model running on the vehicle.",
+    doing: [
+      "Own detection and tracking models running on-vehicle under a hard latency budget.",
+      "Build the data engine — what we collect, how it is labelled, and which failures get prioritised.",
+      "Spend real time on site watching your models fail, then fix the causes."
+    ],
+    needs: [
+      "Four or more years shipping perception models to a device, not a notebook.",
+      "Strong PyTorch, and fluency with quantisation and on-device inference.",
+      "Evidence you improved a model by fixing the data rather than the architecture."
+    ],
+    bonus: ["Multi-camera calibration and sensor fusion.", "You have owned an edge deployment pipeline."]
+  },
+  {
+    id: "1036", title: "Platform Engineer",
+    blurb: "The deploy path, the observability and the tooling every other team ships on.",
+    locations: "Austin · Boston · Remote", workplace: "Remote", yoe: "5–8 yrs", salary: "$160k–$190k",
+    visa: "No sponsorship",
+    about: "Forty engineers ship through the platform you own. It runs the deploy path, the observability stack and the local environment they develop against. When it is good nobody notices; when it is bad everything else slows down.",
+    doing: [
+      "Own the deploy path from commit to two hundred sites, including the staged rollout and the rollback.",
+      "Run the observability stack and make it something engineers reach for during an incident.",
+      "Cut build and test times aggressively — the team feels every minute."
+    ],
+    needs: [
+      "Five or more years on infrastructure serving an engineering team of thirty or more.",
+      "Kubernetes, Terraform and one strong language for real tooling.",
+      "A bias for reducing what exists rather than adding to it."
+    ],
+    bonus: ["Fleet or edge deployment experience.", "You have run a migration nobody noticed."]
+  },
+  {
+    id: "1031", title: "Staff Product Designer",
+    blurb: "Design the floor software supervisors use for eight hours a day, on a scuffed tablet.",
+    locations: "Austin · Boston", workplace: "Hybrid", yoe: "8+ yrs", salary: "$170k–$200k",
+    visa: "No sponsorship",
+    about: "Floor supervisors use our software for a full shift, standing up, on a scuffed tablet, while a building runs around them. You are the second designer and the first at staff level. You will set how the product looks and behaves for the next several years.",
+    doing: [
+      "Own the supervisor experience end to end: fleet view, exceptions, and the shift handover.",
+      "Establish the design system the team builds against, alongside platform.",
+      "Run site visits and turn what you watch into decisions the team can act on."
+    ],
+    needs: [
+      "Eight or more years, with at least one dense operational tool shipped and iterated.",
+      "You design in the medium — prototypes in the real environment, not just static screens.",
+      "Comfortable being the person who says what good looks like."
+    ],
+    bonus: ["Industrial, logistics or field-service software.", "You have built a design system that survived you."]
+  },
+  {
+    id: "1024", title: "Field Reliability Engineer",
+    blurb: "Own uptime across eleven states — and the tooling that means you rarely fly out.",
+    locations: "Remote", workplace: "Remote", yoe: "4–7 yrs", salary: "$145k–$170k",
+    visa: "Visa transfers OK",
+    about: "Two hundred sites, eleven states, and a promise of ninety-nine percent uptime. You are the engineer operators call, and the one who makes sure they call less each quarter by turning every incident into tooling or a fix.",
+    doing: [
+      "Own the on-call rotation for live sites and the runbooks behind it.",
+      "Turn recurring incidents into permanent fixes with the fleet and perception teams.",
+      "Build the remote diagnostics that keep you out of an airport."
+    ],
+    needs: [
+      "Four or more years in SRE, field engineering or hardware support at scale.",
+      "You debug across software, network and physical layers without flinching.",
+      "Clear writing — your runbooks are read at 2am by someone tired."
+    ],
+    bonus: ["Robotics or industrial automation.", "Willing to travel about twenty percent."]
+  }
+];
+
+class Component extends DCLogic {
+  state = { mode: "board", tab: "jobs", open: null, sel: [], spec: false, sent: false, filters: false, future: false };
+
+  seg(on) {
+    return "appearance:none;height:30px;padding:0 15px;border-radius:999px;border:none;font-size:12.5px;font-weight:600;cursor:pointer;" +
+      (on ? "background:#fff;color:#111110;box-shadow:0 1px 3px rgba(0,0,0,.14)" : "background:none;color:#5d5b56");
+  }
+  tabStyle(on) {
+    return "appearance:none;border:none;background:none;padding:0 0 12px;cursor:pointer;font-size:14px;font-weight:" +
+      (on ? "600;color:#111110;box-shadow:inset 0 -2px 0 #111110" : "500;color:#8a877f");
+  }
+
+  renderVals() {
+    const s = this.state;
+    const isRec = s.mode === "recruiter";
+    const spec = s.spec && s.sel.length === 0;
+    const rail = s.sel.length > 0 || s.spec || s.sent;
+    const showJobs = !(s.mode === "board" && s.tab === "about");
+
+    const toggleSel = (id) => this.setState((p) => ({
+      spec: false,
+      sel: p.sel.includes(id) ? p.sel.filter((x) => x !== id) : p.sel.length >= MAX ? p.sel : [...p.sel, id],
+    }));
+
+    const rows = ROLES.map((r) => {
+      const isSel = s.sel.includes(r.id);
+      const isOpen = s.open === r.id;
+      return {
+        ...r,
+        hash: "#" + r.id,
+        open: isOpen,
+        rowStyle: "border-bottom:1px solid rgba(0,0,0,.07);" + (isOpen ? "background:#FBFAF8" : ""),
+        toggleOpen: () => this.setState((p) => ({ open: p.open === r.id ? null : r.id })),
+        toggleSel: () => toggleSel(r.id),
+        applyLabel: isSel ? "✓ " + (s.sel.indexOf(r.id) + 1) + "/" + MAX : "APPLY +",
+        jdApplyLabel: isSel ? "✓ SELECTED · REMOVE" : "APPLY TO THIS ROLE +",
+        applyStyle:
+          "appearance:none;justify-self:end;height:30px;padding:0 12px;border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;cursor:pointer;white-space:nowrap;" +
+          (isSel
+            ? "border:1px solid #111110;background:#111110;color:#fff"
+            : "border:1px solid rgba(0,0,0,.14);background:#fff;color:#111110"),
+      };
+    });
+
+    const cart = s.sel.map((id) => {
+      const r = ROLES.find((x) => x.id === id);
+      return { title: r.title, meta: r.salary + " · #" + r.id, remove: () => toggleSel(id) };
+    });
+
+    const left = MAX - s.sel.length;
+
+    return {
+      isBoard: s.mode === "board",
+      isRecruiter: isRec,
+      setBoard: () => this.setState({ mode: "board", tab: "jobs", future: false }),
+      setRecruiter: () => this.setState({ mode: "recruiter", tab: "jobs" }),
+      modeBoardStyle: this.seg(s.mode === "board"),
+      modeRecruiterStyle: this.seg(isRec),
+
+      setJobs: () => this.setState({ tab: "jobs" }),
+      setAbout: () => this.setState({ tab: "about" }),
+      jobsTabStyle: this.tabStyle(s.tab === "jobs"),
+      aboutTabStyle: this.tabStyle(s.tab === "about"),
+      showAbout: s.mode === "board" && s.tab === "about",
+      showJobs,
+
+      showBoardBanner: !isRec && !rail,
+      showRecruiterBanner: isRec && !rail,
+      futureOpen: s.future,
+      toggleFuture: () => this.setState((p) => ({ future: !p.future })),
+      futureBtnStyle:
+        "appearance:none;height:34px;padding:0 14px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer;border:1px solid " +
+        (s.future ? "rgba(91,75,255,.45);background:#F6F4FF;color:#4536E8" : "rgba(0,0,0,.14);background:#fff;color:#111110"),
+
+      filtersOpen: s.filters,
+      hasFilters: true,
+      toggleFilters: () => this.setState((p) => ({ filters: !p.filters })),
+      filtersBtnStyle:
+        "appearance:none;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border-radius:8px;font-size:13.5px;font-weight:600;color:#111110;cursor:pointer;flex:none;border:1px solid " +
+        (s.filters ? "rgba(91,75,255,.45);background:#F6F4FF" : "rgba(0,0,0,.12);background:#fff"),
+
+      rows,
+      layoutCols: rail ? "grid-template-columns:minmax(0,1fr) 352px" : "grid-template-columns:minmax(0,1fr)",
+      railVisible: rail,
+      showThanks: s.sent,
+      showForm: !s.sent,
+      isSpeculative: spec,
+      startSpeculative: () => this.setState({ spec: true, sel: [], sent: false, future: false }),
+      cart,
+      cartLabel: spec ? "GENERAL APPLICATION" : s.sel.length + "/" + MAX + " ROLES SELECTED",
+      showSlots: !spec && left > 0,
+      slotsLabel: "+ " + left + " slot" + (left > 1 ? "s" : "") + " left — hit APPLY + in the table",
+      resumeReq: spec || isRec ? "required" : "optional but recommended",
+      submitLabel: spec ? "SUBMIT FOR MATCHING →" : "SUBMIT — " + s.sel.length + " ROLE" + (s.sel.length > 1 ? "S" : "") + " →",
+      submit: () => this.setState({ sent: true }),
+      reset: () => this.setState({ sent: false, sel: [], spec: false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

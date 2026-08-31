@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F4F2EE;font-family:'Instrument Sans',system-ui,sans-serif;color:#111110;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  a{color:#4536E8;text-decoration:none}
+  a:hover{color:#2E22B8}
+  @keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+</style>
+</helmet>
+
+<section style="padding:44px 48px 90px">
+  <div style="max-width:1300px;margin:0 auto 26px">
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">transformertalent.com — homepage, three layouts</h2>
+    <p style="margin:7px 0 0;max-width:820px;font-size:13.5px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Same palette, type and components as the market index and roles pages; the positioning copy and claims are unchanged from the current site. What differs is structure — what the page leads with and what it asks for. Reference them in chat as <a href="#11a">11a</a>, <a href="#11b">11b</a>, <a href="#11c">11c</a>.</p>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start">
+
+    <div id="11a" style="width:1180px;flex:none">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">11a</span>
+        <b style="font-size:14px;font-weight:600">Two doors</b>
+        <span style="font-size:13px;color:#8a877f">Hiring or looking — the page splits at the top and never makes you guess which half is yours.</span>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;height:62px;padding:0 34px;border-bottom:1px solid rgba(0,0,0,.08)">
+          <a href="#11a" style="display:flex;align-items:baseline;font-size:15px;font-weight:600;letter-spacing:-.015em;color:#111110">Transformer<b style="color:#5B4BFF">_</b>Talent</a>
+          <div style="flex:1"></div>
+          <nav style="display:flex;align-items:center;gap:20px">
+            <a href="#11a" style="font-size:12.5px;color:#5d5b56;font-variant-numeric:tabular-nums">/about</a>
+            <a href="#11a" style="font-size:12.5px;color:#5d5b56">/market-index</a>
+            <a href="#11a" style="font-size:12.5px;color:#5d5b56">/roles</a>
+            <a href="#11a" style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.07em">UPLOAD JD →</a>
+          </nav>
+          <span style="display:flex;align-items:center;gap:7px;margin-left:20px;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:#1F7A4C;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block"></span>SYSTEM LIVE</span>
+        </div>
+
+        <div style="padding:54px 34px 40px;text-align:center">
+          <h1 style="margin:0 auto;max-width:840px;font-size:56px;line-height:1.05;font-weight:600;letter-spacing:-.035em;text-wrap:balance">Top engineers. The best-backed <span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400">start-ups.</span></h1>
+          <p style="margin:20px auto 0;max-width:620px;font-size:17px;line-height:1.6;color:#3b3934;text-wrap:pretty">Transformer Talent specialises in placing <b style="font-weight:600">top AI/ML and software engineers</b> at venture-backed start-ups, from first engineering hire to Chief Science Officer.</p>
+          <p style="margin:22px 0 0;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a9a6a0">Placements at companies backed by <b style="color:#5d5b56">Sequoia · 8VC · Felicis · Y Combinator · a16z</b></p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:0 34px 40px">
+          <div style="border:1px solid rgba(0,0,0,.1);border-radius:14px;padding:26px 28px;display:flex;flex-direction:column">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a877f">Hiring managers</div>
+            <h2 style="margin:12px 0 0;font-size:26px;font-weight:600;letter-spacing:-.025em;text-wrap:pretty">Upload your JD. See who we&rsquo;d put in front of you.</h2>
+            <p style="margin:11px 0 0;font-size:14.5px;line-height:1.65;color:#3b3934;text-wrap:pretty">Anonymized profiles from our network within a day — and an honest read on whether your band clears the market. No call required.</p>
+            <div style="flex:1;min-height:22px"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:22px">
+              <a href="#11a" style="display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:9px;background:#111110;color:#fff;font-size:13.5px;font-weight:600">Upload your JD →</a>
+              <a href="#11a" style="font-size:13px;font-weight:600;color:#5d5b56">How it works</a>
+            </div>
+          </div>
+          <div style="border:1px solid rgba(0,0,0,.1);border-radius:14px;padding:26px 28px;background:#FBFAF8;display:flex;flex-direction:column">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a877f">Engineers</div>
+            <h2 style="margin:12px 0 0;font-size:26px;font-weight:600;letter-spacing:-.025em;text-wrap:pretty">One profile, every role we work on.</h2>
+            <p style="margin:11px 0 0;font-size:14.5px;line-height:1.65;color:#3b3934;text-wrap:pretty">Most of what we place is never posted publicly. Apply once and we&rsquo;ll consider you for all of it, now and as new searches open.</p>
+            <div style="flex:1;min-height:22px"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:22px">
+              <a href="#11a" style="display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:9px;border:1px solid rgba(0,0,0,.16);background:#fff;color:#111110;font-size:13.5px;font-weight:600">See 128 open roles →</a>
+              <a href="#11a" style="font-size:13px;font-weight:600;color:#5d5b56">Send a resume</a>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:26px 0 28px;border-top:1px solid rgba(0,0,0,.08);background:#FBFAF8;overflow:hidden">
+          <div style="padding:0 34px;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a877f">Recently closed</div>
+          <div style="display:flex;gap:0;margin-top:16px;width:max-content;animation:drift 46s linear infinite">
+            <div style="display:flex;align-items:center;gap:28px;padding-right:28px">
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Fleet AI</b><span style="font-size:12.5px;color:#8a877f">ML Infrastructure Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Ironsite</b><span style="font-size:12.5px;color:#8a877f">Chief Science Officer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Virtualitics</b><span style="font-size:12.5px;color:#8a877f">ML Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Adaptive</b><span style="font-size:12.5px;color:#8a877f">Product Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Palantir</b><span style="font-size:12.5px;color:#8a877f">Forward Deployed Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:28px;padding-right:28px">
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Fleet AI</b><span style="font-size:12.5px;color:#8a877f">ML Infrastructure Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Ironsite</b><span style="font-size:12.5px;color:#8a877f">Chief Science Officer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Virtualitics</b><span style="font-size:12.5px;color:#8a877f">ML Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Adaptive</b><span style="font-size:12.5px;color:#8a877f">Product Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+              <span style="display:flex;align-items:baseline;gap:9px;white-space:nowrap"><b style="font-size:14px;font-weight:600">Palantir</b><span style="font-size:12.5px;color:#8a877f">Forward Deployed Engineer</span></span>
+              <span style="color:#c2bfb8">✦</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:26px;padding:30px 34px;border-top:1px solid rgba(0,0,0,.08)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a877f">Market index</div>
+            <h2 style="margin:10px 0 0;font-size:24px;font-weight:600;letter-spacing:-.025em;text-wrap:pretty">What engineers actually cost, from 123 live searches.</h2>
+            <p style="margin:9px 0 0;max-width:580px;font-size:14px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Median authorized base bands per role family in SF and New York — what companies gave us permission to offer, not scraped posts.</p>
+            <a href="#11a" style="display:inline-block;margin-top:14px;font-size:13px;font-weight:600">Read the index →</a>
+          </div>
+          <div style="width:400px;flex:none;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:16px 18px">
+            <div style="display:flex;gap:16px;font-size:11px;color:#5d5b56">
+              <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:3px;background:#5B4BFF;display:block"></span>SF</span>
+              <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:3px;background:#C4621B;display:block"></span>NYC</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:13px">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#8a877f"><span>Infra / Backend</span><span style="font-variant-numeric:tabular-nums">$192–252k</span></div>
+                <div style="display:flex;flex-direction:column;gap:3px;margin-top:5px">
+                  <div style="height:7px;border-radius:999px;background:#5B4BFF;width:74%"></div>
+                  <div style="height:7px;border-radius:999px;background:#C4621B;width:62%"></div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#8a877f"><span>ML / AI</span><span style="font-variant-numeric:tabular-nums">$160–300k</span></div>
+                <div style="display:flex;flex-direction:column;gap:3px;margin-top:5px">
+                  <div style="height:7px;border-radius:999px;background:#5B4BFF;width:92%"></div>
+                  <div style="height:7px;border-radius:999px;background:#C4621B;width:68%"></div>
+                </div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#8a877f"><span>Product / Full-Stack</span><span style="font-variant-numeric:tabular-nums">$170–255k</span></div>
+                <div style="display:flex;flex-direction:column;gap:3px;margin-top:5px">
+                  <div style="height:7px;border-radius:999px;background:#5B4BFF;width:78%"></div>
+                  <div style="height:7px;border-radius:999px;background:#C4621B;width:60%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 34px;border-top:1px solid rgba(0,0,0,.08);background:#FBFAF8">
+          <span style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#8a877f">© 2026 TRANSFORMER TALENT — &ldquo;TALENT IS ALL YOU NEED&rdquo;</span>
+          <div style="flex:1"></div>
+          <a href="#11a" style="font-size:12.5px;color:#8a877f">spencer@transformertalent.com</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="11b" style="width:1180px;flex:none">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">11b</span>
+        <b style="font-size:14px;font-weight:600">The ledger</b>
+        <span style="font-size:13px;color:#8a877f">Proof first. The homepage is the data — searches, bands, live roles — with the pitch as one line.</span>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;height:62px;padding:0 34px;border-bottom:1px solid rgba(0,0,0,.08)">
+          <a href="#11b" style="display:flex;align-items:baseline;font-size:15px;font-weight:600;letter-spacing:-.015em;color:#111110">Transformer<b style="color:#5B4BFF">_</b>Talent</a>
+          <div style="flex:1"></div>
+          <nav style="display:flex;align-items:center;gap:20px">
+            <a href="#11b" style="font-size:12.5px;color:#5d5b56;font-variant-numeric:tabular-nums">/about</a>
+            <a href="#11b" style="font-size:12.5px;color:#5d5b56">/market-index</a>
+            <a href="#11b" style="font-size:12.5px;color:#5d5b56">/roles</a>
+            <a href="#11b" style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.07em">UPLOAD JD →</a>
+          </nav>
+          <span style="display:flex;align-items:center;gap:7px;margin-left:20px;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:#1F7A4C;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block"></span>SYSTEM LIVE</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:48px;padding:52px 34px 42px;align-items:start">
+          <div>
+            <h1 style="margin:0;font-size:52px;line-height:1.06;font-weight:600;letter-spacing:-.035em;text-wrap:balance">Top engineers.<br>The best-backed <span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400">start-ups.</span></h1>
+            <p style="margin:20px 0 0;max-width:560px;font-size:16.5px;line-height:1.6;color:#3b3934;text-wrap:pretty">We place <b style="font-weight:600">top AI/ML and software engineers</b> at venture-backed start-ups — from first engineering hire to Chief Science Officer.</p>
+            <div style="display:flex;gap:10px;margin-top:26px">
+              <a href="#11b" style="display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:9px;background:#111110;color:#fff;font-size:13.5px;font-weight:600">Hiring? Upload your JD</a>
+              <a href="#11b" style="display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:9px;border:1px solid rgba(0,0,0,.16);color:#111110;font-size:13.5px;font-weight:600">Looking? See open roles</a>
+            </div>
+            <p style="margin:24px 0 0;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a9a6a0">Backed by <b style="color:#5d5b56">Sequoia · 8VC · Felicis · Y Combinator · a16z</b></p>
+          </div>
+
+          <div style="border:1px solid rgba(0,0,0,.1);border-radius:14px;overflow:hidden">
+            <div style="padding:12px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">The numbers</div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr))">
+              <div style="padding:18px;border-right:1px solid rgba(0,0,0,.07);border-bottom:1px solid rgba(0,0,0,.07)">
+                <div style="font-size:29px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">128</div>
+                <div style="margin-top:3px;font-size:12.5px;color:#8a877f">live roles today</div>
+              </div>
+              <div style="padding:18px;border-bottom:1px solid rgba(0,0,0,.07)">
+                <div style="font-size:29px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">123</div>
+                <div style="margin-top:3px;font-size:12.5px;color:#8a877f">searches run</div>
+              </div>
+              <div style="padding:18px;border-right:1px solid rgba(0,0,0,.07)">
+                <div style="font-size:29px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">$600k</div>
+                <div style="margin-top:3px;font-size:12.5px;color:#8a877f">highest base carried</div>
+              </div>
+              <div style="padding:18px">
+                <div style="font-size:29px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">48h</div>
+                <div style="margin-top:3px;font-size:12.5px;color:#8a877f">reply, either way</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 34px 40px">
+          <div style="display:flex;align-items:baseline;gap:12px">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Open now</h2>
+            <span style="font-size:12.5px;color:#8a877f">five of 128 · base salary, authorized</span>
+            <div style="flex:1"></div>
+            <a href="#11b" style="font-size:12.5px;font-weight:600">All 128 roles →</a>
+          </div>
+          <div style="margin-top:14px;border:1px solid rgba(0,0,0,.09);border-radius:14px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:56px minmax(0,2.4fr) 150px 130px 96px;gap:14px;padding:11px 18px;background:#FBFAF8;border-bottom:1px solid rgba(0,0,0,.09);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8a877f">
+              <span>ID</span><span>Role</span><span>Location</span><span>Base salary</span><span style="text-align:right">Apply</span>
+            </div>
+            <div style="display:grid;grid-template-columns:56px minmax(0,2.4fr) 150px 130px 96px;gap:14px;padding:13px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1042</span>
+              <span style="min-width:0"><b style="display:block;font-size:14px;font-weight:600;letter-spacing:-.01em">Senior Fleet Software Engineer</b><span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Hybrid · 6–9 yrs · Series C, warehouse automation</span></span>
+              <span style="font-size:12.5px;color:#3b3934">Austin · Boston</span>
+              <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">$185k–$220k</span>
+              <span style="justify-self:end;display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap">APPLY +</span>
+            </div>
+            <div style="display:grid;grid-template-columns:56px minmax(0,2.4fr) 150px 130px 96px;gap:14px;padding:13px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1039</span>
+              <span style="min-width:0"><b style="display:block;font-size:14px;font-weight:600;letter-spacing:-.01em">Perception Engineer</b><span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">On-site · 4–8 yrs · robotics, deployed hardware</span></span>
+              <span style="font-size:12.5px;color:#3b3934">Austin</span>
+              <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">$175k–$205k</span>
+              <span style="justify-self:end;display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap">APPLY +</span>
+            </div>
+            <div style="display:grid;grid-template-columns:56px minmax(0,2.4fr) 150px 130px 96px;gap:14px;padding:13px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1036</span>
+              <span style="min-width:0"><b style="display:block;font-size:14px;font-weight:600;letter-spacing:-.01em">Staff Platform Engineer</b><span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Remote · 5–8 yrs · forty engineers, edge fleet</span></span>
+              <span style="font-size:12.5px;color:#3b3934">Remote, US</span>
+              <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">$190k–$225k</span>
+              <span style="justify-self:end;display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap">APPLY +</span>
+            </div>
+            <div style="display:grid;grid-template-columns:56px minmax(0,2.4fr) 150px 130px 96px;gap:14px;padding:13px 18px;align-items:center;border-bottom:1px solid rgba(0,0,0,.07)">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1031</span>
+              <span style="min-width:0"><b style="display:block;font-size:14px;font-weight:600;letter-spacing:-.01em">Applied ML Engineer</b><span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Hybrid · 4–7 yrs · profitable freight marketplace</span></span>
+              <span style="font-size:12.5px;color:#3b3934">NYC · Remote</span>
+              <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">$180k–$210k</span>
+              <span style="justify-self:end;display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap">APPLY +</span>
+            </div>
+            <div style="display:grid;grid-template-columns:56px minmax(0,2.4fr) 150px 130px 96px;gap:14px;padding:13px 18px;align-items:center">
+              <span style="font-size:12.5px;color:#8a877f;font-variant-numeric:tabular-nums">#1024</span>
+              <span style="min-width:0"><b style="display:block;font-size:14px;font-weight:600;letter-spacing:-.01em">Founding Backend Engineer</b><span style="display:block;margin-top:2px;font-size:12px;color:#8a877f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">On-site · 5+ yrs · seed-stage payments, four engineers</span></span>
+              <span style="font-size:12.5px;color:#3b3934">SF / Bay Area</span>
+              <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">$170k–$200k</span>
+              <span style="justify-self:end;display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap">APPLY +</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:0 34px 40px">
+          <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Closed recently</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:13px">
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">Fleet AI</b> <span style="color:#5d5b56">ML Infrastructure Engineer</span></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#8a877f;white-space:nowrap">ML_INFRA</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">Ironsite</b> <span style="color:#5d5b56">Chief Science Officer</span></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#8a877f;white-space:nowrap">EXEC</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">Virtualitics</b> <span style="color:#5d5b56">ML Engineer</span></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#8a877f;white-space:nowrap">ML</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">Adaptive</b> <span style="color:#5d5b56">Product Engineer</span></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#8a877f;white-space:nowrap">PRODUCT</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">Palantir</b> <span style="color:#5d5b56">Forward Deployed Engineer</span></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#8a877f;white-space:nowrap">FDE</span></div>
+            </div>
+          </div>
+          <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Market index</div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#5d5b56">Infra / Backend, SF</span><b style="font-weight:600;font-variant-numeric:tabular-nums">$192–252k</b></div>
+                <div style="height:7px;margin-top:6px;border-radius:999px;background:#5B4BFF;width:74%"></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#5d5b56">ML / AI, SF</span><b style="font-weight:600;font-variant-numeric:tabular-nums">$160–300k</b></div>
+                <div style="height:7px;margin-top:6px;border-radius:999px;background:#5B4BFF;width:92%"></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:#5d5b56">Product, NYC</span><b style="font-weight:600;font-variant-numeric:tabular-nums">$150–225k</b></div>
+                <div style="height:7px;margin-top:6px;border-radius:999px;background:#C4621B;width:60%"></div>
+              </div>
+            </div>
+            <a href="#11b" style="display:inline-block;margin-top:14px;font-size:12.5px;font-weight:600">Full index →</a>
+          </div>
+          <div style="border:1px solid rgba(0,0,0,.09);border-radius:14px;padding:20px 22px;background:#FBFAF8">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">How it works</div>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:13px">
+              <div style="display:flex;gap:10px;font-size:13px;line-height:1.5;color:#3b3934"><b style="font-weight:600;flex:none">1</b><span style="text-wrap:pretty">You send a JD, or a profile. No call to start.</span></div>
+              <div style="display:flex;gap:10px;font-size:13px;line-height:1.5;color:#3b3934"><b style="font-weight:600;flex:none">2</b><span style="text-wrap:pretty">We come back within 48 hours with real names and an honest read on the band.</span></div>
+              <div style="display:flex;gap:10px;font-size:13px;line-height:1.5;color:#3b3934"><b style="font-weight:600;flex:none">3</b><span style="text-wrap:pretty">You decide whether it&rsquo;s worth a conversation.</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:24px;margin:0 34px 34px;padding:28px 30px;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#111110">
+          <div style="flex:1;min-width:0">
+            <h2 style="margin:0;font-size:25px;font-weight:600;letter-spacing:-.025em;color:#fff;text-wrap:pretty">Upload your JD. We&rsquo;ll share potential matches.</h2>
+            <p style="margin:9px 0 0;max-width:600px;font-size:14px;line-height:1.6;color:rgba(255,255,255,.68);text-wrap:pretty">Paste a job description and see anonymized profiles of engineers we&rsquo;d put in front of you — before you ever take a call.</p>
+          </div>
+          <a href="#11b" style="display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:9px;background:#fff;color:#111110;font-size:12px;font-weight:700;letter-spacing:.06em;flex:none;white-space:nowrap">SEE POTENTIAL MATCHES →</a>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 34px;border-top:1px solid rgba(0,0,0,.08);background:#FBFAF8">
+          <span style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#8a877f">© 2026 TRANSFORMER TALENT — &ldquo;TALENT IS ALL YOU NEED&rdquo;</span>
+          <div style="flex:1"></div>
+          <a href="#11b" style="font-size:12.5px;color:#8a877f">spencer@transformertalent.com</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="11c" style="width:1180px;flex:none">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">11c</span>
+        <b style="font-size:14px;font-weight:600">Do it here</b>
+        <span style="font-size:13px;color:#8a877f">The JD box is the hero. The homepage isn&rsquo;t a pitch for the product — it is the product.</span>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;height:62px;padding:0 34px;border-bottom:1px solid rgba(0,0,0,.08)">
+          <a href="#11c" style="display:flex;align-items:baseline;font-size:15px;font-weight:600;letter-spacing:-.015em;color:#111110">Transformer<b style="color:#5B4BFF">_</b>Talent</a>
+          <div style="flex:1"></div>
+          <nav style="display:flex;align-items:center;gap:20px">
+            <a href="#11c" style="font-size:12.5px;color:#5d5b56;font-variant-numeric:tabular-nums">/about</a>
+            <a href="#11c" style="font-size:12.5px;color:#5d5b56">/market-index</a>
+            <a href="#11c" style="font-size:12.5px;color:#5d5b56">/roles</a>
+            <a href="#11c" style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;background:#111110;color:#fff;font-size:11px;font-weight:700;letter-spacing:.07em">UPLOAD JD →</a>
+          </nav>
+          <span style="display:flex;align-items:center;gap:7px;margin-left:20px;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:#1F7A4C;white-space:nowrap"><span style="width:6px;height:6px;border-radius:999px;background:#1F7A4C;display:block"></span>SYSTEM LIVE</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 470px;gap:44px;padding:50px 34px 40px;align-items:start">
+          <div>
+            <h1 style="margin:0;font-size:50px;line-height:1.07;font-weight:600;letter-spacing:-.035em;text-wrap:balance">Top engineers. The best-backed <span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400">start-ups.</span></h1>
+            <p style="margin:20px 0 0;max-width:540px;font-size:16.5px;line-height:1.6;color:#3b3934;text-wrap:pretty">We place <b style="font-weight:600">top AI/ML and software engineers</b> at venture-backed start-ups, from first engineering hire to Chief Science Officer. Start by pasting a job description — no call, no form maze.</p>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:26px;max-width:520px">
+              <div style="display:flex;gap:11px;font-size:14px;line-height:1.55;color:#3b3934"><span style="color:#1F7A4C;font-weight:700;flex:none">✓</span><span style="text-wrap:pretty">Anonymized profiles of engineers we&rsquo;d actually put in front of you.</span></div>
+              <div style="display:flex;gap:11px;font-size:14px;line-height:1.55;color:#3b3934"><span style="color:#1F7A4C;font-weight:700;flex:none">✓</span><span style="text-wrap:pretty">An honest read on whether your band clears the market, from 123 live searches.</span></div>
+              <div style="display:flex;gap:11px;font-size:14px;line-height:1.55;color:#3b3934"><span style="color:#1F7A4C;font-weight:700;flex:none">✓</span><span style="text-wrap:pretty">A reply within 48 hours, either way.</span></div>
+            </div>
+            <p style="margin:26px 0 0;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a9a6a0">Placements at companies backed by <b style="color:#5d5b56">Sequoia · 8VC · Felicis · Y Combinator · a16z</b></p>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:26px;padding:14px 16px;border:1px solid rgba(0,0,0,.1);border-radius:12px;background:#FBFAF8">
+              <span style="font-size:13.5px;color:#3b3934">Not hiring — looking?</span>
+              <a href="#11c" style="font-size:13.5px;font-weight:600">See 128 open roles →</a>
+              <span style="font-size:12.5px;color:#8a877f">most are never posted</span>
+            </div>
+          </div>
+
+          <div style="border:1px solid rgba(0,0,0,.12);border-radius:16px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(17,17,16,.4)">
+            <div style="padding:14px 20px;background:#111110;color:#fff">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.6)">Free · no account</div>
+              <div style="margin-top:4px;font-size:16px;font-weight:600;letter-spacing:-.015em">See potential matches</div>
+            </div>
+            <div style="padding:20px">
+              <div style="font-size:11.5px;font-weight:600;color:#5d5b56">Paste the job description</div>
+              <div style="margin-top:6px;padding:13px 14px;border:1px solid rgba(0,0,0,.14);border-radius:10px;min-height:132px;font-size:13px;line-height:1.6;color:#a9a6a0">Senior Backend Engineer — Series B fintech, New York, hybrid. Rust or Go, 6+ years, owns the ledger service. $180k–$220k…</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:9px">
+                <span style="font-size:12px;color:#8a877f">or</span>
+                <span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 11px;border:1px dashed rgba(0,0,0,.2);border-radius:8px;font-size:12.5px;color:#5d5b56"><b style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#B3402F;background:#FBEAE7;border-radius:4px;padding:2px 5px">PDF</b>upload a file</span>
+                <span style="display:inline-flex;align-items:center;height:30px;padding:0 11px;border:1px dashed rgba(0,0,0,.2);border-radius:8px;font-size:12.5px;color:#5d5b56">paste a link</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px">
+                <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Work email
+                  <input placeholder="you@company.com" style="display:block;width:100%;height:36px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+                </label>
+                <label style="display:block;font-size:11.5px;font-weight:600;color:#5d5b56">Company
+                  <input style="display:block;width:100%;height:36px;margin-top:5px;padding:0 11px;border:1px solid rgba(0,0,0,.14);border-radius:8px;font-size:13.5px">
+                </label>
+              </div>
+              <a href="#11c" style="display:flex;align-items:center;justify-content:center;height:44px;margin-top:14px;border-radius:9px;background:#111110;color:#fff;font-size:12px;font-weight:700;letter-spacing:.06em">SEE POTENTIAL MATCHES →</a>
+              <p style="margin:10px 0 0;font-size:12px;line-height:1.5;color:#8a877f;text-wrap:pretty">We never contact your team or share the JD. Matches come back within 48 hours.</p>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid rgba(0,0,0,.08);background:#FBFAF8">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">What comes back</div>
+              <div style="display:flex;gap:9px;margin-top:11px">
+                <div style="flex:1;padding:11px 12px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#fff">
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <span style="width:22px;height:22px;border-radius:999px;background:#5B7FDB;color:#fff;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;flex:none">◆</span>
+                    <b style="font-size:12.5px;font-weight:600">Engineer A</b>
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:999px;background:#E9F5EE;color:#1F7A4C;font-size:10px;font-weight:600;white-space:nowrap">Strong</span>
+                  </div>
+                  <div style="margin-top:6px;font-size:11.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">8 yrs · ledger systems at two fintechs · Rust</div>
+                </div>
+                <div style="flex:1;padding:11px 12px;border:1px solid rgba(0,0,0,.09);border-radius:10px;background:#fff">
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <span style="width:22px;height:22px;border-radius:999px;background:#4CA88C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;flex:none">◆</span>
+                    <b style="font-size:12.5px;font-weight:600">Engineer B</b>
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:999px;background:#EFEDFF;color:#4536E8;font-size:10px;font-weight:600;white-space:nowrap">Yes</span>
+                  </div>
+                  <div style="margin-top:6px;font-size:11.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">6 yrs · payments infra, Go · NYC, open to hybrid</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:11px;padding:11px 12px;border:1px solid rgba(154,91,20,.28);border-radius:10px;background:#FBF1E6">
+                <span style="font-size:12.5px;line-height:1.5;color:#584634;text-wrap:pretty"><b style="font-weight:600">Band check:</b> $180–220k sits at the NYC median for this profile. Top of market is $250k.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-top:1px solid rgba(0,0,0,.08);background:#FBFAF8">
+          <div style="padding:22px 24px;border-right:1px solid rgba(0,0,0,.07)">
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">128</div>
+            <div style="margin-top:3px;font-size:12.5px;color:#8a877f">live roles</div>
+          </div>
+          <div style="padding:22px 24px;border-right:1px solid rgba(0,0,0,.07)">
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">123</div>
+            <div style="margin-top:3px;font-size:12.5px;color:#8a877f">searches run</div>
+          </div>
+          <div style="padding:22px 24px;border-right:1px solid rgba(0,0,0,.07)">
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">4</div>
+            <div style="margin-top:3px;font-size:12.5px;color:#8a877f">role families priced</div>
+          </div>
+          <div style="padding:22px 24px">
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums">48h</div>
+            <div style="margin-top:3px;font-size:12.5px;color:#8a877f">reply, either way</div>
+          </div>
+        </div>
+
+        <div style="padding:34px;border-top:1px solid rgba(0,0,0,.08)">
+          <div style="display:flex;align-items:baseline;gap:12px">
+            <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em">Recently closed</h2>
+            <span style="font-size:12.5px;color:#8a877f">real placements — ML infrastructure through Chief Science Officer</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px">
+            <div style="padding:16px 18px;border:1px solid rgba(0,0,0,.09);border-radius:12px">
+              <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Fleet AI</b><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a877f">ML_INFRA</span></div>
+              <div style="margin-top:3px;font-size:13px;color:#3b3934">ML Infrastructure Engineer</div>
+              <p style="margin:7px 0 0;font-size:12.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">The engineer now running ML infrastructure end to end.</p>
+            </div>
+            <div style="padding:16px 18px;border:1px solid rgba(0,0,0,.09);border-radius:12px">
+              <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Ironsite</b><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a877f">EXEC</span></div>
+              <div style="margin-top:3px;font-size:13px;color:#3b3934">Chief Science Officer</div>
+              <p style="margin:7px 0 0;font-size:12.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">An executive search at the applied-AI frontier.</p>
+            </div>
+            <div style="padding:16px 18px;border:1px solid rgba(0,0,0,.09);border-radius:12px">
+              <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Virtualitics</b><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a877f">ML</span></div>
+              <div style="margin-top:3px;font-size:13px;color:#3b3934">ML Engineer</div>
+              <p style="margin:7px 0 0;font-size:12.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">Machine learning for AI-driven analytics.</p>
+            </div>
+            <div style="padding:16px 18px;border:1px solid rgba(0,0,0,.09);border-radius:12px">
+              <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Adaptive</b><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a877f">PRODUCT</span></div>
+              <div style="margin-top:3px;font-size:13px;color:#3b3934">Product Engineer</div>
+              <p style="margin:7px 0 0;font-size:12.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">The full-stack generalist a design-led team wanted.</p>
+            </div>
+            <div style="padding:16px 18px;border:1px solid rgba(0,0,0,.09);border-radius:12px">
+              <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">Palantir</b><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a877f">FDE</span></div>
+              <div style="margin-top:3px;font-size:13px;color:#3b3934">Forward Deployed Engineer</div>
+              <p style="margin:7px 0 0;font-size:12.5px;line-height:1.5;color:#8a877f;text-wrap:pretty">High-bar FDE hiring from a live, pre-qualified pipeline.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 34px;border-top:1px solid rgba(0,0,0,.08);background:#FBFAF8">
+          <span style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#8a877f">© 2026 TRANSFORMER TALENT — &ldquo;TALENT IS ALL YOU NEED&rdquo;</span>
+          <div style="flex:1"></div>
+          <a href="#11c" style="font-size:12.5px;color:#8a877f">spencer@transformertalent.com</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width:1000px;margin:34px auto 0;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:20px 22px">
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a877f">Notes</div>
+    <p style="margin:9px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">All three keep the current hero claim, the sub-paragraph, the investor line and the two audience CTAs verbatim from <b style="font-weight:600;color:#111110">app/page.tsx</b>. The chrome is grounded in <code style="font-size:12.5px">app/layout.tsx</code>: the <b style="font-weight:600">Transformer_Talent</b> underscore wordmark, the path-style nav (/about · /market-index · /roles) with UPLOAD JD →, the SYSTEM LIVE status and the real footer with the slogan and Spencer&rsquo;s address. Two deliberate drops: the terminal-window hero block (the strongest piece of the old dark identity, with no equivalent in this language) and the invented &ldquo;For companies&rdquo; nav item, which was never in the real topbar.</p>
+    <p style="margin:11px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">Placements are the real five from <code style="font-size:12.5px">data/placements.ts</code> — Fleet AI, Ironsite, Virtualitics, Adaptive, Palantir — with their tags and, in 11c, the one-line story each carries. Each links out to the company as it does today. The stats in 11b and 11c are all derived from data you already have (roles count, <code style="font-size:12.5px">market-index.json</code>); &ldquo;48h reply&rdquo; comes from the apply and JD flows — confirm it&rsquo;s a promise you want on the homepage.</p>
+    <p style="margin:11px 0 0;font-size:13px;line-height:1.6;color:#5d5b56;text-wrap:pretty">11c implies product work the site doesn&rsquo;t have yet: the inline JD box needs the <code style="font-size:12.5px">TalentMatcher</code> flow lifted onto the homepage, and the &ldquo;what comes back&rdquo; preview is a promise about output quality. 11a and 11b are pure restyles of what exists.</p>
+  </div>
+</section>
+
+</x-dc>
+</body>
+</html>

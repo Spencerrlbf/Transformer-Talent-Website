@@ -9,9 +9,10 @@ import { leadRecipients, sendLeadNotification } from "@/lib/server/lead-notify";
 
 export const maxDuration = 60;
 
-// Referrals from recruiter pages. The referred person becomes a real
-// pipeline citizen: a website_applications row + the full enrichment and
-// screening pipeline, tagged Referral, attributed to the recruiter page.
+// Referrals from recruiter pages and org boards. The referred person becomes
+// a real pipeline citizen: a website_applications row + the full enrichment
+// and screening pipeline, tagged Referral, attributed to the recruiter page
+// (bounty) or the org board (no bounty promised — amount 0).
 // People already in the system are recorded as status=duplicate (not
 // eligible for the bounty) but the response NEVER reveals whether we knew
 // them — that would leak who is in the network.
@@ -34,13 +35,16 @@ export async function POST(req: NextRequest) {
   if (clean(body.website, 50)) return NextResponse.json({ ok: true });
 
   const recruiterId = clean(body.recruiter, 40);
+  const orgSlug = clean(body.org, 60).toLowerCase();
   const referrerName = clean(body.referrerName, 120);
   const referrerEmail = clean(body.referrerEmail, 254).toLowerCase();
   const candidateLinkedin = clean(body.candidateLinkedin, 300);
   const candidateEmail = clean(body.candidateEmail, 254).toLowerCase();
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!/^[0-9a-f-]{36}$/.test(recruiterId))
+  const viaRecruiter = /^[0-9a-f-]{36}$/.test(recruiterId);
+  const viaBoard = !viaRecruiter && /^[a-z0-9][a-z0-9-]{1,58}$/.test(orgSlug);
+  if (!viaRecruiter && !viaBoard)
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   if (!referrerName || !emailRe.test(referrerEmail))
     return NextResponse.json(
@@ -59,15 +63,27 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
 
-  // The page must be real, published, and offering referrals.
-  const pres = await sbRest(
-    `recruiter_profiles?id=eq.${recruiterId}&published=is.true&show_referral=is.true&select=id,organization_id`
-  );
-  const [profile] = pres.ok
-    ? ((await pres.json()) as { id: string; organization_id: string }[])
-    : [];
-  if (!profile) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-  const orgId = profile.organization_id;
+  // The source must be real: a published referral-offering recruiter page,
+  // or an existing org board.
+  let profile: { id: string; organization_id: string } | null = null;
+  let orgId: string;
+  if (viaRecruiter) {
+    const pres = await sbRest(
+      `recruiter_profiles?id=eq.${recruiterId}&published=is.true&show_referral=is.true&select=id,organization_id`
+    );
+    [profile] = pres.ok
+      ? ((await pres.json()) as { id: string; organization_id: string }[])
+      : [];
+    if (!profile) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    orgId = profile.organization_id;
+  } else {
+    const ores = await sbRest(
+      `organizations?slug=eq.${encodeURIComponent(orgSlug)}&select=id`
+    );
+    const [orgRow] = ores.ok ? ((await ores.json()) as { id: string }[]) : [];
+    if (!orgRow) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    orgId = orgRow.id;
+  }
 
   const ip =
     req.headers.get("x-real-ip") ||
@@ -84,6 +100,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The bounty is the org's configured referral_amount — the same number the
+  // board and recruiter page rendered. 0 means no dollar offer was made, so
+  // the ledger records 0 and the confirmation email stays silent about money.
   const [orgRes, ttOrgId] = await Promise.all([
     sbRest(`organizations?id=eq.${orgId}&select=referral_amount`),
     getOrgId(),
@@ -91,7 +110,7 @@ export async function POST(req: NextRequest) {
   const [orgRow] = orgRes.ok
     ? ((await orgRes.json()) as { referral_amount: number }[])
     : [];
-  const amount = orgRow?.referral_amount ?? 5000;
+  const amount = orgRow?.referral_amount ?? (viaRecruiter ? 5000 : 0);
 
   // Already in the system? Org's applications (any time), and for the TT org
   // also the global candidate pool. Recorded, not rejected — and never
@@ -118,7 +137,7 @@ export async function POST(req: NextRequest) {
   if (known) {
     await sbInsert("referrals", {
       organization_id: orgId,
-      recruiter_profile_id: profile.id,
+      recruiter_profile_id: profile?.id ?? null,
       referrer_name: referrerName,
       referrer_email: referrerEmail,
       candidate_linkedin: candidateLinkedin,
@@ -134,7 +153,7 @@ export async function POST(req: NextRequest) {
         to: referrerEmail,
         referrerName,
         candidateLinkedin,
-        amount,
+        amount: amount > 0 ? amount : null,
       });
     });
     return NextResponse.json({ ok: true });
@@ -146,7 +165,7 @@ export async function POST(req: NextRequest) {
     "website_applications",
     {
       organization_id: orgId,
-      recruiter_profile_id: profile.id,
+      recruiter_profile_id: profile?.id ?? null,
       name: "",
       email: candidateEmail,
       linkedin_url: candidateLinkedin,
@@ -175,7 +194,7 @@ export async function POST(req: NextRequest) {
 
   await sbInsert("referrals", {
     organization_id: orgId,
-    recruiter_profile_id: profile.id,
+    recruiter_profile_id: profile?.id ?? null,
     referrer_name: referrerName,
     referrer_email: referrerEmail,
     candidate_linkedin: candidateLinkedin,
@@ -202,7 +221,7 @@ export async function POST(req: NextRequest) {
       to: referrerEmail,
       referrerName,
       candidateLinkedin,
-      amount,
+      amount: amount > 0 ? amount : null,
     });
     await runApplicantPipeline({
       submissionId: submission.id,
@@ -225,7 +244,7 @@ export async function POST(req: NextRequest) {
     try {
       const nres = await sbRest(`website_applications?id=eq.${submission.id}&select=name`);
       const [nrow] = nres.ok ? ((await nres.json()) as { name: string }[]) : [];
-      const to = await leadRecipients({ recruiterProfileId: profile.id, orgId });
+      const to = await leadRecipients({ recruiterProfileId: profile?.id ?? null, orgId });
       await sendLeadNotification({
         to,
         kind: "referral",

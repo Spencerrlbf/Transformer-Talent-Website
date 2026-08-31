@@ -228,16 +228,20 @@ function PipelineRows({
             {entry.title} <em>#{entry.jobId}</em>
           </button>
           <small>
-            {entry.via === "applied"
-              ? "applied"
-              : entry.via === "matched"
-                ? "matched"
-                : "via sourcing run"}
+            {[
+              entry.via === "applied"
+                ? "applied"
+                : entry.via === "matched"
+                  ? "matched"
+                  : "via sourcing run",
+              entry.company,
+              entry.salary,
+              entry.location,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </small>
         </td>
-        <td className="cv2d-ploc">{entry.company || "—"}</td>
-        <td className="cv2d-pnum">{entry.salary || "—"}</td>
-        <td className="cv2d-ploc">{entry.location || "—"}</td>
         <td className="cv2d-pnum">{fmtDay(entry.addedAt)}</td>
         <td>
           {entry.tag ? (
@@ -270,7 +274,7 @@ function PipelineRows({
       </tr>
       {expanded && (
         <tr className="cv2d-preview-row">
-          <td colSpan={8}>
+          <td colSpan={5}>
             <div className="cv2d-pipe-detail">
               <FitReview entry={entry} />
             </div>
@@ -513,7 +517,7 @@ export default function CandidateDrawer({
                       {detail.bestTagLabel}
                     </span>
                   )}
-                  {detail.viaTT && <span className="cv2-tt">⚡ Via Transformer Talent</span>}
+                  {detail.viaTT && <span className="cv2-via">Via TT</span>}
                 </div>
                 {detail.headline && <div className="cv2d-headline">{detail.headline}</div>}
                 <div className="cv2d-meta">
@@ -831,7 +835,7 @@ export default function CandidateDrawer({
               </div>
             )}
 
-            <div className="cv2d-tabs">
+            <div className="dash-tabs cv2d-tabs">
               {(
                 [
                   ["profile", "Profile", null],
@@ -842,7 +846,7 @@ export default function CandidateDrawer({
               ).map(([id, label, n]) => (
                 <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
                   {label}
-                  {n != null && n > 0 && <span className="cv2d-n">{n}</span>}
+                  {n != null && n > 0 && <span className="n">{n}</span>}
                 </button>
               ))}
             </div>
@@ -943,9 +947,6 @@ export default function CandidateDrawer({
                         <thead>
                           <tr>
                             <th>Role</th>
-                            <th>Company</th>
-                            <th>Salary</th>
-                            <th>Location</th>
                             <th>Added</th>
                             <th>Fit</th>
                             <th>Stage</th>
