@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Turnstile, { resetTurnstile } from "@/components/Turnstile";
 import {
   MAX_ROLES,
   getSelection,
@@ -79,6 +80,7 @@ export default function ApplyForm({
     try {
       const res = await fetch("/api/apply", { method: "POST", body: data });
       const json = await res.json().catch(() => ({}));
+      resetTurnstile(form);
       if (res.ok && json.ok) {
         const roleTitles = roles
           .filter((r) => selected.includes(r.jobId))
@@ -96,6 +98,7 @@ export default function ApplyForm({
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
     } catch {
+      resetTurnstile(form);
       setStatus({ kind: "error", message: "Network error — please try again." });
     }
   }
@@ -266,6 +269,7 @@ export default function ApplyForm({
             style={{ position: "absolute", left: "-9999px" }}
             aria-hidden="true"
           />
+          <Turnstile />
           <button type="submit" className="board-btn apply-submit" disabled={status.kind === "sending"}>
             {status.kind === "sending"
               ? "SUBMITTING…"

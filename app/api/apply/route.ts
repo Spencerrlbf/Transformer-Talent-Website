@@ -7,6 +7,7 @@ import { loadOrgBySlug, loadOrgRoles, type BoardRole } from "@/lib/server/org-bo
 import { getOrgId } from "@/lib/server/spine";
 import { sanitizeLocationOptions } from "@/lib/server/locations";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const maxDuration = 60;
 
@@ -45,6 +46,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (clean(form.get("website"), 50)) return NextResponse.json({ ok: true });
+
+  if (!(await verifyTurnstile(form.get("cf-turnstile-response")))) {
+    return NextResponse.json(
+      { error: "We couldn't verify your browser. Please refresh the page and try again." },
+      { status: 403 }
+    );
+  }
 
   // Tenant boards post their org slug; absent/own slug = the site's own flow.
   const boardSlug = clean(form.get("board"), 60);

@@ -3245,3 +3245,8 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .cpe-socfield input:focus { outline: none; border-color: rgba(91,75,255,.55); }
 @media (max-width: 800px) { .cpe-socgrid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .co-strip { flex-wrap: wrap; } .co-socials { margin-left: 0; width: 100%; } }
+
+/* ---- Turnstile (captcha) ---- */
+/* interaction-only: the box is empty for almost everyone; when Cloudflare
+   does need an interactive check it renders inline, so give it air then. */
+.ts-box:not(:empty) { margin: 4px 0 10px; }

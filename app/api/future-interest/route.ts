@@ -5,6 +5,7 @@ import { linkedinUsername } from "@/lib/server/applicants";
 import { loadOrgBySlug } from "@/lib/server/org-board";
 import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
@@ -62,6 +63,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (clean(form.get("website"), 50)) return NextResponse.json({ ok: true });
+
+  if (!(await verifyTurnstile(form.get("cf-turnstile-response")))) {
+    return NextResponse.json(
+      { error: "We couldn't verify your browser. Please refresh the page and try again." },
+      { status: 403 }
+    );
+  }
 
   const boardSlug = clean(form.get("board"), 60);
   let boardOrg: { id: string; slug: string; name: string } | null = null;

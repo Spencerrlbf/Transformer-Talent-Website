@@ -10,6 +10,7 @@ import { sbInsert, sbRest } from "@/lib/server/supabase";
 import { screenAgainstJD } from "@/lib/server/screening";
 import { llamaParsePdf } from "@/lib/server/llamaparse";
 import { enqueueMatchedCandidates, recordEnrichment } from "@/lib/server/spine";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const maxDuration = 60;
 
@@ -21,7 +22,7 @@ const DISPOSABLE = new Set([
 const MAX_JD_PDF_BYTES = 8 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
-  let body: { email?: string; company?: string; linkedin?: string; jdText?: string; website?: string };
+  let body: { email?: string; company?: string; linkedin?: string; jdText?: string; website?: string; captcha?: string };
   let jdFile: File | null = null;
   const contentType = req.headers.get("content-type") || "";
   try {
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
         linkedin: String(form.get("linkedin") ?? ""),
         jdText: String(form.get("jdText") ?? ""),
         website: String(form.get("website") ?? ""),
+        captcha: String(form.get("cf-turnstile-response") ?? ""),
       };
       const f = form.get("jdFile");
       if (f instanceof File && f.size > 0) jdFile = f;
@@ -45,6 +47,13 @@ export async function POST(req: NextRequest) {
 
   // Honeypot
   if (body.website) return NextResponse.json({ ok: true, matches: [] });
+
+  if (!(await verifyTurnstile(body.captcha))) {
+    return NextResponse.json(
+      { error: "We couldn't verify your browser. Please try again, or email spencer@transformertalent.com directly." },
+      { status: 403 }
+    );
+  }
 
   const email = (body.email || "").trim().toLowerCase().slice(0, 254);
   const company = (body.company || "").trim().slice(0, 200);
