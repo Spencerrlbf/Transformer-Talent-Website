@@ -3,6 +3,9 @@
 // from the org's interview stage template; this doc only carries the
 // per-step durations and the note.
 import { sbRest } from "./supabase";
+import { SOCIAL_KEYS, type CompanySocials } from "@/lib/socials";
+
+export type { CompanySocials, SocialKey } from "@/lib/socials";
 
 export type CompanyFounder = {
   id: string;
@@ -44,6 +47,8 @@ export type CompanyProfile = {
   funding: string;
   offices: string;
   workEnv: string;
+  /** Social links; only filled entries render as header icons. */
+  socials: CompanySocials;
 };
 
 export type CompanyPage = {
@@ -107,6 +112,12 @@ export function sanitizeProfile(input: unknown, orgId: string): CompanyProfile {
       };
     })
     .filter((c) => c.name);
+  const socials: CompanySocials = {};
+  const so = (o.socials ?? {}) as Record<string, unknown>;
+  for (const k of SOCIAL_KEYS) {
+    const u = s(so[k], 300);
+    if (u && /^https?:\/\/[^\s]+\.[^\s]+/i.test(u)) socials[k] = u;
+  }
   return {
     tagline: s(o.tagline, 120),
     missionHeadline: s(o.missionHeadline, 220),
@@ -121,6 +132,7 @@ export function sanitizeProfile(input: unknown, orgId: string): CompanyProfile {
     funding: s(o.funding, 40),
     offices: s(o.offices, 60),
     workEnv: s(o.workEnv, 40),
+    socials,
   };
 }
 

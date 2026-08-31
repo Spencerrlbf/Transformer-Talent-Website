@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const res = await sbRest(
-    `organizations?id=eq.${member.org.id}&select=company_profile,company_page_published,logo_path,interview_stages`
+    `organizations?id=eq.${member.org.id}&select=company_profile,company_page_published,logo_path,interview_stages,website`
   );
   const [row] = res.ok
     ? ((await res.json()) as {
@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
         company_page_published: boolean;
         logo_path: string | null;
         interview_stages: unknown;
+        website: string | null;
       }[])
     : [];
   return NextResponse.json({
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
     logoPath: row?.logo_path || null,
     logoUrl: assetPublicUrl(row?.logo_path || null),
     stages: (row && sanitizeStages(row.interview_stages)) || DEFAULT_STAGES,
+    website: row?.website || "",
     canEdit: member.memberRole === "owner",
     boardUrl: `https://www.transformertalent.com/board/${member.org.slug}`,
   });
@@ -42,7 +44,7 @@ export async function PUT(req: NextRequest) {
   if (member.memberRole !== "owner")
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
 
-  let body: { profile?: unknown; published?: unknown; logoPath?: unknown };
+  let body: { profile?: unknown; published?: unknown; logoPath?: unknown; website?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -52,6 +54,12 @@ export async function PUT(req: NextRequest) {
   const patch: Record<string, unknown> = {};
   if ("profile" in body) patch.company_profile = sanitizeProfile(body.profile, member.org.id);
   if ("published" in body) patch.company_page_published = body.published === true;
+  if ("website" in body) {
+    const website = String(body.website ?? "").trim().slice(0, 300);
+    if (website && !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(website))
+      return NextResponse.json({ error: "bad_website" }, { status: 400 });
+    patch.website = website || null;
+  }
   if ("logoPath" in body) {
     const p = String(body.logoPath ?? "").trim();
     patch.logo_path =

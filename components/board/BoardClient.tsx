@@ -10,6 +10,7 @@
 // When embedded via widget.js it reports its height for iframe auto-resize.
 import { useEffect, useMemo, useRef, useState } from "react";
 import CompanyAbout from "@/components/board/CompanyAbout";
+import SocialIcons from "@/components/board/SocialIcons";
 import MultiSelect, { SingleSelect } from "@/components/MultiSelect";
 import type { CompanyPage } from "@/lib/server/company-page";
 import {
@@ -511,11 +512,11 @@ export default function BoardClient({
                 ) : null;
               })()}
             </div>
-            {company.website && (
-              <a className="co-site" href={company.website} target="_blank" rel="noreferrer">
-                {company.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")} ↗
-              </a>
-            )}
+            <SocialIcons
+              website={company.website}
+              socials={company.profile.socials}
+              orgName={org.name}
+            />
           </div>
           <div className="co-tabs">
             <button

@@ -1389,7 +1389,6 @@ footer a:hover { color: var(--ink); }
   font-size: 12px;
   color: var(--body);
 }
-.co-site { margin-left: auto; flex: none; font-size: 13px; color: var(--body-2); }
 
 .co-tabs { display: flex; gap: 22px; padding: 22px 34px 0; margin-bottom: 24px; box-shadow: inset 0 -1px 0 rgba(0,0,0,.09); }
 .co-tabs button { appearance: none; padding: 0 0 12px; border: none; background: none; color: var(--muted); font-size: 14px; font-weight: 500; cursor: pointer; }
@@ -3219,3 +3218,30 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 
 /* Settings: referral bounty row (amount group + save + saved note) */
 .dash-refamount { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+
+/* Board header: social icon cluster (replaces the text website link).
+   Renders only the links the company saved — no placeholders. */
+.co-socials { display: flex; gap: 4px; flex: none; margin: 2px 0 0 auto; }
+.co-socials a {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: var(--r-control);
+  color: var(--icon); text-decoration: none;
+}
+.co-socials a:hover { background: var(--surface); color: var(--ink); }
+.co-socials svg { width: 17px; height: 17px; display: block; }
+.co-social-word { font-size: 9px; font-weight: 800; letter-spacing: .02em; }
+
+/* Settings: social link fields (company page editor) */
+.cpe-socgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 620px; }
+.cpe-socfield label { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: var(--body); }
+.cpe-socglyph { display: inline-flex; color: var(--icon); }
+.cpe-socglyph svg { width: 14px; height: 14px; display: block; }
+.cpe-socglyph .co-social-word { font-size: 8px; }
+.cpe-socfield input {
+  width: 100%; padding: 8px 12px;
+  border: 1px solid var(--control-line); border-radius: var(--r-control);
+  background: var(--paper); color: var(--ink); font: inherit; font-size: 13px;
+}
+.cpe-socfield input:focus { outline: none; border-color: rgba(91,75,255,.55); }
+@media (max-width: 800px) { .cpe-socgrid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .co-strip { flex-wrap: wrap; } .co-socials { margin-left: 0; width: 100%; } }
