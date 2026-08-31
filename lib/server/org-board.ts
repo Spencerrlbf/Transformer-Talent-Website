@@ -5,17 +5,36 @@ import { sbRest, sbRpc } from "./supabase";
 import type { Role } from "@/lib/roles";
 import type { MatchingProfile } from "./roles-pipeline";
 
-export type BoardOrg = { id: string; slug: string; name: string };
+export type BoardOrg = {
+  id: string;
+  slug: string;
+  name: string;
+  /** Referral bounty in whole dollars; 0 = the board makes no dollar offer. */
+  referralAmount: number;
+};
 
 // Tenant roles carry their matching profile along for gating.
 export type BoardRole = Role & { matchingProfile: MatchingProfile | null };
 
 export async function loadOrgBySlug(slug: string): Promise<BoardOrg | null> {
   if (!/^[a-z0-9-]{2,60}$/.test(slug)) return null;
-  const res = await sbRest(`organizations?slug=eq.${slug}&select=id,slug,name`);
+  const res = await sbRest(
+    `organizations?slug=eq.${slug}&select=id,slug,name,referral_amount`
+  );
   if (!res.ok) return null;
-  const [org] = await res.json();
-  return org ?? null;
+  const [org] = (await res.json()) as {
+    id: string;
+    slug: string;
+    name: string;
+    referral_amount: number | null;
+  }[];
+  if (!org) return null;
+  return {
+    id: org.id,
+    slug: org.slug,
+    name: org.name,
+    referralAmount: org.referral_amount ?? 5000,
+  };
 }
 
 export async function loadOrgRoles(organizationId: string): Promise<BoardRole[]> {

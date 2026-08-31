@@ -18,6 +18,10 @@ export default function SettingsPage() {
   const [editingStages, setEditingStages] = useState(false);
   const [stagesSaving, setStagesSaving] = useState(false);
   const [stagesError, setStagesError] = useState("");
+  const [referralAmount, setReferralAmount] = useState<number | null>(null);
+  const [amountSaving, setAmountSaving] = useState(false);
+  const [amountSaved, setAmountSaved] = useState(false);
+  const [amountError, setAmountError] = useState("");
 
   useEffect(() => {
     fetch("/api/dashboard/credits", { headers: { Authorization: `Bearer ${token}` } })
@@ -31,9 +35,29 @@ export default function SettingsPage() {
           setStages(d.interviewStages);
           setCanEditStages(!!d.canEdit);
         }
+        if (d && typeof d.referralAmount === "number") setReferralAmount(d.referralAmount);
       })
       .catch(() => {});
   }, [token]);
+
+  async function saveReferralAmount() {
+    if (referralAmount === null) return;
+    setAmountSaving(true);
+    setAmountSaved(false);
+    setAmountError("");
+    try {
+      const res = await fetch("/api/dashboard/org", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ referralAmount }),
+      });
+      if (res.ok) setAmountSaved(true);
+      else setAmountError("Couldn't save — please try again.");
+    } catch {
+      setAmountError("Couldn't save — please try again.");
+    }
+    setAmountSaving(false);
+  }
 
   async function saveStages(next: StageDef[]) {
     setStagesSaving(true);
@@ -108,6 +132,56 @@ export default function SettingsPage() {
               </>
             ) : (
               <small>Loading…</small>
+            )}
+          </div>
+        </div>
+        <div className="dash-setting">
+          <label>Referral bounty</label>
+          <div>
+            {referralAmount === null ? (
+              <small>Loading…</small>
+            ) : canEditStages ? (
+              <>
+                <div className="dash-refamount">
+                  <div className="dash-mypage-amount">
+                    <span>$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1000000}
+                      step={500}
+                      value={referralAmount}
+                      onChange={(e) => {
+                        setReferralAmount(Math.max(0, Math.round(Number(e.target.value) || 0)));
+                        setAmountSaved(false);
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="dash-btn dash-btn-2"
+                    disabled={amountSaving}
+                    onClick={saveReferralAmount}
+                  >
+                    {amountSaving ? "Saving…" : "Save"}
+                  </button>
+                  {amountSaved && !amountError && <span className="dash-saved">Saved ✓</span>}
+                </div>
+                {amountError && <p className="dash-error">{amountError}</p>}
+                <small>
+                  Shown on your job board&apos;s &ldquo;Refer an engineer&rdquo; card and paid when
+                  a referred placement completes. Set to 0 to make no dollar offer.
+                </small>
+              </>
+            ) : (
+              <>
+                <div className="val">
+                  {referralAmount > 0 ? `$${referralAmount.toLocaleString()}` : "No dollar offer"}
+                </div>
+                <small>
+                  Shown on your job board&apos;s &ldquo;Refer an engineer&rdquo; card. Set by your
+                  company&apos;s owner account.
+                </small>
+              </>
             )}
           </div>
         </div>

@@ -165,7 +165,7 @@ export default function BoardClient({
   company,
   initialTab = "jobs",
 }: {
-  org: { slug: string; name: string };
+  org: { slug: string; name: string; referralAmount?: number };
   roles: BoardRoleView[];
   recruiter?: RecruiterHead;
   /** Published company page content; undefined = plain board (as ever). */
@@ -614,8 +614,18 @@ export default function BoardClient({
             </div>
             <div className="board-spec">
               <p>
-                <b>Know someone great?</b> Refer an engineer for {org.name}&apos;s open roles and
-                we&apos;ll take it from there.
+                <b>Know someone great?</b>{" "}
+                {org.referralAmount ? (
+                  <>
+                    Refer an engineer for {org.name}&apos;s open roles and receive{" "}
+                    <b>${org.referralAmount.toLocaleString()}</b> if we place them.
+                  </>
+                ) : (
+                  <>
+                    Refer an engineer for {org.name}&apos;s open roles and we&apos;ll take it from
+                    there.
+                  </>
+                )}
               </p>
               <button
                 className="board-btn"
@@ -1209,7 +1219,13 @@ export default function BoardClient({
       {recruiter && recruiter.referralAmount != null && (
         <ReferralBlock recruiterId={recruiter.id} amount={recruiter.referralAmount} />
       )}
-      {!recruiter && <ReferralBlock orgSlug={org.slug} orgName={org.name} />}
+      {!recruiter && (
+        <ReferralBlock
+          orgSlug={org.slug}
+          orgName={org.name}
+          amount={org.referralAmount || undefined}
+        />
+      )}
 
       {/* Narrow screens: rail stacks under the table; bar jumps to it. */}
       {selected.length > 0 && status.kind === "idle" && (

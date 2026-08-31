@@ -100,8 +100,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Board referrals promise no bounty — the card makes no dollar offer, so
-  // the ledger and the confirmation email stay silent about money too.
+  // The bounty is the org's configured referral_amount — the same number the
+  // board and recruiter page rendered. 0 means no dollar offer was made, so
+  // the ledger records 0 and the confirmation email stays silent about money.
   const [orgRes, ttOrgId] = await Promise.all([
     sbRest(`organizations?id=eq.${orgId}&select=referral_amount`),
     getOrgId(),
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
   const [orgRow] = orgRes.ok
     ? ((await orgRes.json()) as { referral_amount: number }[])
     : [];
-  const amount = viaRecruiter ? (orgRow?.referral_amount ?? 5000) : 0;
+  const amount = orgRow?.referral_amount ?? (viaRecruiter ? 5000 : 0);
 
   // Already in the system? Org's applications (any time), and for the TT org
   // also the global candidate pool. Recorded, not rejected — and never
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
         to: referrerEmail,
         referrerName,
         candidateLinkedin,
-        amount: viaRecruiter ? amount : null,
+        amount: amount > 0 ? amount : null,
       });
     });
     return NextResponse.json({ ok: true });
@@ -220,7 +221,7 @@ export async function POST(req: NextRequest) {
       to: referrerEmail,
       referrerName,
       candidateLinkedin,
-      amount: viaRecruiter ? amount : null,
+      amount: amount > 0 ? amount : null,
     });
     await runApplicantPipeline({
       submissionId: submission.id,

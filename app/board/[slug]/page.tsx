@@ -27,7 +27,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const [roles, company] = await Promise.all([loadOrgRoles(org.id), loadCompanyPage(org.id)]);
   return (
     <BoardClient
-      org={{ slug: org.slug, name: org.name }}
+      org={{ slug: org.slug, name: org.name, referralAmount: org.referralAmount }}
       company={company ?? undefined}
       initialTab={company && tab === "about" ? "about" : "jobs"}
       roles={roles.map((r) => ({

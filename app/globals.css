@@ -3216,3 +3216,6 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   .coab-rail { position: static; order: -1; margin-bottom: 22px; }
   .coab-track { display: none; }
 }
+
+/* Settings: referral bounty row (amount group + save + saved note) */
+.dash-refamount { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
