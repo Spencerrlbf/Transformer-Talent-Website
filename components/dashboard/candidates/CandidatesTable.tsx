@@ -657,6 +657,8 @@ export default function CandidatesTable({
                 {header("fit", "Fit", "w-fit")}
                 {jobId && <th className="w-stage">{past ? "" : "Stage"}</th>}
                 <th>Current role</th>
+                <th>Company</th>
+                <th>Location</th>
                 <th className="cv2-th-icon w-in">LinkedIn</th>
                 <th className="cv2-th-icon w-ct">Contact</th>
                 {pool && header("followup", "Reach out", "w-fu")}
@@ -727,11 +729,12 @@ export default function CandidatesTable({
                     <div className="cv2-role-t">
                       {r.currentTitle || <span className="cv2-dim">—</span>}
                     </div>
-                    {(r.currentCompany || r.location) && (
-                      <div className="cv2-role-m">
-                        {[r.currentCompany, r.location].filter(Boolean).join(" · ")}
-                      </div>
-                    )}
+                  </td>
+                  <td className="cv2-company">
+                    {r.currentCompany || <span className="cv2-dim">—</span>}
+                  </td>
+                  <td className="cv2-loc">
+                    {r.location || <span className="cv2-dim">—</span>}
                   </td>
                   <td className="cv2-icons">
                     <span className="cv2-icwrap">

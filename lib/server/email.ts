@@ -96,10 +96,20 @@ export async function sendReferralConfirmation(args: {
   to: string;
   referrerName: string;
   candidateLinkedin: string;
-  amount: number;
+  /** null = no bounty was offered (org-board referrals) — say nothing about money. */
+  amount: number | null;
 }): Promise<void> {
   const first = args.referrerName.split(/\s+/)[0] || args.referrerName;
-  const money = `$${args.amount.toLocaleString()}`;
+  const moneyHtml =
+    args.amount != null
+      ? `
+      <p style="margin:0 0 14px;">If your referral leads to a placement, you receive
+      <b style="color:#067647;">$${args.amount.toLocaleString()}</b>, paid when the placement completes.</p>`
+      : "";
+  const moneyText =
+    args.amount != null
+      ? `\n\nIf your referral leads to a placement, you receive $${args.amount.toLocaleString()}, paid when the placement completes.`
+      : "";
   await sendEmail({
     to: args.to,
     subject: "We received your referral",
@@ -107,10 +117,8 @@ export async function sendReferralConfirmation(args: {
       <p style="margin:0 0 14px;">Hi ${first},</p>
       <p style="margin:0 0 14px;">Thank you for your referral. Our team will review their profile
       (<a href="${args.candidateLinkedin}" style="color:#2a5bd7;">${args.candidateLinkedin}</a>)
-      and reach out to them if there is a fit.</p>
-      <p style="margin:0 0 14px;">If your referral leads to a placement, you receive
-      <b style="color:#067647;">${money}</b>, paid when the placement completes.</p>
+      and reach out to them if there is a fit.</p>${moneyHtml}
       <p style="margin:0;">Spencer<br>Transformer Talent</p>`,
-    text: `Hi ${first},\n\nThank you for your referral. Our team will review their profile (${args.candidateLinkedin}) and reach out to them if there is a fit.\n\nIf your referral leads to a placement, you receive ${money}, paid when the placement completes.\n\nSpencer\nTransformer Talent`,
+    text: `Hi ${first},\n\nThank you for your referral. Our team will review their profile (${args.candidateLinkedin}) and reach out to them if there is a fit.${moneyText}\n\nSpencer\nTransformer Talent`,
   });
 }

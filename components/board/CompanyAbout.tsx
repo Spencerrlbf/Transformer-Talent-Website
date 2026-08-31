@@ -19,10 +19,33 @@ export default function CompanyAbout({
 }) {
   const p = company.profile;
 
+  // Section index: one jump chip per section that actually exists, so a
+  // visitor sees the page's shape at a glance. Rendered only when there are
+  // at least two destinations to jump between.
+  const anchors: { id: string; label: string }[] = [
+    ...(p.missionHeadline || p.missionDetail ? [{ id: "about-mission", label: "Mission" }] : []),
+    ...p.sections.map((sec, i) => ({ id: `about-sec-${i}`, label: sec.title || "More" })),
+    ...(p.founders.length > 0 ? [{ id: "about-founders", label: "Founders" }] : []),
+    ...(p.rounds.length > 0 ? [{ id: "about-hiring", label: "Interview process" }] : []),
+  ];
+  const jump = (id: string) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
     <div className="coab">
+      {anchors.length >= 2 && (
+        <nav className="coab-nav" aria-label="On this page">
+          <span className="coab-nav-kick">On this page</span>
+          {anchors.map((a) => (
+            <button key={a.id} type="button" onClick={() => jump(a.id)}>
+              {a.label}
+            </button>
+          ))}
+        </nav>
+      )}
+
       {(p.missionHeadline || p.missionDetail) && (
-        <div className="coab-mission">
+        <div className="coab-mission" id="about-mission">
           <div className="coab-eyebrow">Our mission</div>
           {p.missionHeadline && <p className="coab-lead">{p.missionHeadline}</p>}
           {p.missionDetail && <p className="coab-sub">{p.missionDetail}</p>}
@@ -30,7 +53,7 @@ export default function CompanyAbout({
       )}
 
       {p.sections.map((sec, i) => (
-        <div key={i} className="coab-sec">
+        <div key={i} className="coab-sec" id={`about-sec-${i}`}>
           <h2>{sec.title}</h2>
           {sec.subtitle && <div className="coab-subtitle">{sec.subtitle}</div>}
           <p>{sec.body}</p>
@@ -38,7 +61,7 @@ export default function CompanyAbout({
       ))}
 
       {p.founders.length > 0 && (
-        <div className="coab-sec">
+        <div className="coab-sec" id="about-founders">
           <h2>Founders</h2>
           <div className="coab-founders">
             {p.founders.map((f) => (
@@ -66,7 +89,7 @@ export default function CompanyAbout({
       )}
 
       {p.rounds.length > 0 && (
-        <div className="coab-sec">
+        <div className="coab-sec" id="about-hiring">
           <div className="coab-eyebrow">How we hire</div>
           <h2>The rounds we draw from.</h2>
           <p className="coab-hireintro">

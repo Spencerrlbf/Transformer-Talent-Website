@@ -594,22 +594,40 @@ export default function BoardClient({
       )}
 
       <div className="board-body">
-      {/* Org boards keep the plain resume banner. */}
+      {/* Org boards: resume drop and refer-an-engineer side by side. */}
       {!recruiter && !railVisible && (
         <div className="board-banners">
-          <div className="board-spec">
-            <p>
-              <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
-              {org.name}&apos;s open roles and reach out when the right one arrives.
-            </p>
-            <button
-              className="board-btn"
-              onClick={() => {
-                setSpeculative(true);
-              }}
-            >
-              UPLOAD RESUME →
-            </button>
+          <div className="board-spec2">
+            <div className="board-spec">
+              <p>
+                <b>Nothing that fits?</b> Upload your resume — we&apos;ll match you against{" "}
+                {org.name}&apos;s open roles and reach out when the right one arrives.
+              </p>
+              <button
+                className="board-btn"
+                onClick={() => {
+                  setSpeculative(true);
+                }}
+              >
+                UPLOAD RESUME →
+              </button>
+            </div>
+            <div className="board-spec">
+              <p>
+                <b>Know someone great?</b> Refer an engineer for {org.name}&apos;s open roles and
+                we&apos;ll take it from there.
+              </p>
+              <button
+                className="board-btn"
+                onClick={() =>
+                  document
+                    .getElementById("refer")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                REFER AN ENGINEER →
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1191,6 +1209,7 @@ export default function BoardClient({
       {recruiter && recruiter.referralAmount != null && (
         <ReferralBlock recruiterId={recruiter.id} amount={recruiter.referralAmount} />
       )}
+      {!recruiter && <ReferralBlock orgSlug={org.slug} orgName={org.name} />}
 
       {/* Narrow screens: rail stacks under the table; bar jumps to it. */}
       {selected.length > 0 && status.kind === "idle" && (
@@ -1251,10 +1270,21 @@ export default function BoardClient({
   );
 }
 
-// The referral offer at the bottom of a recruiter page. Self-contained:
-// four fields to /api/referral, generic thank-you either way (the response
-// never reveals whether we already know the person).
-function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: number }) {
+// The referral offer at the bottom of a recruiter page or org board.
+// Self-contained: four fields to /api/referral, generic thank-you either way
+// (the response never reveals whether we already know the person). Recruiter
+// pages carry the bounty; org boards make no dollar promise.
+function ReferralBlock({
+  recruiterId,
+  orgSlug,
+  orgName,
+  amount,
+}: {
+  recruiterId?: string;
+  orgSlug?: string;
+  orgName?: string;
+  amount?: number;
+}) {
   const [state, setState] = useState<"idle" | "sending" | "ok" | "error">("idle");
   const [error, setError] = useState("");
 
@@ -1268,7 +1298,7 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          recruiter: recruiterId,
+          ...(recruiterId ? { recruiter: recruiterId } : { org: orgSlug }),
           referrerName: data.get("referrerName"),
           referrerEmail: data.get("referrerEmail"),
           candidateLinkedin: data.get("candidateLinkedin"),
@@ -1288,14 +1318,20 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
     }
   }
 
-  const money = `$${amount.toLocaleString()}`;
   return (
     <section className="board-referral" id="refer">
       <h2>Not looking right now? Refer an engineer.</h2>
-      <p className="board-referral-sub">
-        If we place someone you refer, you receive <b>{money}</b>. Paid when
-        the placement completes.
-      </p>
+      {amount != null ? (
+        <p className="board-referral-sub">
+          If we place someone you refer, you receive <b>${amount.toLocaleString()}</b>. Paid when
+          the placement completes.
+        </p>
+      ) : (
+        <p className="board-referral-sub">
+          Know someone who would be a great fit{orgName ? ` for ${orgName}` : ""}? We review every
+          referral and reach out to them directly if there is a match.
+        </p>
+      )}
       {state === "ok" ? (
         <div>
           <p className="board-referral-thanks">
@@ -1338,7 +1374,11 @@ function ReferralBlock({ recruiterId, amount }: { recruiterId: string; amount: n
           />
           <div className="board-referral-foot">
             <button type="submit" className="board-btn" disabled={state === "sending"}>
-              {state === "sending" ? "SENDING…" : `REFER THEM FOR ${money} →`}
+              {state === "sending"
+                ? "SENDING…"
+                : amount != null
+                  ? `REFER THEM FOR $${amount.toLocaleString()} →`
+                  : "SEND REFERRAL →"}
             </button>
             {state === "error" && <span className="board-error" style={{ margin: 0 }}>{error}</span>}
           </div>

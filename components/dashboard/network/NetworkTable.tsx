@@ -405,6 +405,8 @@ export default function NetworkTable({
             <thead>
               <tr>
                 <th>Candidate</th>
+                <th>Current role</th>
+                <th>Company</th>
                 <th>Location</th>
                 <th>Matched roles</th>
                 <th className="nw-th-latest">Latest</th>
@@ -500,22 +502,20 @@ function PersonRows({
   onSend: (match: NetMatch) => void;
   onOpenJob: (jobId: string) => void;
 }) {
-  const meta = [person.currentTitle, person.currentCompany].filter(Boolean).join(" @ ");
   return (
     <>
       <tr className="cv2-click" onClick={() => onOpen?.(`net_${person.candidateId}`)}>
         <td>
           <span className="cv2-cand">
             <Avatar photoUrl={person.photoUrl} name={person.name} />
-            <span className="nw-who">
-              <span className="cv2-name">
-                {person.name}
-                {isNew && <i className="nw-newdot" title="New match since yesterday" />}
-              </span>
-              {meta && <span className="nw-pmeta">{meta}</span>}
+            <span className="cv2-name">
+              {person.name}
+              {isNew && <i className="nw-newdot" title="New match since yesterday" />}
             </span>
           </span>
         </td>
+        <td className="cv2-title">{person.currentTitle || <span className="cv2-dim">—</span>}</td>
+        <td className="cv2-company">{person.currentCompany || <span className="cv2-dim">—</span>}</td>
         <td className="cv2-loc">{person.location || <span className="cv2-dim">—</span>}</td>
         <td onClick={(e) => { e.stopPropagation(); onToggle(); }}>
           <span className="nw-chips">
@@ -552,7 +552,7 @@ function PersonRows({
       </tr>
       {expanded && (
         <tr className="nw-review-row">
-          <td colSpan={6}>
+          <td colSpan={8}>
             <div className="nw-reviews">
               {person.matches.map((m) => (
                 <div key={m.jobId} className={`nw-rv${m.tag === "strong" ? " best" : ""}`}>

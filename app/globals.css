@@ -2795,19 +2795,21 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 /* --------------------------------------------------------------------------
    screen 9 — network matches (Network.dc.html 8a) + auth additions (8b)
    -------------------------------------------------------------------------- */
-.nw-who { min-width: 0; display: flex; flex-direction: column; }
-.nw-pmeta { margin-top: 2px; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nw-count { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nw-th-latest, td.nw-latest { text-align: right; }
 
+/* Fixed layout, 8 columns: Candidate · Current role · Company · Location ·
+   Matched roles (the flexible one) · Latest · LinkedIn · caret */
 .cv2-table.nw-tight { table-layout: fixed; width: 100%; }
-.cv2-table.nw-tight th:nth-child(1) { width: 27%; }
-.cv2-table.nw-tight th:nth-child(2) { width: 130px; }
-.cv2-table.nw-tight th:nth-child(4) { width: 76px; }
-.cv2-table.nw-tight th:nth-child(5) { width: 74px; }
-.cv2-table.nw-tight th:nth-child(6) { width: 34px; }
+.cv2-table.nw-tight th:nth-child(1) { width: 17%; }
+.cv2-table.nw-tight th:nth-child(2) { width: 14%; }
+.cv2-table.nw-tight th:nth-child(3) { width: 11%; }
+.cv2-table.nw-tight th:nth-child(4) { width: 110px; }
+.cv2-table.nw-tight th:nth-child(6) { width: 76px; }
+.cv2-table.nw-tight th:nth-child(7) { width: 74px; }
+.cv2-table.nw-tight th:nth-child(8) { width: 34px; }
 .cv2-table.nw-tight .cv2-name { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cv2-table.nw-tight .cv2-loc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv2-table.nw-tight .cv2-title, .cv2-table.nw-tight .cv2-company, .cv2-table.nw-tight .cv2-loc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The base .cv2-table td nowrap must not leak into review rows — reviews wrap. */
 .cv2-table .nw-review-row td { white-space: normal; }
 
@@ -3173,3 +3175,38 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   .crd-row b { min-width: 0; }
   .crd-hint { display: none; }
 }
+
+/* --------------------------------------------------------------------------
+   review round 2 (2026-08-29): kanban full-height columns, org-board
+   refer-an-engineer card, About-tab section index
+   -------------------------------------------------------------------------- */
+
+/* Kanban: columns are always full-height strips — the whole strip is a drop
+   target, so an empty column never means aiming at a small box at the top. */
+.pb-scroll { align-items: stretch; min-height: max(420px, calc(100vh - 380px)); }
+.pb-col { display: flex; flex-direction: column; }
+.pb-cards { flex: 1; }
+
+/* Org board: upload-resume and refer-an-engineer sit side by side */
+.board-spec2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.board-banners .board-spec2 { flex: 1 1 100%; }
+.board-spec2 .board-spec { align-items: flex-start; flex-direction: column; }
+@media (max-width: 860px) { .board-spec2 { grid-template-columns: 1fr; } }
+
+/* About tab: on-this-page section index */
+.coab-nav {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  margin-bottom: 26px; padding-bottom: 18px; border-bottom: 1px solid var(--row-line);
+}
+.coab-nav-kick {
+  margin-right: 5px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted);
+}
+.coab-nav button {
+  appearance: none; display: inline-flex; align-items: center; height: 30px; padding: 0 13px;
+  border: 1px solid var(--control-line); border-radius: var(--r-pill); background: var(--paper);
+  color: var(--body); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  white-space: nowrap;
+}
+.coab-nav button:hover { border-color: rgba(91,75,255,.45); color: var(--accent-press); }
