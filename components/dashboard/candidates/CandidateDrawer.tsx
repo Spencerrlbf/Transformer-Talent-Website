@@ -519,7 +519,10 @@ export default function CandidateDrawer({
   return (
     <div className="cv2d-overlay" onClick={onClose}>
       <JobDrawer jobId={openJob} onClose={() => setOpenJob(null)} />
-      <aside className="cv2d" onClick={(e) => e.stopPropagation()}>
+      <aside
+        className={`cv2d${onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 ? " has-nav" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 && (
           <span className="cv2d-nav">
             <button

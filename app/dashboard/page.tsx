@@ -205,9 +205,7 @@ export default function JobsPage() {
               ⇩ CSV
             </button>
           )}
-          <Link className="dash-btn dash-btn-2" href="/dashboard/jobs/new">
-            Import a JD
-          </Link>
+          {/* One door: the new-job form itself offers paste-or-import a JD. */}
           <Link className="dash-btn" href="/dashboard/jobs/new">
             New job
           </Link>
