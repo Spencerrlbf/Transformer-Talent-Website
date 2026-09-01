@@ -107,7 +107,7 @@ export default function EmailModal({
   const [err, setErr] = useState("");
   const [connecting, setConnecting] = useState(false);
 
-  const [menu, setMenu] = useState<"" | "tpl" | "fields" | "job" | "link">("");
+  const [menu, setMenu] = useState<"" | "tpl" | "fields" | "job" | "link" | "joblink">("");
   const [jobQ, setJobQ] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [manage, setManage] = useState<"" | "list" | "new">("");
@@ -216,9 +216,36 @@ export default function EmailModal({
 
   const focusBody = () => bodyRef.current?.focus();
 
+  /** Keep the caret position across focus loss — opening a menu or typing
+   *  in the job search steals it, and inserts must land where the user
+   *  last was, not at the top of the email. */
+  const rememberSel = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && bodyRef.current?.contains(sel.anchorNode)) {
+      savedRange.current = sel.getRangeAt(0).cloneRange();
+    }
+  };
+
   const insertHtml = (html: string) => {
-    focusBody();
+    const el = bodyRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (sel) {
+      if (savedRange.current && el.contains(savedRange.current.startContainer)) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange.current);
+      } else if (!el.contains(sel.anchorNode)) {
+        // Never touched the editor: append at the end, not the start.
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        r.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    }
     document.execCommand("insertHTML", false, html);
+    rememberSel();
     refreshFlags();
   };
 
@@ -620,7 +647,12 @@ export default function EmailModal({
                           ["tracked_link", "Tracked link"],
                           ["sender_name", "Your name"],
                         ].map(([k, label]) => (
-                          <button key={k} type="button" onClick={() => insertField(k)}>
+                          <button
+                            key={k}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => insertField(k)}
+                          >
                             {label}
                           </button>
                         ))}
@@ -655,6 +687,7 @@ export default function EmailModal({
                             <button
                               key={j.id}
                               type="button"
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
                                 setMenu("");
                                 insertHtml(jobBlockHtml(j));
@@ -672,13 +705,13 @@ export default function EmailModal({
                     )}
                   </div>
                 </div>
-                {menu === "link" && (
+                {(menu === "link" || menu === "joblink") && (
                   <div className="em-linkwrap">
                     <div className="em-linkrow">
                       <input
                         placeholder="https://…"
                         value={linkUrl}
-                        autoFocus
+                        autoFocus={menu === "link"}
                         onChange={(e) => setLinkUrl(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
@@ -690,6 +723,19 @@ export default function EmailModal({
                       <button type="button" className="tk-doneb" onClick={() => applyLink()}>
                         Add link
                       </button>
+                      {ctx.jobs.length > 0 && (
+                        <button
+                          type="button"
+                          className="tk-doneb"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setJobQ("");
+                            setMenu(menu === "joblink" ? "link" : "joblink");
+                          }}
+                        >
+                          Job link…
+                        </button>
+                      )}
                       {ctx.trackedLink && (
                         <button
                           type="button"
@@ -701,6 +747,42 @@ export default function EmailModal({
                         </button>
                       )}
                     </div>
+                    {menu === "joblink" && (
+                      <div className="em-menu em-jobmenu">
+                        <input
+                          className="em-jobsearch"
+                          placeholder="Link to which job…"
+                          value={jobQ}
+                          autoFocus
+                          onChange={(e) => setJobQ(e.target.value)}
+                        />
+                        <div className="em-jobscroll">
+                          {filteredJobs
+                            .filter((j) => j.url)
+                            .map((j) => (
+                              <button
+                                key={j.id}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  // Populate the URL field (same flow as
+                                  // Tracked link); Add link applies it.
+                                  setLinkUrl(j.url);
+                                  setMenu("link");
+                                }}
+                              >
+                                {j.title}
+                                <small>
+                                  {[j.company, j.salary, j.workplace].filter(Boolean).join(" · ")}
+                                </small>
+                              </button>
+                            ))}
+                          {!filteredJobs.filter((j) => j.url).length && (
+                            <p className="em-fine">No matches.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div
@@ -708,9 +790,15 @@ export default function EmailModal({
                   ref={bodyRef}
                   contentEditable
                   suppressContentEditableWarning
-                  onInput={refreshFlags}
+                  onInput={() => {
+                    rememberSel();
+                    refreshFlags();
+                  }}
+                  onKeyUp={rememberSel}
+                  onMouseUp={rememberSel}
                   onPaste={(e) => {
                     handleEditorPaste(e);
+                    rememberSel();
                     refreshFlags();
                   }}
                 />
