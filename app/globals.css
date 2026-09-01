@@ -3900,3 +3900,9 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 /* Link row job-picker + linkwrap anchor */
 .em-linkwrap { position: relative; }
 .em-linkwrap .em-menu { top: 100%; left: 8px; right: auto; }
+
+/* Toolbar Template menu */
+.em-tplmenu { min-width: 260px; }
+.em-menudiv { height: 1px; background: var(--row-line); margin: 4px 2px; }
+.em-menu > button.em-menuact { color: var(--accent-press); }
+.em-menu > button.em-tplpending { color: var(--bad); }

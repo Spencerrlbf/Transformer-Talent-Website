@@ -107,10 +107,10 @@ export default function EmailModal({
   const [err, setErr] = useState("");
   const [connecting, setConnecting] = useState(false);
 
-  const [menu, setMenu] = useState<"" | "fields" | "job" | "link">("");
+  const [menu, setMenu] = useState<"" | "tpl" | "fields" | "job" | "link">("");
   const [jobQ, setJobQ] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
-  const [manage, setManage] = useState(false);
+  const [manage, setManage] = useState<"" | "list" | "new">("");
   const [pendingTpl, setPendingTpl] = useState("");
   const [gateErr, setGateErr] = useState("");
 
@@ -286,6 +286,7 @@ export default function EmailModal({
       return;
     }
     setPendingTpl("");
+    setMenu("");
     setSubject(resolveSubject(t.subject).slice(0, 300));
     el.innerHTML = resolveHtml(t.bodyHtml);
     refreshFlags();
@@ -483,29 +484,10 @@ export default function EmailModal({
                 </p>
               )}
 
-              <span className="lbl">
-                Template
-                <button className="em-side" onClick={() => setManage(true)}>
-                  Manage templates ›
-                </button>
-              </span>
-              <div className="tk-chips">
-                {ctx.templates.length === 0 && (
-                  <span className="em-fine em-m0">None yet — create one via Manage templates.</span>
-                )}
-                {ctx.templates.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={pendingTpl === t.id ? "on" : undefined}
-                    onClick={() => applyTemplate(t)}
-                  >
-                    {pendingTpl === t.id ? "Replace draft?" : t.name}
-                  </button>
-                ))}
-              </div>
-
-              <div className="cv2n-duo" style={{ gridTemplateColumns: ctx.jobs.length ? "1.6fr 1fr" : "1fr" }}>
+              <div
+                className="cv2n-duo"
+                style={{ gridTemplateColumns: ctx.jobs.length ? "1.6fr 1fr" : "1fr" }}
+              >
                 <label style={{ display: "contents" }}>
                   <span>
                     <span className="lbl em-lbl0">Subject</span>
@@ -569,6 +551,56 @@ export default function EmailModal({
                     1.
                   </button>
                   <span className="em-tbsep" />
+                  <div className="em-menuwrap">
+                    <button
+                      type="button"
+                      className="em-word"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setPendingTpl("");
+                        setMenu(menu === "tpl" ? "" : "tpl");
+                      }}
+                    >
+                      Template
+                    </button>
+                    {menu === "tpl" && (
+                      <div className="em-menu em-tplmenu">
+                        {ctx.templates.length === 0 && <p className="em-fine">No templates yet.</p>}
+                        {ctx.templates.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            className={pendingTpl === t.id ? "em-tplpending" : undefined}
+                            onClick={() => applyTemplate(t)}
+                          >
+                            {pendingTpl === t.id ? "Replace draft?" : t.name}
+                            {pendingTpl !== t.id && !!t.subject && <small>{t.subject}</small>}
+                          </button>
+                        ))}
+                        <div className="em-menudiv" />
+                        <button
+                          type="button"
+                          className="em-menuact"
+                          onClick={() => {
+                            setMenu("");
+                            setManage("new");
+                          }}
+                        >
+                          ＋ New template…
+                        </button>
+                        <button
+                          type="button"
+                          className="em-menuact"
+                          onClick={() => {
+                            setMenu("");
+                            setManage("list");
+                          }}
+                        >
+                          Manage templates
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <div className="em-menuwrap">
                     <button
                       type="button"
@@ -707,7 +739,8 @@ export default function EmailModal({
       </div>
       {manage && (
         <TemplatesModal
-          onClose={() => setManage(false)}
+          startNew={manage === "new"}
+          onClose={() => setManage("")}
           onChanged={loadCtx}
         />
       )}
@@ -718,9 +751,12 @@ export default function EmailModal({
 // ------------------------------------------------------------- templates
 
 export function TemplatesModal({
+  startNew = false,
   onClose,
   onChanged,
 }: {
+  /** Open straight into the new-template editor (toolbar "＋ New template…"). */
+  startNew?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -741,6 +777,11 @@ export function TemplatesModal({
       .catch(() => setTemplates([]));
   }, [token]);
   useEffect(load, [load]);
+
+  useEffect(() => {
+    if (startNew) startEdit(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, []);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
