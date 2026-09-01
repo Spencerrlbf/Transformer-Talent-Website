@@ -107,7 +107,7 @@ export default function EmailModal({
   const [err, setErr] = useState("");
   const [connecting, setConnecting] = useState(false);
 
-  const [menu, setMenu] = useState<"" | "fields" | "job" | "link" | "joblink">("");
+  const [menu, setMenu] = useState<"" | "fields" | "job" | "link">("");
   const [jobQ, setJobQ] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [manage, setManage] = useState(false);
@@ -640,13 +640,13 @@ export default function EmailModal({
                     )}
                   </div>
                 </div>
-                {(menu === "link" || menu === "joblink") && (
+                {menu === "link" && (
                   <div className="em-linkwrap">
                     <div className="em-linkrow">
                       <input
                         placeholder="https://…"
                         value={linkUrl}
-                        autoFocus={menu === "link"}
+                        autoFocus
                         onChange={(e) => setLinkUrl(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
@@ -658,54 +658,17 @@ export default function EmailModal({
                       <button type="button" className="tk-doneb" onClick={() => applyLink()}>
                         Add link
                       </button>
-                      {ctx.jobs.length > 0 && (
-                        <button
-                          type="button"
-                          className="tk-doneb"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setJobQ("");
-                            setMenu(menu === "joblink" ? "link" : "joblink");
-                          }}
-                        >
-                          Job link…
-                        </button>
-                      )}
                       {ctx.trackedLink && (
                         <button
                           type="button"
                           className="tk-doneb"
                           onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => applyLink(ctx.trackedLink)}
+                          onClick={() => setLinkUrl(ctx.trackedLink)}
                         >
                           Tracked link
                         </button>
                       )}
                     </div>
-                    {menu === "joblink" && (
-                      <div className="em-menu em-jobmenu">
-                        <input
-                          className="em-jobsearch"
-                          placeholder="Link to which job…"
-                          value={jobQ}
-                          autoFocus
-                          onChange={(e) => setJobQ(e.target.value)}
-                        />
-                        <div className="em-jobscroll">
-                          {filteredJobs
-                            .filter((j) => j.url)
-                            .map((j) => (
-                              <button key={j.id} type="button" onClick={() => applyLink(j.url, j.title)}>
-                                {j.title}
-                                <small>
-                                  {[j.company, j.salary, j.workplace].filter(Boolean).join(" · ")}
-                                </small>
-                              </button>
-                            ))}
-                          {!filteredJobs.filter((j) => j.url).length && <p className="em-fine">No matches.</p>}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
                 <div
