@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     yoe: q.get("yoe") || undefined,
     skill: q.get("skill") || undefined,
     visa: q.get("visa") || undefined,
+    opened: q.get("opened") || undefined,
     sort:
       sort === "added" || sort === "name" || sort === "years" || sort === "followup"
         ? sort

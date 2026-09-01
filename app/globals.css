@@ -3653,3 +3653,18 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .cv2d.has-nav .cv2d-head { padding-right: 200px; }
 .cv2-export { white-space: nowrap; }
 .cv2-export:disabled { opacity: .5; cursor: default; }
+
+/* ---- Tracked link column ---- */
+.cv2-linkcell { white-space: nowrap; }
+.cv2-linkbtn {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--body-2);
+  border: 1px solid var(--control-line); background: var(--paper); border-radius: var(--r-control);
+  padding: 4px 9px; cursor: pointer;
+}
+.cv2-linkbtn:hover:not(:disabled) { color: var(--ink); border-color: var(--strong-line); }
+.cv2-linkbtn:disabled { opacity: .6; cursor: default; }
+.cv2-opened {
+  margin-left: 7px; font-size: 12px; font-weight: 700; color: var(--pos);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cv2-linkcell .cv2-dim { margin-left: 7px; font-variant-numeric: tabular-nums; }
