@@ -6,6 +6,13 @@
 // stored judge reasons; raw verdicts and internal scores never cross here.
 import { sbRest } from "./supabase";
 import { loadLinksByKey } from "./tracked-links";
+import {
+  attachmentsByKey,
+  attachmentsForKey,
+  isShortlisted,
+  membershipByKey,
+  type RowListEntry,
+} from "./lists";
 import { signResumeUrl } from "./applicants";
 import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
 import { poolEmails } from "./network";
@@ -64,7 +71,7 @@ const FIT_GROUPS: Record<string, string[]> = {
 export type UnifiedRole = {
   jobId: string;
   title: string;
-  via: "applied" | "sourced" | "matched";
+  via: "applied" | "sourced" | "matched" | "added";
   tag: string | null;
   tagLabel: string | null;
 };
@@ -103,6 +110,8 @@ export type UnifiedRow = {
   visa: string | null;
   /** Tracked outreach link, when one has been minted for this person. */
   link?: { path: string; openCount: number; lastOpenedAt: string | null } | null;
+  /** List memberships (the built-in Shortlist drives the ★ column). */
+  lists?: RowListEntry[];
 };
 
 // Human pipeline statuses — distinct from the AI fit tag. "rejected" moves a
@@ -144,6 +153,8 @@ export type UnifiedListParams = {
   visa?: string;
   /** Tracked-link opens: "1" = opened at least once, "0" = has a link, never opened. */
   opened?: string;
+  /** List membership: a list id, or "none" for people on no list. */
+  list?: string;
   sort?: "fit" | "added" | "name" | "years" | "followup";
   dir?: "asc" | "desc";
   page?: number;
@@ -193,6 +204,8 @@ export type UnifiedDetail = {
   photoUrl: string | null;
   about: string | null;
   source: "applied" | "sourced";
+  /** On the built-in Shortlist list (the drawer header's ★). */
+  shortlisted: boolean;
   viaTT: boolean;
   alsoSourced: boolean;
   provenance: string;
@@ -222,7 +235,7 @@ export type UnifiedDetail = {
     company: string | null;
     salary: string | null;
     location: string | null;
-    via: "applied" | "sourced" | "matched";
+    via: "applied" | "sourced" | "matched" | "added";
     tag: string | null;
     tagLabel: string | null;
     reason: string | null;
@@ -645,13 +658,16 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
 
-  const [apps, pairings, memberships, roleIndex, linksByKey] = await Promise.all([
-    fetchApplicants(orgId),
-    orgVerdictPairings(orgId),
-    fetchMemberships(orgId),
-    orgRoleIndex(orgId),
-    loadLinksByKey(orgId),
-  ]);
+  const [apps, pairings, memberships, roleIndex, linksByKey, listsByKey, attachedByKey] =
+    await Promise.all([
+      fetchApplicants(orgId),
+      orgVerdictPairings(orgId),
+      fetchMemberships(orgId),
+      orgRoleIndex(orgId),
+      loadLinksByKey(orgId),
+      membershipByKey(orgId),
+      attachmentsByKey(orgId),
+    ]);
   const roleIdx = roleIndex.byId;
   const byPerson = newestPerPersonRole(memberships);
   const people = await fetchSourcedPeople(orgId, [...byPerson.keys()]);
@@ -748,6 +764,21 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   for (const r of rows) {
     const l = linksByKey.get(r.key);
     if (l) r.link = { path: l.path, openCount: l.openCount, lastOpenedAt: l.lastOpenedAt };
+    const ls = listsByKey.get(r.key);
+    if (ls) r.lists = ls;
+    // Manual "Add to a job" attachments join the person's roles (tag stays
+    // null — no verdict is invented), which also puts them in that job's
+    // pipeline view.
+    const attached = attachedByKey.get(r.key);
+    if (attached) {
+      const covered = new Set(r.roles.map((x) => x.jobId));
+      for (const jobId of attached) {
+        if (covered.has(jobId)) continue;
+        const info = roleIndex.byExternal.get(jobId);
+        if (!info) continue;
+        r.roles.push({ jobId, title: info.title, via: "added", tag: null, tagLabel: null });
+      }
+    }
   }
 
   // ---- filters ----
@@ -858,6 +889,11 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   }
   if (params.opened === "1") filtered = filtered.filter((r) => (r.link?.openCount ?? 0) > 0);
   if (params.opened === "0") filtered = filtered.filter((r) => r.link && r.link.openCount === 0);
+  if (params.list === "none") {
+    filtered = filtered.filter((r) => !r.lists || r.lists.length === 0);
+  } else if (params.list) {
+    filtered = filtered.filter((r) => r.lists?.some((l) => l.id === params.list));
+  }
   if (params.stage && (STAGES as readonly string[]).includes(params.stage)) {
     if (params.jobId) {
       filtered = filtered.filter((r) => r.stage === params.stage);
@@ -1196,6 +1232,35 @@ async function sourcedPipeline(
   return out;
 }
 
+/** Fold this person's manual "Add to a job" attachments into a pipeline.
+ *  tag stays null: no verdict exists for a manual add. */
+async function appendAttached(
+  orgId: string,
+  key: string,
+  pipeline: UnifiedDetail["pipeline"],
+  byExternal: Map<string, RoleInfo>
+): Promise<void> {
+  const covered = new Set(pipeline.map((x) => x.jobId));
+  for (const a of await attachmentsForKey(orgId, key)) {
+    if (covered.has(a.jobId)) continue;
+    const info = byExternal.get(a.jobId);
+    if (!info) continue;
+    pipeline.push({
+      jobId: a.jobId,
+      title: info.title,
+      company: info.company,
+      salary: info.salary,
+      location: info.location,
+      via: "added",
+      tag: null,
+      tagLabel: null,
+      reason: null,
+      addedAt: a.addedAt,
+      stage: "new",
+    });
+  }
+}
+
 function applicantPipeline(
   a: AppRow,
   pairings: Map<string, VerdictRow>,
@@ -1318,6 +1383,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       photoUrl: bits.photoUrl || str(p.profile_picture_url),
       about: bits.about,
       source: "sourced",
+      shortlisted: false,
       viaTT: false,
       alsoSourced: false,
       provenance: `Matched from your talent pool by the nightly runs`,
@@ -1376,6 +1442,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         if (!covered.has(entry.jobId)) pipeline.unshift(entry);
     }
 
+    await appendAttached(orgId, key, pipeline, byExternal);
     await attachStages(orgId, key, pipeline);
     const bits = profileBits(p.profile);
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
@@ -1390,6 +1457,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       photoUrl: bits.photoUrl,
       about: bits.about,
       source: app ? "applied" : "sourced",
+      shortlisted: await isShortlisted(orgId, key),
       viaTT: app?.source === "transformer_talent",
       alsoSourced: !!app,
       provenance: firstRun
@@ -1440,6 +1508,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         if (!covered.has(entry.jobId)) pipeline.push(entry);
     }
 
+    await appendAttached(orgId, key, pipeline, byExternal);
     await attachStages(orgId, key, pipeline);
     const bits = profileBits(sourced?.profile || (a.harvest_profile as HarvestProfile | null));
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
@@ -1456,6 +1525,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       photoUrl: bits.photoUrl,
       about: bits.about,
       source: "applied",
+      shortlisted: await isShortlisted(orgId, key),
       viaTT: a.source === "transformer_talent",
       alsoSourced: !!sourced,
       provenance: (() => {

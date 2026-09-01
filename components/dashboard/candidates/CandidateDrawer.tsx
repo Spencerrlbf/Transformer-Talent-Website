@@ -23,7 +23,7 @@ type PipelineEntry = {
   company: string | null;
   salary: string | null;
   location: string | null;
-  via: "applied" | "sourced" | "matched";
+  via: "applied" | "sourced" | "matched" | "added";
   tag: string | null;
   tagLabel: string | null;
   reason: string | null;
@@ -40,6 +40,7 @@ type Detail = {
   photoUrl: string | null;
   about: string | null;
   source: "applied" | "sourced";
+  shortlisted: boolean;
   viaTT: boolean;
   alsoSourced: boolean;
   provenance: string;
@@ -234,7 +235,9 @@ function PipelineRows({
                 ? "applied"
                 : entry.via === "matched"
                   ? "matched"
-                  : "via sourcing run",
+                  : entry.via === "added"
+                    ? "added by your team"
+                    : "via sourcing run",
               entry.company,
               entry.salary,
               entry.location,
@@ -370,6 +373,22 @@ export default function CandidateDrawer({
       })
       .catch(() => setError(true));
   }, [candKey, token, roleContext]);
+
+  // Toggle Shortlist membership from the header star (optimistic).
+  const [starBusy, setStarBusy] = useState(false);
+  async function toggleStar() {
+    if (!candKey || !detail || starBusy) return;
+    const was = detail.shortlisted;
+    setStarBusy(true);
+    setDetail({ ...detail, shortlisted: !was });
+    const res = await fetch(`/api/dashboard/lists/shortlist/members`, {
+      method: was ? "DELETE" : "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ keys: [candKey] }),
+    }).catch(() => null);
+    setStarBusy(false);
+    if (!res?.ok) setDetail((d) => (d ? { ...d, shortlisted: was } : d));
+  }
 
   // Save one role's stage from the pipeline table; optimistic with rollback.
   async function changeStage(jobId: string, stage: string) {
@@ -560,6 +579,18 @@ export default function CandidateDrawer({
               <div className="cv2d-id">
                 <div className="cv2d-name">
                   <h3>{detail.name}</h3>
+                  {!isNet && (
+                    <button
+                      type="button"
+                      className={`cv2d-star${detail.shortlisted ? " on" : ""}`}
+                      disabled={starBusy}
+                      title={detail.shortlisted ? "On your Shortlist — click to remove" : "Add to Shortlist"}
+                      aria-label="Shortlist"
+                      onClick={toggleStar}
+                    >
+                      {detail.shortlisted ? "★" : "☆"}
+                    </button>
+                  )}
                   {detail.bestTag && (
                     <span className={`dash-tag ${TAG_CLASS[detail.bestTag] || "t-pending"}`}>
                       {detail.bestTagLabel}
