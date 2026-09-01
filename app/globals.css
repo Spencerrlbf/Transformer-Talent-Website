@@ -3767,3 +3767,12 @@ tr.cv2-selrow td { background: var(--accent-tint); }
   content: "✓"; position: absolute; inset: 0; color: #fff; font-size: 11px; line-height: 14px;
   text-align: center; font-weight: 700;
 }
+
+/* job drawer opened from inside the add-to-job modal stacks above it */
+.tkm-back .jdw-overlay { z-index: 95; }
+.blk-view {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--body-2);
+  border: 1px solid var(--control-line); background: var(--paper); border-radius: var(--r-pill);
+  padding: 3px 11px; cursor: pointer; white-space: nowrap;
+}
+.blk-view:hover { color: var(--ink); border-color: var(--strong-line); }

@@ -5,6 +5,7 @@
 // built-in Shortlist accepts neither). All reuse the tkm modal shell.
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
+import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 
 export type ListInfo = {
   id: string;
@@ -169,7 +170,20 @@ export function AddToJobModal({
   const [q, setQ] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
-  useEscape(onClose);
+  const [viewJob, setViewJob] = useState<string | null>(null);
+
+  // Esc peels one layer: the job drawer first, then the modal.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        if (viewJob) setViewJob(null);
+        else onClose();
+      }
+    };
+    document.addEventListener("keydown", h, true);
+    return () => document.removeEventListener("keydown", h, true);
+  }, [onClose, viewJob]);
 
   const needle = q.trim().toLowerCase();
   const shown = needle
@@ -249,6 +263,17 @@ export function AddToJobModal({
                   {company ? ` · ${company}` : ""}
                 </span>
               </span>
+              <button
+                type="button"
+                className="blk-view"
+                title="View this job"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewJob(id);
+                }}
+              >
+                View ›
+              </button>
             </div>
           ))}
           {shown.length === 0 && (
@@ -271,6 +296,11 @@ export function AddToJobModal({
                 : `ADD TO ${picked.size} JOBS →`}
           </button>
         </div>
+      </div>
+      {/* A backdrop click on the drawer must not also fall through and close
+          the modal beneath it. */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <JobDrawer jobId={viewJob} onClose={() => setViewJob(null)} />
       </div>
     </div>
   );
