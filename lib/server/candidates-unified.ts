@@ -908,6 +908,46 @@ export async function updateFollowUp(
   return { ok: true };
 }
 
+/** Reschedule a future-interest ask WITHOUT touching the preferences —
+ *  the Tasks page's quick edit ("they emailed: looking next week now").
+ *  updateFollowUp above is a full replace, so it must not be used for this. */
+export async function updateFollowUpDate(
+  orgId: string,
+  key: string,
+  at: unknown
+): Promise<{ ok: boolean; error?: string }> {
+  if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
+  const id = key.slice(4);
+  const date = typeof at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null;
+  if (!date) return { ok: false, error: "bad_date" };
+
+  const res = await sbRest(
+    `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=id,candidate_id,follow_up_at&limit=1`
+  );
+  const [row] = (res.ok ? await res.json() : []) as {
+    id: string;
+    candidate_id: string | null;
+    follow_up_at: string | null;
+  }[];
+  if (!row) return { ok: false, error: "not_found" };
+  if (!row.follow_up_at) return { ok: false, error: "no_ask" };
+
+  const saved = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ follow_up_at: date }),
+    prefer: "return=minimal",
+  });
+  if (!saved.ok) return { ok: false, error: "save_failed" };
+  if (row.candidate_id) {
+    await sbRest(`candidates?id=eq.${row.candidate_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ follow_up_at: date }),
+      prefer: "return=minimal",
+    }).catch(() => {});
+  }
+  return { ok: true };
+}
+
 /** Clear a future-interest ask ("Mark contacted"): the follow-up date comes
  *  off the application row and the mirrored candidate record. The person and
  *  their preferences stay in the pool. */

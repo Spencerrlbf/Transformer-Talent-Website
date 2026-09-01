@@ -479,9 +479,6 @@ export default function CandidatesTable({
                 ["", `All ${counts.all + (hideNotNow ? 0 : counts.notNow)}`],
                 ["applied", `Applied ${counts.applied}`],
                 ["sourced", `Sourced ${counts.sourced + (hideNotNow ? 0 : counts.notNow)}`],
-                ...(data?.followups?.total
-                  ? [["followups", `Follow-ups ${data.followups.total}`]]
-                  : []),
               ] as ["" | "applied" | "sourced" | "followups", string][]
             ).map(([v, label]) => (
               <button key={v} className={seg === v ? "on" : ""} onClick={() => setSeg(v)}>
@@ -615,24 +612,6 @@ export default function CandidatesTable({
             }}
           >
             Clear all
-          </button>
-        </div>
-      )}
-
-      {/* Follow-ups due: surfaced above the table so nobody has to remember
-          to check. Clicking through applies the Follow-ups view. */}
-      {pool && !past && seg !== "followups" && data?.followups && data.followups.due > 0 && (
-        <div className="cv2-due">
-          <b>
-            {data.followups.due} follow-up{data.followups.due === 1 ? "" : "s"} due
-          </b>
-          <span>
-            {data.followups.dueNames.join(", ")}
-            {data.followups.due > data.followups.dueNames.length ? " and more" : ""} asked to hear
-            from you.
-          </span>
-          <button type="button" onClick={() => setSeg("followups")}>
-            View
           </button>
         </div>
       )}
