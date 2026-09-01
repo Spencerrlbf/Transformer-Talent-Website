@@ -10,6 +10,7 @@ import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 import MultiSelect from "@/components/MultiSelect";
 import NotesTab from "@/components/dashboard/tasks/NotesTab";
+import EmailModal from "@/components/dashboard/email/EmailModal";
 import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
@@ -340,6 +341,7 @@ export default function CandidateDrawer({
   const [cOther, setCOther] = useState("");
   const [contactErr, setContactErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   useEffect(() => {
     setDetail(null);
@@ -348,6 +350,7 @@ export default function CandidateDrawer({
     setEditingContact(false);
     setContactErr("");
     setOpenJob(null);
+    setEmailOpen(false);
     setMarking(false);
     setMarkedDone(false);
     setAskEditing(false);
@@ -538,6 +541,14 @@ export default function CandidateDrawer({
   return (
     <div className="cv2d-overlay" onClick={onClose}>
       <JobDrawer jobId={openJob} onClose={() => setOpenJob(null)} />
+      {emailOpen && detail && candKey && (
+        <EmailModal
+          candKey={candKey}
+          candidateName={detail.name}
+          onClose={() => setEmailOpen(false)}
+          onSent={() => setTab("notes")}
+        />
+      )}
       <aside
         className={`cv2d${onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 ? " has-nav" : ""}`}
         onClick={(e) => e.stopPropagation()}
@@ -589,6 +600,17 @@ export default function CandidateDrawer({
                       onClick={toggleStar}
                     >
                       {detail.shortlisted ? "★" : "☆"}
+                    </button>
+                  )}
+                  {!isNet && (
+                    <button
+                      type="button"
+                      className="cv2d-mail"
+                      title={`Email ${detail.name.split(/\s+/)[0] || "them"}`}
+                      aria-label="Send email"
+                      onClick={() => setEmailOpen(true)}
+                    >
+                      ✉
                     </button>
                   )}
                   {detail.bestTag && (

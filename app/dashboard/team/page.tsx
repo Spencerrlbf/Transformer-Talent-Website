@@ -4,6 +4,7 @@
 // stats drawer (the same numbers My page shows, per person).
 import { useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
+import EmailConnectCard from "@/components/dashboard/email/EmailConnectCard";
 
 type StatPair = { week: number; all: number };
 type Stats = {
@@ -162,7 +163,8 @@ export default function TeamPage() {
     return (
       <>
         <h1 className="dash-h1">Team</h1>
-        <p className="dash-sub">This area is for admins only.</p>
+        <p className="dash-sub">This area is for admins only — but your email connection below is yours to manage.</p>
+        <EmailConnectCard />
       </>
     );
   }
@@ -216,6 +218,8 @@ export default function TeamPage() {
           </button>
         </div>
       </div>
+      <EmailConnectCard />
+
       {notice && <p className="tm-notice">{notice}</p>}
       {error && <p className="dash-error">{error}</p>}
 

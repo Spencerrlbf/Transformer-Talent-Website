@@ -1,0 +1,829 @@
+"use client";
+// Send-as-you compose modal + org template manager. One modal opened from
+// the candidate drawer / Notes tab; the seat's first visit shows the
+// connect gate instead of the composer. Merge fields resolve at insert
+// time (the body always shows exactly what will send); an empty value
+// becomes an atomic red pill that blocks Send until dealt with.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDash } from "@/components/dashboard/DashShell";
+
+type ComposeJob = {
+  id: string;
+  title: string;
+  company: string;
+  salary: string;
+  locations: string[];
+  workplace: string;
+  url: string;
+};
+type Template = { id: string; name: string; subject: string; bodyHtml: string };
+type Ctx = {
+  connected: boolean;
+  address: string;
+  candidate: { name: string; email: string | null };
+  senderName: string;
+  jobs: ComposeJob[];
+  templates: Template[];
+  trackedLink: string;
+};
+
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const missPill = (label: string) =>
+  `<span class="em-miss" contenteditable="false">${esc(label)}</span>`;
+
+const shortUrl = (u: string) => u.replace(/^https?:\/\//, "");
+
+function jobBlockHtml(j: ComposeJob): string {
+  const meta = [j.salary, j.locations.slice(0, 3).join(", "), j.workplace]
+    .filter(Boolean)
+    .map(esc)
+    .join(" — ");
+  const title = j.url
+    ? `<a href="${esc(j.url)}">${esc(j.title)}</a>`
+    : esc(j.title);
+  return `<div><b>${title}</b>${meta ? ` — ${meta}` : ""}</div><div><br></div>`;
+}
+
+// ---------------------------------------------------------------- compose
+
+export default function EmailModal({
+  candKey,
+  candidateName,
+  onClose,
+  onSent,
+}: {
+  candKey: string;
+  candidateName: string;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const { token } = useDash();
+  const [ctx, setCtx] = useState<Ctx | null>(null);
+  const [ctxErr, setCtxErr] = useState(false);
+  const [reconnect, setReconnect] = useState(false);
+
+  const [subject, setSubject] = useState("");
+  const [roleId, setRoleId] = useState("");
+  const [misses, setMisses] = useState(0);
+  const [hasBody, setHasBody] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
+  const [menu, setMenu] = useState<"" | "fields" | "job" | "link">("");
+  const [jobQ, setJobQ] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [manage, setManage] = useState(false);
+
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const savedRange = useRef<Range | null>(null);
+  const first = candidateName.split(/\s+/)[0] || candidateName;
+
+  const loadCtx = useCallback(() => {
+    fetch("/api/dashboard/email/context", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ candidateKey: candKey }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json() as Promise<Ctx>;
+      })
+      .then((c) => {
+        setCtx(c);
+        setRoleId((cur) => cur || c.jobs[0]?.id || "");
+      })
+      .catch(() => setCtxErr(true));
+  }, [candKey, token]);
+
+  useEffect(loadCtx, [loadCtx]);
+
+  // Above the drawer: swallow Escape before the drawer's document handler.
+  // Deps include the open sublayers so this handler re-registers behind
+  // theirs and each Escape peels one layer.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        if (menu) setMenu("");
+        else onClose();
+      }
+    };
+    document.addEventListener("keydown", h, true);
+    return () => document.removeEventListener("keydown", h, true);
+  }, [onClose, menu, manage]);
+
+  // ---- editor helpers ----
+
+  const refreshFlags = () => {
+    const el = bodyRef.current;
+    if (!el) return;
+    setMisses(el.querySelectorAll(".em-miss").length);
+    setHasBody((el.innerText || "").trim().length > 0);
+  };
+
+  const focusBody = () => bodyRef.current?.focus();
+
+  const insertHtml = (html: string) => {
+    focusBody();
+    document.execCommand("insertHTML", false, html);
+    refreshFlags();
+  };
+
+  const cmd = (c: string) => {
+    focusBody();
+    document.execCommand(c);
+  };
+
+  const mergeValues = useCallback((): Record<string, { value: string; label: string; html?: string }> => {
+    const c = ctx!;
+    const role = c.jobs.find((j) => j.id === roleId);
+    return {
+      first_name: { value: first, label: "first name" },
+      full_name: { value: candidateName, label: "full name" },
+      job_title: { value: role?.title || "", label: "role title" },
+      company: { value: role?.company || "", label: "company" },
+      tracked_link: {
+        value: c.trackedLink,
+        label: "tracked link",
+        html: c.trackedLink
+          ? `<a href="${esc(c.trackedLink)}">${esc(shortUrl(c.trackedLink))}</a>`
+          : undefined,
+      },
+      sender_name: { value: c.senderName, label: "your name" },
+    };
+  }, [ctx, roleId, first, candidateName]);
+
+  const resolveHtml = (tpl: string): string => {
+    const vals = mergeValues();
+    return tpl.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, raw: string) => {
+      const f = vals[raw.toLowerCase()];
+      if (!f) return missPill(raw.replace(/_/g, " "));
+      if (!f.value) return missPill(f.label);
+      return f.html || esc(f.value);
+    });
+  };
+
+  const resolveSubject = (tpl: string): string => {
+    const vals = mergeValues();
+    return tpl.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (m, raw: string) => {
+      const f = vals[raw.toLowerCase()];
+      return f && f.value ? f.value : m;
+    });
+  };
+
+  const applyTemplate = (t: Template) => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if ((el.innerText || "").trim() && !window.confirm("Replace what you've written with this template?")) return;
+    setSubject(resolveSubject(t.subject));
+    el.innerHTML = resolveHtml(t.bodyHtml);
+    refreshFlags();
+  };
+
+  const insertField = (key: string) => {
+    const vals = mergeValues();
+    const f = vals[key];
+    if (!f) return;
+    setMenu("");
+    insertHtml(f.value ? f.html || esc(f.value) : missPill(f.label));
+  };
+
+  const openLink = () => {
+    const sel = window.getSelection();
+    savedRange.current =
+      sel && sel.rangeCount > 0 && bodyRef.current?.contains(sel.anchorNode)
+        ? sel.getRangeAt(0).cloneRange()
+        : null;
+    setLinkUrl("");
+    setMenu(menu === "link" ? "" : "link");
+  };
+
+  const applyLink = () => {
+    let url = linkUrl.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    focusBody();
+    const sel = window.getSelection();
+    if (savedRange.current && sel) {
+      sel.removeAllRanges();
+      sel.addRange(savedRange.current);
+    }
+    if (sel && !sel.isCollapsed) {
+      document.execCommand("createLink", false, url);
+    } else {
+      document.execCommand("insertHTML", false, `<a href="${esc(url)}">${esc(shortUrl(url))}</a>`);
+    }
+    setMenu("");
+    refreshFlags();
+  };
+
+  // ---- actions ----
+
+  const connect = async () => {
+    setConnecting(true);
+    try {
+      const r = await fetch("/api/dashboard/email/connect", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = (await r.json()) as { url?: string };
+      if (j.url) window.location.href = j.url;
+      else setConnecting(false);
+    } catch {
+      setConnecting(false);
+    }
+  };
+
+  const send = async () => {
+    const el = bodyRef.current;
+    if (!el || sending) return;
+    setErr("");
+    if (subject.includes("{{")) {
+      setErr("The subject still has an unfilled field — edit it before sending.");
+      return;
+    }
+    setSending(true);
+    try {
+      const r = await fetch("/api/dashboard/email/send", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateKey: candKey, subject: subject.trim(), html: el.innerHTML }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (r.ok && j.ok) {
+        onSent();
+        onClose();
+        return;
+      }
+      if (j.error === "not_connected" || j.error === "grant_invalid") {
+        setReconnect(true);
+        setCtx((c) => (c ? { ...c, connected: false } : c));
+      } else if (j.error === "unresolved_fields") {
+        setErr("Some fields are still unfilled — fix the highlighted ones first.");
+      } else if (j.error === "no_candidate_email") {
+        setErr(`No email on file for ${first} — add one in the contact section first.`);
+      } else {
+        setErr("Sending failed — nothing went out. Try again in a moment.");
+      }
+    } catch {
+      setErr("Network error — nothing went out. Try again.");
+    }
+    setSending(false);
+  };
+
+  // ---- render ----
+
+  const filteredJobs =
+    ctx?.jobs.filter((j) => {
+      const q = jobQ.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        j.title.toLowerCase().includes(q) ||
+        j.company.toLowerCase().includes(q) ||
+        `#${j.id}`.includes(q)
+      );
+    }) || [];
+
+  const blocked =
+    sending || !subject.trim() || !hasBody || misses > 0 || !ctx?.candidate.email;
+
+  return (
+    <>
+      <div className="tkm-back" onClick={onClose}>
+        <div className="tkm em-tkm" onClick={(e) => e.stopPropagation()}>
+          {ctxErr && (
+            <>
+              <h3>Email {first}</h3>
+              <p className="tkm-sub">Couldn&apos;t load the composer — close and try again.</p>
+            </>
+          )}
+          {!ctx && !ctxErr && (
+            <>
+              <h3>Email {first}</h3>
+              <p className="tkm-sub">Loading…</p>
+            </>
+          )}
+
+          {ctx && !ctx.connected && (
+            <>
+              <h3>Send email as you</h3>
+              <p className="tkm-sub">
+                {reconnect
+                  ? "Your email connection expired or was revoked — reconnect to keep sending."
+                  : "Connect your own inbox once — emails go out from your address and replies land back in it."}
+              </p>
+              <button className="em-provbtn" onClick={connect} disabled={connecting}>
+                {connecting ? "OPENING…" : "CONNECT YOUR EMAIL →"}
+              </button>
+              <p className="em-fine">
+                Google and Microsoft accounts are supported — you&apos;ll approve access in your
+                provider&apos;s own window, and you can disconnect at any time. Transformer Talent
+                only stores email to and from your candidates, never the rest of your inbox.
+              </p>
+              <div className="tkm-foot">
+                <button className="tkm-cancel" onClick={onClose}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+
+          {ctx && ctx.connected && (
+            <>
+              <h3>Email {first}</h3>
+              <p className="tkm-sub">
+                From <b>{ctx.address}</b> · sent from your own inbox, logged to the timeline
+              </p>
+
+              <span className="lbl" style={{ marginTop: 6 }}>
+                To
+              </span>
+              {ctx.candidate.email ? (
+                <span className="em-pill">
+                  {ctx.candidate.name || "Candidate"} <i>&lt;{ctx.candidate.email}&gt;</i>
+                </span>
+              ) : (
+                <p className="em-warn">
+                  No email on file for {first} — add one in the drawer&apos;s contact section first.
+                </p>
+              )}
+
+              {(ctx.templates.length > 0 || true) && (
+                <>
+                  <span className="lbl">
+                    Template
+                    <button className="em-side" onClick={() => setManage(true)}>
+                      Manage templates ›
+                    </button>
+                  </span>
+                  <div className="tk-chips">
+                    {ctx.templates.length === 0 && (
+                      <span className="em-fine" style={{ margin: 0 }}>
+                        None yet — create one via Manage templates.
+                      </span>
+                    )}
+                    {ctx.templates.map((t) => (
+                      <button key={t.id} type="button" onClick={() => applyTemplate(t)}>
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="cv2n-duo" style={{ gridTemplateColumns: ctx.jobs.length ? "1.6fr 1fr" : "1fr" }}>
+                <label style={{ display: "contents" }}>
+                  <span>
+                    <span className="lbl" style={{ marginTop: 0 }}>
+                      Subject
+                    </span>
+                    <input
+                      className="em-subject"
+                      value={subject}
+                      maxLength={300}
+                      onChange={(e) => setSubject(e.target.value)}
+                      placeholder={`e.g. ${first} — a role that fits your background`}
+                    />
+                  </span>
+                </label>
+                {ctx.jobs.length > 0 && (
+                  <span>
+                    <span className="lbl" style={{ marginTop: 0 }}>
+                      Merge role
+                    </span>
+                    <select
+                      className="em-roleselect"
+                      value={roleId}
+                      onChange={(e) => setRoleId(e.target.value)}
+                    >
+                      {ctx.jobs.map((j) => (
+                        <option key={j.id} value={j.id}>
+                          {j.title}
+                          {j.company ? ` · ${j.company}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                )}
+              </div>
+
+              <span className="lbl">Message</span>
+              <div className="em-editor">
+                <div className="em-toolbar">
+                  <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("bold")}>
+                    <b>B</b>
+                  </button>
+                  <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("italic")}>
+                    <i>I</i>
+                  </button>
+                  <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("underline")}>
+                    <u>U</u>
+                  </button>
+                  <button type="button" title="Link" onMouseDown={(e) => e.preventDefault()} onClick={openLink}>
+                    🔗
+                  </button>
+                  <button
+                    type="button"
+                    title="Bulleted list"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => cmd("insertUnorderedList")}
+                  >
+                    ≔
+                  </button>
+                  <button
+                    type="button"
+                    title="Numbered list"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => cmd("insertOrderedList")}
+                  >
+                    1.
+                  </button>
+                  <span className="em-tbsep" />
+                  <div className="em-menuwrap">
+                    <button
+                      type="button"
+                      className="em-word"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setMenu(menu === "fields" ? "" : "fields")}
+                    >
+                      Insert {"{}"}
+                    </button>
+                    {menu === "fields" && (
+                      <div className="em-menu">
+                        {[
+                          ["first_name", "First name"],
+                          ["full_name", "Full name"],
+                          ["job_title", "Role title"],
+                          ["company", "Company"],
+                          ["tracked_link", "Tracked link"],
+                          ["sender_name", "Your name"],
+                        ].map(([k, label]) => (
+                          <button key={k} type="button" onClick={() => insertField(k)}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="em-menuwrap">
+                    <button
+                      type="button"
+                      className="em-word"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setJobQ("");
+                        setMenu(menu === "job" ? "" : "job");
+                      }}
+                      disabled={!ctx.jobs.length}
+                      title={ctx.jobs.length ? "Insert a job line" : "No open jobs"}
+                    >
+                      Insert job
+                    </button>
+                    {menu === "job" && (
+                      <div className="em-menu em-jobmenu">
+                        <input
+                          className="em-jobsearch"
+                          placeholder="Search jobs…"
+                          value={jobQ}
+                          autoFocus
+                          onChange={(e) => setJobQ(e.target.value)}
+                        />
+                        <div className="em-jobscroll">
+                          {filteredJobs.map((j) => (
+                            <button
+                              key={j.id}
+                              type="button"
+                              onClick={() => {
+                                setMenu("");
+                                insertHtml(jobBlockHtml(j));
+                              }}
+                            >
+                              {j.title}
+                              <small>
+                                {[j.company, j.salary, j.workplace].filter(Boolean).join(" · ")}
+                              </small>
+                            </button>
+                          ))}
+                          {!filteredJobs.length && <p className="em-fine">No matches.</p>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {menu === "link" && (
+                  <div className="em-linkrow">
+                    <input
+                      placeholder="https://…"
+                      value={linkUrl}
+                      autoFocus
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          applyLink();
+                        }
+                      }}
+                    />
+                    <button type="button" className="tk-doneb" onClick={applyLink}>
+                      Add link
+                    </button>
+                  </div>
+                )}
+                <div
+                  className="em-body"
+                  ref={bodyRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={refreshFlags}
+                />
+              </div>
+              {misses > 0 && (
+                <p className="em-warn">
+                  {misses} field{misses > 1 ? "s" : ""} came up empty for {first} — replace the
+                  highlighted pill{misses > 1 ? "s" : ""} with real text (or delete{" "}
+                  {misses > 1 ? "them" : "it"}).
+                </p>
+              )}
+              {err && <p className="em-warn">{err}</p>}
+
+              <div className="tkm-foot">
+                <span className="em-foothint">Logged to {first}&apos;s timeline on send</span>
+                <button className="tkm-cancel" onClick={onClose} disabled={sending}>
+                  Cancel
+                </button>
+                <button className="tkm-save" onClick={send} disabled={blocked}>
+                  {sending ? "SENDING…" : "SEND EMAIL →"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      {manage && (
+        <TemplatesModal
+          onClose={() => setManage(false)}
+          onChanged={loadCtx}
+        />
+      )}
+    </>
+  );
+}
+
+// ------------------------------------------------------------- templates
+
+export function TemplatesModal({
+  onClose,
+  onChanged,
+}: {
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const { token } = useDash();
+  const [templates, setTemplates] = useState<Template[] | null>(null);
+  const [editing, setEditing] = useState<"" | "new" | string>("");
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [confirmDel, setConfirmDel] = useState("");
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  const load = useCallback(() => {
+    fetch("/api/dashboard/email/templates", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json() as Promise<{ templates: Template[] }>)
+      .then((j) => setTemplates(j.templates || []))
+      .catch(() => setTemplates([]));
+  }, [token]);
+  useEffect(load, [load]);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", h, true);
+    return () => document.removeEventListener("keydown", h, true);
+  }, [onClose]);
+
+  const startEdit = (t: Template | null) => {
+    setErr("");
+    setConfirmDel("");
+    setEditing(t ? t.id : "new");
+    setName(t?.name || "");
+    setSubject(t?.subject || "");
+    // The editor div mounts on this render; seed it just after.
+    requestAnimationFrame(() => {
+      if (bodyRef.current) bodyRef.current.innerHTML = t?.bodyHtml || "";
+    });
+  };
+
+  const insertToken = (tok: string) => {
+    bodyRef.current?.focus();
+    document.execCommand("insertText", false, `{{${tok}}}`);
+  };
+
+  const save = async () => {
+    if (busy || !name.trim()) return;
+    setBusy(true);
+    setErr("");
+    const payload = {
+      name: name.trim(),
+      subject,
+      bodyHtml: bodyRef.current?.innerHTML || "",
+    };
+    const isNew = editing === "new";
+    try {
+      const r = await fetch(
+        isNew ? "/api/dashboard/email/templates" : `/api/dashboard/email/templates/${editing}`,
+        {
+          method: isNew ? "POST" : "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (r.ok && j.ok) {
+        setEditing("");
+        load();
+        onChanged();
+      } else {
+        setErr(j.error === "duplicate_name" ? "A template with that name already exists." : "Couldn't save — try again.");
+      }
+    } catch {
+      setErr("Network error — try again.");
+    }
+    setBusy(false);
+  };
+
+  const del = async (id: string) => {
+    if (confirmDel !== id) {
+      setConfirmDel(id);
+      return;
+    }
+    setBusy(true);
+    await fetch(`/api/dashboard/email/templates/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+    setBusy(false);
+    setConfirmDel("");
+    if (editing === id) setEditing("");
+    load();
+    onChanged();
+  };
+
+  return (
+    <div className="tkm-back" onClick={onClose}>
+      <div className="tkm em-tkm" onClick={(e) => e.stopPropagation()}>
+        <h3>Email templates</h3>
+        <p className="tkm-sub">
+          Shared with your whole team. Fields like {"{{first_name}}"} fill in per candidate when a
+          template is used.
+        </p>
+
+        {!templates && <p className="em-fine">Loading…</p>}
+        {templates?.map((t) =>
+          editing === t.id ? (
+            <TemplateEditor
+              key={t.id}
+              name={name}
+              subject={subject}
+              setName={setName}
+              setSubject={setSubject}
+              bodyRef={bodyRef}
+              insertToken={insertToken}
+              busy={busy}
+              err={err}
+              onCancel={() => setEditing("")}
+              onSave={save}
+              onDelete={() => del(t.id)}
+              confirmDel={confirmDel === t.id}
+            />
+          ) : (
+            <div className="emt-row" key={t.id}>
+              <span className="emt-name">{t.name}</span>
+              <span className="emt-subj">{t.subject}</span>
+              <button className="cv2n-edit" onClick={() => startEdit(t)}>
+                Edit
+              </button>
+            </div>
+          )
+        )}
+        {templates && templates.length === 0 && editing !== "new" && (
+          <p className="em-fine">No templates yet — create your first one.</p>
+        )}
+
+        {editing === "new" ? (
+          <TemplateEditor
+            name={name}
+            subject={subject}
+            setName={setName}
+            setSubject={setSubject}
+            bodyRef={bodyRef}
+            insertToken={insertToken}
+            busy={busy}
+            err={err}
+            onCancel={() => setEditing("")}
+            onSave={save}
+          />
+        ) : (
+          <button className="emt-new" onClick={() => startEdit(null)}>
+            ＋ New template…
+          </button>
+        )}
+
+        <div className="tkm-foot">
+          <button className="tkm-cancel" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TemplateEditor({
+  name,
+  subject,
+  setName,
+  setSubject,
+  bodyRef,
+  insertToken,
+  busy,
+  err,
+  onCancel,
+  onSave,
+  onDelete,
+  confirmDel,
+}: {
+  name: string;
+  subject: string;
+  setName: (v: string) => void;
+  setSubject: (v: string) => void;
+  bodyRef: React.RefObject<HTMLDivElement | null>;
+  insertToken: (t: string) => void;
+  busy: boolean;
+  err: string;
+  onCancel: () => void;
+  onSave: () => void;
+  onDelete?: () => void;
+  confirmDel?: boolean;
+}) {
+  return (
+    <div className="emt-editbox">
+      <span className="lbl" style={{ marginTop: 0 }}>
+        Name
+      </span>
+      <input className="em-subject" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+      <span className="lbl">Subject</span>
+      <input
+        className="em-subject"
+        value={subject}
+        maxLength={300}
+        onChange={(e) => setSubject(e.target.value)}
+        placeholder="{{first_name}} — a {{job_title}} role worth a look"
+      />
+      <span className="lbl">Body</span>
+      <div className="em-editor">
+        <div className="em-toolbar">
+          <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => { bodyRef.current?.focus(); document.execCommand("bold"); }}>
+            <b>B</b>
+          </button>
+          <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => { bodyRef.current?.focus(); document.execCommand("italic"); }}>
+            <i>I</i>
+          </button>
+          <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => { bodyRef.current?.focus(); document.execCommand("underline"); }}>
+            <u>U</u>
+          </button>
+          <span className="em-tbsep" />
+          {["first_name", "full_name", "job_title", "company", "tracked_link", "sender_name"].map((t) => (
+            <button key={t} type="button" className="em-word" onMouseDown={(e) => e.preventDefault()} onClick={() => insertToken(t)}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="em-body em-tplbody" ref={bodyRef} contentEditable suppressContentEditableWarning />
+      </div>
+      {err && <p className="em-warn">{err}</p>}
+      <div className="tkm-foot" style={{ marginTop: 12 }}>
+        {onDelete && (
+          <button className="tkm-del" onClick={onDelete} disabled={busy}>
+            {confirmDel ? "Really delete?" : "Delete"}
+          </button>
+        )}
+        <button className="tkm-cancel" onClick={onCancel} disabled={busy} style={{ marginLeft: onDelete ? 0 : "auto" }}>
+          Cancel
+        </button>
+        <button className="tkm-save" onClick={onSave} disabled={busy || !name.trim()}>
+          {busy ? "SAVING…" : "SAVE"}
+        </button>
+      </div>
+    </div>
+  );
+}

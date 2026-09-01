@@ -8,6 +8,7 @@ import { useDash } from "@/components/dashboard/DashShell";
 import KindIcon from "@/components/dashboard/tasks/KindIcon";
 import NoteModal, { type NoteModalTarget } from "@/components/dashboard/tasks/NoteModal";
 import TaskModal, { type TaskModalTarget } from "@/components/dashboard/tasks/TaskModal";
+import EmailModal from "@/components/dashboard/email/EmailModal";
 
 type NoteRow = {
   id: string;
@@ -28,17 +29,29 @@ type TaskRow = {
   createdAt: string;
   completedAt: string | null;
 };
+type EmailRow = {
+  id: string;
+  direction: "out" | "in";
+  memberEmail: string;
+  address: string;
+  subject: string;
+  snippet: string;
+  bodyHtml: string | null;
+  createdAt: string;
+};
 type Data = {
   notes: NoteRow[];
   tasks: TaskRow[];
   ask: { at: string; askedAt: string | null } | null;
+  emails?: EmailRow[];
 };
 
 type Ev =
   | { at: string; type: "note"; note: NoteRow }
   | { at: string; type: "task_created"; task: TaskRow }
   | { at: string; type: "task_done"; task: TaskRow }
-  | { at: string; type: "ask"; date: string };
+  | { at: string; type: "ask"; date: string }
+  | { at: string; type: "email"; email: EmailRow };
 
 const NOTE_LABEL: Record<string, string> = { note: "Note", call: "Call", email: "Email", message: "Message" };
 
@@ -69,6 +82,8 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
   const [error, setError] = useState(false);
   const [noteModal, setNoteModal] = useState<NoteModalTarget | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailView, setEmailView] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/dashboard/candidates/v2/${candKey}/timeline`, {
@@ -89,12 +104,15 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
     setData(null);
     setNoteModal(null);
     setTaskModal(null);
+    setEmailOpen(false);
+    setEmailView(null);
     load();
   }, [load]);
 
   const events: Ev[] = data
     ? [
         ...data.notes.map((n): Ev => ({ at: n.createdAt, type: "note", note: n })),
+        ...(data.emails || []).map((e): Ev => ({ at: e.createdAt, type: "email", email: e })),
         ...data.tasks.map((t): Ev => ({ at: t.createdAt, type: "task_created", task: t })),
         ...data.tasks
           .filter((t) => t.completedAt)
@@ -119,6 +137,9 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
           onClick={() => setTaskModal({ mode: "create", candidateKey: candKey, candidateName: name })}
         >
           + Add task
+        </button>
+        <button className="cv2n-newbtn" onClick={() => setEmailOpen(true)}>
+          ✉ Send email
         </button>
         <span className="cv2n-hint">Notes are shared with your team; tasks land in your Tasks tab.</span>
       </div>
@@ -163,6 +184,38 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
                     )}
                   </div>
                   <p>{n.body}</p>
+                </div>
+              </div>
+            );
+          }
+          if (ev.type === "email") {
+            const e = ev.email;
+            const out = e.direction === "out";
+            const open = emailView === e.id;
+            const expandable = out ? Boolean(e.bodyHtml) : e.snippet.length > 0;
+            return (
+              <div className="cv2n-ev" key={`e${e.id}`}>
+                <span className={`av ${out ? "mail" : "rin"}`}>{out ? "✉" : "↩"}</span>
+                <div className="b">
+                  <div className="m">
+                    <b>{out ? `Email · ${authorName(e.memberEmail)}` : `${first} replied`}</b>
+                    <span>{out ? "sent" : `to ${authorName(e.memberEmail)}`} · {fmtWhen(e.createdAt)}</span>
+                    {expandable && (
+                      <button className="cv2n-edit" onClick={() => setEmailView(open ? null : e.id)}>
+                        {open ? "Hide" : "View"}
+                      </button>
+                    )}
+                  </div>
+                  {e.subject && <p className="cv2n-mailsubj">{e.subject}</p>}
+                  {!open && e.snippet && <p className="cv2n-mailsnip">{e.snippet}</p>}
+                  {open &&
+                    (out && e.bodyHtml ? (
+                      // Sanitized server-side at write time (rebuild-only
+                      // allowlist); replies are never stored as HTML.
+                      <div className="cv2n-mailbody" dangerouslySetInnerHTML={{ __html: e.bodyHtml }} />
+                    ) : (
+                      <div className="cv2n-mailbody">{e.snippet}</div>
+                    ))}
                 </div>
               </div>
             );
@@ -238,6 +291,14 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
       )}
       {taskModal && (
         <TaskModal target={taskModal} onClose={() => setTaskModal(null)} onChanged={load} />
+      )}
+      {emailOpen && (
+        <EmailModal
+          candKey={candKey}
+          candidateName={name}
+          onClose={() => setEmailOpen(false)}
+          onSent={load}
+        />
       )}
     </div>
   );

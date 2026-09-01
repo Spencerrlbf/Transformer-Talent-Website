@@ -3776,3 +3776,113 @@ tr.cv2-selrow td { background: var(--accent-tint); }
   padding: 3px 11px; cursor: pointer; white-space: nowrap;
 }
 .blk-view:hover { color: var(--ink); border-color: var(--strong-line); }
+
+/* ---- Send-as-you email (compose modal, templates, timeline, team card) ---- */
+.cv2d-mail {
+  font: inherit; font-size: 15px; line-height: 1; color: var(--faint); background: none; border: 0;
+  cursor: pointer; padding: 2px 4px; vertical-align: 2px;
+}
+.cv2d-mail:hover { color: var(--accent-press); }
+
+.em-tkm { width: 580px; }
+.em-provbtn {
+  display: block; width: 100%; background: var(--ink); color: #fff; border: 0;
+  border-radius: var(--r-control); padding: 12px 18px; font: inherit; font-size: 13px;
+  font-weight: 700; letter-spacing: .04em; cursor: pointer; margin-top: 6px;
+}
+.em-provbtn:disabled { opacity: .55; cursor: default; }
+.em-fine { margin: 12px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+.em-pill {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--surface);
+  border: 1px solid var(--hair); border-radius: var(--r-pill); padding: 5px 12px; font-size: 12.5px;
+  font-weight: 600; color: var(--ink); max-width: 100%; overflow: hidden;
+}
+.em-pill i { font-style: normal; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.em-side {
+  float: right; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0;
+  text-transform: none; color: var(--accent-press); background: none; border: 0; cursor: pointer; padding: 0;
+}
+.em-subject, .em-roleselect {
+  width: 100%; border: 1px solid var(--control-line); background: var(--paper);
+  border-radius: var(--r-control); padding: 8px 10px; font: inherit; font-size: 13px; color: var(--ink);
+}
+.em-editor { position: relative; }
+.em-toolbar {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  border: 1px solid var(--control-line); border-bottom: 0; border-radius: var(--r-control) var(--r-control) 0 0;
+  background: var(--surface); padding: 5px 8px;
+}
+.em-toolbar > button, .em-menuwrap > button {
+  font: inherit; font-size: 12.5px; color: var(--body-2); background: none; border: 0;
+  border-radius: 6px; min-width: 26px; height: 26px; padding: 0 7px; cursor: pointer;
+}
+.em-toolbar > button:hover, .em-menuwrap > button:hover { background: var(--accent-wash); color: var(--ink); }
+.em-toolbar button:disabled { opacity: .45; cursor: default; }
+.em-word { font-weight: 600; white-space: nowrap; }
+.em-tbsep { width: 1px; height: 16px; background: var(--control-line); margin: 0 6px; }
+.em-menuwrap { position: relative; }
+.em-menu {
+  position: absolute; top: 30px; left: 0; z-index: 6; min-width: 170px;
+  background: var(--paper); border: 1px solid var(--hair); border-radius: var(--r-menu);
+  box-shadow: var(--sh-menu); padding: 6px; display: grid; gap: 2px;
+}
+.em-menu > div > button, .em-menu > button {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--body); background: none; border: 0; border-radius: 6px; padding: 7px 10px; cursor: pointer;
+}
+.em-menu > div > button:hover, .em-menu > button:hover { background: var(--surface); }
+.em-menu button small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.em-jobmenu { min-width: 280px; left: auto; right: 0; }
+.em-jobsearch {
+  width: 100%; border: 1px solid var(--control-line); background: var(--paper);
+  border-radius: 7px; padding: 6px 9px; font: inherit; font-size: 12.5px; margin-bottom: 4px;
+}
+.em-jobscroll { max-height: 220px; overflow-y: auto; display: grid; gap: 2px; }
+.em-linkrow { display: flex; gap: 6px; padding: 6px 8px; border: 1px solid var(--control-line); border-bottom: 0; background: var(--surface); }
+.em-linkrow input {
+  flex: 1; border: 1px solid var(--control-line); background: var(--paper); border-radius: 7px;
+  padding: 5px 9px; font: inherit; font-size: 12.5px;
+}
+.em-body {
+  min-height: 170px; max-height: 320px; overflow-y: auto;
+  border: 1px solid var(--control-line); border-radius: 0 0 var(--r-control) var(--r-control);
+  background: var(--paper); padding: 10px 12px; font-size: 13.5px; line-height: 1.6; color: var(--ink);
+}
+.em-body:focus { outline: none; border-color: var(--strong-line); }
+.em-tplbody { min-height: 90px; }
+.em-body a { color: var(--accent-press); text-decoration: underline; }
+.em-miss {
+  display: inline-block; background: var(--bad-bg); color: var(--bad); border-radius: 5px;
+  padding: 0 6px; font-size: 12px; font-weight: 700; user-select: all;
+}
+.em-warn { margin: 8px 0 0; font-size: 12px; color: var(--bad); }
+.em-foothint { margin-right: auto; font-size: 11.5px; color: var(--muted); }
+
+.emt-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--row-line); font-size: 13.5px; }
+.emt-name { font-weight: 600; white-space: nowrap; }
+.emt-subj { flex: 1; color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emt-new {
+  display: block; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent-press);
+  background: none; border: 0; cursor: pointer; padding: 12px 2px 0;
+}
+.emt-editbox { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-card); padding: 14px 16px; margin-top: 12px; }
+.emt-editbox .em-toolbar, .emt-editbox .em-body { background: var(--paper); }
+
+.cv2n-ev .av.mail { background: var(--accent-wash); color: var(--accent-press); font-size: 13px; }
+.cv2n-ev .av.rin { background: var(--pos-bg); color: var(--pos); font-size: 13px; }
+.cv2n-mailsubj { margin: 4px 0 1px !important; font-weight: 600; color: var(--ink) !important; }
+.cv2n-mailsnip { color: var(--muted) !important; }
+.cv2n-mailbody {
+  margin-top: 6px; border: 1px solid var(--hair); border-radius: var(--r-card);
+  background: var(--surface); padding: 10px 12px; font-size: 13px; line-height: 1.6; color: var(--body);
+  overflow-wrap: anywhere;
+}
+.cv2n-mailbody a { color: var(--accent-press); text-decoration: underline; }
+
+.em-card {
+  border: 1px solid var(--hair); border-radius: var(--r-card); background: var(--paper);
+  padding: 14px 18px; margin: 14px 0 18px;
+}
+.em-cardrow { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+.em-cardstat { flex: 1; min-width: 260px; font-size: 13px; line-height: 1.55; color: var(--body); }
+.em-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); margin-right: 4px; }
