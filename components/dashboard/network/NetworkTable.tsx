@@ -87,10 +87,13 @@ const InIcon = () => (
 export default function NetworkTable({
   jobId,
   onOpen,
+  onKeys,
 }: {
   /** Deep-link filter: preselect one role (the job-page shortcut). */
   jobId?: string;
   onOpen?: (key: string) => void;
+  /** Filtered row keys in display order — drives drawer prev/next. */
+  onKeys?: (keys: string[]) => void;
 }) {
   const { token } = useDash();
   const [people, setPeople] = useState<NetPerson[] | null>(null);
@@ -169,6 +172,11 @@ export default function NetworkTable({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [people, q, role, company, fit, newOnly]);
+
+  useEffect(() => {
+    onKeys?.(filtered.map((p) => `net_${p.candidateId}`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered]);
 
   const newSinceYesterday = (people || []).filter(
     (p) => new Date(p.latestMatchAt).getTime() >= dayAgo

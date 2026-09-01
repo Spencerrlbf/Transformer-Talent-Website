@@ -22,6 +22,11 @@ export async function GET(req: NextRequest) {
     hideNotNow: q.get("hideNotNow") === "1",
     past: q.get("past") === "1",
     followups: q.get("followups") === "1",
+    loc: q.get("loc") || undefined,
+    stage: q.get("stage") || undefined,
+    yoe: q.get("yoe") || undefined,
+    skill: q.get("skill") || undefined,
+    visa: q.get("visa") || undefined,
     sort:
       sort === "added" || sort === "name" || sort === "years" || sort === "followup"
         ? sort

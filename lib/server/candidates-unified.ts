@@ -96,6 +96,10 @@ export type UnifiedRow = {
   screeningPending: boolean;
   /** "Hear from me later" ask: the date they want contact (null otherwise). */
   followUpAt: string | null;
+  /** Enriched skills (sourced people); drives the Skills filter + CSV. */
+  skills: string[] | null;
+  /** Visa status as stated by the applicant (applied people). */
+  visa: string | null;
 };
 
 // Human pipeline statuses — distinct from the AI fit tag. "rejected" moves a
@@ -125,6 +129,16 @@ export type UnifiedListParams = {
   past?: boolean;
   /** Only people with a future-interest ask, soonest follow-up first. */
   followups?: boolean;
+  /** Exact match on the row's location (options come from the data). */
+  loc?: string;
+  /** Pipeline stage: the job's stage with jobId, any role's stage pool-wide. */
+  stage?: string;
+  /** Years-of-experience band: "0-3" | "4-7" | "8-12" | "13plus". */
+  yoe?: string;
+  /** Case-insensitive match against enriched skills. */
+  skill?: string;
+  /** Exact match on stated visa status. */
+  visa?: string;
   sort?: "fit" | "added" | "name" | "years" | "followup";
   dir?: "asc" | "desc";
   page?: number;
@@ -137,6 +151,8 @@ export type UnifiedList = {
   counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
   /** Future-interest summary across the whole pool (pagination-independent). */
   followups: { total: number; due: number; dueNames: string[] };
+  /** Filter options present in the current scope (frequency-ordered, capped). */
+  filters: { locations: string[]; skills: string[]; visas: string[] };
   page: number;
   pageSize: number;
 };
@@ -681,6 +697,8 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       // finished — no verdict then reads "Not screened", not "Screening…".
       screeningPending: a.status === "processing",
       followUpAt: a.follow_up_at,
+      skills: null,
+      visa: str(a.visa_status),
     });
   }
 
@@ -716,6 +734,8 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       stage: null,
       screeningPending: true, // sourced judgments arrive asynchronously
       followUpAt: null,
+      skills: p.skills && p.skills.length ? p.skills : null,
+      visa: null,
     });
   }
 
@@ -737,6 +757,27 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     rejectedCount = rejected.length;
     visible = params.past ? rejected : visible.filter((r) => r.stage !== "rejected");
   }
+  // Filter options come from the current scope BEFORE search/filters apply,
+  // so panes never empty out while narrowing. Frequency-ordered, capped.
+  const freqTop = (values: string[], cap: number): string[] => {
+    const byNorm = new Map<string, { display: string; n: number }>();
+    for (const v of values) {
+      const norm = v.toLowerCase();
+      const cur = byNorm.get(norm);
+      if (cur) cur.n += 1;
+      else byNorm.set(norm, { display: v, n: 1 });
+    }
+    return [...byNorm.values()]
+      .sort((a, b) => b.n - a.n || a.display.localeCompare(b.display))
+      .slice(0, cap)
+      .map((x) => x.display);
+  };
+  const filterOptions = {
+    locations: freqTop(visible.map((r) => r.location || "").filter(Boolean), 40),
+    skills: freqTop(visible.flatMap((r) => r.skills || []), 40),
+    visas: freqTop(visible.map((r) => r.visa || "").filter(Boolean), 20),
+  };
+
   if (params.q) {
     const q = params.q.toLowerCase();
     visible = visible.filter((r) =>
@@ -776,6 +817,54 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     else {
       const group = FIT_GROUPS[params.fit] || [params.fit];
       filtered = filtered.filter((r) => r.bestTag != null && group.includes(r.bestTag));
+    }
+  }
+  if (params.loc) {
+    const loc = params.loc.toLowerCase();
+    filtered = filtered.filter((r) => (r.location || "").toLowerCase() === loc);
+  }
+  if (params.yoe) {
+    const bands: Record<string, [number, number]> = {
+      "0-3": [0, 3],
+      "4-7": [4, 7],
+      "8-12": [8, 12],
+      "13plus": [13, 1000],
+    };
+    const band = bands[params.yoe];
+    if (band) {
+      filtered = filtered.filter(
+        (r) => r.yearsExperience != null && r.yearsExperience >= band[0] && r.yearsExperience <= band[1]
+      );
+    }
+  }
+  if (params.skill) {
+    const skill = params.skill.toLowerCase();
+    filtered = filtered.filter((r) => (r.skills || []).some((s) => s.toLowerCase() === skill));
+  }
+  if (params.visa) {
+    const visa = params.visa.toLowerCase();
+    filtered = filtered.filter((r) => (r.visa || "").toLowerCase() === visa);
+  }
+  if (params.stage && (STAGES as readonly string[]).includes(params.stage)) {
+    if (params.jobId) {
+      filtered = filtered.filter((r) => r.stage === params.stage);
+    } else {
+      // Pool-wide: match if ANY of the person's roles sits in that stage.
+      // "new" is implicit (no status row), so it matches people with a role
+      // that has no explicit status yet.
+      const res = await sbRest(
+        `candidate_role_statuses?organization_id=eq.${orgId}&select=candidate_key,status`
+      );
+      const rowsSt: { candidate_key: string; status: string }[] = res.ok ? await res.json() : [];
+      const byKey = new Map<string, Set<string>>();
+      for (const r of rowsSt) {
+        byKey.set(r.candidate_key, (byKey.get(r.candidate_key) || new Set()).add(r.status));
+      }
+      filtered = filtered.filter((r) => {
+        const set = byKey.get(r.key);
+        if (params.stage === "new") return !set || set.has("new") || set.size < r.roles.length;
+        return set?.has(params.stage!) ?? false;
+      });
     }
   }
 
@@ -835,7 +924,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   ]);
   for (const item of items) item.photoUrl = photos.get(item.key) ?? null;
 
-  return { items, total: filtered.length, counts, followups, page, pageSize };
+  return { items, total: filtered.length, counts, followups, filters: filterOptions, page, pageSize };
 }
 
 /** Edit a future-interest ask: date and preferences, validated against the

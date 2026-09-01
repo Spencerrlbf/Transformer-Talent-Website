@@ -3632,3 +3632,24 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   .tk-row { flex-wrap: wrap; }
   .tk-title { flex-basis: 100%; }
 }
+
+/* ---- Drawer prev/next + CSV export ---- */
+/* The cluster mirrors .cv2d-close exactly (30px, same border/radius) and
+   sits on its baseline; .has-nav reserves header space so the ask panel's
+   Edit never ends up underneath it. Disabled arrows keep their box and only
+   dim the glyph — a washed-out button reads as broken, not as "first row". */
+.cv2d-nav {
+  position: absolute; top: 18px; right: 60px; z-index: 5; height: 30px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cv2d-nav button {
+  width: 30px; height: 30px; border: 1px solid var(--control-line); background: var(--paper);
+  border-radius: var(--r-control); font: inherit; font-size: 17px; line-height: 1;
+  color: var(--body-2); cursor: pointer; display: grid; place-items: center; padding: 0 0 2px;
+}
+.cv2d-nav button:hover:not(:disabled) { color: var(--ink); border-color: var(--strong-line); }
+.cv2d-nav button:disabled { color: var(--faint); border-color: var(--hair); cursor: default; }
+.cv2d-navpos { font-size: 12px; color: var(--muted); padding: 0 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cv2d.has-nav .cv2d-head { padding-right: 200px; }
+.cv2-export { white-space: nowrap; }
+.cv2-export:disabled { opacity: .5; cursor: default; }
