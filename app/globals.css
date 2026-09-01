@@ -3668,3 +3668,85 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .cv2-linkcell .cv2-dim { margin-left: 7px; font-variant-numeric: tabular-nums; }
+
+/* ---- Lists + bulk selection ---- */
+.w-chk { width: 34px; padding-right: 0 !important; }
+.w-starcol { width: 34px; padding-left: 4px !important; }
+th.w-starcol { color: var(--muted); font-weight: 600; cursor: default; }
+.cv2-chk {
+  width: 16px; height: 16px; border: 1.5px solid var(--control-line); border-radius: 4px;
+  background: var(--paper); cursor: pointer; padding: 0; display: inline-block; vertical-align: middle;
+  position: relative;
+}
+.cv2-chk:hover { border-color: var(--strong-line); }
+.cv2-chk.on, .cv2-chk.some { background: var(--accent); border-color: var(--accent); }
+.cv2-chk.on::after {
+  content: "✓"; position: absolute; inset: 0; color: #fff; font-size: 11px; line-height: 14px;
+  text-align: center; font-weight: 700;
+}
+.cv2-chk.some::after {
+  content: "–"; position: absolute; inset: 0; color: #fff; font-size: 12px; line-height: 13px;
+  text-align: center; font-weight: 700;
+}
+tr.cv2-selrow td { background: var(--accent-tint); }
+.cv2-star, .cv2d-star {
+  font: inherit; font-size: 16px; line-height: 1; color: var(--faint); background: none; border: 0;
+  cursor: pointer; padding: 2px 4px;
+}
+.cv2-star:hover, .cv2d-star:hover { color: #C98A1B; }
+.cv2-star.on, .cv2d-star.on { color: #C98A1B; }
+.cv2-star:disabled, .cv2d-star:disabled { opacity: .6; cursor: default; }
+.cv2d-star { font-size: 19px; vertical-align: 2px; }
+
+.cv2-bulkbar {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 55;
+  display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  background: var(--ink); color: #fff; border-radius: var(--r-pill);
+  padding: 9px 10px 9px 18px; font-size: 13px;
+  box-shadow: 0 18px 40px -12px rgba(17,17,16,.5);
+  max-width: calc(100vw - 40px); overflow-x: auto;
+}
+.cv2-bulkbar b { font-weight: 700; }
+.cv2-bulkbar .sep { opacity: .35; }
+.cv2-bulkbar button {
+  font: inherit; font-size: 12.5px; font-weight: 600; color: #fff; border: 0; cursor: pointer;
+  background: rgba(255,255,255,.14); border-radius: var(--r-pill); padding: 6px 14px;
+}
+.cv2-bulkbar button:hover { background: rgba(255,255,255,.24); }
+.cv2-bulkbar button.pri { background: #fff; color: var(--ink); }
+.cv2-bulkbar button.pri:hover { background: var(--surface); }
+.cv2-bulkbar button.bx { background: none; opacity: .75; padding: 6px 8px; }
+.cv2-bulkbar button:disabled { opacity: .55; cursor: default; }
+
+/* modal list rows (add-to-list / add-to-job / manage) */
+.blk-scroll { max-height: 300px; overflow-y: auto; }
+.blk-row {
+  display: flex; align-items: center; gap: 12px; border: 1px solid var(--control-line);
+  border-radius: var(--r-card); padding: 10px 14px; margin-top: 8px; cursor: pointer;
+}
+.blk-row.on { border-color: var(--accent); background: var(--accent-tint); }
+.blk-row.static { cursor: default; }
+.blk-row.new { border-style: dashed; }
+.blk-radio {
+  width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--control-line);
+  background: var(--paper); flex: none;
+}
+.blk-row.on .blk-radio { border: 4.5px solid var(--accent); }
+.blk-row .t { flex: 1; min-width: 0; }
+.blk-row .t b { display: block; font-size: 13.5px; color: var(--ink); }
+.blk-row .t > span, .blk-row .t span:last-child { font-size: 12px; color: var(--muted); }
+.blk-row .n { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.blk-row.new input {
+  flex: 1; border: 0; background: none; font: inherit; font-size: 13.5px; color: var(--ink);
+  outline: none; padding: 0;
+}
+.blk-rename {
+  width: 100%; border: 1px solid transparent; background: none; font: inherit; font-size: 13.5px;
+  font-weight: 600; color: var(--ink); border-radius: var(--r-control); padding: 2px 6px; margin-left: -6px;
+}
+.blk-rename:hover, .blk-rename:focus { border-color: var(--control-line); background: var(--paper); outline: none; }
+.blk-del {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--bad); background: none;
+  border: 0; cursor: pointer; padding: 4px 6px; white-space: nowrap;
+}
+.blk-del.sure { text-decoration: underline; }

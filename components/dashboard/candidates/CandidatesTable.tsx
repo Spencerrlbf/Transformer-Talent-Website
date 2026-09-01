@@ -4,9 +4,15 @@
 // everyone visible) and the job page (role-scoped, "Not now" hidden by
 // default). Role attachments live in the drawer's Pipeline tab, not here —
 // a person can be on many roles. Rows open the profile drawer via onOpen.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { downloadCsv } from "@/lib/csv";
+import {
+  AddToJobModal,
+  AddToListModal,
+  ManageListsModal,
+  type ListInfo,
+} from "@/components/dashboard/candidates/BulkModals";
 
 export type Cv2Role = {
   jobId: string;
@@ -41,6 +47,7 @@ export type Cv2Row = {
   skills?: string[] | null;
   visa?: string | null;
   link?: { path: string; openCount: number; lastOpenedAt: string | null } | null;
+  lists?: { id: string; name: string; builtin: boolean; addedByEmail: string; addedAt: string }[];
 };
 
 type Cv2List = {
@@ -270,9 +277,35 @@ export default function CandidatesTable({
   const [skill, setSkill] = useState("");
   const [visa, setVisa] = useState("");
   const [openedF, setOpenedF] = useState("");
+  const [listF, setListF] = useState("");
   const [exporting, setExporting] = useState(false);
   const [linkBusy, setLinkBusy] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Lists (the ★ is the built-in Shortlist) + row selection for the bulk bar.
+  // Selection persists across pages and filters until cleared; rows are
+  // snapshotted so a selected person from another page still exports.
+  const [lists, setLists] = useState<ListInfo[] | null>(null);
+  const [selected, setSelected] = useState<Map<string, Cv2Row>>(new Map());
+  const [starBusy, setStarBusy] = useState<string | null>(null);
+  const [modal, setModal] = useState<"" | "list" | "job" | "manage">("");
+  const [flash, setFlash] = useState("");
+
+  const refreshLists = useCallback(() => {
+    fetch("/api/dashboard/lists", { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.lists) setLists(d.lists);
+      })
+      .catch(() => {});
+  }, [token]);
+  useEffect(refreshLists, [refreshLists]);
+
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(""), 3000);
+    return () => clearTimeout(t);
+  }, [flash]);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [hideNotNow, setHideNotNow] = useState(defaultHideNotNow);
@@ -288,7 +321,7 @@ export default function CandidatesTable({
   // its option pane; active filters render as chips below the row.
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPane, setMenuPane] = useState<
-    "" | "role" | "fit" | "loc" | "stage" | "yoe" | "skill" | "visa" | "opened"
+    "" | "role" | "fit" | "loc" | "stage" | "yoe" | "skill" | "visa" | "opened" | "listp"
   >("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -308,9 +341,9 @@ export default function CandidatesTable({
     return () => clearTimeout(t);
   }, [q]);
 
-  // Role pane options (pool view only) from the org's jobs.
+  // The org's jobs: role-filter pane options (pool view) and the bulk bar's
+  // Add-to-a-job modal (every view).
   useEffect(() => {
-    if (jobId) return;
     fetch("/api/dashboard/jobs", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((j: { jobs?: { id: string; title: string }[] } | null) => {
@@ -344,6 +377,7 @@ export default function CandidatesTable({
     if (skill) params.set("skill", skill);
     if (visa) params.set("visa", visa);
     if (openedF) params.set("opened", openedF);
+    if (listF) params.set("list", listF);
     if (debouncedQ) params.set("q", debouncedQ);
     if (hideNotNow && !past) params.set("hideNotNow", "1");
     if (past) params.set("past", "1");
@@ -371,7 +405,7 @@ export default function CandidatesTable({
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
+  }, [token, seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, listF, debouncedQ, hideNotNow, sort, dir, page, bump, past, refreshKey]);
 
   // Self-refresh, two speeds. Fast (10s): an applicant on screen is still
   // mid-pipeline ("Screening…"), so refetch until it settles — capped so a
@@ -392,7 +426,7 @@ export default function CandidatesTable({
   }, [data]);
   useEffect(() => {
     pollCount.current = 0;
-  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, debouncedQ, hideNotNow, past]);
+  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, listF, debouncedQ, hideNotNow, past]);
   // Coming back to a background tab: catch up immediately.
   useEffect(() => {
     const onVisible = () => {
@@ -447,7 +481,78 @@ export default function CandidatesTable({
   // Any filter change goes back to page 1.
   useEffect(() => {
     setPage(1);
-  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, debouncedQ, hideNotNow]);
+  }, [seg, effectiveJob, fit, loc, stageF, yoe, skill, visa, openedF, listF, debouncedQ, hideNotNow]);
+
+  // ---- ★ + selection ----
+  const shortlistOf = (r: Cv2Row) => r.lists?.find((l) => l.builtin) || null;
+
+  // Toggle Shortlist membership from a row's star (optimistic).
+  async function toggleStar(r: Cv2Row) {
+    if (starBusy) return;
+    const entry = shortlistOf(r);
+    setStarBusy(r.key);
+    const patch = (row: Cv2Row): Cv2Row =>
+      entry
+        ? { ...row, lists: (row.lists || []).filter((l) => !l.builtin) }
+        : {
+            ...row,
+            lists: [
+              ...(row.lists || []),
+              { id: "pending", name: "Shortlist", builtin: true, addedByEmail: "", addedAt: "" },
+            ],
+          };
+    setData((d) => (d ? { ...d, items: d.items.map((x) => (x.key === r.key ? patch(x) : x)) } : d));
+    const res = await fetch(`/api/dashboard/lists/shortlist/members`, {
+      method: entry ? "DELETE" : "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ keys: [r.key] }),
+    }).catch(() => null);
+    setStarBusy(null);
+    if (!res?.ok) {
+      silentRef.current = true;
+      setBump((b) => b + 1);
+    } else {
+      refreshLists();
+    }
+  }
+
+  function toggleSelect(r: Cv2Row) {
+    setSelected((s) => {
+      const next = new Map(s);
+      if (next.has(r.key)) next.delete(r.key);
+      else next.set(r.key, r);
+      return next;
+    });
+  }
+
+  const pageKeys = data?.items.map((r) => r.key) || [];
+  const pageAllSelected = pageKeys.length > 0 && pageKeys.every((k) => selected.has(k));
+  const pageSomeSelected = pageKeys.some((k) => selected.has(k));
+
+  function togglePage() {
+    setSelected((s) => {
+      const next = new Map(s);
+      if (pageAllSelected) for (const k of pageKeys) next.delete(k);
+      else for (const r of data?.items || []) next.set(r.key, r);
+      return next;
+    });
+  }
+
+  async function bulkShortlist() {
+    const keys = [...selected.keys()];
+    if (!keys.length) return;
+    const res = await fetch(`/api/dashboard/lists/shortlist/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ keys }),
+    }).catch(() => null);
+    if (res?.ok) {
+      setFlash(`Added ${keys.length} to ★ Shortlist`);
+      refreshLists();
+      silentRef.current = true;
+      setBump((b) => b + 1);
+    }
+  }
 
   // Copy a candidate's tracked link, minting it on first use. The URL is
   // stable afterwards (one link per person), so CSV and button agree.
@@ -538,50 +643,84 @@ export default function CandidatesTable({
           }
         }
       }
-      const header = [
-        "Name",
-        "Current title",
-        "Company",
-        "Location",
-        "Years of experience",
-        "Email",
-        "Phone",
-        "LinkedIn",
-        "Source",
-        "Fit",
-        "Roles",
-        ...(jobId ? ["Stage"] : []),
-        "Skills",
-        "Visa",
-        "Follow up",
-        ...(pool ? ["Tracking link", "Link opens"] : []),
-        "Added",
-      ];
-      const rows = all.map((r) => [
-        r.name,
-        r.currentTitle,
-        r.currentCompany,
-        r.location,
-        r.yearsExperience,
-        r.contact.email,
-        r.contact.phone,
-        r.linkedinUrl,
-        r.source,
-        r.bestTagLabel,
-        r.roles.map((x) => x.title).join("; "),
-        ...(jobId ? [r.stage || "new"] : []),
-        (r.skills || []).join("; "),
-        r.visa,
-        r.followUpAt,
-        ...(pool
-          ? [r.link ? `${window.location.origin}${r.link.path}` : "", r.link?.openCount ?? ""]
-          : []),
-        r.addedAt.slice(0, 10),
-      ]);
-      const day = new Date().toISOString().slice(0, 10);
-      downloadCsv(jobId ? `applicants-job-${jobId}-${day}.csv` : `candidates-${day}.csv`, header, rows);
+      saveCsvOf(all, jobId ? `applicants-job-${jobId}` : "candidates");
     } catch {
       // No toast system here; the button simply re-enables for a retry.
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function saveCsvOf(all: Cv2Row[], basename: string) {
+    const header = [
+      "Name",
+      "Current title",
+      "Company",
+      "Location",
+      "Years of experience",
+      "Email",
+      "Phone",
+      "LinkedIn",
+      "Source",
+      "Fit",
+      "Roles",
+      ...(jobId ? ["Stage"] : []),
+      "Skills",
+      "Visa",
+      "Lists",
+      "Follow up",
+      ...(pool ? ["Tracking link", "Link opens"] : []),
+      "Added",
+    ];
+    const rows = all.map((r) => [
+      r.name,
+      r.currentTitle,
+      r.currentCompany,
+      r.location,
+      r.yearsExperience,
+      r.contact.email,
+      r.contact.phone,
+      r.linkedinUrl,
+      r.source,
+      r.bestTagLabel,
+      r.roles.map((x) => x.title).join("; "),
+      ...(jobId ? [r.stage || "new"] : []),
+      (r.skills || []).join("; "),
+      r.visa,
+      (r.lists || []).map((l) => l.name).join("; "),
+      r.followUpAt,
+      ...(pool
+        ? [r.link ? `${window.location.origin}${r.link.path}` : "", r.link?.openCount ?? ""]
+        : []),
+      r.addedAt.slice(0, 10),
+    ]);
+    const day = new Date().toISOString().slice(0, 10);
+    downloadCsv(`${basename}-${day}.csv`, header, rows);
+  }
+
+  // Export just the selected rows (snapshots survive paging), minting their
+  // tracked links first in pool view so the merge column is complete.
+  async function exportSelected() {
+    if (exporting || selected.size === 0) return;
+    setExporting(true);
+    try {
+      const rows = [...selected.values()];
+      if (pool) {
+        const res = await fetch("/api/dashboard/tracked-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ keys: rows.map((r) => r.key) }),
+        }).catch(() => null);
+        const json = res?.ok ? await res.json().catch(() => null) : null;
+        if (json?.links) {
+          for (const r of rows) {
+            const l = json.links[r.key];
+            if (l) r.link = { path: l.path, openCount: l.openCount ?? 0, lastOpenedAt: l.lastOpenedAt ?? null };
+          }
+        }
+      }
+      saveCsvOf(rows, "selected-candidates");
+      setFlash(`Downloaded ${rows.length} selected`);
     } finally {
       setExporting(false);
     }
@@ -623,6 +762,7 @@ export default function CandidatesTable({
     skill,
     visa,
     openedF,
+    listF,
     hideNotNow && !past,
   ].filter(Boolean).length;
 
@@ -703,6 +843,13 @@ export default function CandidatesTable({
                       openedF === "1" ? "Opened" : openedF === "0" ? "Not yet" : "Any",
                       () => setMenuPane("opened")
                     )}
+                  {menuRow(
+                    "List",
+                    listF === "none"
+                      ? "Not on any list"
+                      : lists?.find((l) => l.id === listF)?.name || "Any",
+                    () => setMenuPane("listp")
+                  )}
                 </>
               )}
               {menuPane === "stage" && (
@@ -789,6 +936,41 @@ export default function CandidatesTable({
                       setMenuOpen(false);
                     })
                   )}
+                </>
+              )}
+              {menuPane === "listp" && (
+                <>
+                  <div className="head back" role="button" onClick={() => setMenuPane("")}>
+                    ‹ List
+                  </div>
+                  {paneOption("Any", !listF, () => {
+                    setListF("");
+                    setMenuOpen(false);
+                  })}
+                  {(lists || []).map((l) =>
+                    paneOption(
+                      `${l.builtin ? "★ " : ""}${l.name} (${l.count})`,
+                      listF === l.id,
+                      () => {
+                        setListF(l.id);
+                        setMenuOpen(false);
+                      }
+                    )
+                  )}
+                  {paneOption("Not on any list", listF === "none", () => {
+                    setListF("none");
+                    setMenuOpen(false);
+                  })}
+                  <div
+                    className="row"
+                    role="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setModal("manage");
+                    }}
+                  >
+                    Manage lists…
+                  </div>
                 </>
               )}
               {menuPane === "opened" && (
@@ -935,6 +1117,15 @@ export default function CandidatesTable({
               </button>
             </span>
           )}
+          {listF && (
+            <span className="dash-chip">
+              List:{" "}
+              <b>{listF === "none" ? "None" : lists?.find((l) => l.id === listF)?.name || "…"}</b>
+              <button type="button" aria-label="Clear list filter" onClick={() => setListF("")}>
+                ✕
+              </button>
+            </span>
+          )}
           {hideNotNow && !past && (
             <span className="dash-chip">
               “Not now”: <b>Hidden{counts ? ` (${counts.notNow})` : ""}</b>
@@ -955,6 +1146,7 @@ export default function CandidatesTable({
               setSkill("");
               setVisa("");
               setOpenedF("");
+              setListF("");
               setHideNotNow(past ? hideNotNow : false);
             }}
           >
@@ -978,6 +1170,16 @@ export default function CandidatesTable({
           <table className={`cv2-table${loading ? " cv2-loading" : ""}`}>
             <thead>
               <tr>
+                <th className="w-chk">
+                  <button
+                    type="button"
+                    className={`cv2-chk${pageAllSelected ? " on" : pageSomeSelected ? " some" : ""}`}
+                    title={pageAllSelected ? "Deselect this page" : "Select this page"}
+                    aria-label="Select page"
+                    onClick={togglePage}
+                  />
+                </th>
+                <th className="w-starcol" title="Shortlist">★</th>
                 {header("name", "Candidate")}
                 <th className="w-src">Source</th>
                 {header("fit", "Fit", "w-fit")}
@@ -996,9 +1198,36 @@ export default function CandidatesTable({
               {data.items.map((r) => (
                 <tr
                   key={r.key}
-                  className={onOpen ? "cv2-click" : ""}
+                  className={`${onOpen ? "cv2-click" : ""}${selected.has(r.key) ? " cv2-selrow" : ""}`}
                   onClick={() => onOpen?.(r.key)}
                 >
+                  <td className="w-chk" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className={`cv2-chk${selected.has(r.key) ? " on" : ""}`}
+                      aria-label={`Select ${r.name}`}
+                      onClick={() => toggleSelect(r)}
+                    />
+                  </td>
+                  <td className="w-starcol" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className={`cv2-star${shortlistOf(r) ? " on" : ""}`}
+                      disabled={starBusy === r.key}
+                      title={(() => {
+                        const s = shortlistOf(r);
+                        if (!s) return "Add to Shortlist";
+                        const by = s.addedByEmail ? s.addedByEmail.split("@")[0] : "";
+                        return `Shortlisted${by ? ` by ${by}` : ""}${
+                          s.addedAt ? ` · ${fmtDay(s.addedAt)}` : ""
+                        } — click to remove`;
+                      })()}
+                      aria-label="Shortlist"
+                      onClick={() => toggleStar(r)}
+                    >
+                      {shortlistOf(r) ? "★" : "☆"}
+                    </button>
+                  </td>
                   <td>
                     <span className="cv2-cand">
                       <RowAvatar photoUrl={r.photoUrl} name={r.name} />
@@ -1176,6 +1405,74 @@ export default function CandidatesTable({
           never the underlying scorecard. Contact icons copy on click; greyed means nothing on
           file. &ldquo;Via TT&rdquo; marks someone who came through the Transformer Talent network.
         </p>
+      )}
+
+      {selected.size > 0 && (
+        <div className="cv2-bulkbar">
+          <b>
+            {selected.size} selected{flash ? ` · ${flash} ✓` : ""}
+          </b>
+          <span className="sep" aria-hidden>·</span>
+          <button type="button" disabled={exporting} onClick={exportSelected}>
+            {exporting ? "Preparing…" : "⇩ Download CSV"}
+          </button>
+          <button type="button" onClick={() => setModal("list")}>
+            ＋ Add to list
+          </button>
+          <button type="button" onClick={bulkShortlist}>
+            ★ Shortlist
+          </button>
+          <button type="button" className="pri" onClick={() => setModal("job")}>
+            Add to a job →
+          </button>
+          <button
+            type="button"
+            className="bx"
+            aria-label="Clear selection"
+            onClick={() => setSelected(new Map())}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {modal === "list" && lists && (
+        <AddToListModal
+          lists={lists}
+          count={selected.size}
+          keys={[...selected.keys()]}
+          onClose={() => setModal("")}
+          onDone={(name) => {
+            setFlash(`Added ${selected.size} to ${name}`);
+            refreshLists();
+            silentRef.current = true;
+            setBump((b) => b + 1);
+          }}
+        />
+      )}
+      {modal === "job" && (
+        <AddToJobModal
+          jobs={roles}
+          count={selected.size}
+          keys={[...selected.keys()]}
+          onClose={() => setModal("")}
+          onDone={(title) => {
+            setFlash(`Added ${selected.size} to ${title}`);
+            silentRef.current = true;
+            setBump((b) => b + 1);
+          }}
+        />
+      )}
+      {modal === "manage" && lists && (
+        <ManageListsModal
+          lists={lists}
+          onClose={() => setModal("")}
+          onChanged={() => {
+            refreshLists();
+            silentRef.current = true;
+            setBump((b) => b + 1);
+          }}
+        />
       )}
     </div>
   );
