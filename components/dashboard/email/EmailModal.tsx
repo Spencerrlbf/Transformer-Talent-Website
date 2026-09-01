@@ -193,15 +193,16 @@ export default function EmailModal({
   }, [ctx, roleId]);
 
   // Any open floater (Insert {}, Insert job, the link row) dismisses on a
-  // click anywhere else.
+  // press anywhere else. Capture-phase pointerdown: fires before anything
+  // can swallow the event, and covers mouse + touch alike.
   useEffect(() => {
     if (!menu) return;
-    const h = (e: MouseEvent) => {
+    const h = (e: Event) => {
       const t = e.target as HTMLElement | null;
       if (t && !t.closest(".em-menuwrap") && !t.closest(".em-linkwrap")) setMenu("");
     };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("pointerdown", h, true);
+    return () => document.removeEventListener("pointerdown", h, true);
   }, [menu]);
 
   // ---- editor helpers ----
