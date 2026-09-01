@@ -2,6 +2,7 @@
 // routes. Connections, org-shared templates, the compose context (merge
 // values incl. the candidate's tracked link), HTML sanitizing, the per-
 // candidate log, and reply matching for the webhook.
+import { randomUUID } from "crypto";
 import { sbRest, sbInsert } from "./supabase";
 import { ensureLinks } from "./tracked-links";
 
@@ -57,19 +58,20 @@ export async function removeAccount(orgId: string, memberEmail: string): Promise
   return existing.grantId;
 }
 
-export async function accountByGrant(
+/** All seats bound to a grant. Nylas dedupes grants per app+mailbox, so a
+ *  shared inbox connected by several seats (or orgs) yields several rows
+ *  with the same grant_id — the webhook must serve every one of them, and
+ *  disconnect must only revoke the grant once no row references it. */
+export async function accountsByGrant(
   grantId: string
-): Promise<{ orgId: string; memberEmail: string; address: string } | null> {
+): Promise<{ orgId: string; memberEmail: string; address: string }[]> {
   const res = await sbRest(
-    `email_accounts?grant_id=eq.${encodeURIComponent(grantId)}&select=organization_id,member_email,address&limit=1`
+    `email_accounts?grant_id=eq.${encodeURIComponent(grantId)}&select=organization_id,member_email,address&limit=20`
   );
-  if (!res.ok) return null;
-  const [row] = (await res.json()) as {
-    organization_id: string;
-    member_email: string;
-    address: string;
-  }[];
-  return row ? { orgId: row.organization_id, memberEmail: row.member_email, address: row.address } : null;
+  if (!res.ok) return [];
+  return ((await res.json()) as { organization_id: string; member_email: string; address: string }[]).map(
+    (row) => ({ orgId: row.organization_id, memberEmail: row.member_email, address: row.address })
+  );
 }
 
 // ---- templates --------------------------------------------------------
@@ -327,7 +329,9 @@ export async function logEmail(args: {
   threadId?: string;
 }): Promise<boolean> {
   // ignore-duplicates: a webhook echo of a message we logged at send time
-  // hits the (org, message_id) unique index and is dropped.
+  // hits the (org, message_id) unique index and is dropped. The index is
+  // FULL (not partial — PostgREST can't arbitrate on a partial index), so
+  // a missing provider id gets a synthetic unique one.
   const res = await sbRest(`candidate_email_log?on_conflict=organization_id,message_id`, {
     method: "POST",
     prefer: "resolution=ignore-duplicates",
@@ -340,10 +344,11 @@ export async function logEmail(args: {
       subject: args.subject.slice(0, 500),
       snippet: args.snippet,
       body_html: args.bodyHtml ?? null,
-      message_id: args.messageId || "",
+      message_id: args.messageId || `local-${randomUUID()}`,
       thread_id: args.threadId || "",
     }),
   });
+  if (!res.ok) console.error("email log failed", res.status, await res.text().catch(() => ""));
   return res.ok;
 }
 

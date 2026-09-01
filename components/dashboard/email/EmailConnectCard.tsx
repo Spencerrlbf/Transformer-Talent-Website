@@ -12,6 +12,20 @@ export default function EmailConnectCard() {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "ok" | "bad"; text: string } | null>(null);
+
+  // The OAuth callback lands back here with ?email=connected|error — show
+  // the outcome once, then scrub the param.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("email");
+    if (p === "connected") setNotice({ kind: "ok", text: "Email connected — you can now send from candidate profiles." });
+    else if (p === "error") setNotice({ kind: "bad", text: "Connecting your email didn't finish. Try again." });
+    if (p) {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("email");
+      window.history.replaceState({}, "", u.toString());
+    }
+  }, []);
 
   const load = useCallback(() => {
     fetch("/api/dashboard/email/account", { headers: { Authorization: `Bearer ${token}` } })
@@ -25,6 +39,7 @@ export default function EmailConnectCard() {
 
   const connect = async () => {
     setBusy(true);
+    setNotice(null);
     try {
       const r = await fetch("/api/dashboard/email/connect", {
         headers: { Authorization: `Bearer ${token}` },
@@ -37,6 +52,7 @@ export default function EmailConnectCard() {
     } catch {
       /* fall through */
     }
+    setNotice({ kind: "bad", text: "Couldn't start the connect flow. Try again in a moment." });
     setBusy(false);
   };
 
@@ -59,9 +75,8 @@ export default function EmailConnectCard() {
 
   return (
     <div className="em-card">
-      <span className="lbl" style={{ margin: 0 }}>
-        Email sending
-      </span>
+      <span className="lbl">Email sending</span>
+      {notice && <p className={`em-cardnote ${notice.kind}`}>{notice.text}</p>}
       {status.connected ? (
         <div className="em-cardrow">
           <span className="em-cardstat">

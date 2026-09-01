@@ -3886,3 +3886,13 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .em-cardrow { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
 .em-cardstat { flex: 1; min-width: 260px; font-size: 13px; line-height: 1.55; color: var(--body); }
 .em-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); margin-right: 4px; }
+
+/* Spacing modifiers for the shared modal labels (no inline styles). */
+.em-tkm .em-lblfirst { margin-top: 6px; }
+.em-tkm .em-lbl0, .emt-editbox .em-lbl0 { margin-top: 0; }
+.em-fine.em-m0 { margin: 0; }
+.emt-editbox .tkm-foot { margin-top: 12px; }
+.em-card .lbl { margin: 0; }
+.em-cardnote { margin: 8px 0 0; font-size: 12.5px; font-weight: 600; }
+.em-cardnote.ok { color: var(--pos); }
+.em-cardnote.bad { color: var(--bad); }

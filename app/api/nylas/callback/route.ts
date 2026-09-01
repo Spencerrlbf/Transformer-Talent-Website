@@ -8,7 +8,9 @@ import { saveAccount } from "@/lib/server/email-compose";
 // the dashboard.
 export async function GET(req: NextRequest) {
   const origin = requestOrigin(req);
-  const back = (q: string) => NextResponse.redirect(`${origin}/dashboard?${q}`);
+  // Land on the Team page: it hosts the connection card, which reads the
+  // email= param and shows what happened.
+  const back = (q: string) => NextResponse.redirect(`${origin}/dashboard/team?${q}`);
 
   const url = new URL(req.url);
   const code = url.searchParams.get("code") || "";

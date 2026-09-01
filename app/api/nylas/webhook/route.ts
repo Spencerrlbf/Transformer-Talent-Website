@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/server/nylas";
 import {
-  accountByGrant,
+  accountsByGrant,
   htmlToSnippet,
   logEmail,
   matchCandidateByAddress,
@@ -49,31 +49,35 @@ export async function POST(req: NextRequest) {
   const grantId = msg?.grant_id || "";
   if (!msg || !grantId) return NextResponse.json({ ok: true });
 
-  const account = await accountByGrant(grantId);
-  if (!account) return NextResponse.json({ ok: true });
+  // A shared inbox connected by several seats/orgs maps to ONE Nylas grant;
+  // serve every binding — each org matches the sender against its own
+  // candidates, and the (org, message_id) index dedups within an org.
+  const accounts = await accountsByGrant(grantId);
+  if (!accounts.length) return NextResponse.json({ ok: true });
 
   const fromAddr = (msg.from?.[0]?.email || "").trim();
   if (!fromAddr) return NextResponse.json({ ok: true });
   // The account's own outbound messages also sync as message.created; app
   // sends were already logged at send time (and the message_id unique index
   // catches the echo), and out-of-app sends are out of scope for v1.
-  if (fromAddr.toLowerCase() === account.address.trim().toLowerCase()) {
+  if (fromAddr.toLowerCase() === accounts[0].address.trim().toLowerCase()) {
     return NextResponse.json({ ok: true });
   }
 
-  const candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
-  if (!candidateKey) return NextResponse.json({ ok: true });
-
-  await logEmail({
-    orgId: account.orgId,
-    candidateKey,
-    direction: "in",
-    memberEmail: account.memberEmail,
-    address: fromAddr,
-    subject: msg.subject || "",
-    snippet: msg.snippet ? msg.snippet.slice(0, 180) : htmlToSnippet(msg.body || ""),
-    messageId: msg.id || "",
-    threadId: msg.thread_id || "",
-  });
+  for (const account of accounts) {
+    const candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
+    if (!candidateKey) continue;
+    await logEmail({
+      orgId: account.orgId,
+      candidateKey,
+      direction: "in",
+      memberEmail: account.memberEmail,
+      address: fromAddr,
+      subject: msg.subject || "",
+      snippet: msg.snippet ? msg.snippet.slice(0, 180) : htmlToSnippet(msg.body || ""),
+      messageId: msg.id || "",
+      threadId: msg.thread_id || "",
+    });
+  }
   return NextResponse.json({ ok: true });
 }

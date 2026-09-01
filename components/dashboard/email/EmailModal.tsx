@@ -35,15 +35,47 @@ const missPill = (label: string) =>
 
 const shortUrl = (u: string) => u.replace(/^https?:\/\//, "");
 
+// Candidate-facing meta joins on "·" (the copy rules ban em-dashes in
+// anything a candidate reads).
 function jobBlockHtml(j: ComposeJob): string {
   const meta = [j.salary, j.locations.slice(0, 3).join(", "), j.workplace]
     .filter(Boolean)
     .map(esc)
-    .join(" — ");
+    .join(" · ");
   const title = j.url
     ? `<a href="${esc(j.url)}">${esc(j.title)}</a>`
     : esc(j.title);
-  return `<div><b>${title}</b>${meta ? ` — ${meta}` : ""}</div><div><br></div>`;
+  return `<div><b>${title}</b>${meta ? ` · ${meta}` : ""}</div><div><br></div>`;
+}
+
+// Same allowlist as the server's sanitizeEmailHtml, applied to pasted HTML
+// so the preview always matches what actually sends.
+const OK_TAGS = new Set(["b", "strong", "i", "em", "u", "p", "div", "span", "br", "ul", "ol", "li"]);
+
+function sanitizePastedHtml(html: string): string {
+  return html.slice(0, 100_000).replace(/<[^>]*>?/g, (tag) => {
+    if (!tag.endsWith(">")) return "";
+    const m = /^<\s*(\/?)\s*([a-zA-Z0-9]+)/.exec(tag);
+    if (!m) return "";
+    const close = m[1] === "/";
+    const name = m[2].toLowerCase();
+    if (name === "a") {
+      if (close) return "</a>";
+      const href = /href\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+      const url = (href?.[1] ?? href?.[2] ?? "").trim();
+      if (/^(https?:|mailto:)/i.test(url)) return `<a href="${url.replace(/"/g, "&quot;")}">`;
+      return "<a>";
+    }
+    if (OK_TAGS.has(name)) return close ? `</${name}>` : name === "br" ? "<br>" : `<${name}>`;
+    return "";
+  });
+}
+
+function handleEditorPaste(e: React.ClipboardEvent<HTMLDivElement>) {
+  e.preventDefault();
+  const html = e.clipboardData.getData("text/html");
+  if (html) document.execCommand("insertHTML", false, sanitizePastedHtml(html));
+  else document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
 }
 
 // ---------------------------------------------------------------- compose
@@ -76,6 +108,8 @@ export default function EmailModal({
   const [jobQ, setJobQ] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [manage, setManage] = useState(false);
+  const [pendingTpl, setPendingTpl] = useState("");
+  const [gateErr, setGateErr] = useState("");
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const savedRange = useRef<Range | null>(null);
@@ -159,12 +193,16 @@ export default function EmailModal({
 
   const resolveHtml = (tpl: string): string => {
     const vals = mergeValues();
-    return tpl.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, raw: string) => {
-      const f = vals[raw.toLowerCase()];
-      if (!f) return missPill(raw.replace(/_/g, " "));
-      if (!f.value) return missPill(f.label);
-      return f.html || esc(f.value);
-    });
+    return tpl
+      .replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, raw: string) => {
+        const f = vals[raw.toLowerCase()];
+        if (!f) return missPill(raw.replace(/_/g, " "));
+        if (!f.value) return missPill(f.label);
+        return f.html || esc(f.value);
+      })
+      // Malformed tokens ({{first-name}}, {{link 2}}, …) become pills too,
+      // so nothing token-shaped ever survives unhighlighted.
+      .replace(/\{\{[^}]*\}\}/g, (m) => missPill(m.replace(/[{}]/g, "").trim() || "field"));
   };
 
   const resolveSubject = (tpl: string): string => {
@@ -175,11 +213,17 @@ export default function EmailModal({
     });
   };
 
+  // Two-click confirm (the house pattern — no native dialogs): first click
+  // on a chip while a draft exists flips it to "Replace draft?".
   const applyTemplate = (t: Template) => {
     const el = bodyRef.current;
     if (!el) return;
-    if ((el.innerText || "").trim() && !window.confirm("Replace what you've written with this template?")) return;
-    setSubject(resolveSubject(t.subject));
+    if ((el.innerText || "").trim() && pendingTpl !== t.id) {
+      setPendingTpl(t.id);
+      return;
+    }
+    setPendingTpl("");
+    setSubject(resolveSubject(t.subject).slice(0, 300));
     el.innerHTML = resolveHtml(t.bodyHtml);
     refreshFlags();
   };
@@ -225,16 +269,21 @@ export default function EmailModal({
 
   const connect = async () => {
     setConnecting(true);
+    setGateErr("");
     try {
       const r = await fetch("/api/dashboard/email/connect", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const j = (await r.json()) as { url?: string };
-      if (j.url) window.location.href = j.url;
-      else setConnecting(false);
+      if (j.url) {
+        window.location.href = j.url;
+        return;
+      }
     } catch {
-      setConnecting(false);
+      /* fall through */
     }
+    setGateErr("Couldn't start the connect flow. Try again in a moment.");
+    setConnecting(false);
   };
 
   const send = async () => {
@@ -243,6 +292,10 @@ export default function EmailModal({
     setErr("");
     if (subject.includes("{{")) {
       setErr("The subject still has an unfilled field — edit it before sending.");
+      return;
+    }
+    if ((el.innerText || "").includes("{{")) {
+      setErr("There's an unfilled {{…}} placeholder in the message — replace or remove it.");
       return;
     }
     setSending(true);
@@ -262,7 +315,9 @@ export default function EmailModal({
         setReconnect(true);
         setCtx((c) => (c ? { ...c, connected: false } : c));
       } else if (j.error === "unresolved_fields") {
-        setErr("Some fields are still unfilled — fix the highlighted ones first.");
+        setErr("Some fields are still unfilled — replace or remove the {{…}} placeholders and red pills.");
+      } else if (j.error === "bad_subject") {
+        setErr("The subject is too long after filling fields — shorten it (300 characters max).");
       } else if (j.error === "no_candidate_email") {
         setErr(`No email on file for ${first} — add one in the contact section first.`);
       } else {
@@ -292,7 +347,16 @@ export default function EmailModal({
 
   return (
     <>
-      <div className="tkm-back" onClick={onClose}>
+      {/* stopPropagation: from the drawer header this modal sits inside the
+          drawer's own overlay — a backdrop click must not fall through and
+          close the drawer too. */}
+      <div
+        className="tkm-back"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
         <div className="tkm em-tkm" onClick={(e) => e.stopPropagation()}>
           {ctxErr && (
             <>
@@ -318,6 +382,7 @@ export default function EmailModal({
               <button className="em-provbtn" onClick={connect} disabled={connecting}>
                 {connecting ? "OPENING…" : "CONNECT YOUR EMAIL →"}
               </button>
+              {gateErr && <p className="em-warn">{gateErr}</p>}
               <p className="em-fine">
                 Google and Microsoft accounts are supported — you&apos;ll approve access in your
                 provider&apos;s own window, and you can disconnect at any time. Transformer Talent
@@ -338,9 +403,7 @@ export default function EmailModal({
                 From <b>{ctx.address}</b> · sent from your own inbox, logged to the timeline
               </p>
 
-              <span className="lbl" style={{ marginTop: 6 }}>
-                To
-              </span>
+              <span className="lbl em-lblfirst">To</span>
               {ctx.candidate.email ? (
                 <span className="em-pill">
                   {ctx.candidate.name || "Candidate"} <i>&lt;{ctx.candidate.email}&gt;</i>
@@ -351,49 +414,44 @@ export default function EmailModal({
                 </p>
               )}
 
-              {(ctx.templates.length > 0 || true) && (
-                <>
-                  <span className="lbl">
-                    Template
-                    <button className="em-side" onClick={() => setManage(true)}>
-                      Manage templates ›
-                    </button>
-                  </span>
-                  <div className="tk-chips">
-                    {ctx.templates.length === 0 && (
-                      <span className="em-fine" style={{ margin: 0 }}>
-                        None yet — create one via Manage templates.
-                      </span>
-                    )}
-                    {ctx.templates.map((t) => (
-                      <button key={t.id} type="button" onClick={() => applyTemplate(t)}>
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+              <span className="lbl">
+                Template
+                <button className="em-side" onClick={() => setManage(true)}>
+                  Manage templates ›
+                </button>
+              </span>
+              <div className="tk-chips">
+                {ctx.templates.length === 0 && (
+                  <span className="em-fine em-m0">None yet — create one via Manage templates.</span>
+                )}
+                {ctx.templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={pendingTpl === t.id ? "on" : undefined}
+                    onClick={() => applyTemplate(t)}
+                  >
+                    {pendingTpl === t.id ? "Replace draft?" : t.name}
+                  </button>
+                ))}
+              </div>
 
               <div className="cv2n-duo" style={{ gridTemplateColumns: ctx.jobs.length ? "1.6fr 1fr" : "1fr" }}>
                 <label style={{ display: "contents" }}>
                   <span>
-                    <span className="lbl" style={{ marginTop: 0 }}>
-                      Subject
-                    </span>
+                    <span className="lbl em-lbl0">Subject</span>
                     <input
                       className="em-subject"
                       value={subject}
                       maxLength={300}
                       onChange={(e) => setSubject(e.target.value)}
-                      placeholder={`e.g. ${first} — a role that fits your background`}
+                      placeholder={`e.g. A role that fits your background, ${first}`}
                     />
                   </span>
                 </label>
                 {ctx.jobs.length > 0 && (
                   <span>
-                    <span className="lbl" style={{ marginTop: 0 }}>
-                      Merge role
-                    </span>
+                    <span className="lbl em-lbl0">Merge role</span>
                     <select
                       className="em-roleselect"
                       value={roleId}
@@ -538,6 +596,10 @@ export default function EmailModal({
                   contentEditable
                   suppressContentEditableWarning
                   onInput={refreshFlags}
+                  onPaste={(e) => {
+                    handleEditorPaste(e);
+                    refreshFlags();
+                  }}
                 />
               </div>
               {misses > 0 && (
@@ -679,7 +741,13 @@ export function TemplatesModal({
   };
 
   return (
-    <div className="tkm-back" onClick={onClose}>
+    <div
+      className="tkm-back"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
       <div className="tkm em-tkm" onClick={(e) => e.stopPropagation()}>
         <h3>Email templates</h3>
         <p className="tkm-sub">
@@ -777,9 +845,7 @@ function TemplateEditor({
 }) {
   return (
     <div className="emt-editbox">
-      <span className="lbl" style={{ marginTop: 0 }}>
-        Name
-      </span>
+      <span className="lbl em-lbl0">Name</span>
       <input className="em-subject" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
       <span className="lbl">Subject</span>
       <input
@@ -787,7 +853,7 @@ function TemplateEditor({
         value={subject}
         maxLength={300}
         onChange={(e) => setSubject(e.target.value)}
-        placeholder="{{first_name}} — a {{job_title}} role worth a look"
+        placeholder="A {{job_title}} role worth a look, {{first_name}}"
       />
       <span className="lbl">Body</span>
       <div className="em-editor">
@@ -808,16 +874,22 @@ function TemplateEditor({
             </button>
           ))}
         </div>
-        <div className="em-body em-tplbody" ref={bodyRef} contentEditable suppressContentEditableWarning />
+        <div
+          className="em-body em-tplbody"
+          ref={bodyRef}
+          contentEditable
+          suppressContentEditableWarning
+          onPaste={handleEditorPaste}
+        />
       </div>
       {err && <p className="em-warn">{err}</p>}
-      <div className="tkm-foot" style={{ marginTop: 12 }}>
+      <div className="tkm-foot">
         {onDelete && (
           <button className="tkm-del" onClick={onDelete} disabled={busy}>
             {confirmDel ? "Really delete?" : "Delete"}
           </button>
         )}
-        <button className="tkm-cancel" onClick={onCancel} disabled={busy} style={{ marginLeft: onDelete ? 0 : "auto" }}>
+        <button className="tkm-cancel" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
         <button className="tkm-save" onClick={onSave} disabled={busy || !name.trim()}>

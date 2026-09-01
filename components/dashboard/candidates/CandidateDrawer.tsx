@@ -342,6 +342,8 @@ export default function CandidateDrawer({
   const [contactErr, setContactErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  // Bumped on send so an already-open Notes tab remounts and refetches.
+  const [notesBump, setNotesBump] = useState(0);
 
   useEffect(() => {
     setDetail(null);
@@ -546,7 +548,10 @@ export default function CandidateDrawer({
           candKey={candKey}
           candidateName={detail.name}
           onClose={() => setEmailOpen(false)}
-          onSent={() => setTab("notes")}
+          onSent={() => {
+            setTab("notes");
+            setNotesBump((b) => b + 1);
+          }}
         />
       )}
       <aside
@@ -1144,7 +1149,7 @@ export default function CandidateDrawer({
               )}
 
               {tab === "notes" && !isNet && candKey && (
-                <NotesTab candKey={candKey} name={detail.name} />
+                <NotesTab key={notesBump} candKey={candKey} name={detail.name} />
               )}
               {tab === "notes" && isNet && (
                 <div className="cv2d-notes">
