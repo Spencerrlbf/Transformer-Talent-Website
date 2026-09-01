@@ -158,11 +158,20 @@ export async function candidateContact(
   if (!KEY_RE.test(key)) return null;
   const id = key.slice(4);
   if (key.startsWith("app_")) {
+    // Contact edits made in the drawer live on the contact jsonb; the email
+    // column keeps what the candidate originally applied with. The edited
+    // address wins — it's what the drawer shows.
     const res = await sbRest(
-      `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=name,email&limit=1`
+      `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=name,email,contact&limit=1`
     );
-    const [row] = res.ok ? ((await res.json()) as { name: string; email: string | null }[]) : [];
-    return row ? { name: row.name || "", email: row.email || null } : null;
+    const [row] = res.ok
+      ? ((await res.json()) as {
+          name: string;
+          email: string | null;
+          contact: { email?: string | null } | null;
+        }[])
+      : [];
+    return row ? { name: row.name || "", email: row.contact?.email || row.email || null } : null;
   }
   const res = await sbRest(
     `sourced_candidates?id=eq.${id}&organization_id=eq.${orgId}&select=full_name,contact&limit=1`
@@ -362,15 +371,29 @@ export async function matchCandidateByAddress(orgId: string, address: string): P
   // ilike gets case-insensitivity; its two wildcards are escaped, and the
   // result is re-checked in code so no pattern quirk can widen the match.
   const pat = encodeURIComponent(addr.replace(/([%_\\])/g, "\\$1"));
+  // Applications match on the original email OR the drawer-edited contact
+  // email — a reply from either must land in the timeline.
   const [apps, srcs] = await Promise.all([
-    sbRest(`website_applications?organization_id=eq.${orgId}&email=ilike.${pat}&select=id,email&limit=1`),
+    sbRest(
+      `website_applications?organization_id=eq.${orgId}&or=(email.ilike.${pat},contact->>email.ilike.${pat})&select=id,email,contact&limit=1`
+    ),
     sbRest(
       `sourced_candidates?organization_id=eq.${orgId}&contact->>email=ilike.${pat}&select=id,contact&limit=1`
     ),
   ]);
   if (apps.ok) {
-    const [row] = (await apps.json()) as { id: string; email: string | null }[];
-    if (row && (row.email || "").trim().toLowerCase() === addr) return `app_${row.id}`;
+    const [row] = (await apps.json()) as {
+      id: string;
+      email: string | null;
+      contact: { email?: string | null } | null;
+    }[];
+    if (
+      row &&
+      ((row.email || "").trim().toLowerCase() === addr ||
+        (row.contact?.email || "").trim().toLowerCase() === addr)
+    ) {
+      return `app_${row.id}`;
+    }
   }
   if (srcs.ok) {
     const [row] = (await srcs.json()) as { id: string; contact: { email?: string | null } | null }[];

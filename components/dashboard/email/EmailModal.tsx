@@ -30,8 +30,11 @@ type Ctx = {
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const missPill = (label: string) =>
-  `<span class="em-miss" contenteditable="false">${esc(label)}</span>`;
+// Pills and merged role values carry data-mf so a Merge-role change can
+// re-resolve them in place (the server sanitizer strips the attribute, so
+// nothing leaks into the sent email).
+const missPill = (label: string, mf?: string) =>
+  `<span class="em-miss"${mf ? ` data-mf="${mf}"` : ""} contenteditable="false">${esc(label)}</span>`;
 
 const shortUrl = (u: string) => u.replace(/^https?:\/\//, "");
 
@@ -104,7 +107,7 @@ export default function EmailModal({
   const [err, setErr] = useState("");
   const [connecting, setConnecting] = useState(false);
 
-  const [menu, setMenu] = useState<"" | "fields" | "job" | "link">("");
+  const [menu, setMenu] = useState<"" | "fields" | "job" | "link" | "joblink">("");
   const [jobQ, setJobQ] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [manage, setManage] = useState(false);
@@ -113,6 +116,7 @@ export default function EmailModal({
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const savedRange = useRef<Range | null>(null);
+  const prevRole = useRef<{ title: string; company: string } | null>(null);
   const first = candidateName.split(/\s+/)[0] || candidateName;
 
   const loadCtx = useCallback(() => {
@@ -149,6 +153,56 @@ export default function EmailModal({
     document.addEventListener("keydown", h, true);
     return () => document.removeEventListener("keydown", h, true);
   }, [onClose, menu, manage]);
+
+  // Changing the Role-for-fields select re-resolves everything that was
+  // merged from the old role: data-mf spans in the body swap value<->pill,
+  // and the subject swaps the old role's strings for the new one's.
+  useEffect(() => {
+    if (!ctx) return;
+    const role = ctx.jobs.find((j) => j.id === roleId);
+    const next = { title: role?.title || "", company: role?.company || "" };
+    const prev = prevRole.current;
+    prevRole.current = next;
+    if (!prev || (prev.title === next.title && prev.company === next.company)) return;
+
+    const el = bodyRef.current;
+    if (el) {
+      el.querySelectorAll<HTMLElement>("[data-mf]").forEach((span) => {
+        const key = span.getAttribute("data-mf");
+        if (key !== "job_title" && key !== "company") return;
+        const val = key === "job_title" ? next.title : next.company;
+        if (val) {
+          span.textContent = val;
+          span.className = "";
+          span.removeAttribute("contenteditable");
+        } else {
+          span.textContent = key === "job_title" ? "role title" : "company";
+          span.className = "em-miss";
+          span.setAttribute("contenteditable", "false");
+        }
+      });
+      setMisses(el.querySelectorAll(".em-miss").length);
+      setHasBody((el.innerText || "").trim().length > 0);
+    }
+    setSubject((s) => {
+      let out = s;
+      if (prev.title && next.title) out = out.split(prev.title).join(next.title);
+      if (prev.company && next.company) out = out.split(prev.company).join(next.company);
+      return out.slice(0, 300);
+    });
+  }, [ctx, roleId]);
+
+  // Any open floater (Insert {}, Insert job, the link row) dismisses on a
+  // click anywhere else.
+  useEffect(() => {
+    if (!menu) return;
+    const h = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && !t.closest(".em-menuwrap") && !t.closest(".em-linkwrap")) setMenu("");
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [menu]);
 
   // ---- editor helpers ----
 
@@ -191,14 +245,22 @@ export default function EmailModal({
     };
   }, [ctx, roleId, first, candidateName]);
 
+  // Role-dependent fields render as data-mf spans (value or pill) so they
+  // stay live-bound to the Role-for-fields select.
+  const fieldHtml = (key: string, f: { value: string; label: string; html?: string }): string => {
+    const isRole = key === "job_title" || key === "company";
+    if (!f.value) return missPill(f.label, isRole ? key : undefined);
+    if (isRole) return `<span data-mf="${key}">${esc(f.value)}</span>`;
+    return f.html || esc(f.value);
+  };
+
   const resolveHtml = (tpl: string): string => {
     const vals = mergeValues();
     return tpl
-      .replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, raw: string) => {
+      .replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_m, raw: string) => {
         const f = vals[raw.toLowerCase()];
         if (!f) return missPill(raw.replace(/_/g, " "));
-        if (!f.value) return missPill(f.label);
-        return f.html || esc(f.value);
+        return fieldHtml(raw.toLowerCase(), f);
       })
       // Malformed tokens ({{first-name}}, {{link 2}}, …) become pills too,
       // so nothing token-shaped ever survives unhighlighted.
@@ -233,7 +295,7 @@ export default function EmailModal({
     const f = vals[key];
     if (!f) return;
     setMenu("");
-    insertHtml(f.value ? f.html || esc(f.value) : missPill(f.label));
+    insertHtml(fieldHtml(key, f));
   };
 
   const openLink = () => {
@@ -246,8 +308,10 @@ export default function EmailModal({
     setMenu(menu === "link" ? "" : "link");
   };
 
-  const applyLink = () => {
-    let url = linkUrl.trim();
+  /** Link the saved selection to a URL (typed, a job's JD, or the tracked
+   *  link); with no selection, insert linked text instead. */
+  const applyLink = (urlArg?: string, label?: string) => {
+    let url = (urlArg ?? linkUrl).trim();
     if (!url) return;
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
     focusBody();
@@ -259,7 +323,11 @@ export default function EmailModal({
     if (sel && !sel.isCollapsed) {
       document.execCommand("createLink", false, url);
     } else {
-      document.execCommand("insertHTML", false, `<a href="${esc(url)}">${esc(shortUrl(url))}</a>`);
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<a href="${esc(url)}">${esc(label || shortUrl(url))}</a>`
+      );
     }
     setMenu("");
     refreshFlags();
@@ -451,7 +519,7 @@ export default function EmailModal({
                 </label>
                 {ctx.jobs.length > 0 && (
                   <span>
-                    <span className="lbl em-lbl0">Merge role</span>
+                    <span className="lbl em-lbl0">Role for fields</span>
                     <select
                       className="em-roleselect"
                       value={roleId}
@@ -571,23 +639,72 @@ export default function EmailModal({
                     )}
                   </div>
                 </div>
-                {menu === "link" && (
-                  <div className="em-linkrow">
-                    <input
-                      placeholder="https://…"
-                      value={linkUrl}
-                      autoFocus
-                      onChange={(e) => setLinkUrl(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          applyLink();
-                        }
-                      }}
-                    />
-                    <button type="button" className="tk-doneb" onClick={applyLink}>
-                      Add link
-                    </button>
+                {(menu === "link" || menu === "joblink") && (
+                  <div className="em-linkwrap">
+                    <div className="em-linkrow">
+                      <input
+                        placeholder="https://…"
+                        value={linkUrl}
+                        autoFocus={menu === "link"}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            applyLink();
+                          }
+                        }}
+                      />
+                      <button type="button" className="tk-doneb" onClick={() => applyLink()}>
+                        Add link
+                      </button>
+                      {ctx.jobs.length > 0 && (
+                        <button
+                          type="button"
+                          className="tk-doneb"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setJobQ("");
+                            setMenu(menu === "joblink" ? "link" : "joblink");
+                          }}
+                        >
+                          Job link…
+                        </button>
+                      )}
+                      {ctx.trackedLink && (
+                        <button
+                          type="button"
+                          className="tk-doneb"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyLink(ctx.trackedLink)}
+                        >
+                          Tracked link
+                        </button>
+                      )}
+                    </div>
+                    {menu === "joblink" && (
+                      <div className="em-menu em-jobmenu">
+                        <input
+                          className="em-jobsearch"
+                          placeholder="Link to which job…"
+                          value={jobQ}
+                          autoFocus
+                          onChange={(e) => setJobQ(e.target.value)}
+                        />
+                        <div className="em-jobscroll">
+                          {filteredJobs
+                            .filter((j) => j.url)
+                            .map((j) => (
+                              <button key={j.id} type="button" onClick={() => applyLink(j.url, j.title)}>
+                                {j.title}
+                                <small>
+                                  {[j.company, j.salary, j.workplace].filter(Boolean).join(" · ")}
+                                </small>
+                              </button>
+                            ))}
+                          {!filteredJobs.filter((j) => j.url).length && <p className="em-fine">No matches.</p>}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div
@@ -853,7 +970,7 @@ function TemplateEditor({
         value={subject}
         maxLength={300}
         onChange={(e) => setSubject(e.target.value)}
-        placeholder="A {{job_title}} role worth a look, {{first_name}}"
+        placeholder="{{job_title}} role worth a look, {{first_name}}"
       />
       <span className="lbl">Body</span>
       <div className="em-editor">

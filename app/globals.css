@@ -3896,3 +3896,7 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .em-cardnote { margin: 8px 0 0; font-size: 12.5px; font-weight: 600; }
 .em-cardnote.ok { color: var(--pos); }
 .em-cardnote.bad { color: var(--bad); }
+
+/* Link row job-picker + linkwrap anchor */
+.em-linkwrap { position: relative; }
+.em-linkwrap .em-menu { top: 100%; left: 8px; right: auto; }
