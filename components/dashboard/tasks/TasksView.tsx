@@ -1,11 +1,13 @@
 "use client";
 // The Tasks page: open tasks grouped by due day (overdue first), a Done view,
 // and candidate-requested follow-ups folded in as "Candidate request" rows.
-// Clicking a due date reschedules a task in place; a request's date belongs
-// to the candidate's ask, so its chip opens the drawer instead.
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+// Clicking a task row (or its Edit button) opens the shared TaskModal —
+// retitle, retype, reschedule, delete. A request's date belongs to the
+// candidate's ask, so its row opens the drawer instead.
+import { useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import KindIcon from "@/components/dashboard/tasks/KindIcon";
+import TaskModal, { type TaskModalTarget } from "@/components/dashboard/tasks/TaskModal";
 
 type TaskRow = {
   id: string;
@@ -42,11 +44,6 @@ const addDays = (iso: string, n: number) => {
   d.setDate(d.getDate() + n);
   return localDay(d);
 };
-const addMonths = (iso: string, n: number) => {
-  const d = new Date(iso + "T12:00:00");
-  d.setMonth(d.getMonth() + n);
-  return localDay(d);
-};
 const fmtDay = (iso: string) => {
   const d = new Date(iso + "T12:00:00");
   const sameYear = d.getFullYear() === new Date().getFullYear();
@@ -77,8 +74,7 @@ export default function TasksView({
   const [error, setError] = useState(false);
   const [seg, setSeg] = useState<Seg>("today");
   const [busy, setBusy] = useState<string | null>(null);
-  const [pop, setPop] = useState<string | null>(null); // task id with popover open
-  const popRef = useRef<HTMLDivElement | null>(null);
+  const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
 
   const load = useCallback(() => {
     fetch("/api/dashboard/tasks", { headers: { Authorization: `Bearer ${token}` } })
@@ -94,23 +90,6 @@ export default function TasksView({
   }, [token]);
 
   useEffect(load, [load, reloadNonce]);
-
-  // Close the reschedule popover on outside click / Escape.
-  useEffect(() => {
-    if (!pop) return;
-    const onDown = (e: MouseEvent) => {
-      if (popRef.current && !popRef.current.contains(e.target as Node)) setPop(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPop(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [pop]);
 
   const today = localDay(new Date());
   // "This week" = the next 7 days inclusive, so a "1 week" quick-select task
@@ -174,9 +153,30 @@ export default function TasksView({
     }
   }
 
+  function openEntry(e: Entry) {
+    if (e.isRequest) {
+      // Their ask is edited in the drawer's panel.
+      onOpenCandidate(e.candidateKey!);
+      return;
+    }
+    const t = data?.tasks.find((x) => x.id === e.id);
+    if (t) {
+      setTaskModal({
+        mode: "edit",
+        task: {
+          id: t.id,
+          kind: t.kind,
+          title: t.title,
+          dueDate: t.dueDate,
+          dueTime: t.dueTime,
+          candidateName: t.candidateName,
+        },
+      });
+    }
+  }
+
   async function completeTask(t: Entry) {
     setBusy(t.id);
-    setPop(null);
     const res = t.isRequest
       ? await fetch(`/api/dashboard/candidates/v2/${t.candidateKey}/followup`, {
           method: "POST",
@@ -194,10 +194,8 @@ export default function TasksView({
         tasks: data.tasks.filter((x) => x.id !== t.id),
         requests: data.requests.filter((r) => `req_${r.candidateKey}` !== t.id),
       });
-      load();
-    } else {
-      load();
     }
+    load();
   }
 
   async function reopenTask(id: string) {
@@ -210,8 +208,6 @@ export default function TasksView({
     setBusy(null);
     load();
   }
-
-  const task = (id: string) => data?.tasks.find((t) => t.id === id) || null;
 
   return (
     <>
@@ -246,9 +242,7 @@ export default function TasksView({
 
       {data && seg !== "done" && overdue.length > 0 && (
         <div className="tk-strip">
-          <b>
-            {overdue.length} overdue
-          </b>
+          <b>{overdue.length} overdue</b>
           <span>oldest from {fmtDay(overdue.map((e) => e.dueDate).sort()[0])}</span>
         </div>
       )}
@@ -272,12 +266,20 @@ export default function TasksView({
             </div>
             <div className="tk-rows">
               {g.items.map((e) => (
-                <div className="tk-row" key={e.id}>
+                <div
+                  className="tk-row tk-click"
+                  key={e.id}
+                  role="button"
+                  onClick={() => openEntry(e)}
+                >
                   <button
                     className="tk-tick"
                     title={e.isRequest ? "Mark contacted" : "Mark done"}
                     disabled={busy === e.id}
-                    onClick={() => completeTask(e)}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      completeTask(e);
+                    }}
                     aria-label="Mark done"
                   />
                   <span className="tk-title">
@@ -287,40 +289,39 @@ export default function TasksView({
                     {e.title}
                   </span>
                   {e.candidateKey && (
-                    <button className="tk-cand" onClick={() => onOpenCandidate(e.candidateKey!)}>
+                    <button
+                      className="tk-cand"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onOpenCandidate(e.candidateKey!);
+                      }}
+                    >
                       <span className="av">{initials(e.candidateName)}</span>
                       {e.candidateName}
                     </button>
                   )}
                   {e.isRequest && <span className="tk-src">Candidate request</span>}
-                  <span className={`tk-duewrap${pop === e.id ? " open" : ""}`}>
-                    <button
-                      className={`tk-due${g.overdue ? " bad" : ""}`}
-                      title={e.isRequest ? "Edit the ask in the drawer" : "Reschedule"}
-                      onClick={() =>
-                        e.isRequest ? onOpenCandidate(e.candidateKey!) : setPop(pop === e.id ? null : e.id)
-                      }
-                    >
-                      {e.dueDate === today ? "Today" : fmtDay(e.dueDate)}
-                      {e.dueTime ? ` · ${e.dueTime}` : ""}
-                    </button>
-                    {pop === e.id && !e.isRequest && (
-                      <ReschedulePop
-                        ref={popRef}
-                        task={task(e.id)!}
-                        token={token}
-                        today={today}
-                        onDone={() => {
-                          setPop(null);
-                          load();
-                        }}
-                      />
-                    )}
+                  <span className={`tk-due${g.overdue ? " bad" : ""}`}>
+                    {e.dueDate === today ? "Today" : fmtDay(e.dueDate)}
+                    {e.dueTime ? ` · ${e.dueTime}` : ""}
                   </span>
+                  <button
+                    className="tk-doneb tk-editb"
+                    title={e.isRequest ? "Edit their ask in the drawer" : "Edit, reschedule, or delete"}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      openEntry(e);
+                    }}
+                  >
+                    Edit
+                  </button>
                   <button
                     className="tk-doneb"
                     disabled={busy === e.id}
-                    onClick={() => completeTask(e)}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      completeTask(e);
+                    }}
                   >
                     {busy === e.id ? "…" : "Done"}
                   </button>
@@ -363,78 +364,10 @@ export default function TasksView({
           )}
         </div>
       )}
+
+      {taskModal && (
+        <TaskModal target={taskModal} onClose={() => setTaskModal(null)} onChanged={load} />
+      )}
     </>
   );
 }
-
-const ReschedulePop = forwardRef<
-  HTMLDivElement,
-  { task: TaskRow; token: string; today: string; onDone: () => void }
->(function ReschedulePop({ task, token, today, onDone }, ref) {
-  const [date, setDate] = useState(task.dueDate);
-  const [time, setTime] = useState(task.dueTime || "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function save(dateOverride?: string) {
-    const d = dateOverride ?? date;
-    setSaving(true);
-    setErr("");
-    const res = await fetch(`/api/dashboard/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ dueDate: d, dueTime: time || null }),
-    }).catch(() => null);
-    setSaving(false);
-    if (res?.ok) onDone();
-    else setErr("Couldn't save. Try again.");
-  }
-
-  async function remove() {
-    setSaving(true);
-    const res = await fetch(`/api/dashboard/tasks/${task.id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => null);
-    setSaving(false);
-    if (res?.ok) onDone();
-    else setErr("Couldn't delete. Try again.");
-  }
-
-  const quick: [string, string][] = [
-    ["Today", today],
-    ["Tomorrow", addDays(today, 1)],
-    ["+1 week", addDays(today, 7)],
-    ["+1 month", addMonths(today, 1)],
-  ];
-
-  return (
-    <div className="tk-pop" ref={ref}>
-      <div className="lbl">Reschedule</div>
-      <div className="tk-chips">
-        {quick.map(([label, d]) => (
-          <button key={label} className={d === date ? "on" : ""} disabled={saving} onClick={() => save(d)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="tk-duo">
-        <label>
-          <span className="lbl">Due date</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label>
-          <span className="lbl">Time</span>
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-        </label>
-      </div>
-      {err && <p className="cv2d-err">{err}</p>}
-      <button className="tk-save" disabled={saving} onClick={() => save()}>
-        {saving ? "Saving…" : "SAVE"}
-      </button>
-      <button className="tk-del" disabled={saving} onClick={remove}>
-        Delete task
-      </button>
-    </div>
-  );
-});

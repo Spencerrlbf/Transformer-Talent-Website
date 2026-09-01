@@ -40,6 +40,8 @@ export type NoteRow = {
   body: string;
   authorEmail: string;
   createdAt: string;
+  /** Set when the note was edited after creation. */
+  updatedAt: string | null;
 };
 
 type DbTask = {
@@ -203,13 +205,7 @@ export async function addNote(args: {
   const body = args.body.trim().slice(0, 4000);
   if (!body) return { error: "Write the note first." };
   if (!(await candidateInOrg(args.orgId, args.candidateKey))) return { error: "not_found" };
-  const row = await sbInsert<{
-    id: string;
-    kind: NoteKind;
-    body: string;
-    author_email: string;
-    created_at: string;
-  }>(
+  const row = await sbInsert<DbNote>(
     "candidate_notes",
     {
       organization_id: args.orgId,
@@ -221,9 +217,65 @@ export async function addNote(args: {
     },
     true
   ).catch(() => null);
-  return row
-    ? { id: row.id, kind: row.kind, body: row.body, authorEmail: row.author_email, createdAt: row.created_at }
-    : { error: "Could not save the note. Please try again." };
+  return row ? shapeNote(row) : { error: "Could not save the note. Please try again." };
+}
+
+type DbNote = {
+  id: string;
+  kind: NoteKind;
+  body: string;
+  author_email: string;
+  created_at: string;
+  updated_at: string | null;
+};
+
+const NOTE_COLS = "id,kind,body,author_email,created_at,updated_at";
+
+const shapeNote = (n: DbNote): NoteRow => ({
+  id: n.id,
+  kind: n.kind,
+  body: n.body,
+  authorEmail: n.author_email,
+  createdAt: n.created_at,
+  updatedAt: n.updated_at,
+});
+
+/** Edit a note — only its author's (the where clause enforces it). */
+export async function updateNote(
+  orgId: string,
+  id: string,
+  authorEmail: string,
+  patch: { kind?: string; body?: string }
+): Promise<NoteRow | { error: string }> {
+  const body: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.kind !== undefined) {
+    if (!(NOTE_KINDS as readonly string[]).includes(patch.kind)) return { error: "bad_kind" };
+    body.kind = patch.kind;
+  }
+  if (patch.body !== undefined) {
+    const b = patch.body.trim().slice(0, 4000);
+    if (!b) return { error: "Write the note first." };
+    body.body = b;
+  }
+  const res = await sbRest(
+    `candidate_notes?id=eq.${id}&organization_id=eq.${orgId}` +
+      `&author_email=eq.${encodeURIComponent(authorEmail)}&select=${NOTE_COLS}`,
+    { method: "PATCH", body: JSON.stringify(body), prefer: "return=representation" }
+  );
+  if (!res.ok) return { error: "Could not save. Please try again." };
+  const [row] = (await res.json()) as DbNote[];
+  return row ? shapeNote(row) : { error: "not_found" };
+}
+
+/** Delete a note — only its author's. */
+export async function deleteNote(orgId: string, id: string, authorEmail: string): Promise<boolean> {
+  const res = await sbRest(
+    `candidate_notes?id=eq.${id}&organization_id=eq.${orgId}` +
+      `&author_email=eq.${encodeURIComponent(authorEmail)}`,
+    { method: "DELETE", prefer: "return=representation" }
+  );
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0;
 }
 
 /** Everything the drawer's timeline needs for one candidate, newest first
@@ -237,28 +289,14 @@ export async function candidateTimeline(
   const [notesRes, tasksRes] = await Promise.all([
     sbRest(
       `candidate_notes?organization_id=eq.${orgId}&candidate_key=eq.${key}` +
-        `&select=id,kind,body,author_email,created_at&order=created_at.desc&limit=200`
+        `&select=${NOTE_COLS}&order=created_at.desc&limit=200`
     ),
     sbRest(
       `tasks?organization_id=eq.${orgId}&candidate_key=eq.${key}` +
         `&select=${TASK_COLS}&order=created_at.desc&limit=100`
     ),
   ]);
-  const notes = notesRes.ok
-    ? ((await notesRes.json()) as {
-        id: string;
-        kind: NoteKind;
-        body: string;
-        author_email: string;
-        created_at: string;
-      }[]).map((n) => ({
-        id: n.id,
-        kind: n.kind,
-        body: n.body,
-        authorEmail: n.author_email,
-        createdAt: n.created_at,
-      }))
-    : [];
+  const notes = notesRes.ok ? ((await notesRes.json()) as DbNote[]).map(shapeNote) : [];
   const tasks = tasksRes.ok ? ((await tasksRes.json()) as DbTask[]).map(shapeTask) : [];
   let ask: { at: string; askedAt: string | null } | null = null;
   if (key.startsWith("app_")) {
