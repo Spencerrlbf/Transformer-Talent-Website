@@ -315,7 +315,7 @@ export default function CandidatesTable({
   const [bump, setBump] = useState(0); // refetch trigger (stage → rejected)
   const [savingStage, setSavingStage] = useState<string | null>(null);
 
-  const [roles, setRoles] = useState<[string, string][]>([]);
+  const [roles, setRoles] = useState<[string, string, string][]>([]);
 
   // One Filters control (§2.3): button opens a grouped menu; a live row opens
   // its option pane; active filters render as chips below the row.
@@ -346,8 +346,8 @@ export default function CandidatesTable({
   useEffect(() => {
     fetch("/api/dashboard/jobs", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { jobs?: { id: string; title: string }[] } | null) => {
-        setRoles((j?.jobs || []).map((r) => [r.id, r.title]));
+      .then((j: { jobs?: { id: string; title: string; company?: string }[] } | null) => {
+        setRoles((j?.jobs || []).map((r) => [r.id, r.title, r.company || ""]));
       })
       .catch(() => {});
   }, [token, jobId]);

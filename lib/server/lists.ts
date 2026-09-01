@@ -230,35 +230,45 @@ export async function membershipByKey(orgId: string): Promise<Map<string, RowLis
 
 // ---- manual role attachments ("Add to a job") ----
 
-/** Attach candidates to an org role; idempotent. Returns attached count. */
+/** Attach candidates to one or more org roles in one go; idempotent per
+ *  (candidate, job). Returns how many jobs and candidates were involved. */
 export async function addAttachments(
   orgId: string,
-  jobId: string,
+  jobIds: string[],
   keys: string[],
   user: { id: string; email: string }
-): Promise<{ ok: boolean; count: number; error?: string }> {
-  if (!/^[\w-]{1,40}$/.test(jobId)) return { ok: false, count: 0, error: "bad_job" };
+): Promise<{ ok: boolean; jobs: number; count: number; error?: string }> {
+  const wanted = [...new Set(jobIds.filter((j) => /^[\w-]{1,40}$/.test(j)))].slice(0, 50);
+  if (!wanted.length) return { ok: false, jobs: 0, count: 0, error: "bad_job" };
   const jobRes = await sbRest(
-    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=external_id&limit=1`
+    `org_roles?organization_id=eq.${orgId}&external_id=in.(${wanted
+      .map((j) => `"${j}"`)
+      .join(",")})&select=external_id`
   );
-  const [job] = jobRes.ok ? ((await jobRes.json()) as { external_id: string }[]) : [];
-  if (!job) return { ok: false, count: 0, error: "not_found" };
+  const found = jobRes.ok
+    ? ((await jobRes.json()) as { external_id: string }[]).map((r) => r.external_id)
+    : [];
+  if (!found.length) return { ok: false, jobs: 0, count: 0, error: "not_found" };
   const valid = await keysInOrg(orgId, keys);
-  if (!valid.length) return { ok: false, count: 0, error: "no_candidates" };
+  if (!valid.length) return { ok: false, jobs: 0, count: 0, error: "no_candidates" };
   const res = await sbRest(`role_attachments?on_conflict=organization_id,candidate_key,job_id`, {
     method: "POST",
     body: JSON.stringify(
-      valid.map((k) => ({
-        organization_id: orgId,
-        candidate_key: k,
-        job_id: jobId,
-        added_by: user.id,
-        added_by_email: user.email,
-      }))
+      found.flatMap((jobId) =>
+        valid.map((k) => ({
+          organization_id: orgId,
+          candidate_key: k,
+          job_id: jobId,
+          added_by: user.id,
+          added_by_email: user.email,
+        }))
+      )
     ),
     prefer: "resolution=ignore-duplicates,return=minimal",
   });
-  return res.ok ? { ok: true, count: valid.length } : { ok: false, count: 0, error: "save_failed" };
+  return res.ok
+    ? { ok: true, jobs: found.length, count: valid.length }
+    : { ok: false, jobs: 0, count: 0, error: "save_failed" };
 }
 
 /** All manual attachments in the org, keyed by candidate. */

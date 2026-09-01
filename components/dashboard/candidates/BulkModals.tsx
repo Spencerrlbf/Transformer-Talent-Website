@@ -157,30 +157,57 @@ export function AddToJobModal({
   onClose,
   onDone,
 }: {
-  jobs: [string, string][];
+  /** [externalId, title, company] */
+  jobs: [string, string, string][];
   count: number;
   keys: string[];
   onClose: () => void;
-  onDone: (jobTitle: string) => void;
+  onDone: (label: string) => void;
 }) {
   const { token } = useDash();
-  const [picked, setPicked] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   useEscape(onClose);
 
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? jobs.filter(
+        ([id, title, company]) =>
+          title.toLowerCase().includes(needle) ||
+          `#${id}`.includes(needle) ||
+          id.toLowerCase() === needle ||
+          (company || "").toLowerCase().includes(needle)
+      )
+    : jobs;
+
+  function toggle(id: string) {
+    setPicked((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function save() {
-    if (saving || !picked) return;
+    if (saving || picked.size === 0) return;
     setSaving(true);
     setErr("");
+    const ids = [...picked];
     const res = await fetch("/api/dashboard/attachments", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ jobId: picked, keys }),
+      body: JSON.stringify({ jobIds: ids, keys }),
     }).catch(() => null);
     setSaving(false);
     if (res?.ok) {
-      onDone(jobs.find(([id]) => id === picked)?.[1] || "the job");
+      const label =
+        ids.length === 1
+          ? jobs.find(([id]) => id === ids[0])?.[1] || "the job"
+          : `${ids.length} jobs`;
+      onDone(label);
       onClose();
     } else {
       setErr("Couldn't add them. Try again.");
@@ -191,29 +218,44 @@ export function AddToJobModal({
     <div className="tkm-back" onClick={onClose}>
       <div className="tkm" onClick={(e) => e.stopPropagation()}>
         <h3>
-          Add {count} candidate{count === 1 ? "" : "s"} to a job
+          Add {count} candidate{count === 1 ? "" : "s"} to jobs
         </h3>
         <p className="tkm-sub">
-          They join the job&apos;s pipeline at stage <b>New</b>, marked as added by your team. No AI
-          verdict is invented for manual adds.
+          Pick as many roles as you need. They join each job&apos;s pipeline at stage <b>New</b>,
+          marked as added by your team — no AI verdict is invented for manual adds.
         </p>
 
+        <input
+          className="blk-search"
+          placeholder="Search roles by title, #id, or company…"
+          value={q}
+          autoFocus
+          onChange={(e) => setQ(e.target.value)}
+        />
+
         <div className="blk-scroll">
-          {jobs.map(([id, title]) => (
+          {shown.map(([id, title, company]) => (
             <div
               key={id}
-              className={`blk-row${picked === id ? " on" : ""}`}
+              className={`blk-row${picked.has(id) ? " on" : ""}`}
               role="button"
-              onClick={() => setPicked(id)}
+              onClick={() => toggle(id)}
             >
-              <span className="blk-radio" />
+              <span className={`blk-check${picked.has(id) ? " on" : ""}`} />
               <span className="t">
                 <b>{title}</b>
-                <span>#{id}</span>
+                <span>
+                  #{id}
+                  {company ? ` · ${company}` : ""}
+                </span>
               </span>
             </div>
           ))}
-          {jobs.length === 0 && <p className="cv2n-empty">No open jobs yet.</p>}
+          {shown.length === 0 && (
+            <p className="cv2n-empty">
+              {jobs.length === 0 ? "No open jobs yet." : "No roles match that search."}
+            </p>
+          )}
         </div>
 
         {err && <p className="cv2d-err">{err}</p>}
@@ -221,8 +263,12 @@ export function AddToJobModal({
           <button className="tkm-cancel" disabled={saving} onClick={onClose}>
             Cancel
           </button>
-          <button className="tkm-save" disabled={saving || !picked} onClick={save}>
-            {saving ? "ADDING…" : "ADD TO JOB →"}
+          <button className="tkm-save" disabled={saving || picked.size === 0} onClick={save}>
+            {saving
+              ? "ADDING…"
+              : picked.size <= 1
+                ? "ADD TO JOB →"
+                : `ADD TO ${picked.size} JOBS →`}
           </button>
         </div>
       </div>

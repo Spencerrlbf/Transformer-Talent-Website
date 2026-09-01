@@ -3750,3 +3750,20 @@ tr.cv2-selrow td { background: var(--accent-tint); }
   border: 0; cursor: pointer; padding: 4px 6px; white-space: nowrap;
 }
 .blk-del.sure { text-decoration: underline; }
+
+/* add-to-job modal: search + checkboxes */
+.blk-search {
+  width: 100%; border: 1px solid var(--control-line); background: var(--paper);
+  border-radius: var(--r-control); padding: 9px 12px; font: inherit; font-size: 13.5px;
+  color: var(--ink); margin-bottom: 4px;
+}
+.blk-search:focus { outline: none; border-color: rgba(91,75,255,.55); }
+.blk-check {
+  width: 16px; height: 16px; border: 1.5px solid var(--control-line); border-radius: 4px;
+  background: var(--paper); flex: none; position: relative;
+}
+.blk-check.on { background: var(--accent); border-color: var(--accent); }
+.blk-check.on::after {
+  content: "✓"; position: absolute; inset: 0; color: #fff; font-size: 11px; line-height: 14px;
+  text-align: center; font-weight: 700;
+}
