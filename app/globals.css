@@ -3399,6 +3399,11 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
   margin-right: auto; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--bad);
   background: none; border: 0; cursor: pointer; padding: 6px 0;
 }
+.tkm-markc {
+  margin-right: auto; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--pos);
+  background: none; border: 0; cursor: pointer; padding: 6px 0;
+}
+.tkm-markc:disabled { opacity: .55; cursor: default; }
 .tkm-cancel {
   margin-left: auto; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--body-2);
   border: 1px solid var(--control-line); background: var(--paper); border-radius: var(--r-control);

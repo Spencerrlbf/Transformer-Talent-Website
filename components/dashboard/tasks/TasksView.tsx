@@ -155,8 +155,13 @@ export default function TasksView({
 
   function openEntry(e: Entry) {
     if (e.isRequest) {
-      // Their ask is edited in the drawer's panel.
-      onOpenCandidate(e.candidateKey!);
+      // Same modal as tasks; it edits the ask's date (prefs stay in the drawer).
+      setTaskModal({
+        mode: "request",
+        candidateKey: e.candidateKey!,
+        candidateName: e.candidateName,
+        dueDate: e.dueDate,
+      });
       return;
     }
     const t = data?.tasks.find((x) => x.id === e.id);
@@ -307,7 +312,7 @@ export default function TasksView({
                   </span>
                   <button
                     className="tk-doneb tk-editb"
-                    title={e.isRequest ? "Edit their ask in the drawer" : "Edit, reschedule, or delete"}
+                    title={e.isRequest ? "Move their follow-up date" : "Edit, reschedule, or delete"}
                     onClick={(ev) => {
                       ev.stopPropagation();
                       openEntry(e);

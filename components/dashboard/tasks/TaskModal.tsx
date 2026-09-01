@@ -11,7 +11,11 @@ export type TaskModalTarget =
   | {
       mode: "edit";
       task: { id: string; kind: string; title: string; dueDate: string; dueTime: string | null; candidateName: string };
-    };
+    }
+  // A candidate's own "hear from me later" ask: only its date is edited here
+  // (their preferences live in the drawer's ask panel); "Mark contacted"
+  // clears it, same as the row's Done.
+  | { mode: "request"; candidateKey: string; candidateName: string; dueDate: string };
 
 const TASK_KINDS = ["task", "call", "email"] as const;
 const TASK_LABEL: Record<string, string> = { task: "Task", call: "Call", email: "Email" };
@@ -39,16 +43,19 @@ export default function TaskModal({
 }) {
   const { token } = useDash();
   const creating = target.mode === "create";
-  const name = creating ? target.candidateName : target.task.candidateName;
+  const isRequest = target.mode === "request";
+  const name = target.mode === "edit" ? target.task.candidateName : target.candidateName;
   const first = name.split(/\s+/)[0] || name || "them";
 
   const defaultTitle = (k: string) =>
     k === "call" ? `Call ${first}` : k === "email" ? `Email ${first}` : `Follow up with ${first}`;
 
-  const [kind, setKind] = useState(creating ? "task" : target.task.kind);
-  const [title, setTitle] = useState(creating ? defaultTitle("task") : target.task.title);
-  const [date, setDate] = useState(creating ? addDays(7) : target.task.dueDate);
-  const [time, setTime] = useState(creating ? "" : target.task.dueTime || "");
+  const [kind, setKind] = useState(target.mode === "edit" ? target.task.kind : "task");
+  const [title, setTitle] = useState(target.mode === "edit" ? target.task.title : defaultTitle("task"));
+  const [date, setDate] = useState(
+    target.mode === "create" ? addDays(7) : target.mode === "edit" ? target.task.dueDate : target.dueDate
+  );
+  const [time, setTime] = useState(target.mode === "edit" ? target.task.dueTime || "" : "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -79,9 +86,25 @@ export default function TaskModal({
   ];
 
   async function save() {
-    if (saving || !title.trim()) return;
+    if (saving || (!isRequest && !title.trim())) return;
     setSaving(true);
     setErr("");
+    if (isRequest) {
+      const res = await fetch(`/api/dashboard/candidates/v2/${target.candidateKey}/followup`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ dateOnly: true, at: date }),
+      }).catch(() => null);
+      const json = res ? await res.json().catch(() => ({})) : {};
+      setSaving(false);
+      if (res?.ok) {
+        onChanged();
+        onClose();
+      } else {
+        setErr(json.error === "bad_date" ? "Pick a date." : "Couldn't save. Try again.");
+      }
+      return;
+    }
     const res = creating
       ? await fetch("/api/dashboard/tasks", {
           method: "POST",
@@ -111,7 +134,7 @@ export default function TaskModal({
   }
 
   async function remove() {
-    if (creating || saving) return;
+    if (saving || target.mode !== "edit") return;
     setSaving(true);
     setErr("");
     const res = await fetch(`/api/dashboard/tasks/${target.task.id}`, {
@@ -127,35 +150,63 @@ export default function TaskModal({
     }
   }
 
+  // Request rows only: "Mark contacted" clears the ask, same as Done.
+  async function markContacted() {
+    if (saving || target.mode !== "request") return;
+    setSaving(true);
+    setErr("");
+    const res = await fetch(`/api/dashboard/candidates/v2/${target.candidateKey}/followup`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => null);
+    setSaving(false);
+    if (res?.ok) {
+      onChanged();
+      onClose();
+    } else {
+      setErr("Couldn't save. Try again.");
+    }
+  }
+
   return (
     <div className="tkm-back" onClick={onClose}>
       <div className="tkm" onClick={(e) => e.stopPropagation()}>
-        <h3>{creating ? `Add task for ${first}` : "Edit task"}</h3>
+        <h3>
+          {isRequest ? "Edit follow-up" : creating ? `Add task for ${first}` : "Edit task"}
+        </h3>
         <p className="tkm-sub">
-          {creating
-            ? "Create a task for this candidate and get it into your Tasks tab."
-            : `On ${name}'s timeline and your Tasks tab.`}
+          {isRequest
+            ? `${name} asked to hear from you later. Move the date here; their full ask (roles, salary, visa) is in their profile.`
+            : creating
+              ? "Create a task for this candidate and get it into your Tasks tab."
+              : `On ${name}'s timeline and your Tasks tab.`}
         </p>
 
-        <div className="lbl">Type</div>
-        <div className="cv2n-kinds">
-          {TASK_KINDS.map((k) => (
-            <button key={k} className={kind === k ? "on" : ""} onClick={() => pickKind(k)}>
-              <KindIcon kind={k} className="tk-ico" />
-              {TASK_LABEL[k]}
-            </button>
-          ))}
-        </div>
+        {!isRequest && (
+          <>
+            <div className="lbl">Type</div>
+            <div className="cv2n-kinds">
+              {TASK_KINDS.map((k) => (
+                <button key={k} className={kind === k ? "on" : ""} onClick={() => pickKind(k)}>
+                  <KindIcon kind={k} className="tk-ico" />
+                  {TASK_LABEL[k]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="cv2n-duo">
           <label>
-            <span className="lbl">Due date</span>
+            <span className="lbl">{isRequest ? "Reach out on" : "Due date"}</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
-          <label>
-            <span className="lbl">Time · optional</span>
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-          </label>
+          {!isRequest && (
+            <label>
+              <span className="lbl">Time · optional</span>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            </label>
+          )}
         </div>
 
         <div className="lbl">Quick select</div>
@@ -167,25 +218,38 @@ export default function TaskModal({
           ))}
         </div>
 
-        <div className="lbl">Task</div>
-        <textarea
-          className="tkm-text"
-          value={title}
-          maxLength={300}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+        {!isRequest && (
+          <>
+            <div className="lbl">Task</div>
+            <textarea
+              className="tkm-text"
+              value={title}
+              maxLength={300}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </>
+        )}
 
         {err && <p className="cv2d-err">{err}</p>}
         <div className="tkm-foot">
-          {!creating && (
+          {target.mode === "edit" && (
             <button className="tkm-del" disabled={saving} onClick={remove}>
               Delete task
+            </button>
+          )}
+          {isRequest && (
+            <button className="tkm-markc" disabled={saving} onClick={markContacted}>
+              ✓ Mark contacted
             </button>
           )}
           <button className="tkm-cancel" disabled={saving} onClick={onClose}>
             Cancel
           </button>
-          <button className="tkm-save" disabled={saving || !title.trim()} onClick={save}>
+          <button
+            className="tkm-save"
+            disabled={saving || (!isRequest && !title.trim())}
+            onClick={save}
+          >
             {saving ? "SAVING…" : creating ? "ADD TASK →" : "SAVE"}
           </button>
         </div>
