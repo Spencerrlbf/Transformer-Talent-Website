@@ -6,6 +6,7 @@
 // API returns is never rendered — plain-English fit reads only.
 
 import { useState } from "react";
+import Turnstile, { resetTurnstile } from "@/components/Turnstile";
 
 interface Match {
   ref: string;
@@ -39,7 +40,8 @@ export default function TalentMatcher() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     const jdFile = form.get("jdFile");
     const jdTextLen = String(form.get("jdText") || "").trim().length;
     if (jdTextLen < 200 && !(jdFile instanceof File && jdFile.size > 0)) {
@@ -53,6 +55,7 @@ export default function TalentMatcher() {
     try {
       const res = await fetch("/api/talent", { method: "POST", body: form });
       const json = await res.json().catch(() => ({}));
+      resetTurnstile(formEl);
       if (res.ok && json.ok) {
         setStatus({ kind: "done", result: json as Result });
       } else {
@@ -62,6 +65,7 @@ export default function TalentMatcher() {
         });
       }
     } catch {
+      resetTurnstile(formEl);
       setStatus({ kind: "error", message: "Network error — please try again." });
     }
   }
@@ -200,6 +204,7 @@ export default function TalentMatcher() {
         style={{ position: "absolute", left: "-9999px" }}
         aria-hidden="true"
       />
+      <Turnstile />
       <button type="submit" className="tal-submit" disabled={status.kind === "sending"}>
         {status.kind === "sending" ? "FINDING POTENTIAL MATCHES…" : "SEE POTENTIAL MATCHES →"}
       </button>

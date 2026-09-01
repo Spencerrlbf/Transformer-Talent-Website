@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CompanyAbout from "@/components/board/CompanyAbout";
 import SocialIcons from "@/components/board/SocialIcons";
 import MultiSelect, { SingleSelect } from "@/components/MultiSelect";
+import Turnstile, { resetTurnstile } from "@/components/Turnstile";
 import type { CompanyPage } from "@/lib/server/company-page";
 import {
   ROLE_FOCUS_OPTIONS,
@@ -325,7 +326,8 @@ export default function BoardClient({
   async function onFutureSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!recruiter) return;
-    const data = new FormData(e.currentTarget);
+    const futFormEl = e.currentTarget;
+    const data = new FormData(futFormEl);
     data.set("board", org.slug);
     data.set("recruiter", recruiter.id);
     data.set("months", futMonths);
@@ -338,6 +340,7 @@ export default function BoardClient({
     try {
       const res = await fetch("/api/future-interest", { method: "POST", body: data });
       const json = await res.json().catch(() => ({}));
+      resetTurnstile(futFormEl);
       if (res.ok && json.ok) {
         const when = json.followUpAt
           ? new Date(`${json.followUpAt}T00:00:00Z`).toLocaleDateString("en-GB", {
@@ -351,6 +354,7 @@ export default function BoardClient({
         setFutStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
     } catch {
+      resetTurnstile(futFormEl);
       setFutStatus({ kind: "error", message: "Network error — please try again." });
     }
   }
@@ -465,6 +469,7 @@ export default function BoardClient({
     try {
       const res = await fetch("/api/apply", { method: "POST", body: data });
       const json = await res.json().catch(() => ({}));
+      resetTurnstile(form);
       if (res.ok && json.ok) {
         form.reset();
         setSelected([]);
@@ -479,6 +484,7 @@ export default function BoardClient({
         setStatus({ kind: "error", message: json.error || "Something went wrong — please try again." });
       }
     } catch {
+      resetTurnstile(form);
       setStatus({ kind: "error", message: "Network error — please try again." });
     }
   }
@@ -784,6 +790,7 @@ export default function BoardClient({
                     aria-hidden="true"
                   />
                   {futStatus.kind === "error" && <p className="board-error">{futStatus.message}</p>}
+                  <Turnstile />
                   <button type="submit" className="board-btn" disabled={futStatus.kind === "sending"}>
                     {futStatus.kind === "sending" ? "SENDING…" : "ASK TO HEAR BACK LATER →"}
                   </button>
@@ -1203,6 +1210,7 @@ export default function BoardClient({
                       {formError || (status.kind === "error" ? status.message : "")}
                     </p>
                   )}
+                  <Turnstile />
                   <button type="submit" className="board-btn" disabled={status.kind === "sending"} style={{ width: "100%" }}>
                     {status.kind === "sending"
                       ? "SUBMITTING & MATCHING…"
@@ -1308,7 +1316,8 @@ function ReferralBlock({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    const data = new FormData(e.currentTarget);
+    const refFormEl = e.currentTarget;
+    const data = new FormData(refFormEl);
     setState("sending");
     try {
       const res = await fetch("/api/referral", {
@@ -1321,15 +1330,18 @@ function ReferralBlock({
           candidateLinkedin: data.get("candidateLinkedin"),
           candidateEmail: data.get("candidateEmail"),
           website: data.get("website"),
+          captcha: data.get("cf-turnstile-response") || "",
         }),
       });
       const json = await res.json().catch(() => ({}));
+      resetTurnstile(refFormEl);
       if (res.ok && json.ok) setState("ok");
       else {
         setError(json.error || "Something went wrong — please try again.");
         setState("error");
       }
     } catch {
+      resetTurnstile(refFormEl);
       setError("Network error — please try again.");
       setState("error");
     }
@@ -1390,6 +1402,7 @@ function ReferralBlock({
             aria-hidden="true"
           />
           <div className="board-referral-foot">
+            <Turnstile />
             <button type="submit" className="board-btn" disabled={state === "sending"}>
               {state === "sending"
                 ? "SENDING…"

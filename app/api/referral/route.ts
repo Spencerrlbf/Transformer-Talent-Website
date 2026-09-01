@@ -6,6 +6,7 @@ import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
 import { sendReferralConfirmation } from "@/lib/server/email";
 import { leadRecipients, sendLeadNotification } from "@/lib/server/lead-notify";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const maxDuration = 60;
 
@@ -33,6 +34,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (clean(body.website, 50)) return NextResponse.json({ ok: true });
+
+  if (!(await verifyTurnstile(body.captcha))) {
+    return NextResponse.json(
+      { error: "We couldn't verify your browser. Please refresh the page and try again." },
+      { status: 403 }
+    );
+  }
 
   const recruiterId = clean(body.recruiter, 40);
   const orgSlug = clean(body.org, 60).toLowerCase();
