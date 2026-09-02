@@ -62,7 +62,20 @@ export type HomeData = {
 };
 
 const DAY = 86400_000;
+const PAGE = 1000;
 const inList = (ids: string[]) => ids.map((s) => `"${s.replace(/"/g, "")}"`).join(",");
+/** PostgREST pages at 1000 rows; walk them so a window is a window. */
+async function pageAll<T>(pathFor: (limit: number, offset: number) => string): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const res = await sbRest(pathFor(PAGE, offset));
+    if (!res.ok) break;
+    const batch = (await res.json()) as T[];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 export async function homeMetrics(member: Member, scope: InboxScope, period: Period, todayIn?: string | null, tzOffsetMin = 0): Promise<HomeData> {
@@ -82,39 +95,33 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
   const localDay = (iso: string) => new Date(Date.parse(iso) - tzOffsetMin * 60_000).toISOString().slice(0, 10);
 
   const [
-    inbox, membersRes, profilesRes, rolesRes, statusRes, appsRes, logsRes, doneRes, openRes, movesRes,
-    linksRes, refsRes, credit, usageRes, runsRes,
+    inbox, membersRes, profilesRes, rolesRes, statuses, apps, logs, done, open, moves,
+    links, refs, credit, usage, runsRes,
   ] = await Promise.all([
-    listInbox(member, scope, today),
+    listInbox(member, scope, today, { lean: true }),
     sbRest(`org_members?organization_id=eq.${org}&select=user_id,email,member_role`),
     sbRest(`recruiter_profiles?organization_id=eq.${org}&select=id,user_id`),
     sbRest(`org_roles?organization_id=eq.${org}&select=id,external_id,title,company_name,status,updated_at&order=title.asc`),
-    sbRest(`candidate_role_statuses?organization_id=eq.${org}&select=job_id,candidate_key,status`),
-    sbRest(`website_applications?organization_id=eq.${org}&select=id,created_at,role_ids,source,recruiter_profile_id&order=created_at.desc&limit=5000`),
-    sbRest(`candidate_email_log?organization_id=eq.${org}&created_at=gte.${prevIso}&select=direction,member_email,candidate_key,thread_id,created_at&order=created_at.asc&limit=5000`),
-    sbRest(`tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${prevIso}&select=completed_at,created_by_email&limit=2000`),
-    sbRest(`tasks?organization_id=eq.${org}&status=eq.open&select=due_date,created_by_email&limit=2000`),
-    sbRest(`stage_events?organization_id=eq.${org}&created_at=gte.${prevIso}&select=to_status,created_at&limit=5000`),
-    sbRest(`tracked_links?organization_id=eq.${org}&select=created_by,created_at,last_opened_at,open_count&limit=5000`),
-    sbRest(`referrals?organization_id=eq.${org}&created_at=gte.${prevIso}&select=recruiter_profile_id,created_at&limit=2000`),
+    pageAll<{ job_id: string; candidate_key: string; status: string }>((l, o) => `candidate_role_statuses?organization_id=eq.${org}&select=job_id,candidate_key,status&order=id.asc&limit=${l}&offset=${o}`),
+    pageAll<{ id: string; created_at: string; role_ids: string[] | null; source: string | null; recruiter_profile_id: string | null }>((l, o) => `website_applications?organization_id=eq.${org}&select=id,created_at,role_ids,source,recruiter_profile_id&order=created_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ direction: "out" | "in"; member_email: string; candidate_key: string; thread_id: string; created_at: string }>((l, o) => `candidate_email_log?organization_id=eq.${org}&created_at=gte.${prevIso}&select=direction,member_email,candidate_key,thread_id,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ completed_at: string; created_by_email: string }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${prevIso}&select=completed_at,created_by_email&order=completed_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ due_date: string; created_by_email: string }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.open&select=due_date,created_by_email&order=due_date.asc&limit=${l}&offset=${o}`),
+    pageAll<{ to_status: string; created_at: string }>((l, o) => `stage_events?organization_id=eq.${org}&created_at=gte.${prevIso}&select=to_status,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
+    // Only links that could count: minted or opened inside the two periods.
+    pageAll<{ created_by: string | null; created_at: string; last_opened_at: string | null; open_count: number }>((l, o) => `tracked_links?organization_id=eq.${org}&or=(created_at.gte.${prevIso},last_opened_at.gte.${prevIso})&select=created_by,created_at,last_opened_at,open_count&order=created_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ recruiter_profile_id: string | null; created_at: string }>((l, o) => `referrals?organization_id=eq.${org}&created_at=gte.${prevIso}&select=recruiter_profile_id,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
     sbRpc<{ available: number }[]>("org_credit_summary", { p_org: org }).catch(() => [] as { available: number }[]),
-    sbRest(`usage_events?organization_id=eq.${org}&credits=gt.0&created_at=gte.${prevIso}&select=credits,created_at,run_id&limit=5000`),
+    pageAll<{ credits: number; created_at: string; run_id: string | null }>((l, o) => `usage_events?organization_id=eq.${org}&credits=gt.0&created_at=gte.${prevIso}&select=credits,created_at,run_id&order=created_at.desc&limit=${l}&offset=${o}`),
     sbRest(`sourcing_runs?organization_id=eq.${org}&select=status,created_at,finished_at,imported_count,org_role_id&order=created_at.desc&limit=200`),
   ]);
+  // Thread pairing below walks oldest → newest.
+  logs.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   const members = membersRes.ok ? ((await membersRes.json()) as { user_id: string; email: string; member_role: string }[]) : [];
   const profiles = profilesRes.ok ? ((await profilesRes.json()) as { id: string; user_id: string }[]) : [];
   const roles = rolesRes.ok ? ((await rolesRes.json()) as { id: string; external_id: string; title: string; company_name: string | null; status: string; updated_at: string }[]) : [];
-  const statuses = statusRes.ok ? ((await statusRes.json()) as { job_id: string; candidate_key: string; status: string }[]) : [];
-  const apps = appsRes.ok ? ((await appsRes.json()) as { id: string; created_at: string; role_ids: string[] | null; source: string | null; recruiter_profile_id: string | null }[]) : [];
-  const logs = logsRes.ok ? ((await logsRes.json()) as { direction: "out" | "in"; member_email: string; candidate_key: string; thread_id: string; created_at: string }[]) : [];
-  const done = doneRes.ok ? ((await doneRes.json()) as { completed_at: string; created_by_email: string }[]) : [];
-  const open = openRes.ok ? ((await openRes.json()) as { due_date: string; created_by_email: string }[]) : [];
-  const moves = movesRes.ok ? ((await movesRes.json()) as { to_status: string; created_at: string }[]) : [];
-  const links = linksRes.ok ? ((await linksRes.json()) as { created_by: string | null; created_at: string; last_opened_at: string | null; open_count: number }[]) : [];
-  const refs = refsRes.ok ? ((await refsRes.json()) as { recruiter_profile_id: string | null; created_at: string }[]) : [];
   const available = Number(credit?.[0]?.available ?? 0);
-  const usage = usageRes.ok ? ((await usageRes.json()) as { credits: number; created_at: string; run_id: string | null }[]) : [];
   const runs = runsRes.ok ? ((await runsRes.json()) as { status: string; created_at: string; finished_at: string | null; imported_count: number | null; org_role_id: string | null }[]) : [];
 
   const emailByUser = new Map(members.map((m) => [m.user_id, m.email]));
@@ -128,11 +135,15 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
 
   // Page events for the profiles in scope (mine, or the whole org's).
   const profileIds = me ? [...myProfiles] : profiles.map((p) => p.id);
-  const events = profileIds.length
-    ? await sbRest(`page_events?recruiter_profile_id=in.(${inList(profileIds)})&created_at=gte.${prevIso}&select=event,created_at&limit=10000`)
-        .then(async (r) => (r.ok ? ((await r.json()) as { event: string; created_at: string }[]) : []))
-        .catch(() => [] as { event: string; created_at: string }[])
-    : [];
+  const events: { event: string; created_at: string }[] = [];
+  for (let i = 0; i < profileIds.length; i += 100) {
+    const list = inList(profileIds.slice(i, i + 100));
+    events.push(
+      ...(await pageAll<{ event: string; created_at: string }>(
+        (l, o) => `page_events?recruiter_profile_id=in.(${list})&created_at=gte.${prevIso}&select=event,created_at&order=created_at.desc&limit=${l}&offset=${o}`
+      ))
+    );
+  }
 
   // ---- KPIs ----------------------------------------------------------------
   const scopedApps = apps.filter((a) => !me || mineApp(a));
