@@ -10,6 +10,8 @@ import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 import MultiSelect from "@/components/MultiSelect";
 import NotesTab from "@/components/dashboard/tasks/NotesTab";
+import EmailModal from "@/components/dashboard/email/EmailModal";
+import EmailTab from "@/components/dashboard/email/EmailTab";
 import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
@@ -289,7 +291,7 @@ function PipelineRows({
   );
 }
 
-type Tab = "profile" | "pipeline" | "resume" | "notes";
+type Tab = "profile" | "pipeline" | "resume" | "notes" | "email";
 
 export default function CandidateDrawer({
   candKey,
@@ -340,6 +342,37 @@ export default function CandidateDrawer({
   const [cOther, setCOther] = useState("");
   const [contactErr, setContactErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  // Bumped on send so an already-open Notes/Email tab remounts and refetches.
+  const [notesBump, setNotesBump] = useState(0);
+  // Threads where the candidate spoke last — the Email tab's badge.
+  const [emailAwaiting, setEmailAwaiting] = useState(0);
+  useEffect(() => {
+    setEmailAwaiting(0);
+    if (!candKey || candKey.startsWith("net_")) return;
+    let gone = false;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      fetch(`/api/dashboard/email/threads?key=${candKey}&summary=1&_=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? (r.json() as Promise<{ awaiting: number }>) : null))
+        .then((j) => {
+          if (j && !gone) setEmailAwaiting(j.awaiting);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    // Badge stays honest while the drawer is open on another tab.
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      gone = true;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [candKey, token, notesBump]);
 
   useEffect(() => {
     setDetail(null);
@@ -348,6 +381,7 @@ export default function CandidateDrawer({
     setEditingContact(false);
     setContactErr("");
     setOpenJob(null);
+    setEmailOpen(false);
     setMarking(false);
     setMarkedDone(false);
     setAskEditing(false);
@@ -538,6 +572,17 @@ export default function CandidateDrawer({
   return (
     <div className="cv2d-overlay" onClick={onClose}>
       <JobDrawer jobId={openJob} onClose={() => setOpenJob(null)} />
+      {emailOpen && detail && candKey && (
+        <EmailModal
+          candKey={candKey}
+          candidateName={detail.name}
+          onClose={() => setEmailOpen(false)}
+          onSent={() => {
+            setTab("email");
+            setNotesBump((b) => b + 1);
+          }}
+        />
+      )}
       <aside
         className={`cv2d${onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 ? " has-nav" : ""}`}
         onClick={(e) => e.stopPropagation()}
@@ -584,11 +629,35 @@ export default function CandidateDrawer({
                       type="button"
                       className={`cv2d-star${detail.shortlisted ? " on" : ""}`}
                       disabled={starBusy}
-                      title={detail.shortlisted ? "On your Shortlist — click to remove" : "Add to Shortlist"}
-                      aria-label="Shortlist"
+                      data-tip={detail.shortlisted ? "Remove from Shortlist" : "Add to Shortlist"}
+                      aria-label={detail.shortlisted ? "Remove from Shortlist" : "Add to Shortlist"}
                       onClick={toggleStar}
                     >
                       {detail.shortlisted ? "★" : "☆"}
+                    </button>
+                  )}
+                  {!isNet && (
+                    <button
+                      type="button"
+                      className="cv2d-mail"
+                      data-tip="Send an email"
+                      aria-label="Send an email"
+                      onClick={() => setEmailOpen(true)}
+                    >
+                      <svg
+                        width="21"
+                        height="21"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                        <path d="M3.5 7.5 12 13l8.5-5.5" />
+                      </svg>
                     </button>
                   )}
                   {detail.bestTag && (
@@ -921,6 +990,7 @@ export default function CandidateDrawer({
                   ["pipeline", "Pipeline", detail.pipeline.length],
                   ["resume", "Resume", null],
                   ["notes", "Notes", null],
+                  ...(isNet ? [] : ([["email", "Email", emailAwaiting]] as [Tab, string, number | null][])),
                 ] as [Tab, string, number | null][]
               ).map(([id, label, n]) => (
                 <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
@@ -1122,7 +1192,20 @@ export default function CandidateDrawer({
               )}
 
               {tab === "notes" && !isNet && candKey && (
-                <NotesTab candKey={candKey} name={detail.name} />
+                <NotesTab
+                  key={notesBump}
+                  candKey={candKey}
+                  name={detail.name}
+                  onOpenEmail={() => setTab("email")}
+                />
+              )}
+              {tab === "email" && !isNet && candKey && (
+                <EmailTab
+                  key={notesBump}
+                  candKey={candKey}
+                  name={detail.name}
+                  onAwaiting={setEmailAwaiting}
+                />
               )}
               {tab === "notes" && isNet && (
                 <div className="cv2d-notes">
