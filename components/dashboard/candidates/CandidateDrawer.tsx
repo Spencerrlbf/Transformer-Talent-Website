@@ -353,8 +353,9 @@ export default function CandidateDrawer({
     let gone = false;
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
-      fetch(`/api/dashboard/email/threads?key=${candKey}&summary=1`, {
+      fetch(`/api/dashboard/email/threads?key=${candKey}&summary=1&_=${Date.now()}`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       })
         .then((r) => (r.ok ? (r.json() as Promise<{ awaiting: number }>) : null))
         .then((j) => {

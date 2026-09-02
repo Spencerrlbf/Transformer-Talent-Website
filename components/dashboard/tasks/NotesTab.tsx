@@ -94,8 +94,9 @@ export default function NotesTab({
   const [emailOpen, setEmailOpen] = useState(false);
 
   const load = useCallback(() => {
-    fetch(`/api/dashboard/candidates/v2/${candKey}/timeline`, {
+    fetch(`/api/dashboard/candidates/v2/${candKey}/timeline?_=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
     })
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));

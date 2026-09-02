@@ -69,9 +69,17 @@ export default function EmailTab({
     initialText?: string;
   }>(null);
   const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
 
   const load = useCallback(() => {
-    fetch(`/api/dashboard/email/threads?key=${candKey}`, { headers: { Authorization: `Bearer ${token}` } })
+    setSyncing(true);
+    // Bypass every cache layer: a poll that returns a stale body is worse
+    // than no poll.
+    fetch(`/api/dashboard/email/threads?key=${candKey}&_=${Date.now()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json() as Promise<Data>;
@@ -79,10 +87,12 @@ export default function EmailTab({
       .then((d) => {
         setData(d);
         setError(false);
+        setLastSync(new Date());
         setOpen((cur) => (cur && d.threads.some((t) => t.id === cur) ? cur : d.threads[0]?.id || null));
         onAwaiting?.(d.awaiting);
       })
-      .catch(() => setError(true));
+      .catch(() => setError(true))
+      .finally(() => setSyncing(false));
   }, [candKey, token, onAwaiting]);
 
   useEffect(load, [load]);
@@ -164,6 +174,21 @@ export default function EmailTab({
             {data.connected ? (
               <span>
                 Sending as <b>{data.address}</b> · replies from {first} land here automatically
+                <button
+                  type="button"
+                  className="emc-live"
+                  title="Checks for new replies every 15 seconds — click to check now"
+                  onClick={load}
+                  disabled={syncing}
+                >
+                  <i className={`emc-livedot${syncing ? " busy" : ""}`} />
+                  {syncing
+                    ? "Checking…"
+                    : lastSync
+                      ? `Live · updated ${lastSync.toLocaleTimeString("en-GB")}`
+                      : "Live"}
+                  <span className="emc-refresh">↻</span>
+                </button>
               </span>
             ) : (
               <span>Connect your inbox to email {first} from here — sends come from your own address.</span>

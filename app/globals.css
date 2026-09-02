@@ -3968,3 +3968,19 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .cv2n-marker { margin: 2px 0 0 !important; font-size: 13px !important; color: var(--body-2) !important; }
 .cv2n-link { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-press); background: none; border: 0; padding: 0; cursor: pointer; }
 @media (max-width: 700px) { .emc-msg { max-width: 100%; } }
+
+/* Email tab: inbound bubbles shrink to content like outbound; live indicator */
+.emc-msg { width: fit-content; }
+.emc-msg.them { justify-self: start; }
+.emc-live {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font: inherit; font-size: 11.5px;
+  font-weight: 600; color: var(--body-2); background: var(--surface); border: 1px solid var(--hair);
+  border-radius: var(--r-pill); padding: 2px 9px 2px 8px; cursor: pointer; vertical-align: 1px;
+}
+.emc-live:hover { color: var(--ink); border-color: var(--strong-line); }
+.emc-live:disabled { cursor: default; }
+.emc-livedot { width: 7px; height: 7px; border-radius: 50%; background: var(--pos); }
+.emc-livedot.busy { background: var(--accent); animation: emc-pulse .9s ease-in-out infinite; }
+.emc-refresh { color: var(--muted); font-size: 12px; }
+@keyframes emc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .emc-livedot.busy { animation: none; } }
