@@ -490,6 +490,18 @@ export async function viewerMailboxEmails(orgId: string, viewer: string): Promis
   return out;
 }
 
+/** Does this thread id belong to this candidate's correspondence in this org?
+ *  (The Inbox names the thread a fresh email answers; never trust it blind.) */
+export async function threadBelongs(orgId: string, key: string, threadId: string): Promise<boolean> {
+  if (!KEY_RE.test(key) || !threadId || threadId.length > 300) return false;
+  const solo = threadId.match(/^solo-([0-9a-f-]{36})$/i);
+  const path = solo
+    ? `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&id=eq.${solo[1]}&select=id&limit=1`
+    : `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&thread_id=eq.${encodeURIComponent(threadId)}&select=id&limit=1`;
+  const res = await sbRest(path).catch(() => null);
+  return Boolean(res && res.ok && ((await res.json()) as unknown[]).length);
+}
+
 /** The one place the privacy rule is applied: what this viewer may read of
  *  a candidate's correspondence, plus markers for what they may not. */
 export async function listCandidateEmailsFor(

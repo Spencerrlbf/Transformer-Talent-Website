@@ -95,6 +95,7 @@ export default function EmailModal({
   reply,
   initialText,
   completeTaskId,
+  inboxThreadId,
   onClose,
   onSent,
 }: {
@@ -106,6 +107,8 @@ export default function EmailModal({
   initialText?: string;
   /** Inbox: the email task this send fulfils — marked done server-side. */
   completeTaskId?: string;
+  /** Inbox: the conversation a fresh email from here answers. */
+  inboxThreadId?: string;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -438,6 +441,7 @@ export default function EmailModal({
           html: el.innerHTML,
           ...(reply ? { replyToMessageId: reply.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
+          ...(inboxThreadId ? { inboxThreadId } : {}),
           today: new Date().toLocaleDateString("en-CA"),
         }),
       });

@@ -290,6 +290,7 @@ export default function InboxPage() {
           onNavigateItem={goto}
           onActivity={onActivity}
           completeTaskId={current.kind === "temail" ? current.taskId : null}
+          inboxThreadId={current.kind === "mail" ? current.threadId : null}
           contextStrip={
             <InboxStrip
               item={current}

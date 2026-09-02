@@ -9,6 +9,7 @@ import {
   loggedMessage,
   logEmail,
   sanitizeEmailHtml,
+  threadBelongs,
 } from "@/lib/server/email-compose";
 import { noteEmailSent } from "@/lib/server/inbox";
 import { completeEmailTask } from "@/lib/server/tasks";
@@ -43,6 +44,8 @@ export async function POST(req: NextRequest) {
     completeTaskId?: unknown;
     /** The viewer's local date (YYYY-MM-DD), so "follow-up due" agrees with the Inbox. */
     today?: unknown;
+    /** Inbox: the thread this (fresh, unthreaded) email answers. */
+    inboxThreadId?: unknown;
   };
   try {
     body = await req.json();
@@ -76,6 +79,13 @@ export async function POST(req: NextRequest) {
   if (replyToMessageId && !target) {
     return NextResponse.json({ error: "bad_reply_target" }, { status: 400 });
   }
+  // A fresh email sent while working an Inbox thread answers that thread:
+  // it is logged under it (so the conversation reads in order and the
+  // item clears) — but only a thread that really is this candidate's.
+  const inboxThreadId =
+    !target && typeof body.inboxThreadId === "string" && (await threadBelongs(member.org.id, key, body.inboxThreadId))
+      ? body.inboxThreadId
+      : null;
 
   const clean = sanitizeEmailHtml(html);
   const sent = await sendAsGrant({
@@ -109,7 +119,10 @@ export async function POST(req: NextRequest) {
     bodyHtml: clean,
     bodyText: htmlToText(clean),
     messageId: sent.messageId,
-    threadId: sent.threadId || target?.threadId || "",
+    // Group on our side by the conversation answered: a colleague's reply
+    // (which the provider can't thread across mailboxes) and a fresh email
+    // from an Inbox item both belong to the thread the candidate is in.
+    threadId: target?.threadId || inboxThreadId || sent.threadId || "",
   });
 
   // Inbox bookkeeping: the thread is answered, an ask/referral/drop is
@@ -119,7 +132,7 @@ export async function POST(req: NextRequest) {
     orgId: member.org.id,
     viewer: member.email,
     key,
-    threadId: target?.threadId || null,
+    threadId: target?.threadId || inboxThreadId || null,
     subject,
     today: typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : null,
   }).catch(() => {});

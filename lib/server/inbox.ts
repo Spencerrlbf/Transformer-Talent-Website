@@ -239,17 +239,15 @@ export async function listInbox(
   const moved = new Map<string, { jobId: string; status: string }[]>();
   for (const row of movedRows) moved.set(row.candidate_key, [...(moved.get(row.candidate_key) || []), { jobId: row.job_id, status: row.status }]);
 
-  // Outbound emails per candidate — anyone's (org truth for asks/referrals/
-  // drops) and this mailbox's (answers a thread the viewer owns).
+  // Outbound emails per candidate — anyone's: org truth for asks, referrals
+  // and drops ("someone reached out"). Threads are judged inside the thread.
   const isMine = (owner: string) => aliases.has(owner);
   const lastOutAny = new Map<string, string>();
-  const lastOutMine = new Map<string, string>();
   const hasThread = new Set<string>();
   for (const l of logs) {
     if (visibility === "team" || isMine(l.member_email)) hasThread.add(l.candidate_key);
     if (l.direction !== "out") continue;
     if (!lastOutAny.has(l.candidate_key)) lastOutAny.set(l.candidate_key, l.created_at);
-    if (isMine(l.member_email) && !lastOutMine.has(l.candidate_key)) lastOutMine.set(l.candidate_key, l.created_at);
   }
 
   const attribution = (a: AppRow): string | null => {
@@ -377,12 +375,10 @@ export async function listInbox(
     if (visibility === "private" && !isMine(owner)) continue;
     if (scope === "me" && !isMine(owner)) continue;
     const id = `mail:${tid}`;
-    // Marks are relative to the newest message: a later reply resurfaces the thread.
+    // Marks are relative to the newest message: a later reply resurfaces the
+    // thread. An answer sent while working this item is logged under this
+    // thread by the send route, so it shows up here as the last message.
     if (handled(id, last.created_at)) continue;
-    // Answered outside the thread: a fresh email from this mailbox, or (when
-    // the team shares mail) any colleague's email after the candidate spoke.
-    const answeredBy = lastOutMine.get(last.candidate_key) || (visibility === "team" ? lastOutAny.get(last.candidate_key) : "") || "";
-    if (answeredBy > last.created_at) continue;
     const subject = (list[0].subject || "").replace(/^(re|fwd?):\s*/i, "") || "(no subject)";
     nameNeeded.add(last.candidate_key);
     mailItems.push({
@@ -578,10 +574,10 @@ export async function noteStageMoved(orgId: string, viewer: string, key: string,
 }
 
 /** Called by the send route after a successful send: clears asks, drops and
- *  referrals for the sender, records the reply on the thread (or on any of
- *  the sender's threads the candidate was waiting on, for a fresh email),
- *  and — when the person's follow-up date has come — counts the email as
- *  the follow-up. `today` is the viewer's local date when the client sent it. */
+ *  referrals for the sender, records the reply on the thread it answered
+ *  (threaded reply, or the Inbox item being worked), and — when the person's
+ *  follow-up date has come — counts the email as the follow-up. `today` is
+ *  the viewer's local date when the client sent it. */
 export async function noteEmailSent(args: {
   orgId: string; viewer: string; key: string; threadId: string | null; subject: string; today?: string | null;
 }): Promise<void> {
@@ -590,24 +586,6 @@ export async function noteEmailSent(args: {
   const today = args.today && DATE_RE.test(args.today) ? args.today : new Date().toISOString().slice(0, 10);
   if (threadId) {
     await markInbox(orgId, viewer, `mail:${threadId}`, { handled: "reply", kind: "mail", label: subject, candidateKey: key }).catch(() => {});
-  } else {
-    // A fresh email answers whatever this mailbox was waiting on with them.
-    const res = await sbRest(
-      `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&select=id,direction,member_email,thread_id,subject,created_at&order=created_at.asc&limit=200`
-    );
-    const rows = res.ok ? ((await res.json()) as LogRow[]) : [];
-    const byThread = new Map<string, LogRow[]>();
-    for (const r of rows) {
-      const tid = r.thread_id || `solo-${r.id}`;
-      byThread.set(tid, [...(byThread.get(tid) || []), r]);
-    }
-    const aliases = await viewerMailboxEmails(orgId, viewer);
-    for (const [tid, list] of byThread) {
-      const last = list[list.length - 1];
-      if (last.direction === "in" && aliases.has(last.member_email)) {
-        await markInbox(orgId, viewer, `mail:${tid}`, { handled: "reply", kind: "mail", label: list[0].subject || subject, candidateKey: key }).catch(() => {});
-      }
-    }
   }
   if (!key.startsWith("app_")) return;
   const a = await arrivalRow(orgId, key);

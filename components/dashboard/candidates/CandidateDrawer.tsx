@@ -307,6 +307,7 @@ export default function CandidateDrawer({
   onNavigateItem,
   onActivity,
   completeTaskId,
+  inboxThreadId,
 }: {
   candKey: string | null;
   roleContext?: string;
@@ -327,6 +328,8 @@ export default function CandidateDrawer({
   onActivity?: (ev: { type: "stage" | "sent" | "contacted"; label?: string }) => void;
   /** Inbox: the email task a send from here fulfils. */
   completeTaskId?: string | null;
+  /** Inbox: the thread a fresh email from here answers. */
+  inboxThreadId?: string | null;
 }) {
   const { token } = useDash();
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -621,6 +624,7 @@ export default function CandidateDrawer({
           candKey={candKey}
           candidateName={detail.name}
           completeTaskId={completeTaskId || undefined}
+          inboxThreadId={inboxThreadId || undefined}
           onClose={() => setEmailOpen(false)}
           onSent={() => {
             setTab("email");
@@ -1257,6 +1261,7 @@ export default function CandidateDrawer({
                   onAwaiting={setEmailAwaiting}
                   openThreadId={initialThreadId || undefined}
                   completeTaskId={completeTaskId || undefined}
+                  inboxThreadId={inboxThreadId || undefined}
                   onSent={() => onActivity?.({ type: "sent" })}
                 />
               )}

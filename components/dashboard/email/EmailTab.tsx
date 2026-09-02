@@ -56,6 +56,7 @@ export default function EmailTab({
   onAwaiting,
   openThreadId,
   completeTaskId,
+  inboxThreadId,
   onSent,
 }: {
   candKey: string;
@@ -66,6 +67,8 @@ export default function EmailTab({
   openThreadId?: string | null;
   /** Inbox: the email task a send from here fulfils. */
   completeTaskId?: string | null;
+  /** Inbox: the thread a fresh (unthreaded) email answers. */
+  inboxThreadId?: string | null;
   /** Inbox: a send went out (quick reply or composer). */
   onSent?: () => void;
 }) {
@@ -166,6 +169,9 @@ export default function EmailTab({
           text,
           ...(target ? { replyToMessageId: target.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
+          // A quick reply with no provider target (local-only thread) still
+          // answers this conversation.
+          ...(!target ? { inboxThreadId: t.id } : {}),
           today: new Date().toLocaleDateString("en-CA"),
         }),
       });
@@ -341,6 +347,7 @@ export default function EmailTab({
           reply={compose.reply}
           initialText={compose.initialText}
           completeTaskId={completeTaskId || undefined}
+          inboxThreadId={compose.threadId || inboxThreadId || undefined}
           onClose={() => setCompose(null)}
           onSent={() => {
             // The draft went out through the composer: clear it here so the
