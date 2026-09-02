@@ -11,6 +11,6 @@ export async function GET(req: NextRequest) {
     memberRole: member.memberRole,
     org: member.org,
     // Drives the "set up" nudge on the My page nav item.
-    myPage: profile ? { published: profile.published, slug: profile.slug } : null,
+    myPage: profile ? { published: profile.published, slug: profile.slug, displayName: profile.display_name } : null,
   });
 }

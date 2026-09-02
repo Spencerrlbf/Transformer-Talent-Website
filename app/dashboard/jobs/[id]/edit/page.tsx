@@ -44,14 +44,14 @@ export default function EditJobPage({ params }: { params: Promise<{ id: string }
     return (
       <>
         <p className="dash-muted">Job not found.</p>
-        <Link href="/dashboard">← Back to jobs</Link>
+        <Link href="/dashboard/jobs">← Back to jobs</Link>
       </>
     );
 
   return (
     <>
       <div className="dash-crumb">
-        <Link href="/dashboard">Jobs</Link> /{" "}
+        <Link href="/dashboard/jobs">Jobs</Link> /{" "}
         <Link href={`/dashboard/jobs/${id}`}>{initial.title}</Link> / Edit
       </div>
       <h1 className="dash-h1">Edit job</h1>

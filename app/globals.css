@@ -4089,3 +4089,71 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .ws-opt.on .ws-rb { border: 5px solid var(--accent); }
 .ws-opt b { display: block; font-size: 13px; }
 .ws-opt > span > span { display: block; font-size: 12.5px; color: var(--body-2); margin-top: 2px; }
+
+/* ---- Home --------------------------------------------------------- */
+.hm-today { margin-top: 14px; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 10px; }
+.hm-tcard {
+  border: 1px solid var(--hair); border-radius: var(--r-card); padding: 12px 14px; background: var(--surface);
+  display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; min-width: 0;
+}
+.hm-tcard.pri { background: var(--accent-tint); border-color: #D9D4FF; }
+.hm-tcard.pri:hover { border-color: var(--accent); }
+.hm-tcard .n { font-size: 24px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1; color: var(--ink); }
+.hm-tcard .n.bad { color: var(--bad); }
+.hm-tcard .l { font-size: 12.5px; color: var(--body-2); line-height: 1.3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-tcard .l b { display: block; color: var(--ink); font-size: 13px; }
+.hm-tcard .go { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--accent-press); white-space: nowrap; }
+.hm-sec { margin-top: 24px; display: flex; align-items: baseline; gap: 8px; }
+.hm-why { font-weight: 500; color: var(--muted); letter-spacing: 0; text-transform: none; font-size: 12px; }
+.hm-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.hm-kpi { border: 1px solid var(--hair); border-radius: var(--r-card); padding: 12px 14px; background: var(--paper); min-width: 0; }
+.hm-kpi .l { font-size: 12px; color: var(--body-2); white-space: nowrap; }
+.hm-kpi .n { font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; line-height: 1.1; color: var(--ink); }
+.hm-kpi .d { font-size: 11.5px; margin-top: 6px; color: var(--muted); white-space: nowrap; }
+.hm-kpi .d b, .hm-mini small.up, .hm-mini small.dn, .hm-mini small.flat { font-weight: 700; }
+.hm-kpi .d b.up, .hm-mini small.up { color: var(--pos); }
+.hm-kpi .d b.dn, .hm-mini small.dn { color: var(--bad); }
+.hm-kpi .d b.flat, .hm-mini small.flat { color: var(--body-2); }
+.hm-kpi .s { font-size: 11.5px; color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-grid2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.hm-grid3 { display: grid; grid-template-columns: 1.15fr 1.35fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+.hm-card { border: 1px solid var(--hair); border-radius: var(--r-card); background: var(--paper); padding: 14px 16px; min-width: 0; }
+.hm-card h4 { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--ink); }
+.hm-card .cs { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+.hm-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.hm-table th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--body-2); padding: 0 6px 8px; white-space: nowrap; }
+.hm-table td { padding: 8px 6px; border-top: 1px solid var(--hair); vertical-align: middle; font-variant-numeric: tabular-nums; color: var(--body); white-space: nowrap; }
+.hm-table td.rt { white-space: normal; min-width: 160px; }
+.hm-more { margin-top: 10px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-press); background: none; border: 0; padding: 0; cursor: pointer; }
+.hm-table td.rt { font-weight: 600; color: var(--ink); }
+.hm-table td.rt span { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.hm-table.team td.rt span { display: inline; margin-left: 8px; }
+.hm-table.team .av { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-wash); color: var(--accent-press); font-size: 10px; font-weight: 700; margin-right: 8px; vertical-align: middle; }
+.hm-click { cursor: pointer; }
+.hm-click:hover td { background: var(--surface); }
+.hm-table .new { color: var(--accent-press); font-weight: 700; }
+.hm-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--hair); width: 84px; }
+.hm-bar i { display: block; height: 100%; }
+.hm-fur { font-size: 11px; font-weight: 700; border-radius: var(--r-pill); padding: 2px 8px; white-space: nowrap; }
+.hm-fur.i { background: var(--accent-wash); color: var(--accent-press); }
+.hm-fur.o { background: var(--pos-bg); color: var(--pos); }
+.hm-fur.s { background: var(--surface); color: var(--body-2); border: 1px solid var(--hair); }
+.hm-age { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.hm-age.old { color: var(--warn); font-weight: 600; }
+.hm-funnel { display: grid; gap: 8px; margin-top: 4px; }
+.hm-funnel .fr { display: grid; grid-template-columns: 96px 1fr 36px; align-items: center; gap: 10px; font-size: 12.5px; }
+.hm-funnel .fl { color: var(--body-2); }
+.hm-funnel .fb { height: 18px; border-radius: 4px; }
+.hm-funnel .fn { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); }
+.hm-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+.hm-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.hm-mini { display: grid; }
+.hm-mini .mr { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hair); font-size: 13px; }
+.hm-mini .mr:first-child { border-top: 0; }
+.hm-mini .mr span { color: var(--body-2); }
+.hm-mini .mr b { font-variant-numeric: tabular-nums; font-size: 15px; color: var(--ink); text-align: right; }
+.hm-mini .mr small { color: var(--muted); font-size: 11.5px; margin-left: 6px; font-weight: 500; }
+.hm-chart { width: 100%; height: 150px; display: block; margin-top: 4px; }
+@media (max-width: 1240px) { .hm-grid3 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 1100px) { .hm-kpis { grid-template-columns: repeat(3, 1fr); } .hm-today { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .hm-grid3 { grid-template-columns: 1fr; } .hm-kpis { grid-template-columns: repeat(2, 1fr); } }

@@ -6,7 +6,7 @@ export default function NewJobPage() {
   return (
     <>
       <div className="dash-crumb">
-        <Link href="/dashboard">Jobs</Link> / New job
+        <Link href="/dashboard/jobs">Jobs</Link> / New job
       </div>
       <h1 className="dash-h1">Create a job</h1>
       <p className="dash-sub">
