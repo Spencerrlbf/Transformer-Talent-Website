@@ -25,7 +25,17 @@ type Ctx = {
   jobs: ComposeJob[];
   templates: Template[];
   trackedLink: string;
+  /** Quick-action merge values (see the context route). */
+  bookingLink?: string;
+  pageLink?: string;
+  matchedRoles?: string[];
+  month?: string;
+  appliedRoleId?: string;
 };
+
+/** "A", "A and B", "A, B and C". */
+const joinTitles = (t: string[]) =>
+  t.length <= 1 ? t.join("") : `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}`;
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -96,6 +106,11 @@ export default function EmailModal({
   initialText,
   completeTaskId,
   inboxThreadId,
+  initialTemplate,
+  after,
+  outcome,
+  allowSilent,
+  onSilent,
   onClose,
   onSent,
 }: {
@@ -109,6 +124,15 @@ export default function EmailModal({
   completeTaskId?: string;
   /** Inbox: the conversation a fresh email from here answers. */
   inboxThreadId?: string;
+  /** Quick action: apply this template (by name) as soon as the composer loads. */
+  initialTemplate?: string;
+  /** Quick action: the pipeline move Send makes (jobId defaults to the merge role). */
+  after?: { stage: "contacted" | "rejected"; jobId?: string | null };
+  /** Quick action: what the footer says Send will do. */
+  outcome?: string;
+  /** Quick action: offer "Reject without emailing". */
+  allowSilent?: boolean;
+  onSilent?: () => void;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -149,7 +173,9 @@ export default function EmailModal({
       })
       .then((c) => {
         setCtx(c);
-        setRoleId((cur) => cur || c.jobs[0]?.id || "");
+        // The role fields follow the role they applied to (or were matched
+        // to) when there is one; the first open role otherwise.
+        setRoleId((cur) => cur || (c.appliedRoleId && c.jobs.some((j) => j.id === c.appliedRoleId) ? c.appliedRoleId : "") || c.jobs[0]?.id || "");
         if (reply) {
           // Subject may have come from a mail client: strip merge braces and
           // clamp so it can't trip the send checks.
@@ -162,7 +188,8 @@ export default function EmailModal({
 
   useEffect(loadCtx, [loadCtx]);
 
-  // Seed a handed-off quick reply once the editor exists.
+  // Seed a handed-off quick reply, or a quick action's template, once the
+  // editor exists. (The template resolver is defined below; hoisted refs.)
   const seeded = useRef(false);
   useEffect(() => {
     if (!ctx?.connected || seeded.current || !bodyRef.current) return;
@@ -170,8 +197,20 @@ export default function EmailModal({
     if (initialText?.trim()) {
       bodyRef.current.innerHTML = textToHtml(initialText);
       setHasBody(true);
+      return;
     }
-  }, [ctx, initialText]);
+    if (initialTemplate) {
+      const t = ctx.templates.find((x) => x.name.trim().toLowerCase() === initialTemplate.trim().toLowerCase());
+      if (t) {
+        // Defer one tick so roleId (set alongside ctx) is in place for the merge.
+        setTimeout(() => applyRef.current?.(t), 0);
+      } else {
+        setErr(`The "${initialTemplate}" template isn't in your list any more. Pick one from the toolbar.`);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx, initialText, initialTemplate]);
+  const applyRef = useRef<((t: Template) => void) | null>(null);
 
   // Above the drawer: swallow Escape before the drawer's document handler.
   // Deps include the open sublayers so this handler re-registers behind
@@ -305,8 +344,22 @@ export default function EmailModal({
           : undefined,
       },
       sender_name: { value: c.senderName, label: "your name" },
+      // Quick-action fields. No booking link on My page yet? The sentence
+      // still reads: "reply here with a few times that suit you".
+      booking_link: {
+        value: c.bookingLink || "reply here with a few times that suit you",
+        label: "booking link",
+        html: c.bookingLink ? `<a href="${esc(c.bookingLink)}">${esc(shortUrl(c.bookingLink))}</a>` : undefined,
+      },
+      page_link: (() => {
+        const url = role?.url || c.pageLink || "";
+        return { value: url, label: "page link", html: url ? `<a href="${esc(url)}">${esc(shortUrl(url))}</a>` : undefined };
+      })(),
+      matched_roles: { value: joinTitles(c.matchedRoles || []), label: "matched roles" },
+      month: { value: c.month || "", label: "month" },
+      subject: { value: (reply?.subject || "").replace(/^(re|fwd?):\s*/i, "").replace(/\{\{|\}\}/g, "").slice(0, 200), label: "subject" },
     };
-  }, [ctx, roleId, first, candidateName]);
+  }, [ctx, roleId, first, candidateName, reply]);
 
   // Role-dependent fields render as data-mf spans (value or pill) so they
   // stay live-bound to the Role-for-fields select.
@@ -353,6 +406,7 @@ export default function EmailModal({
     el.innerHTML = resolveHtml(t.bodyHtml);
     refreshFlags();
   };
+  applyRef.current = applyTemplate;
 
   const insertField = (key: string) => {
     const vals = mergeValues();
@@ -442,6 +496,7 @@ export default function EmailModal({
           ...(reply ? { replyToMessageId: reply.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
           ...(inboxThreadId ? { inboxThreadId } : {}),
+          ...(after ? { after: { stage: after.stage, jobId: after.jobId || roleId || null } } : {}),
           today: new Date().toLocaleDateString("en-CA"),
         }),
       });
@@ -857,7 +912,20 @@ export default function EmailModal({
               {err && <p className="em-warn">{err}</p>}
 
               <div className="tkm-foot">
-                <span className="em-foothint">Logged to {first}&apos;s timeline on send</span>
+                {allowSilent && onSilent && (
+                  <button type="button" className="em-silent" onClick={onSilent} disabled={sending}>
+                    Reject without emailing
+                  </button>
+                )}
+                <span className="em-foothint">
+                  {outcome ? (
+                    <>
+                      Then: <b>{outcome}</b>
+                    </>
+                  ) : (
+                    <>Logged to {first}&apos;s timeline on send</>
+                  )}
+                </span>
                 <button className="tkm-cancel" onClick={onClose} disabled={sending}>
                   Cancel
                 </button>

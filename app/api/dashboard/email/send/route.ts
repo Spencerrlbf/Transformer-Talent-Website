@@ -11,8 +11,9 @@ import {
   sanitizeEmailHtml,
   threadBelongs,
 } from "@/lib/server/email-compose";
-import { noteEmailSent } from "@/lib/server/inbox";
+import { noteEmailSent, noteStageMoved } from "@/lib/server/inbox";
 import { completeEmailTask } from "@/lib/server/tasks";
+import { saveUnifiedStatus, STAGE_LABEL } from "@/lib/server/candidates-unified";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
     today?: unknown;
     /** Inbox: the thread this (fresh, unthreaded) email answers. */
     inboxThreadId?: unknown;
+    /** Quick action: the pipeline move to make once the email is out. */
+    after?: unknown;
   };
   try {
     body = await req.json();
@@ -140,5 +143,17 @@ export async function POST(req: NextRequest) {
   if (completeTaskId) {
     taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
   }
-  return NextResponse.json({ ok: true, taskDone });
+
+  // Quick action outcome: the email is out, now the pipeline move. Only the
+  // two moves a rule can name, on a role this org has.
+  let staged: string | null = null;
+  const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
+  if (after && (after.stage === "contacted" || after.stage === "rejected") && typeof after.jobId === "string" && after.jobId) {
+    const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage).catch(() => ({ ok: false as const, error: "save_failed" }));
+    if (res.ok) {
+      staged = after.stage;
+      await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], after.jobId).catch(() => {});
+    }
+  }
+  return NextResponse.json({ ok: true, taskDone, staged });
 }

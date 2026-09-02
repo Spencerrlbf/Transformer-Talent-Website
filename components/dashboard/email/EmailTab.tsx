@@ -58,6 +58,8 @@ export default function EmailTab({
   completeTaskId,
   inboxThreadId,
   onSent,
+  openCompose,
+  onSilent,
 }: {
   candKey: string;
   name: string;
@@ -71,6 +73,16 @@ export default function EmailTab({
   inboxThreadId?: string | null;
   /** Inbox: a send went out (quick reply or composer). */
   onSent?: () => void;
+  /** Inbox quick action: open the composer on the current thread with a template. */
+  openCompose?: {
+    nonce: number;
+    template: string | null;
+    reply?: boolean;
+    after?: { stage: "contacted" | "rejected"; jobId?: string | null };
+    outcome?: string;
+    allowSilent?: boolean;
+  } | null;
+  onSilent?: () => void;
 }) {
   const { token } = useDash();
   const first = name.split(/\s+/)[0] || name;
@@ -86,7 +98,30 @@ export default function EmailTab({
     threadId?: string;
     reply?: { messageId: string; subject: string };
     initialText?: string;
+    /** Quick action: template + outcome handed in from the Inbox strip. */
+    template?: string | null;
+    after?: { stage: "contacted" | "rejected"; jobId?: string | null };
+    outcome?: string;
+    allowSilent?: boolean;
   }>(null);
+
+  // A quick action from the Inbox strip: compose (as a reply when the open
+  // thread has a provider id) with the named template already merged.
+  useEffect(() => {
+    if (!openCompose || !data) return;
+    const t = data.threads.find((x) => x.id === (openThreadId || open)) || data.threads[0];
+    const target = t ? replyTarget(t) : null;
+    setCompose({
+      threadId: t?.id,
+      reply: openCompose.reply && t && target ? { messageId: target.messageId, subject: t.subject } : undefined,
+      template: openCompose.template,
+      after: openCompose.after,
+      outcome: openCompose.outcome,
+      allowSilent: openCompose.allowSilent,
+    });
+    // Re-run only when a new action is requested (nonce), never on polls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCompose?.nonce, data === null]);
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
@@ -348,6 +383,11 @@ export default function EmailTab({
           initialText={compose.initialText}
           completeTaskId={completeTaskId || undefined}
           inboxThreadId={compose.threadId || inboxThreadId || undefined}
+          initialTemplate={compose.template || undefined}
+          after={compose.after}
+          outcome={compose.outcome}
+          allowSilent={compose.allowSilent}
+          onSilent={onSilent ? () => { setCompose(null); onSilent(); } : undefined}
           onClose={() => setCompose(null)}
           onSent={() => {
             // The draft went out through the composer: clear it here so the

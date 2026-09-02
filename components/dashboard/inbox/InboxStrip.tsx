@@ -1,11 +1,15 @@
 "use client";
 // The strip under the drawer header while working through the Inbox: what
-// this item is, what clears it, and the way on. After the work is done it
-// flips to "Handled" with Next — it never jumps by itself, so a note or a
-// shortlist can still happen on this person first.
+// this item is, what clears it, the quick actions for its kind, and the way
+// on. After the work is done it flips to "Handled" with Next — it never
+// jumps by itself, so a note or a shortlist can still happen on this person
+// first. A quick action never sends: it opens the composer with the right
+// template merged; Send does the bookkeeping.
 import KindIcon from "@/components/dashboard/tasks/KindIcon";
+import { actionsFor, outcomeLabel, type QuickAction } from "@/lib/quick-actions";
 import {
   KIND_ICON,
+  KIND_LABEL,
   KIND_TONE,
   isTask,
   reasonLabel,
@@ -13,8 +17,6 @@ import {
   type InboxItem,
 } from "@/components/dashboard/inbox/types";
 
-// Date-only strings are calendar days (noon local avoids a UTC slip);
-// instants are converted to the viewer's zone.
 const fmtDay = (iso: string) =>
   (iso.length === 10 ? new Date(iso + "T12:00:00") : new Date(iso)).toLocaleDateString("en-GB", {
     weekday: "short",
@@ -31,6 +33,12 @@ const fmtWhen = (item: InboxItem, today: string) => {
   const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString("en-CA") === today ? `${time} today` : fmtDay(item.at);
 };
+/** "Asked to hear from you in November" → "November". */
+const monthOf = (item: InboxItem) => {
+  const m = item.title.match(/ in ([A-Z][a-z]+(?: \d{4})?)$/);
+  return m ? m[1] : null;
+};
+const ACTION_ICON: Record<string, string> = { call: "call", no: "task", file: "note", ack: "request", open: "request", reply: "email" };
 
 export default function InboxStrip({
   item,
@@ -43,6 +51,7 @@ export default function InboxStrip({
   onSkip,
   onNext,
   onClose,
+  onAction,
 }: {
   item: InboxItem;
   today: string;
@@ -55,8 +64,10 @@ export default function InboxStrip({
   onSkip: () => void;
   onNext: () => void;
   onClose: () => void;
+  onAction: (a: QuickAction) => void;
 }) {
   const tone = KIND_TONE[item.kind];
+  const also = item.also || [];
   if (handledReason) {
     // "gone" = it left the list for a reason this session didn't cause
     // (rescheduled, a teammate acted, the date moved): say so, don't claim it.
@@ -87,6 +98,7 @@ export default function InboxStrip({
     );
   }
   const doneLabel = item.kind === "fdue" ? "Mark contacted" : isTask(item.kind) ? "Mark done" : "Done";
+  const actions = actionsFor(item.kind, { hasRole: Boolean(item.jobId), month: monthOf(item) });
   return (
     <div className={`ibs ${tone}`} role="status">
       <span className={`ib-kind ${tone}`}>
@@ -99,13 +111,59 @@ export default function InboxStrip({
           {stripHint(item) ? ` · ${stripHint(item)}` : ""}
         </span>
       </span>
-      <button type="button" className="ibs-btn" disabled={busy} onClick={onDone} title="Clear without acting">
-        {busy ? "…" : doneLabel}
-      </button>
-      {hasNext && (
+      {actions.length === 0 && (
+        <button type="button" className="ibs-btn" disabled={busy} onClick={onDone} title="Clear without acting">
+          {busy ? "…" : doneLabel}
+        </button>
+      )}
+      {actions.length === 0 && hasNext && (
         <button type="button" className="ibs-btn" onClick={onSkip} title="Leave it, move on">
           Skip ›
         </button>
+      )}
+      {actions.length > 0 && (
+        <div className="ibs-acts">
+          {actions.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={`qa${a.primary ? " pri" : ""}${a.danger ? " bad" : ""}`}
+              title={a.template ? `Opens the composer with "${a.template}" merged for them` : "Opens the composer"}
+              onClick={() => onAction(a)}
+            >
+              <KindIcon kind={ACTION_ICON[a.id] || "email"} className="tk-ico" />
+              {a.label}
+            </button>
+          ))}
+          <span className="ibs-more">
+            <button type="button" disabled={busy} onClick={onDone} title="Clear without acting">
+              {busy ? "…" : doneLabel}
+            </button>
+            {hasNext && (
+              <>
+                ·
+                <button type="button" onClick={onSkip} title="Leave it, move on">
+                  Skip ›
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+      )}
+      {actions.length > 0 && (
+        <span className="ibs-also">
+          Every button opens the composer first. After Send: <b>{outcomeLabel(actions[0], item.kind)}</b>
+          {also.length > 0 && (
+            <>
+              {" · "}Also open for them: <b>{also.map((x) => KIND_LABEL[x.kind]).join(" · ")}</b>
+            </>
+          )}
+        </span>
+      )}
+      {actions.length === 0 && also.length > 0 && (
+        <span className="ibs-also">
+          Also open for them: <b>{also.map((x) => KIND_LABEL[x.kind]).join(" · ")}</b>
+        </span>
       )}
     </div>
   );

@@ -12,11 +12,22 @@ import InboxStrip from "@/components/dashboard/inbox/InboxStrip";
 import {
   isTask,
   landingTab,
+  type AlsoItem,
   type InboxData,
   type InboxDone,
   type InboxItem,
   type InboxScope,
 } from "@/components/dashboard/inbox/types";
+import { outcomeLabel, type QuickAction } from "@/lib/quick-actions";
+
+type Quick = {
+  nonce: number;
+  template: string | null;
+  reply?: boolean;
+  after?: { stage: "contacted" | "rejected"; jobId?: string | null };
+  outcome?: string;
+  allowSilent?: boolean;
+};
 
 type Session = {
   items: InboxItem[];
@@ -38,6 +49,7 @@ export default function InboxPage() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [session, setSession] = useState<Session | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
+  const [quick, setQuick] = useState<Quick | null>(null);
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
   // Items this seat has already opened this session (marks are fire-and-forget).
@@ -82,9 +94,11 @@ export default function InboxPage() {
           if (!s) return s;
           const handled = { ...s.handled };
           const items = s.items.map((old) => {
-            const fresh = d.items.find((n) => n.id === old.id);
+            // Rows are people: the same person may lead with a different
+            // item after a reload (their reply handled, a task remains).
+            const fresh = d.items.find((n) => n.id === old.id) || d.items.find((n) => n.candidateKey && n.candidateKey === old.candidateKey);
             if (!fresh && !handled[old.id]) handled[old.id] = "gone";
-            return fresh ? { ...fresh, seen: fresh.seen || seenRef.current.has(fresh.id) } : old;
+            return fresh ? { ...fresh, id: old.id === fresh.id ? fresh.id : old.id, seen: fresh.seen || seenRef.current.has(fresh.id) } : old;
           });
           return { ...s, items, handled };
         });
@@ -137,9 +151,8 @@ export default function InboxPage() {
     }).catch(() => {});
   };
 
-  /** Clear an item without acting: the right call for its kind. */
-  const tick = async (item: InboxItem): Promise<boolean> => {
-    setBusy(item.id, true);
+  /** Clear one thing without acting: the right call for its kind. */
+  const tickOne = async (item: Pick<InboxItem, "id" | "kind" | "taskId" | "candidateKey" | "title">): Promise<boolean> => {
     let res: Response | null = null;
     if (isTask(item.kind) && item.taskId) {
       res = await fetch(`/api/dashboard/tasks/${item.taskId}`, {
@@ -156,8 +169,17 @@ export default function InboxPage() {
         body: JSON.stringify({ id: item.id, handled: "done", kind: item.kind, label: item.title, candidateKey: item.candidateKey }),
       }).catch(() => null);
     }
+    return Boolean(res?.ok);
+  };
+
+  /** Done on a row clears the person: the lead item and everything riding along. */
+  const tick = async (item: InboxItem): Promise<boolean> => {
+    setBusy(item.id, true);
+    const ok = await tickOne(item);
+    for (const x of item.also || []) {
+      await tickOne({ ...x, candidateKey: item.candidateKey } as AlsoItem & { candidateKey: string | null }).catch(() => false);
+    }
     setBusy(item.id, false);
-    const ok = Boolean(res?.ok);
     if (ok) {
       setData((d) =>
         d
@@ -229,6 +251,7 @@ export default function InboxPage() {
     const s = sessionRef.current;
     if (!s || index < 0 || index >= s.items.length) return;
     markSeen(s.items[index]);
+    setQuick(null);
     setSession({ ...s, index });
   };
   const nextUnhandled = (s: Session): number => {
@@ -238,12 +261,47 @@ export default function InboxPage() {
   };
   const closeSession = () => {
     setSession(null);
+    setQuick(null);
     load();
   };
   const noteHandled = (id: string, reason: string) =>
     setSession((s) => (s ? { ...s, handled: { ...s.handled, [id]: reason } } : s));
 
   const current = session ? session.items[session.index] : null;
+
+  /** A quick action: hand the drawer a template + outcome; the composer opens. */
+  const runAction = (a: QuickAction) => {
+    const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
+    if (!cur) return;
+    setQuick({
+      nonce: Date.now(),
+      template: a.template,
+      reply: a.reply,
+      after: a.stage ? { stage: a.stage, jobId: cur.jobId || null } : undefined,
+      outcome: a.template ? outcomeLabel(a, cur.kind) : undefined,
+      allowSilent: a.allowSilent,
+    });
+  };
+
+  /** "Reject without emailing": the stage move alone. */
+  const silentReject = async () => {
+    const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
+    if (!cur || !cur.candidateKey) return;
+    if (cur.jobId) {
+      const res = await fetch(`/api/dashboard/candidates/v2/${cur.candidateKey}/status`, {
+        method: "PUT",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: cur.jobId, status: "rejected" }),
+      }).catch(() => null);
+      if (res?.ok) {
+        noteHandled(cur.id, "stage:Rejected");
+        load();
+        return;
+      }
+    }
+    const ok = await tick(cur);
+    if (ok) noteHandled(cur.id, "done");
+  };
   const onActivity = (ev: { type: "stage" | "sent" | "contacted"; label?: string }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
@@ -291,6 +349,8 @@ export default function InboxPage() {
           onActivity={onActivity}
           completeTaskId={current.kind === "temail" ? current.taskId : null}
           inboxThreadId={current.kind === "mail" ? current.threadId : null}
+          quickAction={quick}
+          onSilentReject={silentReject}
           contextStrip={
             <InboxStrip
               item={current}
@@ -306,6 +366,7 @@ export default function InboxPage() {
               onSkip={() => goto(nextUnhandled(session))}
               onNext={() => goto(nextUnhandled(session))}
               onClose={closeSession}
+              onAction={runAction}
             />
           }
           onClose={closeSession}
