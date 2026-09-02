@@ -75,7 +75,13 @@ export async function POST(req: NextRequest) {
     to: { email: contact.email, name: contact.name || undefined },
     subject,
     html: clean,
-    replyToMessageId: target && !replyToMessageId.startsWith("local-") ? replyToMessageId : undefined,
+    // Provider message ids are per-grant: only the seat whose inbox holds
+    // the target can thread under it. Another seat sends plain, and the
+    // conversation still groups on our side via the thread id below.
+    replyToMessageId:
+      target && target.memberEmail === member.email && !replyToMessageId.startsWith("local-")
+        ? replyToMessageId
+        : undefined,
   });
   if ("error" in sent) {
     // grant_invalid = revoked/expired at the provider; the modal offers a

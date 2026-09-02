@@ -144,7 +144,12 @@ export default function EmailModal({
       .then((c) => {
         setCtx(c);
         setRoleId((cur) => cur || c.jobs[0]?.id || "");
-        if (reply) setSubject((s) => s || `Re: ${reply.subject.replace(/^(re|fwd?):\s*/i, "")}`);
+        if (reply) {
+          // Subject may have come from a mail client: strip merge braces and
+          // clamp so it can't trip the send checks.
+          const base = reply.subject.replace(/^(re|fwd?):\s*/i, "").replace(/\{\{|\}\}/g, "").slice(0, 290);
+          setSubject((s) => s || `Re: ${base}`);
+        }
       })
       .catch(() => setCtxErr(true));
   }, [candKey, token, reply]);

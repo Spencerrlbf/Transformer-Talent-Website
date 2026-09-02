@@ -30,6 +30,10 @@ const fmtWhen = (iso: string) => {
   return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, ${time}`;
 };
 
+/** A thread subject came from a mail client (or a candidate): never let it
+ *  trip the composer's merge-field check or the 300-char limit. */
+const replySubject = (s: string) => `Re: ${s.replace(/\{\{|\}\}/g, "").slice(0, 290)}`;
+
 /** The newest message with a real provider id — what a reply threads under. */
 const replyTarget = (t: Thread): Msg | null => {
   for (let i = t.messages.length - 1; i >= 0; i--) {
@@ -59,9 +63,11 @@ export default function EmailTab({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  const [compose, setCompose] = useState<null | { reply?: { messageId: string; subject: string }; initialText?: string }>(
-    null
-  );
+  const [compose, setCompose] = useState<null | {
+    threadId?: string;
+    reply?: { messageId: string; subject: string };
+    initialText?: string;
+  }>(null);
   const [connecting, setConnecting] = useState(false);
 
   const load = useCallback(() => {
@@ -108,7 +114,7 @@ export default function EmailTab({
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           candidateKey: candKey,
-          subject: `Re: ${t.subject}`,
+          subject: replySubject(t.subject),
           text,
           ...(target ? { replyToMessageId: target.messageId } : {}),
         }),
@@ -194,7 +200,7 @@ export default function EmailTab({
                               // Sanitized server-side at write time (rebuild-only allowlist).
                               <div className="bub" dangerouslySetInnerHTML={{ __html: m.bodyHtml }} />
                             ) : (
-                              <div className="bub pre">{m.bodyText || "(empty)"}</div>
+                              <div className="bub pre">{m.bodyText || "(no text, attachment only)"}</div>
                             )}
                             {!me && m.quotedText && (
                               <>
@@ -227,6 +233,7 @@ export default function EmailTab({
                             onClick={() => {
                               const target = replyTarget(t);
                               setCompose({
+                                threadId: t.id,
                                 reply: target ? { messageId: target.messageId, subject: t.subject } : undefined,
                                 initialText: drafts[t.id] || "",
                               });
@@ -261,7 +268,13 @@ export default function EmailTab({
           reply={compose.reply}
           initialText={compose.initialText}
           onClose={() => setCompose(null)}
-          onSent={load}
+          onSent={() => {
+            // The draft went out through the composer: clear it here so the
+            // quick-reply box can't send it a second time.
+            const sentFrom = compose.threadId;
+            if (sentFrom) setDrafts((d) => ({ ...d, [sentFrom]: "" }));
+            load();
+          }}
         />
       )}
     </div>

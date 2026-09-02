@@ -271,22 +271,52 @@ export function sanitizeEmailHtml(html: string): string {
 // ---- reply cleaning ---------------------------------------------------
 
 /** HTML → readable plain text with line structure kept. */
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  rsquo: "’",
+  lsquo: "‘",
+  rdquo: "”",
+  ldquo: "“",
+  mdash: "—",
+  ndash: "–",
+  hellip: "…",
+};
+
+const decodeEntities = (s: string) =>
+  s
+    .replace(/&#(\d+);/g, (m, n: string) => {
+      const cp = Number(n);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (m, h: string) => {
+      const cp = parseInt(h, 16);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+    })
+    .replace(/&([a-z]+);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m);
+
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<\s*br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
-    .replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/\r/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return (
+    html
+      .replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      // Gmail/Apple Mail put the first line as bare text followed by sibling
+      // <div>s: an opening block right after text is a line break too.
+      .replace(/([^>\n\s])(?=<(?:div|p|li|blockquote|h[1-6]|tr)\b)/gi, "$1\n")
+      .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\r/g, "")
+      .split("\n")
+      .map((line) => decodeEntities(line))
+      .join("\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
 // The quote containers the major clients emit. Quoted history always trails
@@ -298,35 +328,49 @@ export function stripQuotedHtml(html: string): string {
     .replace(/<blockquote[\s\S]*$/i, "");
 }
 
+// The attribution line starts with a date ("On 1 Sep 2026, at 20:26, …" /
+// "On Mon, 1 Sep 2026 at 10:00, …"), which is what keeps a sentence like
+// "On Monday I can do a call." from being mistaken for it.
+const ON_DATE = String.raw`On\s(?:\d|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s*\d)`;
 const QUOTE_MARKERS: RegExp[] = [
-  /(?:^|\n)\s*On\s[\s\S]{0,300}?\bwrote:\s*(?:\n|$)/, // Apple Mail / Gmail / Outlook plain
+  new RegExp(String.raw`(?:^|\n)\s*${ON_DATE}[\s\S]{0,300}?\bwrote:\s*(?:\n|$)`, "i"), // Apple Mail / Gmail / plain
   /(?:^|\n)\s*-{2,}\s*Original Message\s*-{2,}/i,
   /(?:^|\n)\s*From:\s[^\n]+\n\s*(?:Sent|Date):\s[^\n]+/i, // Outlook header block
   /(?:^|\n)\s*_{5,}\s*\n/, // Outlook separator rule
   /(?:^|\n)>\s?[^\n]*(?:\n>[^\n]*)*\s*$/, // trailing ">"-quoted block
 ];
 // For whitespace-collapsed previews (no newlines to anchor on).
-const LOOSE_ON_WROTE = /\bOn\s[^\n]{5,300}?\bwrote:/;
+const LOOSE_MARKERS: RegExp[] = [
+  new RegExp(String.raw`\b${ON_DATE}[^\n]{0,300}?\bwrote:`, "i"),
+  /\bFrom:\s[^\n]{1,200}?\b(?:Sent|Date):\s/,
+];
 
-/** Split text into the sender's own words and the quoted chain. */
+/** Split text into the sender's own words and the quoted chain. A marker at
+ *  position 0 means the sender wrote nothing (attachment-only reply). */
 export function splitQuoted(text: string, loose = false): { own: string; quoted: string } {
   let cut = -1;
-  const markers = loose ? [...QUOTE_MARKERS, LOOSE_ON_WROTE] : QUOTE_MARKERS;
+  const markers = loose ? [...QUOTE_MARKERS, ...LOOSE_MARKERS] : QUOTE_MARKERS;
   for (const re of markers) {
     const m = re.exec(text);
-    if (m && m.index > 0 && (cut === -1 || m.index < cut)) cut = m.index;
+    if (m && (cut === -1 || m.index < cut)) cut = m.index;
   }
   if (cut === -1) return { own: text.trim(), quoted: "" };
   return { own: text.slice(0, cut).trim(), quoted: text.slice(cut).trim() };
 }
 
+const ATTRIBUTION_ONLY = new RegExp(String.raw`^${ON_DATE}[\s\S]*wrote:$`, "i");
+
 /** Inbound message → its own words plus the quoted chain (kept, not lost). */
 export function cleanInbound(bodyHtml: string, fallbackSnippet: string): { own: string; quoted: string } {
   if (!bodyHtml) return splitQuoted(fallbackSnippet, true);
-  const own = splitQuoted(htmlToText(stripQuotedHtml(bodyHtml))).own;
   const full = htmlToText(bodyHtml);
-  const quoted = own && full.startsWith(own) ? full.slice(own.length).trim() : splitQuoted(full).quoted;
-  return { own: own || splitQuoted(full).own, quoted };
+  let own = splitQuoted(htmlToText(stripQuotedHtml(bodyHtml))).own;
+  if (!own) own = splitQuoted(full).own;
+  // Bottom-posted reply (answer typed under the quote): the strip left only
+  // the attribution line, so show everything rather than noise.
+  if (!own || ATTRIBUTION_ONLY.test(own)) return { own: full, quoted: "" };
+  const quoted = full.startsWith(own) ? full.slice(own.length).trim() : splitQuoted(full).quoted;
+  return { own, quoted };
 }
 
 export function htmlToSnippet(html: string, max = 180): string {
@@ -447,16 +491,16 @@ export async function loggedMessage(
   orgId: string,
   key: string,
   messageId: string
-): Promise<{ threadId: string; subject: string } | null> {
+): Promise<{ threadId: string; subject: string; memberEmail: string } | null> {
   if (!KEY_RE.test(key) || !messageId || messageId.length > 200) return null;
   const res = await sbRest(
     `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&message_id=eq.${encodeURIComponent(
       messageId
-    )}&select=thread_id,subject&limit=1`
+    )}&select=thread_id,subject,member_email&limit=1`
   );
   if (!res.ok) return null;
-  const [row] = (await res.json()) as { thread_id: string; subject: string }[];
-  return row ? { threadId: row.thread_id, subject: row.subject } : null;
+  const [row] = (await res.json()) as { thread_id: string; subject: string; member_email: string }[];
+  return row ? { threadId: row.thread_id, subject: row.subject, memberEmail: row.member_email } : null;
 }
 
 export async function logEmail(args: {
