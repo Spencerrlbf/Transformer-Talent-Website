@@ -23,17 +23,18 @@ export function useDash(): DashContext {
 }
 
 const NAV = [
+  { href: "/dashboard/inbox", label: "Inbox" },
   { href: "/dashboard", label: "Jobs" },
   { href: "/dashboard/candidates", label: "Candidates" },
-  { href: "/dashboard/tasks", label: "Tasks" },
   { href: "/dashboard/my-page", label: "My page" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
 // Breadcrumb label for the top bar, from the deepest matching section.
 const CRUMBS: [string, string][] = [
+  ["/dashboard/inbox", "Inbox"],
   ["/dashboard/candidates", "Candidates"],
-  ["/dashboard/tasks", "Tasks"],
+  ["/dashboard/tasks", "Inbox"],
   ["/dashboard/network", "Network"],
   ["/dashboard/my-page", "My page"],
   ["/dashboard/team", "Team"],
@@ -141,6 +142,8 @@ export default function DashShell({ children }: { children: ReactNode }) {
               <span key={item.href} style={{ display: "contents" }}>
                 <Link href={item.href} className={pathname === item.href ? "on" : ""}>
                   {item.label}
+                  {/* What's waiting on you today. */}
+                  {item.href === "/dashboard/inbox" && <InboxBadge token={session.access_token} />}
                   {/* Nudge until the user publishes their recruiter page. */}
                   {item.href === "/dashboard/my-page" && !me.myPage?.published && (
                     <span className="dash-nav-nudge">set up</span>
@@ -207,6 +210,52 @@ export default function DashShell({ children }: { children: ReactNode }) {
 // Sidebar sourcing-credits block (README §9.1 — approved). Balance from the
 // existing credits endpoint; hidden until it resolves, and entirely for orgs
 // that have never been granted credits.
+// Count of what's waiting on this seat today. Polled gently; refetched on
+// focus so coming back from the mail client shows the new reply at once.
+function InboxBadge({ token }: { token: string }) {
+  const [n, setN] = useState<number | null>(null);
+  const [overdue, setOverdue] = useState(0);
+  useEffect(() => {
+    let gone = false;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      // Recomputed per poll: a tab left open across midnight moves on too.
+      const today = new Date().toLocaleDateString("en-CA");
+      fetch(`/api/dashboard/inbox?count=1&scope=me&today=${today}&_=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? (r.json() as Promise<{ today: number; overdue: number }>) : null))
+        .then((j) => {
+          if (j && !gone) {
+            setN(j.today);
+            setOverdue(j.overdue);
+          }
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const id = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    // The Inbox page announces its own changes so the badge never lags it.
+    window.addEventListener("tt-inbox-changed", refresh);
+    return () => {
+      gone = true;
+      window.clearInterval(id);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("tt-inbox-changed", refresh);
+    };
+  }, [token]);
+  if (n === null || n === 0) return null;
+  return (
+    <span className={`dash-nav-badge${overdue ? " bad" : ""}`} title={overdue ? `${overdue} overdue` : undefined}>
+      {n}
+    </span>
+  );
+}
+
 function CreditsBlock({ token }: { token: string }) {
   const [sum, setSum] = useState<{ available: number; granted: number; held: number } | null>(
     null

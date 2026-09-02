@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
-import { saveUnifiedStatus } from "@/lib/server/candidates-unified";
+import { saveUnifiedStatus, STAGE_LABEL, type Stage } from "@/lib/server/candidates-unified";
+import { noteStageMoved } from "@/lib/server/inbox";
 
 // Set a candidate's human pipeline status for one role.
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string }> }) {
@@ -30,6 +31,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
   if (!result.ok) {
     const code = result.error === "save_failed" ? 502 : result.error === "job_not_found" ? 404 : 400;
     return NextResponse.json({ error: result.error }, { status: code });
+  }
+  // A move off New clears the person's Inbox arrival; record why for the
+  // actor's Done view.
+  if (body.status !== "new") {
+    await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[body.status as Stage] || body.status, body.jobId);
   }
   return NextResponse.json({ ok: true, status: body.status });
 }

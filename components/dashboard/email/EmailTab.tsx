@@ -20,7 +20,14 @@ type Msg = {
   createdAt: string;
 };
 type Thread = { id: string; subject: string; messages: Msg[]; lastAt: string; awaiting: boolean };
-type Data = { connected: boolean; address: string; awaiting: number; threads: Thread[] };
+type Data = {
+  connected: boolean;
+  address: string;
+  awaiting: number;
+  threads: Thread[];
+  /** Teammates' conversations the org's private setting keeps from this viewer. */
+  hiddenThreads?: number;
+};
 
 const localDay = (d: Date) => d.toLocaleDateString("en-CA");
 const fmtWhen = (iso: string) => {
@@ -47,11 +54,23 @@ export default function EmailTab({
   candKey,
   name,
   onAwaiting,
+  openThreadId,
+  completeTaskId,
+  inboxThreadId,
+  onSent,
 }: {
   candKey: string;
   name: string;
   /** Reports the awaiting-reply count so the tab badge stays current. */
   onAwaiting?: (n: number) => void;
+  /** Inbox: open on this thread rather than the newest. */
+  openThreadId?: string | null;
+  /** Inbox: the email task a send from here fulfils. */
+  completeTaskId?: string | null;
+  /** Inbox: the thread a fresh (unthreaded) email answers. */
+  inboxThreadId?: string | null;
+  /** Inbox: a send went out (quick reply or composer). */
+  onSent?: () => void;
 }) {
   const { token } = useDash();
   const first = name.split(/\s+/)[0] || name;
@@ -96,6 +115,11 @@ export default function EmailTab({
   }, [candKey, token, onAwaiting]);
 
   useEffect(load, [load]);
+
+  // Opened from the Inbox on a specific thread (a person can have two).
+  useEffect(() => {
+    if (openThreadId) setOpen(openThreadId);
+  }, [openThreadId]);
 
   // Replies arrive by webhook while the tab is open: poll while mounted and
   // refetch the moment the window regains focus (coming back from the mail
@@ -144,12 +168,18 @@ export default function EmailTab({
           subject: replySubject(t.subject),
           text,
           ...(target ? { replyToMessageId: target.messageId } : {}),
+          ...(completeTaskId ? { completeTaskId } : {}),
+          // A quick reply with no provider target (local-only thread) still
+          // answers this conversation.
+          ...(!target ? { inboxThreadId: t.id } : {}),
+          today: new Date().toLocaleDateString("en-CA"),
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (r.ok && j.ok) {
         setDrafts((d) => ({ ...d, [t.id]: "" }));
         load();
+        onSent?.();
       } else if (j.error === "not_connected" || j.error === "grant_invalid") {
         setErr("Your email connection expired — reconnect from the Team page, then try again.");
       } else if (j.error === "no_candidate_email") {
@@ -203,6 +233,13 @@ export default function EmailTab({
               </button>
             )}
           </div>
+
+          {(data.hiddenThreads || 0) > 0 && (
+            <p className="emc-hidden">
+              {data.hiddenThreads} conversation{data.hiddenThreads === 1 ? "" : "s"} with {first} in
+              {data.hiddenThreads === 1 ? " a teammate's mailbox is" : " teammates' mailboxes are"} private to them.
+            </p>
+          )}
 
           {data.threads.length === 0 && (
             <div className="emc-empty">
@@ -309,6 +346,8 @@ export default function EmailTab({
           candidateName={name}
           reply={compose.reply}
           initialText={compose.initialText}
+          completeTaskId={completeTaskId || undefined}
+          inboxThreadId={compose.threadId || inboxThreadId || undefined}
           onClose={() => setCompose(null)}
           onSent={() => {
             // The draft went out through the composer: clear it here so the
@@ -316,6 +355,7 @@ export default function EmailTab({
             const sentFrom = compose.threadId;
             if (sentFrom) setDrafts((d) => ({ ...d, [sentFrom]: "" }));
             load();
+            onSent?.();
           }}
         />
       )}

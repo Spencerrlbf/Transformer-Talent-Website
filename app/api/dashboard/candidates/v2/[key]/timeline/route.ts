@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { addNote, candidateTimeline } from "@/lib/server/tasks";
-import { listCandidateEmails } from "@/lib/server/email-compose";
+import { listCandidateEmailsFor } from "@/lib/server/email-compose";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 
@@ -14,12 +14,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ key: string
   const { key } = await ctx.params;
   if (!KEY_RE.test(key)) return NextResponse.json({ error: "bad_key" }, { status: 400 });
 
-  const [data, emails] = await Promise.all([
+  const [data, mail] = await Promise.all([
     candidateTimeline(member.org.id, key),
-    listCandidateEmails(member.org.id, key),
+    listCandidateEmailsFor(member.org.id, key, member.email),
   ]);
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  return NextResponse.json({ ...data, emails });
+  // privateEmails: teammates' messages this viewer may not read — markers only.
+  return NextResponse.json({ ...data, emails: mail.events, privateEmails: mail.hidden });
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ key: string }> }) {
