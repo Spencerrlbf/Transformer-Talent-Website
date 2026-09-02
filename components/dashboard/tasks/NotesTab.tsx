@@ -116,6 +116,19 @@ export default function NotesTab({
     load();
   }, [load]);
 
+  // Email markers arrive by webhook: refetch when the window regains focus.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [load]);
+
   const events: Ev[] = data
     ? [
         ...data.notes.map((n): Ev => ({ at: n.createdAt, type: "note", note: n })),

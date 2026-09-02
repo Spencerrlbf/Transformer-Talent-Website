@@ -87,6 +87,23 @@ export default function EmailTab({
 
   useEffect(load, [load]);
 
+  // Replies arrive by webhook while the tab is open: poll while mounted and
+  // refetch the moment the window regains focus (coming back from the mail
+  // client is exactly when a reply is expected).
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    const id = window.setInterval(tick, 15_000);
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [load]);
+
   const connect = async () => {
     setConnecting(true);
     try {

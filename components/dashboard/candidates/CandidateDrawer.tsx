@@ -351,16 +351,25 @@ export default function CandidateDrawer({
     setEmailAwaiting(0);
     if (!candKey || candKey.startsWith("net_")) return;
     let gone = false;
-    fetch(`/api/dashboard/email/threads?key=${candKey}&summary=1`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<{ awaiting: number }>) : null))
-      .then((j) => {
-        if (j && !gone) setEmailAwaiting(j.awaiting);
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      fetch(`/api/dashboard/email/threads?key=${candKey}&summary=1`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .catch(() => {});
+        .then((r) => (r.ok ? (r.json() as Promise<{ awaiting: number }>) : null))
+        .then((j) => {
+          if (j && !gone) setEmailAwaiting(j.awaiting);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    // Badge stays honest while the drawer is open on another tab.
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       gone = true;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [candKey, token, notesBump]);
 
