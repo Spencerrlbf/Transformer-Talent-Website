@@ -600,8 +600,8 @@ export default function CandidateDrawer({
                       type="button"
                       className={`cv2d-star${detail.shortlisted ? " on" : ""}`}
                       disabled={starBusy}
-                      title={detail.shortlisted ? "On your Shortlist — click to remove" : "Add to Shortlist"}
-                      aria-label="Shortlist"
+                      data-tip={detail.shortlisted ? "Remove from Shortlist" : "Add to Shortlist"}
+                      aria-label={detail.shortlisted ? "Remove from Shortlist" : "Add to Shortlist"}
                       onClick={toggleStar}
                     >
                       {detail.shortlisted ? "★" : "☆"}
