@@ -428,7 +428,9 @@ export async function listInbox(
     for (const r of ar) info.set(`app_${r.id}`, { name: str(r.name) || "Candidate", phone: str(r.contact?.phone), linkedin: str(r.linkedin_url) });
     for (const r of sr) info.set(`src_${r.id}`, { name: str(r.full_name) || "Candidate", phone: str(r.contact?.phone), linkedin: str(r.linkedin_url) });
   };
-  if (!lean) await loadInfo(nameNeeded, true);
+  // Lean callers (badge, Home strip) still get names — one chunked lookup —
+  // but not the contact hints that only the full list decorates rows with.
+  await loadInfo(nameNeeded, !lean);
 
   for (const m of mailItems) {
     m.item.candidateName = info.get(m.key)?.name || "Candidate";
