@@ -17,6 +17,7 @@ import { getRoles } from "@/lib/roles";
 import { passesHardGates, passesProfileGates, screenRolesWithCache } from "./screening";
 import { loadOrgRoles, matchOrgRolesForApplicant, type BoardRole } from "./org-board";
 import { llamaParsePdf } from "./llamaparse";
+import { extractEmail, extractPhone, fillExtractedContact, normalizePhone, pdfText } from "./contact-extract";
 import {
   recordEnrichment,
   syncExperiences,
@@ -64,18 +65,6 @@ function clean(s: unknown, max: number): string {
     .slice(0, max);
 }
 
-async function extractPdfText(buf: Buffer): Promise<string> {
-  try {
-    const mod = await import("pdf-parse/lib/pdf-parse.js");
-    const pdf = (mod.default || mod) as (b: Buffer) => Promise<{ text: string }>;
-    const out = await pdf(buf);
-    return clean(out.text, 60000);
-  } catch (err) {
-    console.error("pdf extraction failed", err);
-    return "";
-  }
-}
-
 function nameFromProfile(
   harvest: Record<string, unknown> | null,
   fallback: string
@@ -104,7 +93,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     if (resumeText) {
       resumeParser = "llamaparse";
     } else {
-      resumeText = (await extractPdfText(resumeBuf)) || null;
+      resumeText = (await pdfText(resumeBuf)) || null;
       if (resumeText) resumeParser = "pdf-parse";
     }
     if (resumeText) {
@@ -141,6 +130,21 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     }
     if (!harvest) harvest = await harvestProfile(linkedin);
     const parsed = await parseProfile(resumeText || "", harvest);
+
+    // Contact details off the resume: the model's read first, the regex
+    // pass as backstop. Fills gaps only — never overwrites a typed value.
+    if (resumeText) {
+      const foundPhone = normalizePhone(parsed?.phone) || extractPhone(resumeText);
+      const modelEmail = (parsed?.email || "").trim();
+      const foundEmail =
+        (modelEmail && modelEmail.toLowerCase() !== email.toLowerCase() ? modelEmail : null) ||
+        extractEmail(resumeText, email);
+      if (foundPhone || foundEmail) {
+        await fillExtractedContact(`app_${submissionId}`, { phone: foundPhone, email: foundEmail }).catch(
+          (err) => console.error("contact fill failed", err)
+        );
+      }
+    }
 
     // Referrals arrive with no name — take it from the profile.
     if (!name) {

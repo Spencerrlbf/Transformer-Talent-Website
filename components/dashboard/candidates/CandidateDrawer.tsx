@@ -501,8 +501,20 @@ export default function CandidateDrawer({
       setUploadErr("Upload failed — try again.");
       return;
     }
-    const r = (await res.json()) as { resumeUrl: string | null; resumeName: string | null };
-    if (detail) setDetail({ ...detail, resumeUrl: r.resumeUrl, resumeName: r.resumeName, hasResume: true });
+    const r = (await res.json()) as {
+      resumeUrl: string | null;
+      resumeName: string | null;
+      contact?: Detail["contact"] | null;
+    };
+    if (detail) {
+      // The upload may have filled a phone / extra email off the resume.
+      const contact = r.contact || detail.contact;
+      setDetail({ ...detail, resumeUrl: r.resumeUrl, resumeName: r.resumeName, hasResume: true, contact });
+      if (r.contact && !editingContact) {
+        setCPhone(r.contact.phone || "");
+        setCOther((r.contact.otherEmails || []).join(", "));
+      }
+    }
   };
 
   const putContact = async (payload: {

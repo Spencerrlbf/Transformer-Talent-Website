@@ -36,6 +36,9 @@ export interface ParsedProfile {
   education_fields: string[];
   top_skills: string[];
   profile_summary: string;
+  /** Contact details as written on the resume (added later; older rows lack them). */
+  phone?: string | null;
+  email?: string | null;
 }
 
 export async function parseProfile(
@@ -78,11 +81,14 @@ export async function parseProfile(
               education_fields: { type: "array", items: { type: "string" } },
               top_skills: { type: "array", items: { type: "string" } },
               profile_summary: { type: "string" },
+              phone: { type: ["string", "null"] },
+              email: { type: ["string", "null"] },
             },
             required: [
               "current_title", "current_company", "headline", "location",
               "total_experience_years", "previous_companies", "education_schools",
               "education_degrees", "education_fields", "top_skills", "profile_summary",
+              "phone", "email",
             ],
           },
         },
@@ -94,7 +100,9 @@ export async function parseProfile(
             "Extract a candidate profile from the resume and/or LinkedIn data. " +
             "profile_summary: dense 2-3 sentence summary of the engineer (role, seniority, " +
             "core skills, domains) suitable for semantic matching. top_skills: max 12. " +
-            "previous_companies: employers other than the current one, most recent first, max 6.",
+            "previous_companies: employers other than the current one, most recent first, max 6. " +
+            "phone / email: the candidate's own contact details exactly as written in the RESUME " +
+            "(not a referee's, not a company switchboard); null when the resume shows none.",
         },
         { role: "user", content: source },
       ],
