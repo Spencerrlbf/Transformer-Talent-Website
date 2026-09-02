@@ -74,7 +74,16 @@ const authorName = (email: string) => {
   return local.charAt(0).toUpperCase() + local.slice(1);
 };
 
-export default function NotesTab({ candKey, name }: { candKey: string; name: string }) {
+export default function NotesTab({
+  candKey,
+  name,
+  onOpenEmail,
+}: {
+  candKey: string;
+  name: string;
+  /** Email markers link into the drawer's Email tab. */
+  onOpenEmail?: () => void;
+}) {
   const { token, email } = useDash();
   const first = name.split(/\s+/)[0] || name;
 
@@ -83,7 +92,6 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
   const [noteModal, setNoteModal] = useState<NoteModalTarget | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
-  const [emailView, setEmailView] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/dashboard/candidates/v2/${candKey}/timeline`, {
@@ -105,7 +113,6 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
     setNoteModal(null);
     setTaskModal(null);
     setEmailOpen(false);
-    setEmailView(null);
     load();
   }, [load]);
 
@@ -189,33 +196,31 @@ export default function NotesTab({ candKey, name }: { candKey: string; name: str
             );
           }
           if (ev.type === "email") {
+            // One-line marker: the conversation itself lives in the Email tab.
             const e = ev.email;
             const out = e.direction === "out";
-            const open = emailView === e.id;
-            const expandable = out ? Boolean(e.bodyHtml) : e.snippet.length > 0;
             return (
               <div className="cv2n-ev" key={`e${e.id}`}>
                 <span className={`av ${out ? "mail" : "rin"}`}>{out ? "✉" : "↩"}</span>
                 <div className="b">
                   <div className="m">
-                    <b>{out ? `Email · ${authorName(e.memberEmail)}` : `${first} replied`}</b>
-                    <span>{out ? "sent" : `to ${authorName(e.memberEmail)}`} · {fmtWhen(e.createdAt)}</span>
-                    {expandable && (
-                      <button className="cv2n-edit" onClick={() => setEmailView(open ? null : e.id)}>
-                        {open ? "Hide" : "View"}
-                      </button>
-                    )}
+                    <b>{out ? "Email sent" : `${first} replied`}</b>
+                    <span>
+                      {out ? `by ${authorName(e.memberEmail)} · ` : ""}
+                      {fmtWhen(e.createdAt)}
+                    </span>
                   </div>
-                  {e.subject && <p className="cv2n-mailsubj">{e.subject}</p>}
-                  {!open && e.snippet && <p className="cv2n-mailsnip">{e.snippet}</p>}
-                  {open &&
-                    (out && e.bodyHtml ? (
-                      // Sanitized server-side at write time (rebuild-only
-                      // allowlist); replies are never stored as HTML.
-                      <div className="cv2n-mailbody" dangerouslySetInnerHTML={{ __html: e.bodyHtml }} />
-                    ) : (
-                      <div className="cv2n-mailbody">{e.snippet}</div>
-                    ))}
+                  <p className="cv2n-marker">
+                    {e.subject || "(no subject)"}
+                    {onOpenEmail && (
+                      <>
+                        {" · "}
+                        <button type="button" className="cv2n-link" onClick={onOpenEmail}>
+                          Open in Email ›
+                        </button>
+                      </>
+                    )}
+                  </p>
                 </div>
               </div>
             );

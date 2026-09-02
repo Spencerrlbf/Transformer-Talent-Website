@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyWebhookSignature } from "@/lib/server/nylas";
+import { fetchMessage, verifyWebhookSignature } from "@/lib/server/nylas";
 import {
   accountsByGrant,
-  htmlToSnippet,
+  cleanInbound,
   logEmail,
   matchCandidateByAddress,
 } from "@/lib/server/email-compose";
@@ -64,6 +64,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  // The payload may omit the body; fetch the full message once so the reply
+  // can be split into its own words + the quoted chain.
+  let bodyHtml = msg.body || "";
+  let subject = msg.subject || "";
+  let snippet = msg.snippet || "";
+  let threadId = msg.thread_id || "";
+  if (!bodyHtml && msg.id) {
+    const full = await fetchMessage(grantId, msg.id);
+    if (full) {
+      bodyHtml = full.body;
+      subject = subject || full.subject;
+      snippet = snippet || full.snippet;
+      threadId = threadId || full.threadId;
+    }
+  }
+  const { own, quoted } = cleanInbound(bodyHtml, snippet);
+
   for (const account of accounts) {
     const candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
     if (!candidateKey) continue;
@@ -73,10 +90,12 @@ export async function POST(req: NextRequest) {
       direction: "in",
       memberEmail: account.memberEmail,
       address: fromAddr,
-      subject: msg.subject || "",
-      snippet: msg.snippet ? msg.snippet.slice(0, 180) : htmlToSnippet(msg.body || ""),
+      subject,
+      snippet: (own || snippet).slice(0, 180),
+      bodyText: own,
+      quotedText: quoted,
       messageId: msg.id || "",
-      threadId: msg.thread_id || "",
+      threadId,
     });
   }
   return NextResponse.json({ ok: true });

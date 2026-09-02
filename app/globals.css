@@ -3919,3 +3919,52 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .em-menudiv { height: 1px; background: var(--row-line); margin: 4px 2px; }
 .em-menu > button.em-menuact { color: var(--accent-press); }
 .em-menu > button.em-tplpending { color: var(--bad); }
+
+/* ---- Email tab (chat-style threads) + Notes markers ---- */
+.emc { padding: 2px 0 20px; }
+.emc-loading { padding: 14px 2px; }
+.emc-strip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding: 4px 0 12px; }
+.emc-strip > span { flex: 1; min-width: 220px; }
+.emc-strip b { color: var(--body); }
+.emc-btn {
+  background: var(--ink); color: #fff; border: 0; border-radius: var(--r-control); padding: 8px 14px;
+  font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .04em; cursor: pointer; white-space: nowrap;
+}
+.emc-btn:disabled { opacity: .55; cursor: default; }
+.emc-empty {
+  border: 1px dashed var(--control-line); border-radius: var(--r-card); padding: 26px; text-align: center;
+  color: var(--muted); font-size: 13.5px;
+}
+.emc-empty b { display: block; color: var(--body); margin-bottom: 4px; }
+.emc-thread { border: 1px solid var(--hair); border-radius: var(--r-card); background: var(--paper); margin-top: 10px; overflow: hidden; }
+.emc-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; }
+.emc-head:hover { background: var(--surface); }
+.emc-subj { font-size: 13.5px; font-weight: 600; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emc-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.emc-chip { font-size: 11px; font-weight: 700; border-radius: var(--r-pill); padding: 2px 9px; white-space: nowrap; }
+.emc-chip.wait { background: var(--accent-wash); color: var(--accent-press); }
+.emc-chip.done { background: var(--surface); color: var(--body-2); border: 1px solid var(--hair); }
+.emc-caret { color: var(--faint); font-size: 12px; }
+.emc-conv { border-top: 1px solid var(--row-line); background: var(--surface); padding: 14px 16px; display: grid; gap: 10px; }
+.emc-msg { max-width: 78%; display: grid; gap: 3px; }
+.emc-msg .who { font-size: 11px; color: var(--muted); font-weight: 600; }
+.emc-msg .bub { font-size: 13.5px; line-height: 1.55; padding: 9px 12px; border-radius: 12px; color: var(--body); overflow-wrap: anywhere; }
+.emc-msg .bub.pre { white-space: pre-wrap; }
+.emc-msg .bub a { color: inherit; text-decoration: underline; }
+.emc-msg.me { justify-self: end; }
+.emc-msg.me .who { text-align: right; }
+.emc-msg.me .bub { background: var(--ink); color: #fff; border-bottom-right-radius: 4px; }
+.emc-msg.them .bub { background: var(--paper); border: 1px solid var(--hair); border-bottom-left-radius: 4px; }
+.emc-qtoggle { justify-self: start; font: inherit; font-size: 11px; color: var(--muted); background: none; border: 0; border-bottom: 1px dotted var(--faint); padding: 0; cursor: pointer; margin-top: 2px; }
+.emc-quoted { white-space: pre-wrap; font-size: 12.5px; line-height: 1.5; color: var(--muted); padding-left: 10px; border-left: 2px solid var(--hair); margin-top: 4px; }
+.emc-reply { border-top: 1px solid var(--row-line); padding: 12px 14px; display: grid; gap: 8px; }
+.emc-reply textarea {
+  width: 100%; min-height: 58px; border: 1px solid var(--control-line); border-radius: var(--r-control);
+  padding: 9px 11px; font: inherit; font-size: 13.5px; resize: vertical; background: var(--paper); color: var(--ink);
+}
+.emc-reply .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.emc-reply .link { font: inherit; font-size: 12px; font-weight: 600; color: var(--accent-press); background: none; border: 0; padding: 0; cursor: pointer; }
+.emc-reply .hint { font-size: 11.5px; color: var(--muted); flex: 1; }
+.cv2n-marker { margin: 2px 0 0 !important; font-size: 13px !important; color: var(--body-2) !important; }
+.cv2n-link { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-press); background: none; border: 0; padding: 0; cursor: pointer; }
+@media (max-width: 700px) { .emc-msg { max-width: 100%; } }

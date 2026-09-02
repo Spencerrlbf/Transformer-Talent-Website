@@ -106,6 +106,9 @@ export async function sendAsGrant(args: {
   to: { email: string; name?: string };
   subject: string;
   html: string;
+  /** Send as a true reply: threads in the provider's inbox and keeps one
+   *  thread_id on our side. */
+  replyToMessageId?: string;
 }): Promise<{ messageId: string; threadId: string } | { error: string }> {
   const res = await nylas(`/v3/grants/${encodeURIComponent(args.grantId)}/messages/send`, {
     method: "POST",
@@ -113,6 +116,7 @@ export async function sendAsGrant(args: {
       to: [args.to.name ? { email: args.to.email, name: args.to.name } : { email: args.to.email }],
       subject: args.subject,
       body: args.html,
+      ...(args.replyToMessageId ? { reply_to_message_id: args.replyToMessageId } : {}),
     }),
   });
   if (!res.ok) {
@@ -124,6 +128,23 @@ export async function sendAsGrant(args: {
   }
   const json = (await res.json()) as { data?: { id?: string; thread_id?: string } };
   return { messageId: json.data?.id || "", threadId: json.data?.thread_id || "" };
+}
+
+/** Full message (the webhook payload may omit the body). */
+export async function fetchMessage(
+  grantId: string,
+  messageId: string
+): Promise<{ body: string; subject: string; snippet: string; threadId: string } | null> {
+  const res = await nylas(
+    `/v3/grants/${encodeURIComponent(grantId)}/messages/${encodeURIComponent(messageId)}?fields=standard`
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    data?: { body?: string; subject?: string; snippet?: string; thread_id?: string };
+  };
+  const d = json.data;
+  if (!d) return null;
+  return { body: d.body || "", subject: d.subject || "", snippet: d.snippet || "", threadId: d.thread_id || "" };
 }
 
 // ---- webhooks ---------------------------------------------------------

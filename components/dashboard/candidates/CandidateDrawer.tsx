@@ -11,6 +11,7 @@ import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 import MultiSelect from "@/components/MultiSelect";
 import NotesTab from "@/components/dashboard/tasks/NotesTab";
 import EmailModal from "@/components/dashboard/email/EmailModal";
+import EmailTab from "@/components/dashboard/email/EmailTab";
 import {
   ROLE_FOCUS_OPTIONS,
   WORKPLACE_OPTIONS,
@@ -290,7 +291,7 @@ function PipelineRows({
   );
 }
 
-type Tab = "profile" | "pipeline" | "resume" | "notes";
+type Tab = "profile" | "pipeline" | "resume" | "notes" | "email";
 
 export default function CandidateDrawer({
   candKey,
@@ -342,8 +343,26 @@ export default function CandidateDrawer({
   const [contactErr, setContactErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
-  // Bumped on send so an already-open Notes tab remounts and refetches.
+  // Bumped on send so an already-open Notes/Email tab remounts and refetches.
   const [notesBump, setNotesBump] = useState(0);
+  // Threads where the candidate spoke last — the Email tab's badge.
+  const [emailAwaiting, setEmailAwaiting] = useState(0);
+  useEffect(() => {
+    setEmailAwaiting(0);
+    if (!candKey || candKey.startsWith("net_")) return;
+    let gone = false;
+    fetch(`/api/dashboard/email/threads?key=${candKey}&summary=1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<{ awaiting: number }>) : null))
+      .then((j) => {
+        if (j && !gone) setEmailAwaiting(j.awaiting);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [candKey, token, notesBump]);
 
   useEffect(() => {
     setDetail(null);
@@ -549,7 +568,7 @@ export default function CandidateDrawer({
           candidateName={detail.name}
           onClose={() => setEmailOpen(false)}
           onSent={() => {
-            setTab("notes");
+            setTab("email");
             setNotesBump((b) => b + 1);
           }}
         />
@@ -961,6 +980,7 @@ export default function CandidateDrawer({
                   ["pipeline", "Pipeline", detail.pipeline.length],
                   ["resume", "Resume", null],
                   ["notes", "Notes", null],
+                  ...(isNet ? [] : ([["email", "Email", emailAwaiting]] as [Tab, string, number | null][])),
                 ] as [Tab, string, number | null][]
               ).map(([id, label, n]) => (
                 <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
@@ -1162,7 +1182,20 @@ export default function CandidateDrawer({
               )}
 
               {tab === "notes" && !isNet && candKey && (
-                <NotesTab key={notesBump} candKey={candKey} name={detail.name} />
+                <NotesTab
+                  key={notesBump}
+                  candKey={candKey}
+                  name={detail.name}
+                  onOpenEmail={() => setTab("email")}
+                />
+              )}
+              {tab === "email" && !isNet && candKey && (
+                <EmailTab
+                  key={notesBump}
+                  candKey={candKey}
+                  name={detail.name}
+                  onAwaiting={setEmailAwaiting}
+                />
               )}
               {tab === "notes" && isNet && (
                 <div className="cv2d-notes">

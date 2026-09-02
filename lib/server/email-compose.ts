@@ -268,6 +268,67 @@ export function sanitizeEmailHtml(html: string): string {
   });
 }
 
+// ---- reply cleaning ---------------------------------------------------
+
+/** HTML → readable plain text with line structure kept. */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// The quote containers the major clients emit. Quoted history always trails
+// the reply, so everything from the container onward goes.
+export function stripQuotedHtml(html: string): string {
+  return html
+    .replace(/<div[^>]*id=["']?(appendonsend|divRplyFwdMsg)["']?[^>]*>[\s\S]*$/i, "")
+    .replace(/<div[^>]*class=["'][^"']*gmail_quote[^"']*["'][^>]*>[\s\S]*$/i, "")
+    .replace(/<blockquote[\s\S]*$/i, "");
+}
+
+const QUOTE_MARKERS: RegExp[] = [
+  /(?:^|\n)\s*On\s[\s\S]{0,300}?\bwrote:\s*(?:\n|$)/, // Apple Mail / Gmail / Outlook plain
+  /(?:^|\n)\s*-{2,}\s*Original Message\s*-{2,}/i,
+  /(?:^|\n)\s*From:\s[^\n]+\n\s*(?:Sent|Date):\s[^\n]+/i, // Outlook header block
+  /(?:^|\n)\s*_{5,}\s*\n/, // Outlook separator rule
+  /(?:^|\n)>\s?[^\n]*(?:\n>[^\n]*)*\s*$/, // trailing ">"-quoted block
+];
+// For whitespace-collapsed previews (no newlines to anchor on).
+const LOOSE_ON_WROTE = /\bOn\s[^\n]{5,300}?\bwrote:/;
+
+/** Split text into the sender's own words and the quoted chain. */
+export function splitQuoted(text: string, loose = false): { own: string; quoted: string } {
+  let cut = -1;
+  const markers = loose ? [...QUOTE_MARKERS, LOOSE_ON_WROTE] : QUOTE_MARKERS;
+  for (const re of markers) {
+    const m = re.exec(text);
+    if (m && m.index > 0 && (cut === -1 || m.index < cut)) cut = m.index;
+  }
+  if (cut === -1) return { own: text.trim(), quoted: "" };
+  return { own: text.slice(0, cut).trim(), quoted: text.slice(cut).trim() };
+}
+
+/** Inbound message → its own words plus the quoted chain (kept, not lost). */
+export function cleanInbound(bodyHtml: string, fallbackSnippet: string): { own: string; quoted: string } {
+  if (!bodyHtml) return splitQuoted(fallbackSnippet, true);
+  const own = splitQuoted(htmlToText(stripQuotedHtml(bodyHtml))).own;
+  const full = htmlToText(bodyHtml);
+  const quoted = own && full.startsWith(own) ? full.slice(own.length).trim() : splitQuoted(full).quoted;
+  return { own: own || splitQuoted(full).own, quoted };
+}
+
 export function htmlToSnippet(html: string, max = 180): string {
   return html
     .replace(/<br\s*\/?\s*>|<\/(p|div|li)>/gi, " ")
@@ -291,6 +352,11 @@ export type EmailEvent = {
   subject: string;
   snippet: string;
   bodyHtml: string | null;
+  /** The message's own words, quoted history stripped. */
+  bodyText: string;
+  quotedText: string;
+  messageId: string;
+  threadId: string;
   createdAt: string;
 };
 
@@ -302,27 +368,95 @@ type DbLog = {
   subject: string;
   snippet: string;
   body_html: string | null;
+  body_text: string;
+  quoted_text: string;
+  message_id: string;
+  thread_id: string;
   created_at: string;
 };
 
-const LOG_COLS = "id,direction,member_email,address,subject,snippet,body_html,created_at";
+const LOG_COLS =
+  "id,direction,member_email,address,subject,snippet,body_html,body_text,quoted_text,message_id,thread_id,created_at";
+
+const shapeLog = (r: DbLog): EmailEvent => ({
+  id: r.id,
+  direction: r.direction,
+  memberEmail: r.member_email,
+  address: r.address,
+  subject: r.subject,
+  snippet: r.snippet,
+  bodyHtml: r.body_html,
+  // Rows logged before cleaning existed: derive at read time.
+  bodyText:
+    r.body_text ||
+    (r.direction === "out" && r.body_html ? htmlToText(r.body_html) : splitQuoted(r.snippet, true).own),
+  quotedText: r.quoted_text,
+  messageId: r.message_id,
+  threadId: r.thread_id,
+  createdAt: r.created_at,
+});
 
 export async function listCandidateEmails(orgId: string, key: string): Promise<EmailEvent[]> {
   if (!KEY_RE.test(key)) return [];
   const res = await sbRest(
-    `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&select=${LOG_COLS}&order=created_at.desc&limit=100`
+    `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&select=${LOG_COLS}&order=created_at.desc&limit=200`
   );
   if (!res.ok) return [];
-  return ((await res.json()) as DbLog[]).map((r) => ({
-    id: r.id,
-    direction: r.direction,
-    memberEmail: r.member_email,
-    address: r.address,
-    subject: r.subject,
-    snippet: r.snippet,
-    bodyHtml: r.body_html,
-    createdAt: r.created_at,
-  }));
+  return ((await res.json()) as DbLog[]).map(shapeLog);
+}
+
+export type EmailThread = {
+  id: string;
+  subject: string;
+  messages: EmailEvent[];
+  lastAt: string;
+  /** The candidate spoke last — the ball is in the recruiter's court. */
+  awaiting: boolean;
+};
+
+/** Conversations for the Email tab: grouped by provider thread, messages
+ *  oldest→newest inside, threads newest-activity first. */
+export async function listThreads(orgId: string, key: string): Promise<EmailThread[]> {
+  const rows = await listCandidateEmails(orgId, key);
+  const byThread = new Map<string, EmailEvent[]>();
+  for (const m of rows) {
+    const id = m.threadId || `solo-${m.id}`;
+    const list = byThread.get(id) || [];
+    list.push(m);
+    byThread.set(id, list);
+  }
+  const threads: EmailThread[] = [];
+  for (const [id, list] of byThread) {
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const last = list[list.length - 1];
+    threads.push({
+      id,
+      subject: list[0].subject.replace(/^(re|fwd?):\s*/i, "") || "(no subject)",
+      messages: list,
+      lastAt: last.createdAt,
+      awaiting: last.direction === "in",
+    });
+  }
+  threads.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  return threads;
+}
+
+/** A logged message this org sent/received for this candidate — the
+ *  only thing a reply may target. */
+export async function loggedMessage(
+  orgId: string,
+  key: string,
+  messageId: string
+): Promise<{ threadId: string; subject: string } | null> {
+  if (!KEY_RE.test(key) || !messageId || messageId.length > 200) return null;
+  const res = await sbRest(
+    `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&message_id=eq.${encodeURIComponent(
+      messageId
+    )}&select=thread_id,subject&limit=1`
+  );
+  if (!res.ok) return null;
+  const [row] = (await res.json()) as { thread_id: string; subject: string }[];
+  return row ? { threadId: row.thread_id, subject: row.subject } : null;
 }
 
 export async function logEmail(args: {
@@ -334,6 +468,8 @@ export async function logEmail(args: {
   subject: string;
   snippet: string;
   bodyHtml?: string | null;
+  bodyText?: string;
+  quotedText?: string;
   messageId?: string;
   threadId?: string;
 }): Promise<boolean> {
@@ -353,6 +489,8 @@ export async function logEmail(args: {
       subject: args.subject.slice(0, 500),
       snippet: args.snippet,
       body_html: args.bodyHtml ?? null,
+      body_text: (args.bodyText || "").slice(0, 20_000),
+      quoted_text: (args.quotedText || "").slice(0, 20_000),
       message_id: args.messageId || `local-${randomUUID()}`,
       thread_id: args.threadId || "",
     }),

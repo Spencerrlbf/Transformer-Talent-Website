@@ -83,14 +83,26 @@ function handleEditorPaste(e: React.ClipboardEvent<HTMLDivElement>) {
 
 // ---------------------------------------------------------------- compose
 
+const textToHtml = (text: string) =>
+  text
+    .split("\n")
+    .map((l) => `<div>${esc(l) || "<br>"}</div>`)
+    .join("");
+
 export default function EmailModal({
   candKey,
   candidateName,
+  reply,
+  initialText,
   onClose,
   onSent,
 }: {
   candKey: string;
   candidateName: string;
+  /** Reply mode: threads under this logged message, subject pre-filled. */
+  reply?: { messageId: string; subject: string };
+  /** Seed the body (a quick reply handed off to the full composer). */
+  initialText?: string;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -132,11 +144,23 @@ export default function EmailModal({
       .then((c) => {
         setCtx(c);
         setRoleId((cur) => cur || c.jobs[0]?.id || "");
+        if (reply) setSubject((s) => s || `Re: ${reply.subject.replace(/^(re|fwd?):\s*/i, "")}`);
       })
       .catch(() => setCtxErr(true));
-  }, [candKey, token]);
+  }, [candKey, token, reply]);
 
   useEffect(loadCtx, [loadCtx]);
+
+  // Seed a handed-off quick reply once the editor exists.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!ctx?.connected || seeded.current || !bodyRef.current) return;
+    seeded.current = true;
+    if (initialText?.trim()) {
+      bodyRef.current.innerHTML = textToHtml(initialText);
+      setHasBody(true);
+    }
+  }, [ctx, initialText]);
 
   // Above the drawer: swallow Escape before the drawer's document handler.
   // Deps include the open sublayers so this handler re-registers behind
@@ -400,7 +424,12 @@ export default function EmailModal({
       const r = await fetch("/api/dashboard/email/send", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateKey: candKey, subject: subject.trim(), html: el.innerHTML }),
+        body: JSON.stringify({
+          candidateKey: candKey,
+          subject: subject.trim(),
+          html: el.innerHTML,
+          ...(reply ? { replyToMessageId: reply.messageId } : {}),
+        }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (r.ok && j.ok) {
@@ -457,13 +486,13 @@ export default function EmailModal({
         <div className="tkm em-tkm" onClick={(e) => e.stopPropagation()}>
           {ctxErr && (
             <>
-              <h3>Email {first}</h3>
+              <h3>{reply ? "Reply to" : "Email"} {first}</h3>
               <p className="tkm-sub">Couldn&apos;t load the composer — close and try again.</p>
             </>
           )}
           {!ctx && !ctxErr && (
             <>
-              <h3>Email {first}</h3>
+              <h3>{reply ? "Reply to" : "Email"} {first}</h3>
               <p className="tkm-sub">Loading…</p>
             </>
           )}
@@ -495,9 +524,10 @@ export default function EmailModal({
 
           {ctx && ctx.connected && (
             <>
-              <h3>Email {first}</h3>
+              <h3>{reply ? "Reply to" : "Email"} {first}</h3>
               <p className="tkm-sub">
-                From <b>{ctx.address}</b> · sent from your own inbox, logged to the timeline
+                From <b>{ctx.address}</b> ·{" "}
+                {reply ? "sent as a reply in the same thread" : "sent from your own inbox, logged to the timeline"}
               </p>
 
               <span className="lbl em-lblfirst">To</span>
