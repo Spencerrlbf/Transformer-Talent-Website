@@ -14,9 +14,29 @@ import {
 import { noteEmailSent, noteStageMoved } from "@/lib/server/inbox";
 import { completeEmailTask } from "@/lib/server/tasks";
 import { saveUnifiedStatus, STAGE_LABEL } from "@/lib/server/candidates-unified";
+import { sbRest } from "@/lib/server/supabase";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** A quick action may only move a role the person is actually attached to,
+ *  and "Contacted" never overwrites a later stage (Interviewing, Offer…):
+ *  the most natural click on an active thread must not drag someone back. */
+async function quickMoveAllowed(orgId: string, key: string, jobId: string, stage: "contacted" | "rejected"): Promise<boolean> {
+  if (key.startsWith("app_")) {
+    const r = await sbRest(`website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}&select=role_ids,matched_role_ids&limit=1`);
+    const [a] = r.ok ? ((await r.json()) as { role_ids: string[] | null; matched_role_ids: string[] | null }[]) : [];
+    if (!a || ![...(a.role_ids || []), ...(a.matched_role_ids || [])].includes(jobId)) return false;
+  }
+  if (stage === "contacted") {
+    const r = await sbRest(
+      `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${key}&job_id=eq.${encodeURIComponent(jobId)}&select=status&limit=1`
+    );
+    const [row] = r.ok ? ((await r.json()) as { status: string }[]) : [];
+    if (row && row.status !== "new" && row.status !== "contacted") return false;
+  }
+  return true;
+}
 
 // Quick replies arrive as plain text; give them the same HTML shape the
 // composer produces (one div per line).
@@ -149,10 +169,12 @@ export async function POST(req: NextRequest) {
   let staged: string | null = null;
   const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
   if (after && (after.stage === "contacted" || after.stage === "rejected") && typeof after.jobId === "string" && after.jobId) {
-    const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage).catch(() => ({ ok: false as const, error: "save_failed" }));
-    if (res.ok) {
-      staged = after.stage;
-      await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], after.jobId).catch(() => {});
+    if (await quickMoveAllowed(member.org.id, key, after.jobId, after.stage)) {
+      const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage).catch(() => ({ ok: false as const, error: "save_failed" }));
+      if (res.ok) {
+        staged = after.stage;
+        await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], after.jobId).catch(() => {});
+      }
     }
   }
   return NextResponse.json({ ok: true, taskDone, staged });

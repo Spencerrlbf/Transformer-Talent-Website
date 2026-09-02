@@ -142,7 +142,7 @@ export default function InboxStrip({
               key={a.id}
               type="button"
               className={`qa${a.primary ? " pri" : ""}${a.danger ? " bad" : ""}`}
-              title={a.template ? `Opens the composer with "${a.template}" merged for them` : "Opens the composer"}
+              title={a.template ? `Opens the composer with "${a.templateName || a.template}" merged for them` : "Opens the composer"}
               onClick={() => onAction(a, actionKind)}
             >
               <KindIcon kind={ACTION_ICON[a.id] || "email"} className="tk-ico" />
@@ -167,7 +167,7 @@ export default function InboxStrip({
       {actions.length > 0 && (
         <span className="ibs-also">
           {actionKind !== item.kind ? `Buttons are for their ${KIND_LABEL[actionKind].toLowerCase()} · ` : ""}
-          Every button opens the composer first. After Send: <b>{outcomeLabel(actions[0], actionKind)}</b>
+          Every button opens the composer first. After Send: <b>{outcomeLabel(actions[0], actionKind, Boolean(actionKind === item.kind ? item.jobId : also.find((x) => x.kind === actionKind)?.jobId || item.jobId))}</b>
           {also.length > 0 && (
             <>
               {" · "}Also open for them: <b>{also.map((x) => KIND_LABEL[x.kind]).join(" · ")}</b>

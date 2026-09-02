@@ -16,7 +16,7 @@ type ComposeJob = {
   workplace: string;
   url: string;
 };
-type Template = { id: string; name: string; subject: string; bodyHtml: string };
+type Template = { id: string; name: string; subject: string; bodyHtml: string; actionKey?: string | null };
 type Ctx = {
   connected: boolean;
   address: string;
@@ -107,6 +107,8 @@ export default function EmailModal({
   completeTaskId,
   inboxThreadId,
   initialTemplate,
+  initialTemplateName,
+  threadSubject,
   after,
   outcome,
   allowSilent,
@@ -124,9 +126,12 @@ export default function EmailModal({
   completeTaskId?: string;
   /** Inbox: the conversation a fresh email from here answers. */
   inboxThreadId?: string;
-  /** Quick action: apply this template (by name) as soon as the composer loads. */
+  /** Quick action: apply this template (by action key, else by name) as soon as the composer loads. */
   initialTemplate?: string;
-  /** Quick action: the pipeline move Send makes (jobId defaults to the merge role). */
+  initialTemplateName?: string;
+  /** The conversation's subject, for {{subject}} even when the send can't thread. */
+  threadSubject?: string;
+  /** Quick action: the pipeline move Send makes — on this role only, never the merge role. */
   after?: { stage: "contacted" | "rejected"; jobId?: string | null };
   /** Quick action: what the footer says Send will do. */
   outcome?: string;
@@ -134,7 +139,8 @@ export default function EmailModal({
   allowSilent?: boolean;
   onSilent?: () => void;
   onClose: () => void;
-  onSent: () => void;
+  /** Called after a successful send with what the server did. */
+  onSent: (result?: { staged: string | null; taskDone: boolean }) => void;
 }) {
   const { token } = useDash();
   const [ctx, setCtx] = useState<Ctx | null>(null);
@@ -175,7 +181,11 @@ export default function EmailModal({
         setCtx(c);
         // The role fields follow the role they applied to (or were matched
         // to) when there is one; the first open role otherwise.
-        setRoleId((cur) => cur || (c.appliedRoleId && c.jobs.some((j) => j.id === c.appliedRoleId) ? c.appliedRoleId : "") || c.jobs[0]?.id || "");
+        setRoleId((cur) => {
+          if (cur) return cur;
+          if (c.appliedRoleId) return c.jobs.some((j) => j.id === c.appliedRoleId) ? c.appliedRoleId : "";
+          return c.jobs[0]?.id || "";
+        });
         if (reply) {
           // Subject may have come from a mail client: strip merge braces and
           // clamp so it can't trip the send checks.
@@ -200,12 +210,15 @@ export default function EmailModal({
       return;
     }
     if (initialTemplate) {
-      const t = ctx.templates.find((x) => x.name.trim().toLowerCase() === initialTemplate.trim().toLowerCase());
+      const wantName = (initialTemplateName || "").trim().toLowerCase();
+      const t =
+        ctx.templates.find((x) => x.actionKey === initialTemplate) ||
+        (wantName ? ctx.templates.find((x) => x.name.trim().toLowerCase() === wantName) : undefined);
       if (t) {
         // Defer one tick so roleId (set alongside ctx) is in place for the merge.
         setTimeout(() => applyRef.current?.(t), 0);
       } else {
-        setErr(`The "${initialTemplate}" template isn't in your list any more. Pick one from the toolbar.`);
+        setErr(`The "${initialTemplateName || initialTemplate}" template isn't in your list any more. Pick one from the toolbar.`);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -344,22 +357,32 @@ export default function EmailModal({
           : undefined,
       },
       sender_name: { value: c.senderName, label: "your name" },
-      // Quick-action fields. No booking link on My page yet? The sentence
-      // still reads: "reply here with a few times that suit you".
+      // Quick-action fields. No booking link on My page yet? The field is a
+      // pill, so the sentence gets rewritten by a person before it can send.
       booking_link: {
-        value: c.bookingLink || "reply here with a few times that suit you",
+        value: c.bookingLink || "",
         label: "booking link",
         html: c.bookingLink ? `<a href="${esc(c.bookingLink)}">${esc(shortUrl(c.bookingLink))}</a>` : undefined,
       },
-      page_link: (() => {
-        const url = role?.url || c.pageLink || "";
-        return { value: url, label: "page link", html: url ? `<a href="${esc(url)}">${esc(shortUrl(url))}</a>` : undefined };
-      })(),
+      // Your page (or the org's board); the role's own page is role_link.
+      page_link: {
+        value: c.pageLink || "",
+        label: "page link",
+        html: c.pageLink ? `<a href="${esc(c.pageLink)}">${esc(shortUrl(c.pageLink))}</a>` : undefined,
+      },
+      role_link: {
+        value: role?.url || "",
+        label: "role link",
+        html: role?.url ? `<a href="${esc(role.url)}">${esc(shortUrl(role.url))}</a>` : undefined,
+      },
       matched_roles: { value: joinTitles(c.matchedRoles || []), label: "matched roles" },
       month: { value: c.month || "", label: "month" },
-      subject: { value: (reply?.subject || "").replace(/^(re|fwd?):\s*/i, "").replace(/\{\{|\}\}/g, "").slice(0, 200), label: "subject" },
+      subject: {
+        value: (threadSubject || reply?.subject || "").replace(/^(re|fwd?):\s*/i, "").replace(/\{\{|\}\}/g, "").slice(0, 200),
+        label: "subject",
+      },
     };
-  }, [ctx, roleId, first, candidateName, reply]);
+  }, [ctx, roleId, first, candidateName, reply, threadSubject]);
 
   // Role-dependent fields render as data-mf spans (value or pill) so they
   // stay live-bound to the Role-for-fields select.
@@ -496,13 +519,13 @@ export default function EmailModal({
           ...(reply ? { replyToMessageId: reply.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
           ...(inboxThreadId ? { inboxThreadId } : {}),
-          ...(after ? { after: { stage: after.stage, jobId: after.jobId || roleId || null } } : {}),
+          ...(after && after.jobId ? { after: { stage: after.stage, jobId: after.jobId } } : {}),
           today: new Date().toLocaleDateString("en-CA"),
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean };
       if (r.ok && j.ok) {
-        onSent();
+        onSent({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone) });
         onClose();
         return;
       }
@@ -921,6 +944,9 @@ export default function EmailModal({
                   {outcome ? (
                     <>
                       Then: <b>{outcome}</b>
+                      {after?.jobId && ctx?.jobs.find((j) => j.id === after.jobId) && (
+                        <> · {ctx.jobs.find((j) => j.id === after.jobId)!.title}</>
+                      )}
                     </>
                   ) : (
                     <>Logged to {first}&apos;s timeline on send</>

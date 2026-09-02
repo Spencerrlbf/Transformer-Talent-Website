@@ -1,17 +1,19 @@
 // Quick actions: the rules that give each kind of Inbox item its buttons.
-// A button never sends. It opens the composer with a named template merged
-// for the person; Send does the bookkeeping named in `stage`. Shared by
-// the Inbox strip (client) and the send route (server), so both read the
-// same rule. Templates are looked up by name in the org's own list (seeded
-// once per org, editable like any other).
+// A button never sends. It opens the composer with a template merged for
+// the person; Send does the bookkeeping named in `stage`, and only on the
+// item's own role — never on whatever role the merge fields happen to show.
+// Templates are found by a stable key on the org's own template (seeded
+// once per org, renamable, editable); the name is a fallback for older rows.
 export type QuickStage = "contacted" | "rejected";
 
 export type QuickAction = {
   id: string;
   label: string;
-  /** Template name in the org's list; null = the plain composer. */
+  /** Stable key of the template in the org's list; null = the plain composer. */
   template: string | null;
-  /** Pipeline move made after a successful Send. */
+  /** The default template's name (lookup fallback + the button's tooltip). */
+  templateName?: string;
+  /** Pipeline move made after a successful Send — only when the item names a role. */
   stage?: QuickStage;
   primary?: boolean;
   danger?: boolean;
@@ -22,16 +24,17 @@ export type QuickAction = {
 };
 
 export const TEMPLATE = {
-  applyCall: "Thanks for applying, book a call",
-  rolesForYou: "We have roles for you",
-  keepPosted: "Keeping you posted",
-  notThisTime: "Not this time",
-  speakLater: "Thanks, speak later",
-  replyCall: "Book a call (reply)",
-  followUpOpen: "Follow-up: what's open",
+  applyCall: { key: "apply_call", name: "Thanks for applying, book a call" },
+  rolesForYou: { key: "roles_for_you", name: "We have roles for you" },
+  keepPosted: { key: "keep_posted", name: "Keeping you posted" },
+  notThisTime: { key: "not_this_time", name: "Not this time" },
+  speakLater: { key: "speak_later", name: "Thanks, speak later" },
+  replyCall: { key: "reply_call", name: "Book a call (reply)" },
+  followUpOpen: { key: "follow_up_open", name: "Follow-up: what's open" },
 } as const;
 
 const REPLY: QuickAction = { id: "reply", label: "Reply…", template: null };
+const t = (x: { key: string; name: string }) => ({ template: x.key, templateName: x.name });
 
 /** The buttons for one item. hasRole = a role to move (applied or matched). */
 export function actionsFor(
@@ -41,32 +44,32 @@ export function actionsFor(
   switch (kind) {
     case "app":
       return [
-        { id: "call", label: "Schedule a call", template: TEMPLATE.applyCall, stage: "contacted", primary: true },
-        { id: "no", label: "Not suitable", template: TEMPLATE.notThisTime, stage: "rejected", danger: true, allowSilent: true },
+        { id: "call", label: "Schedule a call", ...t(TEMPLATE.applyCall), stage: "contacted", primary: true },
+        { id: "no", label: "Not suitable", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true },
         REPLY,
       ];
     case "drop":
     case "ref":
       return ctx.hasRole
         ? [
-            { id: "call", label: "Schedule a call", template: TEMPLATE.rolesForYou, stage: "contacted", primary: true },
-            { id: "file", label: "Keep on file", template: TEMPLATE.keepPosted },
+            { id: "call", label: "Schedule a call", ...t(TEMPLATE.rolesForYou), stage: "contacted", primary: true },
+            { id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted) },
             REPLY,
           ]
-        : [{ id: "file", label: "Keep on file", template: TEMPLATE.keepPosted, primary: true }, REPLY];
+        : [{ id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), primary: true }, REPLY];
     case "ask":
       return [
-        { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", template: TEMPLATE.speakLater, primary: true },
+        { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", ...t(TEMPLATE.speakLater), primary: true },
         REPLY,
       ];
     case "mail":
       return [
-        { id: "call", label: "Schedule a call", template: TEMPLATE.replyCall, stage: "contacted", primary: true, reply: true },
+        { id: "call", label: "Schedule a call", ...t(TEMPLATE.replyCall), stage: "contacted", primary: true, reply: true },
         { ...REPLY, reply: true },
       ];
     case "fdue":
       return [
-        { id: "open", label: "Here's what's open", template: TEMPLATE.followUpOpen, primary: true },
+        { id: "open", label: "Here's what's open", ...t(TEMPLATE.followUpOpen), primary: true },
         REPLY,
       ];
     default:
@@ -74,11 +77,13 @@ export function actionsFor(
   }
 }
 
-/** Plain-English outcome for the composer's "Then:" line and the strip. */
-export function outcomeLabel(a: QuickAction, kind: string): string {
-  if (a.stage === "contacted") return kind === "mail" ? "stage moves to Contacted · thread clears" : "stage moves to Contacted · item clears";
-  if (a.stage === "rejected") return "stage moves to Rejected · item clears";
+/** Plain-English outcome for the composer's "Then:" line and the strip.
+ *  hasRole = the item names a role the move can land on. */
+export function outcomeLabel(a: QuickAction, kind: string, hasRole = true): string {
+  const clears = kind === "mail" ? "thread clears" : "item clears";
+  if (a.stage === "contacted") return hasRole ? `stage moves to Contacted · ${clears}` : `${clears} · no role to move`;
+  if (a.stage === "rejected") return hasRole ? `stage moves to Rejected · ${clears}` : `${clears} · no role to move`;
   if (kind === "fdue") return "marked contacted · follow-up clears";
   if (kind === "ask") return "item clears · the dated follow-up stays";
-  return "item clears";
+  return clears;
 }

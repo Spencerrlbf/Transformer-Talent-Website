@@ -8,7 +8,7 @@ import { sbRest, sbRpc } from "./supabase";
 import { listInbox, type InboxScope } from "./inbox";
 
 export type Period = "week" | "month";
-type Member = { orgId: string; email: string; userId: string; memberRole: string };
+type Member = { orgId: string; email: string; userId: string; memberRole: string; orgSlug?: string };
 
 const STAGES = ["new", "contacted", "replied", "interviewing", "offer", "hired"] as const;
 type StageKey = (typeof STAGES)[number];

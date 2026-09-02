@@ -1,16 +1,18 @@
 // Default templates for quick actions, seeded into an org's own template
-// list the first time the composer loads for a seat. Once seeded they are
-// the org's: rename, reword, delete. Quick actions look them up by name,
-// so an edited version is what goes out. Candidate-facing copy: no em-
-// dashes, plain sentences, nothing about internal tooling.
-import { listTemplates, createTemplate } from "./email-compose";
+// list ONCE (organizations.quick_templates_seeded_at). After that they are
+// the org's: rename, reword, delete — a deleted one stays deleted, and the
+// button then says the template is missing rather than sending a stale
+// copy. Quick actions find them by action_key, so renames don't matter.
+// Candidate-facing copy: no em-dashes, plain sentences, nothing internal.
+import { sbRest } from "./supabase";
+import { listTemplates, createTemplate, setTemplateActionKey } from "./email-compose";
 import { TEMPLATE } from "@/lib/quick-actions";
 
 const lines = (...ls: string[]) => ls.map((l) => (l ? `<div>${l}</div>` : "<div><br></div>")).join("");
 
-export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: string }[] = [
+export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bodyHtml: string }[] = [
   {
-    name: TEMPLATE.applyCall,
+    ...TEMPLATE.applyCall,
     subject: "Your application for {{job_title}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -25,7 +27,7 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
     ),
   },
   {
-    name: TEMPLATE.rolesForYou,
+    ...TEMPLATE.rolesForYou,
     subject: "Thanks for your resume, a couple of roles to look at",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -38,7 +40,7 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
     ),
   },
   {
-    name: TEMPLATE.keepPosted,
+    ...TEMPLATE.keepPosted,
     subject: "Thanks for your resume",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -51,7 +53,7 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
     ),
   },
   {
-    name: TEMPLATE.notThisTime,
+    ...TEMPLATE.notThisTime,
     subject: "Your application for {{job_title}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -64,7 +66,7 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
     ),
   },
   {
-    name: TEMPLATE.speakLater,
+    ...TEMPLATE.speakLater,
     subject: "Speak in {{month}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -77,7 +79,7 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
     ),
   },
   {
-    name: TEMPLATE.replyCall,
+    ...TEMPLATE.replyCall,
     subject: "Re: {{subject}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -88,7 +90,7 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
     ),
   },
   {
-    name: TEMPLATE.followUpOpen,
+    ...TEMPLATE.followUpOpen,
     subject: "As promised, what's open now",
     bodyHtml: lines(
       "Hi {{first_name}},",
@@ -102,12 +104,29 @@ export const DEFAULT_TEMPLATES: { name: string; subject: string; bodyHtml: strin
   },
 ];
 
-/** Add any default the org doesn't have yet (matched by name, case-
- *  insensitive). Never touches a template that exists. */
+/** Seed the defaults once per org. Existing templates that carry a default's
+ *  name (seeded before keys existed) get their key stamped; nothing else is
+ *  ever touched, and a deleted default stays deleted. */
 export async function ensureDefaultTemplates(orgId: string, byEmail: string): Promise<void> {
-  const have = new Set((await listTemplates(orgId)).map((t) => t.name.trim().toLowerCase()));
+  const res = await sbRest(`organizations?id=eq.${orgId}&select=quick_templates_seeded_at`);
+  const [org] = res.ok ? ((await res.json()) as { quick_templates_seeded_at: string | null }[]) : [];
+  const have = await listTemplates(orgId);
+
+  // Stamp keys onto same-named templates that predate the key column.
   for (const t of DEFAULT_TEMPLATES) {
-    if (have.has(t.name.toLowerCase())) continue;
-    await createTemplate({ orgId, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml, byEmail }).catch(() => null);
+    const existing = have.find((x) => !x.actionKey && x.name.trim().toLowerCase() === t.name.toLowerCase());
+    if (existing) await setTemplateActionKey(orgId, existing.id, t.key).catch(() => {});
   }
+  if (org?.quick_templates_seeded_at) return;
+
+  const keyed = new Set(have.map((x) => x.actionKey || x.name.trim().toLowerCase()));
+  for (const t of DEFAULT_TEMPLATES) {
+    if (keyed.has(t.key) || keyed.has(t.name.toLowerCase())) continue;
+    await createTemplate({ orgId, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml, byEmail, actionKey: t.key }).catch(() => null);
+  }
+  await sbRest(`organizations?id=eq.${orgId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ quick_templates_seeded_at: new Date().toISOString() }),
+    prefer: "return=minimal",
+  }).catch(() => {});
 }

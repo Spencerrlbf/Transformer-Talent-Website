@@ -70,7 +70,9 @@ export async function POST(req: NextRequest) {
   // title, best first, at most three. TT site roles aren't org_roles rows.
   const wantIds = [...(app?.role_ids || []), ...(app?.matched_role_ids || [])].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3);
   const titleOf = new Map(jobs.map((j) => [j.id, j.title]));
-  if (wantIds.some((id) => !titleOf.has(id))) {
+  // Only the TT org's own site roles live outside org_roles; another org's
+  // ids must never resolve against them.
+  if (member.org.slug === "transformer-talent" && wantIds.some((id) => !titleOf.has(id))) {
     for (const r of await getRoles().catch(() => [] as { jobId: string; title: string }[])) titleOf.set(r.jobId, r.title);
   }
   const matchedRoles = wantIds.map((id) => titleOf.get(id) || "").filter(Boolean);

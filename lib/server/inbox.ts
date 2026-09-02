@@ -96,13 +96,13 @@ const KIND_TITLE: Record<string, string> = {
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Subjects mail clients generate on the candidate's behalf. */
-const AUTO_REPLY = /^\s*(accepted|declined|tentative(ly accepted)?|automatic reply|auto(-| )?reply|out of (the )?office|autoreply)\b/i;
+const AUTO_REPLY = /^\s*(?:(?:accepted|declined|tentative|tentatively accepted):\s|automatic reply|auto(?:-| )?reply|autoreply|out of (?:the )?office)/i;
 const ARRIVAL_WINDOW_DAYS = 45;
 const DONE_WINDOW_DAYS = 7;
 const PAGE = 1000;
 const CHUNK = 100;
 
-type Member = { orgId: string; email: string; userId: string; memberRole: string };
+type Member = { orgId: string; email: string; userId: string; memberRole: string; orgSlug?: string };
 
 type AppRow = {
   id: string; name: string | null; email: string | null; source: string | null;
@@ -233,7 +233,8 @@ export async function listInbox(
     // The TT org's own site roles aren't org_roles rows: fill their titles too.
     const wanted = new Set<string>();
     for (const a of [...apps, ...dueRows]) for (const id of [...(a.role_ids || []), ...(a.matched_role_ids || [])]) if (!roleTitle.has(id)) wanted.add(id);
-    if (wanted.size) {
+    // Only the TT org's own site roles live outside org_roles.
+    if (wanted.size && member.orgSlug === "transformer-talent") {
       const site = await getRoles().catch(() => [] as { jobId: string; title: string }[]);
       for (const r of site) if (wanted.has(r.jobId)) roleTitle.set(r.jobId, r.title);
     }

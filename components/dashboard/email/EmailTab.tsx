@@ -4,7 +4,7 @@
 // Outlook/Gmail is one here); each bubble is that message's own words, the
 // quoted chain sits behind a toggle. Quick reply sends a true threaded
 // reply; "Open in composer" hands the same text to the full composer.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import EmailModal from "@/components/dashboard/email/EmailModal";
 
@@ -71,12 +71,13 @@ export default function EmailTab({
   completeTaskId?: string | null;
   /** Inbox: the thread a fresh (unthreaded) email answers. */
   inboxThreadId?: string | null;
-  /** Inbox: a send went out (quick reply or composer). */
-  onSent?: () => void;
+  /** Inbox: a send went out (quick reply or composer), with what the server did. */
+  onSent?: (result?: { staged: string | null; taskDone: boolean }) => void;
   /** Inbox quick action: open the composer on the current thread with a template. */
   openCompose?: {
     nonce: number;
     template: string | null;
+    templateName?: string;
     reply?: boolean;
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
@@ -100,26 +101,34 @@ export default function EmailTab({
     initialText?: string;
     /** Quick action: template + outcome handed in from the Inbox strip. */
     template?: string | null;
+    templateName?: string;
+    threadSubject?: string;
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
     allowSilent?: boolean;
+    nonce?: number;
   }>(null);
 
   // A quick action from the Inbox strip: compose (as a reply when the open
-  // thread has a provider id) with the named template already merged.
+  // thread has a provider id) with the named template already merged. Each
+  // request is handled once — a cancelled composer never reopens itself.
+  const handledNonce = useRef(0);
   useEffect(() => {
-    if (!openCompose || !data) return;
+    if (!openCompose || !data || openCompose.nonce === handledNonce.current) return;
+    handledNonce.current = openCompose.nonce;
     const t = data.threads.find((x) => x.id === (openThreadId || open)) || data.threads[0];
     const target = t ? replyTarget(t) : null;
     setCompose({
       threadId: t?.id,
       reply: openCompose.reply && t && target ? { messageId: target.messageId, subject: t.subject } : undefined,
+      threadSubject: t?.subject,
       template: openCompose.template,
+      templateName: openCompose.templateName,
       after: openCompose.after,
       outcome: openCompose.outcome,
       allowSilent: openCompose.allowSilent,
+      nonce: openCompose.nonce,
     });
-    // Re-run only when a new action is requested (nonce), never on polls.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openCompose?.nonce, data === null]);
   const [connecting, setConnecting] = useState(false);
@@ -210,11 +219,11 @@ export default function EmailTab({
           today: new Date().toLocaleDateString("en-CA"),
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean };
       if (r.ok && j.ok) {
         setDrafts((d) => ({ ...d, [t.id]: "" }));
         load();
-        onSent?.();
+        onSent?.({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone) });
       } else if (j.error === "not_connected" || j.error === "grant_invalid") {
         setErr("Your email connection expired — reconnect from the Team page, then try again.");
       } else if (j.error === "no_candidate_email") {
@@ -377,6 +386,7 @@ export default function EmailTab({
 
       {compose && (
         <EmailModal
+          key={compose.nonce || "plain"}
           candKey={candKey}
           candidateName={name}
           reply={compose.reply}
@@ -384,18 +394,20 @@ export default function EmailTab({
           completeTaskId={completeTaskId || undefined}
           inboxThreadId={compose.threadId || inboxThreadId || undefined}
           initialTemplate={compose.template || undefined}
+          initialTemplateName={compose.templateName}
+          threadSubject={compose.threadSubject}
           after={compose.after}
           outcome={compose.outcome}
           allowSilent={compose.allowSilent}
           onSilent={onSilent ? () => { setCompose(null); onSilent(); } : undefined}
           onClose={() => setCompose(null)}
-          onSent={() => {
+          onSent={(result) => {
             // The draft went out through the composer: clear it here so the
             // quick-reply box can't send it a second time.
             const sentFrom = compose.threadId;
             if (sentFrom) setDrafts((d) => ({ ...d, [sentFrom]: "" }));
             load();
-            onSent?.();
+            onSent?.(result);
           }}
         />
       )}
