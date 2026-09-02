@@ -5,7 +5,7 @@
 // endpoint so both systems stay in step.
 import { sbInsert, sbRest } from "./supabase";
 
-export const TASK_KINDS = ["task", "call", "email"] as const;
+export const TASK_KINDS = ["task", "call", "email", "message"] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 export const NOTE_KINDS = ["note", "call", "email", "message"] as const;
 export type NoteKind = (typeof NOTE_KINDS)[number];

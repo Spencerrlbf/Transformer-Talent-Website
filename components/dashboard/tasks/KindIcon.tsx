@@ -20,6 +20,20 @@ const PATHS: Record<string, React.ReactNode> = {
     <path d="M2.5 3h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3.5 2.8V11h-1a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
   ),
   note: <path d="M10.6 2.6l2.8 2.8L5 13.8l-3.2.4.4-3.2z" />,
+  // Inbox arrivals: an application (document), a resume drop, a referral.
+  applied: (
+    <>
+      <path d="M4 1.5h5.5L13 5v9.5H4z" />
+      <path d="M9.5 1.5V5H13M6 8.5h4M6 11h4" />
+    </>
+  ),
+  drop: <path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10" />,
+  referred: (
+    <>
+      <circle cx="6" cy="5.5" r="2.5" />
+      <path d="M1.5 13a4.5 4.5 0 0 1 9 0M11 4.5v4M9 6.5h4" />
+    </>
+  ),
   request: (
     <>
       <circle cx="8" cy="8" r="6.2" />

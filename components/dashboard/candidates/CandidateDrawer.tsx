@@ -4,7 +4,7 @@
 // by employer, education, skills); fit reviews live ONLY in the Pipeline tab,
 // one expandable row per role. Resume renders inline when on file. Notes is
 // the shared timeline: team notes, tasks, and the candidate's own ask.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
@@ -299,6 +299,14 @@ export default function CandidateDrawer({
   onClose,
   navKeys,
   onNavigate,
+  initialTab,
+  initialThreadId,
+  contextStrip,
+  navItems,
+  navIndex: navItemIndex,
+  onNavigateItem,
+  onActivity,
+  completeTaskId,
 }: {
   candKey: string | null;
   roleContext?: string;
@@ -306,6 +314,19 @@ export default function CandidateDrawer({
   /** The list's current row order — enables ‹ › stepping without closing. */
   navKeys?: string[];
   onNavigate?: (key: string) => void;
+  /** Inbox: open on this tab (and thread) instead of Profile. */
+  initialTab?: Tab;
+  initialThreadId?: string | null;
+  /** Inbox: rendered under the header — what this item is and what clears it. */
+  contextStrip?: ReactNode;
+  /** Inbox: step through its items (a person can appear twice) instead of navKeys. */
+  navItems?: { id: string; key: string }[];
+  navIndex?: number;
+  onNavigateItem?: (index: number) => void;
+  /** Inbox: something happened in here that may clear the current item. */
+  onActivity?: (ev: { type: "stage" | "sent" | "contacted"; label?: string }) => void;
+  /** Inbox: the email task a send from here fulfils. */
+  completeTaskId?: string | null;
 }) {
   const { token } = useDash();
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -374,10 +395,16 @@ export default function CandidateDrawer({
     };
   }, [candKey, token, notesBump]);
 
+  // Inbox stepping can move between two items on the same person: follow the
+  // item's landing tab even when the candidate (and the profile) is unchanged.
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab, navItemIndex]);
+
   useEffect(() => {
     setDetail(null);
     setError(false);
-    setTab("profile");
+    setTab(initialTab || "profile");
     setEditingContact(false);
     setContactErr("");
     setOpenJob(null);
@@ -403,9 +430,11 @@ export default function CandidateDrawer({
         // Opened from a job page: that role's review is what they came for.
         const ctx = roleContext && d.pipeline.find((p) => p.jobId === roleContext);
         setExpanded(ctx ? ctx.jobId : d.pipeline[0]?.jobId ?? null);
-        if (ctx) setTab("pipeline");
+        if (ctx && !initialTab) setTab("pipeline");
       })
       .catch(() => setError(true));
+    // initialTab is applied by the effect above; it must not refetch the profile.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candKey, token, roleContext]);
 
   // Toggle Shortlist membership from the header star (optimistic).
@@ -445,12 +474,27 @@ export default function CandidateDrawer({
           ? { ...d, pipeline: d.pipeline.map((p) => (p.jobId === jobId ? { ...p, stage: prev } : p)) }
           : d
       );
+    else if (stage !== "new") onActivity?.({ type: "stage", label: stage.charAt(0).toUpperCase() + stage.slice(1) });
   }
 
-  // Prev/next within the list that opened the drawer (current page's order).
-  const navIndex = candKey && navKeys ? navKeys.indexOf(candKey) : -1;
-  const navPrev = navIndex > 0 ? navKeys![navIndex - 1] : null;
-  const navNext = navIndex >= 0 && navIndex < (navKeys?.length ?? 0) - 1 ? navKeys![navIndex + 1] : null;
+  // Prev/next within the list that opened the drawer: the Inbox's items when
+  // given (one person can hold two), else the current page's row order.
+  const itemNav = Boolean(navItems && onNavigateItem && navItemIndex !== undefined && navItemIndex >= 0);
+  const navIndex = itemNav ? navItemIndex! : candKey && navKeys ? navKeys.indexOf(candKey) : -1;
+  const navCount = itemNav ? navItems!.length : navKeys?.length ?? 0;
+  const navPrev = !itemNav && navIndex > 0 ? navKeys![navIndex - 1] : null;
+  const navNext = !itemNav && navIndex >= 0 && navIndex < navCount - 1 ? navKeys![navIndex + 1] : null;
+  const canPrev = itemNav ? navIndex > 0 : Boolean(navPrev && onNavigate);
+  const canNext = itemNav ? navIndex < navCount - 1 : Boolean(navNext && onNavigate);
+  const goPrev = useCallback(() => {
+    if (itemNav) onNavigateItem!(navIndex - 1);
+    else if (navPrev && onNavigate) onNavigate(navPrev);
+  }, [itemNav, onNavigateItem, navIndex, navPrev, onNavigate]);
+  const goNext = useCallback(() => {
+    if (itemNav) onNavigateItem!(navIndex + 1);
+    else if (navNext && onNavigate) onNavigate(navNext);
+  }, [itemNav, onNavigateItem, navIndex, navNext, onNavigate]);
+  const showNav = navIndex >= 0 && navCount > 1 && (itemNav || Boolean(onNavigate));
 
   const escClose = useCallback(
     (e: KeyboardEvent) => {
@@ -460,15 +504,15 @@ export default function CandidateDrawer({
         else onClose();
       }
       // Arrow keys step through the list — but never while typing.
-      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onNavigate) {
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && showNav) {
         const t = e.target as HTMLElement | null;
         const tag = t?.tagName || "";
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
-        const to = e.key === "ArrowLeft" ? navPrev : navNext;
-        if (to) onNavigate(to);
+        if (e.key === "ArrowLeft" && canPrev) goPrev();
+        if (e.key === "ArrowRight" && canNext) goNext();
       }
     },
-    [onClose, openJob, onNavigate, navPrev, navNext]
+    [onClose, openJob, showNav, canPrev, canNext, goPrev, goNext]
   );
   useEffect(() => {
     if (!candKey) return;
@@ -576,35 +620,37 @@ export default function CandidateDrawer({
         <EmailModal
           candKey={candKey}
           candidateName={detail.name}
+          completeTaskId={completeTaskId || undefined}
           onClose={() => setEmailOpen(false)}
           onSent={() => {
             setTab("email");
             setNotesBump((b) => b + 1);
+            onActivity?.({ type: "sent" });
           }}
         />
       )}
       <aside
-        className={`cv2d${onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 ? " has-nav" : ""}`}
+        className={`cv2d${showNav ? " has-nav" : ""}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {onNavigate && navIndex >= 0 && (navKeys?.length ?? 0) > 1 && (
+        {showNav && (
           <span className="cv2d-nav">
             <button
               type="button"
-              disabled={!navPrev}
-              aria-label="Previous candidate"
-              onClick={() => navPrev && onNavigate(navPrev)}
+              disabled={!canPrev}
+              aria-label={itemNav ? "Previous item" : "Previous candidate"}
+              onClick={goPrev}
             >
               ‹
             </button>
             <span className="cv2d-navpos">
-              {navIndex + 1} of {navKeys!.length}
+              {navIndex + 1} of {navCount}
             </span>
             <button
               type="button"
-              disabled={!navNext}
-              aria-label="Next candidate"
-              onClick={() => navNext && onNavigate(navNext)}
+              disabled={!canNext}
+              aria-label={itemNav ? "Next item" : "Next candidate"}
+              onClick={goNext}
             >
               ›
             </button>
@@ -859,7 +905,10 @@ export default function CandidateDrawer({
                             { method: "POST", headers: { Authorization: `Bearer ${token}` } }
                           ).catch(() => null);
                           setMarking(false);
-                          if (res?.ok) setMarkedDone(true);
+                          if (res?.ok) {
+                            setMarkedDone(true);
+                            onActivity?.({ type: "contacted" });
+                          }
                         }}
                       >
                         {marking ? "Saving…" : "Mark contacted"}
@@ -983,6 +1032,7 @@ export default function CandidateDrawer({
               </div>
             )}
 
+            {contextStrip}
             <div className="dash-tabs cv2d-tabs">
               {(
                 [
@@ -1205,6 +1255,9 @@ export default function CandidateDrawer({
                   candKey={candKey}
                   name={detail.name}
                   onAwaiting={setEmailAwaiting}
+                  openThreadId={initialThreadId || undefined}
+                  completeTaskId={completeTaskId || undefined}
+                  onSent={() => onActivity?.({ type: "sent" })}
                 />
               )}
               {tab === "notes" && isNet && (

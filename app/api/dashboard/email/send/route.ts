@@ -10,6 +10,8 @@ import {
   logEmail,
   sanitizeEmailHtml,
 } from "@/lib/server/email-compose";
+import { noteEmailSent } from "@/lib/server/inbox";
+import { updateTask } from "@/lib/server/tasks";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -37,6 +39,8 @@ export async function POST(req: NextRequest) {
     html?: unknown;
     text?: unknown;
     replyToMessageId?: unknown;
+    /** Inbox email task this send fulfils — marked done on success. */
+    completeTaskId?: unknown;
   };
   try {
     body = await req.json();
@@ -45,6 +49,8 @@ export async function POST(req: NextRequest) {
   }
 
   const key = String(body.candidateKey || "");
+  const completeTaskId =
+    typeof body.completeTaskId === "string" && /^[0-9a-f-]{36}$/i.test(body.completeTaskId) ? body.completeTaskId : null;
   const subject = String(body.subject || "").trim();
   const text = String(body.text || "").slice(0, 50_000);
   const html = String(body.html || "") || (text.trim() ? textToHtml(text) : "");
@@ -103,5 +109,21 @@ export async function POST(req: NextRequest) {
     messageId: sent.messageId,
     threadId: sent.threadId || target?.threadId || "",
   });
-  return NextResponse.json({ ok: true });
+
+  // Inbox bookkeeping: the thread is answered, an ask/referral/drop is
+  // reached out to, a due follow-up counts as contacted, and the email task
+  // this fulfilled is done.
+  await noteEmailSent({
+    orgId: member.org.id,
+    viewer: member.email,
+    key,
+    threadId: target?.threadId || null,
+    subject,
+  }).catch(() => {});
+  let taskDone = false;
+  if (completeTaskId) {
+    const r = await updateTask(member.org.id, completeTaskId, { status: "done" }).catch(() => null);
+    taskDone = Boolean(r && !("error" in r));
+  }
+  return NextResponse.json({ ok: true, taskDone });
 }

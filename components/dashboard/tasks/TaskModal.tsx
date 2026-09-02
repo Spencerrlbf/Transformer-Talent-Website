@@ -17,8 +17,8 @@ export type TaskModalTarget =
   // clears it, same as the row's Done.
   | { mode: "request"; candidateKey: string; candidateName: string; dueDate: string };
 
-const TASK_KINDS = ["task", "call", "email"] as const;
-const TASK_LABEL: Record<string, string> = { task: "Task", call: "Call", email: "Email" };
+const TASK_KINDS = ["task", "call", "email", "message"] as const;
+const TASK_LABEL: Record<string, string> = { task: "Task", call: "Call", email: "Email", message: "Message" };
 
 const localDay = (d: Date) => d.toLocaleDateString("en-CA");
 const addDays = (n: number) => {
@@ -48,7 +48,13 @@ export default function TaskModal({
   const first = name.split(/\s+/)[0] || name || "them";
 
   const defaultTitle = (k: string) =>
-    k === "call" ? `Call ${first}` : k === "email" ? `Email ${first}` : `Follow up with ${first}`;
+    k === "call"
+      ? `Call ${first}`
+      : k === "email"
+        ? `Email ${first}`
+        : k === "message"
+          ? `Message ${first} on LinkedIn`
+          : `Follow up with ${first}`;
 
   const [kind, setKind] = useState(target.mode === "edit" ? target.task.kind : "task");
   const [title, setTitle] = useState(target.mode === "edit" ? target.task.title : defaultTitle("task"));

@@ -94,6 +94,7 @@ export default function EmailModal({
   candidateName,
   reply,
   initialText,
+  completeTaskId,
   onClose,
   onSent,
 }: {
@@ -103,6 +104,8 @@ export default function EmailModal({
   reply?: { messageId: string; subject: string };
   /** Seed the body (a quick reply handed off to the full composer). */
   initialText?: string;
+  /** Inbox: the email task this send fulfils — marked done server-side. */
+  completeTaskId?: string;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -434,6 +437,7 @@ export default function EmailModal({
           subject: subject.trim(),
           html: el.innerHTML,
           ...(reply ? { replyToMessageId: reply.messageId } : {}),
+          ...(completeTaskId ? { completeTaskId } : {}),
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };

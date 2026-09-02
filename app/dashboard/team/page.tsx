@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import EmailConnectCard from "@/components/dashboard/email/EmailConnectCard";
+import WhoSeesCard from "@/components/dashboard/email/WhoSeesCard";
 
 type StatPair = { week: number; all: number };
 type Stats = {
@@ -219,6 +220,7 @@ export default function TeamPage() {
         </div>
       </div>
       <EmailConnectCard />
+      <WhoSeesCard />
 
       {notice && <p className="tm-notice">{notice}</p>}
       {error && <p className="dash-error">{error}</p>}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { clearFollowUp, updateFollowUp, updateFollowUpDate } from "@/lib/server/candidates-unified";
+import { noteContacted } from "@/lib/server/inbox";
 
 // "Mark contacted": clears an open future-interest ask. The person stays in
 // the pool; only the follow-up date comes off.
@@ -14,6 +15,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
 
   const res = await clearFollowUp(member.org.id, key);
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: res.error === "not_found" ? 404 : 500 });
+  await noteContacted(member.org.id, member.email, key);
   return NextResponse.json({ ok: true });
 }
 

@@ -39,11 +39,14 @@ type EmailRow = {
   bodyHtml: string | null;
   createdAt: string;
 };
+type PrivateEmail = { id: string; direction: "out" | "in"; memberEmail: string; createdAt: string };
 type Data = {
   notes: NoteRow[];
   tasks: TaskRow[];
   ask: { at: string; askedAt: string | null } | null;
   emails?: EmailRow[];
+  /** Teammates' messages under the org's private setting: when, who, which way. */
+  privateEmails?: PrivateEmail[];
 };
 
 type Ev =
@@ -51,7 +54,8 @@ type Ev =
   | { at: string; type: "task_created"; task: TaskRow }
   | { at: string; type: "task_done"; task: TaskRow }
   | { at: string; type: "ask"; date: string }
-  | { at: string; type: "email"; email: EmailRow };
+  | { at: string; type: "email"; email: EmailRow }
+  | { at: string; type: "private_email"; email: PrivateEmail };
 
 const NOTE_LABEL: Record<string, string> = { note: "Note", call: "Call", email: "Email", message: "Message" };
 
@@ -134,6 +138,7 @@ export default function NotesTab({
     ? [
         ...data.notes.map((n): Ev => ({ at: n.createdAt, type: "note", note: n })),
         ...(data.emails || []).map((e): Ev => ({ at: e.createdAt, type: "email", email: e })),
+        ...(data.privateEmails || []).map((e): Ev => ({ at: e.createdAt, type: "private_email", email: e })),
         ...data.tasks.map((t): Ev => ({ at: t.createdAt, type: "task_created", task: t })),
         ...data.tasks
           .filter((t) => t.completedAt)
@@ -235,6 +240,25 @@ export default function NotesTab({
                       </>
                     )}
                   </p>
+                </div>
+              </div>
+            );
+          }
+          if (ev.type === "private_email") {
+            // A teammate's private conversation: that contact happened is
+            // team knowledge; what was said is theirs.
+            const e = ev.email;
+            const out = e.direction === "out";
+            const who = authorName(e.memberEmail);
+            return (
+              <div className="cv2n-ev" key={`p${e.id}`}>
+                <span className={`av ${out ? "mail" : "rin"}`}>{out ? "✉" : "↩"}</span>
+                <div className="b">
+                  <div className="m">
+                    <b>{out ? `${who} emailed ${first}` : `${first} replied to ${who}`}</b>
+                    <span>{fmtWhen(e.createdAt)}</span>
+                  </div>
+                  <p className="cv2n-marker cv2n-private">Private to {who}&apos;s mailbox</p>
                 </div>
               </div>
             );

@@ -14,19 +14,21 @@ export async function GET(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const res = await sbRest(
-    `organizations?id=eq.${member.org.id}&select=website,referral_amount,interview_stages`
+    `organizations?id=eq.${member.org.id}&select=website,referral_amount,interview_stages,email_visibility`
   );
   const [row] = res.ok
     ? ((await res.json()) as {
         website: string | null;
         referral_amount: number | null;
         interview_stages: unknown;
+        email_visibility: string | null;
       }[])
     : [];
   return NextResponse.json({
     website: row?.website || "",
     referralAmount: row?.referral_amount ?? 5000,
     interviewStages: (row && sanitizeStages(row.interview_stages)) || DEFAULT_STAGES,
+    emailVisibility: row?.email_visibility === "team" ? "team" : "private",
     canEdit: member.memberRole === "owner",
   });
 }
@@ -37,7 +39,7 @@ export async function PATCH(req: NextRequest) {
   if (member.memberRole !== "owner")
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
 
-  let body: { website?: string; referralAmount?: number; interviewStages?: unknown };
+  let body: { website?: string; referralAmount?: number; interviewStages?: unknown; emailVisibility?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -56,6 +58,11 @@ export async function PATCH(req: NextRequest) {
     if (website && !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(website))
       return NextResponse.json({ error: "bad_website" }, { status: 400 });
     patch.website = website || null;
+  }
+  if ("emailVisibility" in body) {
+    if (body.emailVisibility !== "private" && body.emailVisibility !== "team")
+      return NextResponse.json({ error: "bad_visibility" }, { status: 400 });
+    patch.email_visibility = body.emailVisibility;
   }
   if ("referralAmount" in body) {
     const amount = Math.round(Number(body.referralAmount));
