@@ -28,6 +28,7 @@ type Quick = {
   after?: { stage: "contacted" | "rejected"; jobId?: string | null };
   outcome?: string;
   allowSilent?: boolean;
+  remind?: boolean;
 };
 
 type Session = {
@@ -38,7 +39,7 @@ type Session = {
 };
 
 const localDay = () => new Date().toLocaleDateString("en-CA");
-const TASK_KIND: Record<string, string> = { temail: "email", tcall: "call", tmsg: "message", ttask: "task" };
+const TASK_KIND: Record<string, string> = { temail: "email", tcall: "call", tmsg: "message", ttask: "task", remind: "reminder" };
 const announce = () => window.dispatchEvent(new CustomEvent("tt-inbox-changed"));
 
 export default function InboxPage() {
@@ -163,7 +164,7 @@ export default function InboxPage() {
       res = await fetch(`/api/dashboard/tasks/${item.taskId}`, {
         method: "PATCH",
         headers: { ...auth, "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "done" }),
+        body: JSON.stringify(item.kind === "remind" ? { status: "done", endedReason: "done" } : { status: "done" }),
       }).catch(() => null);
     } else if (item.kind === "fdue" && item.candidateKey) {
       res = await fetch(`/api/dashboard/candidates/v2/${item.candidateKey}/followup`, { method: "POST", headers: auth }).catch(() => null);
@@ -294,6 +295,7 @@ export default function InboxPage() {
       after: a.stage && jobId ? { stage: a.stage, jobId } : undefined,
       outcome: a.template ? outcomeLabel(a, kind, Boolean(jobId)) : undefined,
       allowSilent: a.allowSilent,
+      remind: a.remind !== false,
     });
   };
 
@@ -320,7 +322,7 @@ export default function InboxPage() {
       setNotice("Couldn't move them to Rejected. Nothing changed; try again.");
     }
   };
-  const onActivity = (ev: { type: "stage" | "sent" | "contacted"; label?: string; staged?: string | null }) => {
+  const onActivity = (ev: { type: "stage" | "sent" | "contacted"; label?: string; staged?: string | null; reminded?: string | null }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
     if (!cur) {
@@ -332,6 +334,7 @@ export default function InboxPage() {
     if (ev.type === "sent") {
       // A quick action's Send reports the move the server actually made.
       if (ev.staged) reason = `stage:${ev.staged.charAt(0).toUpperCase() + ev.staged.slice(1)}`;
+      else if (cur.kind === "remind") reason = ev.reminded ? `remind:${ev.reminded}` : "remind:nudged";
       else if (cur.kind === "mail") reason = "reply";
       else if (cur.kind === "app") reason = "email";
       else if (cur.kind === "ask" || cur.kind === "ref" || cur.kind === "drop" || cur.kind === "fdue" || cur.kind === "temail") reason = "email";
@@ -369,8 +372,8 @@ export default function InboxPage() {
           navIndex={session.index}
           onNavigateItem={goto}
           onActivity={onActivity}
-          completeTaskId={current.kind === "temail" ? current.taskId : null}
-          inboxThreadId={current.kind === "mail" ? current.threadId : null}
+          completeTaskId={current.kind === "temail" || current.kind === "remind" ? current.taskId : null}
+          inboxThreadId={current.kind === "mail" || current.kind === "remind" ? current.threadId : null}
           quickAction={quick}
           onSilentReject={silentReject}
           contextStrip={

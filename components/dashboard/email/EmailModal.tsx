@@ -5,6 +5,8 @@
 // time (the body always shows exactly what will send); an empty value
 // becomes an atomic red pill that blocks Send until dealt with.
 import { useCallback, useEffect, useRef, useState } from "react";
+import RemindChips from "@/components/dashboard/email/RemindChips";
+import { localDay, type RemindChoice } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 
 type ComposeJob = {
@@ -114,6 +116,7 @@ export default function EmailModal({
   outcome,
   allowSilent,
   onSilent,
+  remindMode,
   onClose,
   onSent,
 }: {
@@ -139,11 +142,13 @@ export default function EmailModal({
   /** Quick action: offer "Reject without emailing". */
   allowSilent?: boolean;
   onSilent?: () => void;
+  /** Quick action: start the reply reminder On (seat default) or Off. */
+  remindMode?: "on" | "off";
   onClose: () => void;
   /** Called after a successful send with what the server did. */
-  onSent: (result?: { staged: string | null; taskDone: boolean }) => void;
+  onSent: (result?: { staged: string | null; taskDone: boolean; reminded?: string | null }) => void;
 }) {
-  const { token } = useDash();
+  const { token, reminderDays } = useDash();
   const [ctx, setCtx] = useState<Ctx | null>(null);
   const [ctxErr, setCtxErr] = useState(false);
   const [reconnect, setReconnect] = useState(false);
@@ -155,6 +160,8 @@ export default function EmailModal({
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const [connecting, setConnecting] = useState(false);
+  // "Remind me if no reply": the seat default unless the action says Off.
+  const [remind, setRemind] = useState<RemindChoice>(remindMode === "off" || !reminderDays ? null : { days: reminderDays });
 
   const [menu, setMenu] = useState<"" | "tpl" | "fields" | "job" | "link" | "joblink">("");
   const [jobQ, setJobQ] = useState("");
@@ -523,11 +530,12 @@ export default function EmailModal({
           ...(inboxThreadId ? { inboxThreadId } : {}),
           ...(after && after.jobId ? { after: { stage: after.stage, jobId: after.jobId } } : {}),
           today: new Date().toLocaleDateString("en-CA"),
+          remind,
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean };
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean; reminded?: string | null };
       if (r.ok && j.ok) {
-        onSent({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone) });
+        onSent({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone), reminded: j.reminded ?? null });
         onClose();
         return;
       }
@@ -936,6 +944,9 @@ export default function EmailModal({
               )}
               {err && <p className="em-warn">{err}</p>}
 
+              <div className="em-remindrow">
+                <RemindChips value={remind} onChange={setRemind} today={localDay()} disabled={sending} />
+              </div>
               <div className="tkm-foot">
                 {allowSilent && onSilent && (
                   <button type="button" className="em-silent" onClick={onSilent} disabled={sending}>

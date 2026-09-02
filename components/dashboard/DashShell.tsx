@@ -20,6 +20,8 @@ type DashContext = {
   role: string;
   /** Recruiter-page display name when set; empty otherwise. */
   name: string;
+  /** Seat default for "remind me if no reply" (0 = off). */
+  reminderDays: number;
 };
 
 const Ctx = createContext<DashContext | null>(null);
@@ -65,7 +67,7 @@ export default function DashShell({ children }: { children: ReactNode }) {
   // undefined = still resolving; null = signed out
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [me, setMe] = useState<
-    { org: Org; email: string; memberRole?: string; myPage?: MyPage } | null | undefined
+    { org: Org; email: string; memberRole?: string; myPage?: MyPage; reminderDays?: number } | null | undefined
   >(undefined);
 
   useEffect(() => {
@@ -94,6 +96,20 @@ export default function DashShell({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, [session]);
+
+  // Settings changed something /me carries (the reminder default): refetch.
+  useEffect(() => {
+    if (!session) return;
+    const h = () =>
+      fetch("/api/dashboard/me", { headers: { Authorization: `Bearer ${session.access_token}` } })
+        .then(async (r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && data.org) setMe(data);
+        })
+        .catch(() => {});
+    window.addEventListener("tt-me-changed", h);
+    return () => window.removeEventListener("tt-me-changed", h);
   }, [session]);
 
   if (session === undefined || (session && me === undefined)) {
@@ -135,6 +151,7 @@ export default function DashShell({ children }: { children: ReactNode }) {
         email: me.email,
         role: me.memberRole || "member",
         name: me.myPage?.displayName || "",
+        reminderDays: typeof me.reminderDays === "number" ? me.reminderDays : 3,
       }}
     >
       <div className="dash-app">

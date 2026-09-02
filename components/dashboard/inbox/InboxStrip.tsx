@@ -82,7 +82,7 @@ export default function InboxStrip({
           <b>
             {gone
               ? "No longer in your Inbox"
-              : `✓ ${isTask(item.kind) && handledReason !== "email" ? "Task done" : `Handled · ${reasonLabel(handledReason, item.kind)}`}`}
+              : `✓ ${isTask(item.kind) && item.kind !== "remind" && handledReason !== "email" ? "Task done" : `Handled · ${reasonLabel(handledReason, item.kind)}`}`}
           </b>
           <span>{remaining ? `${remaining} left for today` : "Your Inbox is clear for today"}</span>
         </span>
@@ -98,7 +98,7 @@ export default function InboxStrip({
       </div>
     );
   }
-  const doneLabel = item.kind === "fdue" ? "Mark contacted" : isTask(item.kind) ? "Mark done" : "Done";
+  const doneLabel = item.kind === "fdue" ? "Mark contacted" : item.kind === "remind" ? "Let it go" : isTask(item.kind) ? "Mark done" : "Done";
   // A task leading the row has no buttons of its own; the person's other
   // open item (their application, their resume drop) still gets its rule.
   let actionKind = item.kind;
@@ -119,7 +119,10 @@ export default function InboxStrip({
         <KindIcon kind={KIND_ICON[item.kind]} className="tk-ico" />
       </span>
       <span className="ibs-txt">
-        <b>{item.title}</b>
+        <b>
+          {item.title}
+          {item.kind === "remind" && item.extra ? <span className="ibs-lad">{item.extra}</span> : null}
+        </b>
         <span>
           <em className={item.overdue ? "bad" : ""}>{fmtWhen(item, today)}</em>
           {stripHint(item) ? ` · ${stripHint(item)}` : ""}

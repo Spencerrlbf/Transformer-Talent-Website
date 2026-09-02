@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { accountFor, listThreadsFor } from "@/lib/server/email-compose";
+import { openReminders } from "@/lib/server/reminders";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 
@@ -22,7 +23,10 @@ export async function GET(req: NextRequest) {
   if (url.searchParams.get("summary")) {
     return NextResponse.json({ awaiting, total: threads.length, hiddenThreads });
   }
-  const account = await accountFor(member.org.id, member.email);
+  const [account, reminders] = await Promise.all([
+    accountFor(member.org.id, member.email),
+    openReminders(member.org.id, key, member.email).catch(() => []),
+  ]);
   return NextResponse.json({
     connected: Boolean(account),
     address: account?.address || "",
@@ -30,5 +34,6 @@ export async function GET(req: NextRequest) {
     threads,
     hiddenThreads,
     visibility,
+    reminders,
   });
 }

@@ -44,6 +44,7 @@ export type Cv2Row = {
   stageUpdatedAt?: string | null;
   screeningPending?: boolean;
   followUpAt?: string | null;
+  reminderDue?: string | null;
   skills?: string[] | null;
   visa?: string | null;
   link?: { path: string; openCount: number; lastOpenedAt: string | null } | null;
@@ -1326,6 +1327,10 @@ export default function CandidatesTable({
                       {r.followUpAt ? (
                         <span className={`cv2-fu${r.followUpAt <= TODAY ? " due" : ""}`}>
                           {fuLabel(r.followUpAt)}
+                        </span>
+                      ) : r.reminderDue ? (
+                        <span className="cv2-fu rem" title="Reply reminder: back in the Inbox on this day if they haven't replied">
+                          ↺ {fuLabel(r.reminderDue)}
                         </span>
                       ) : (
                         <span className="cv2-dim">—</span>

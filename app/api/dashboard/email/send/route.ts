@@ -15,6 +15,8 @@ import { noteEmailSent, noteStageMoved } from "@/lib/server/inbox";
 import { completeEmailTask } from "@/lib/server/tasks";
 import { saveUnifiedStatus, STAGE_LABEL } from "@/lib/server/candidates-unified";
 import { sbRest } from "@/lib/server/supabase";
+import { parseRemind, reminderDue } from "@/lib/reminders";
+import { endReminder, setReplyReminder } from "@/lib/server/reminders";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -69,6 +71,8 @@ export async function POST(req: NextRequest) {
     inboxThreadId?: unknown;
     /** Quick action: the pipeline move to make once the email is out. */
     after?: unknown;
+    /** Reply reminder: {days: 3} | {date: "YYYY-MM-DD"} | null. */
+    remind?: unknown;
   };
   try {
     body = await req.json();
@@ -151,23 +155,49 @@ export async function POST(req: NextRequest) {
   // Inbox bookkeeping: the thread is answered, an ask/referral/drop is
   // reached out to, a due follow-up counts as contacted, and the email task
   // this fulfilled is done.
+  const today = typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : new Date().toISOString().slice(0, 10);
   await noteEmailSent({
     orgId: member.org.id,
     viewer: member.email,
     key,
     threadId: target?.threadId || inboxThreadId || null,
     subject,
-    today: typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : null,
+    today,
   }).catch(() => {});
   let taskDone = false;
   if (completeTaskId) {
     taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
+    // An Inbox nudge answers a reply reminder: it closes as "nudged" and the
+    // send below sets the next one on the same conversation.
+    if (!taskDone) taskDone = await endReminder(member.org.id, completeTaskId, key, "nudged").catch(() => false);
+  }
+
+  // Reply reminder: the sender's, on this conversation, N days from today
+  // (weekends roll to Monday). A newer email in the thread moves the
+  // existing one rather than adding a second.
+  const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
+  const remindThread = target?.threadId || inboxThreadId || sent.threadId || "";
+  const due = reminderDue(today, parseRemind(body.remind));
+  let reminded: string | null = null;
+  if (due && remindThread) {
+    const ok = await setReplyReminder({
+      orgId: member.org.id,
+      memberEmail: member.email,
+      userId: member.userId,
+      candidateKey: key,
+      candidateName: contact.name || "",
+      threadId: remindThread,
+      messageId: sent.messageId,
+      subject,
+      jobId: typeof after?.jobId === "string" ? after.jobId : null,
+      due,
+    }).catch(() => false);
+    if (ok) reminded = due;
   }
 
   // Quick action outcome: the email is out, now the pipeline move. Only the
   // two moves a rule can name, on a role this org has.
   let staged: string | null = null;
-  const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
   if (after && (after.stage === "contacted" || after.stage === "rejected") && typeof after.jobId === "string" && after.jobId) {
     if (await quickMoveAllowed(member.org.id, key, after.jobId, after.stage)) {
       const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage).catch(() => ({ ok: false as const, error: "save_failed" }));
@@ -177,5 +207,5 @@ export async function POST(req: NextRequest) {
       }
     }
   }
-  return NextResponse.json({ ok: true, taskDone, staged });
+  return NextResponse.json({ ok: true, taskDone, staged, reminded });
 }

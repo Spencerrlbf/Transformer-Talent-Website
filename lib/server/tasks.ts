@@ -6,7 +6,7 @@
 import { sbInsert, sbRest } from "./supabase";
 
 export const TASK_KINDS = ["task", "call", "email", "message"] as const;
-export type TaskKind = (typeof TASK_KINDS)[number];
+export type TaskKind = (typeof TASK_KINDS)[number] | "reminder";
 export const NOTE_KINDS = ["note", "call", "email", "message"] as const;
 export type NoteKind = (typeof NOTE_KINDS)[number];
 
@@ -26,6 +26,10 @@ export type TaskRow = {
   createdByEmail: string;
   createdAt: string;
   completedAt: string | null;
+  /** Reply reminders: the conversation, the role, and why it ended. */
+  threadId?: string | null;
+  endedReason?: string | null;
+  jobId?: string | null;
 };
 
 export type RequestRow = {
@@ -56,6 +60,9 @@ type DbTask = {
   created_by_email: string;
   created_at: string;
   completed_at: string | null;
+  thread_id?: string | null;
+  ended_reason?: string | null;
+  job_id?: string | null;
 };
 
 const shapeTask = (t: DbTask): TaskRow => ({
@@ -70,10 +77,13 @@ const shapeTask = (t: DbTask): TaskRow => ({
   createdByEmail: t.created_by_email,
   createdAt: t.created_at,
   completedAt: t.completed_at,
+  threadId: t.thread_id ?? null,
+  endedReason: t.ended_reason ?? null,
+  jobId: t.job_id ?? null,
 });
 
 const TASK_COLS =
-  "id,candidate_key,candidate_name,kind,title,due_date,due_time,status,created_by_email,created_at,completed_at";
+  "id,candidate_key,candidate_name,kind,title,due_date,due_time,status,created_by_email,created_at,completed_at,thread_id,ended_reason,job_id";
 
 /** The candidate must exist AND belong to the org — anything else is a 404. */
 export async function candidateInOrg(orgId: string, key: string): Promise<boolean> {
@@ -153,7 +163,7 @@ export async function createTask(args: {
 export async function updateTask(
   orgId: string,
   id: string,
-  patch: { title?: string; kind?: string; dueDate?: string; dueTime?: string | null; status?: string }
+  patch: { title?: string; kind?: string; dueDate?: string; dueTime?: string | null; status?: string; endedReason?: string }
 ): Promise<TaskRow | { error: string }> {
   const body: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.title !== undefined) {
@@ -177,6 +187,9 @@ export async function updateTask(
     if (patch.status !== "open" && patch.status !== "done") return { error: "bad_status" };
     body.status = patch.status;
     body.completed_at = patch.status === "done" ? new Date().toISOString() : null;
+    // Reminders record why they ended; reopening clears it.
+    if (patch.status === "done" && patch.endedReason && ["done", "cancelled"].includes(patch.endedReason)) body.ended_reason = patch.endedReason;
+    if (patch.status === "open") body.ended_reason = null;
   }
   const res = await sbRest(`tasks?id=eq.${id}&organization_id=eq.${orgId}&select=${TASK_COLS}`, {
     method: "PATCH",

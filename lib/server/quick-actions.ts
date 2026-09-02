@@ -124,6 +124,20 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bo
     ),
   },
   {
+    ...TEMPLATE.followUp,
+    since: "2026-09-03T00:00:00Z",
+    subject: "Re: {{subject}}",
+    bodyHtml: lines(
+      "Hi {{first_name}},",
+      "",
+      "Making sure this didn't get buried. I'd still like to talk if you're interested.",
+      "",
+      "Pick a time that suits you here: {{booking_link}}",
+      "",
+      "{{sender_name}}"
+    ),
+  },
+  {
     ...TEMPLATE.followUpOpen,
     subject: "As promised, what's open now",
     bodyHtml: lines(

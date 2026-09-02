@@ -5,6 +5,7 @@
 // modified. Everything client-facing goes through client-reason or the
 // stored judge reasons; raw verdicts and internal scores never cross here.
 import { sbRest } from "./supabase";
+import { cancelReminders, openReminderDues } from "./reminders";
 import { loadLinksByKey } from "./tracked-links";
 import {
   attachmentsByKey,
@@ -104,6 +105,8 @@ export type UnifiedRow = {
   screeningPending: boolean;
   /** "Hear from me later" ask: the date they want contact (null otherwise). */
   followUpAt: string | null;
+  /** A live reply reminder on this person (earliest due day), anyone's. */
+  reminderDue?: string | null;
   /** Enriched skills (sourced people); drives the Skills filter + CSV. */
   skills: string[] | null;
   /** Visa status as stated by the applicant (applied people). */
@@ -633,6 +636,9 @@ export async function saveUnifiedStatus(
   );
   if (!res.ok) return { ok: false, error: "save_failed" };
 
+  // A closed outcome ends any reply reminders on the person: nothing to chase.
+  if (status === "rejected" || status === "hired") await cancelReminders({ orgId, candidateKey: key, reason: "closed" }).catch(() => {});
+
   // The journey, not just the position: append the transition. Best effort —
   // history must never fail a stage change.
   if (cur?.status !== status || (cur?.interview_stage ?? null) !== stage) {
@@ -761,7 +767,10 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     });
   }
 
+  const reminderDues = await openReminderDues(params.orgId).catch(() => new Map<string, string>());
   for (const r of rows) {
+    const rd = reminderDues.get(r.key);
+    if (rd) r.reminderDue = rd;
     const l = linksByKey.get(r.key);
     if (l) r.link = { path: l.path, openCount: l.openCount, lastOpenedAt: l.lastOpenedAt };
     const ls = listsByKey.get(r.key);

@@ -26,6 +26,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     ...(body.dueDate !== undefined ? { dueDate: String(body.dueDate) } : {}),
     ...(body.dueTime !== undefined ? { dueTime: body.dueTime ? String(body.dueTime) : null } : {}),
     ...(body.status !== undefined ? { status: String(body.status) } : {}),
+    ...(body.endedReason !== undefined ? { endedReason: String(body.endedReason) } : {}),
   });
   if ("error" in res) {
     return NextResponse.json({ error: res.error }, { status: res.error === "not_found" ? 404 : 400 });

@@ -21,6 +21,8 @@ export type QuickAction = {
   allowSilent?: boolean;
   /** Sent as a reply inside the open thread. */
   reply?: boolean;
+  /** Composer default for "remind me if no reply": false = start on Off. */
+  remind?: boolean;
 };
 
 export const TEMPLATE = {
@@ -33,6 +35,7 @@ export const TEMPLATE = {
   speakLater: { key: "speak_later", name: "Thanks, speak later" },
   replyCall: { key: "reply_call", name: "Book a call (reply)" },
   followUpOpen: { key: "follow_up_open", name: "Follow-up: what's open" },
+  followUp: { key: "follow_up_nudge", name: "Following up" },
 } as const;
 
 const REPLY: QuickAction = { id: "reply", label: "Reply…", template: null };
@@ -47,35 +50,43 @@ export function actionsFor(
     case "app":
       return [
         { id: "call", label: "Schedule a call", ...t(TEMPLATE.applyCall), stage: "contacted", primary: true },
-        { id: "no", label: "Not suitable", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true },
+        { id: "no", label: "Not suitable", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true, remind: false },
         REPLY,
       ];
     case "drop":
       return ctx.hasRole
         ? [
             { id: "call", label: "Schedule a call", ...t(TEMPLATE.rolesForYou), stage: "contacted", primary: true },
-            { id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted) },
+            { id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), remind: false },
             REPLY,
           ]
-        : [{ id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), primary: true }, REPLY];
+        : [{ id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), remind: false, primary: true }, REPLY];
     // A referred person sent nothing themselves: the email names who put
     // them forward and asks for the resume the referral form never collects.
     case "ref":
       return ctx.hasRole
         ? [
             { id: "call", label: "Schedule a call", ...t(TEMPLATE.referredCall), stage: "contacted", primary: true },
-            { id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep) },
+            { id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), remind: false },
             REPLY,
           ]
-        : [{ id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), primary: true }, REPLY];
+        : [{ id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), remind: false, primary: true }, REPLY];
     case "ask":
       return [
-        { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", ...t(TEMPLATE.speakLater), primary: true },
+        { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", ...t(TEMPLATE.speakLater), primary: true, remind: false },
         REPLY,
       ];
     case "mail":
       return [
         { id: "call", label: "Schedule a call", ...t(TEMPLATE.replyCall), stage: "contacted", primary: true, reply: true },
+        { ...REPLY, reply: true },
+      ];
+    // A reply reminder came due: nudge in the same thread (Send sets the
+    // next one), or let go. Every button opens the composer first.
+    case "remind":
+      return [
+        { id: "nudge", label: "Nudge", ...t(TEMPLATE.followUp), primary: true, reply: true },
+        { id: "no", label: "Not this time", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true, remind: false },
         { ...REPLY, reply: true },
       ];
     case "fdue":
@@ -92,6 +103,11 @@ export function actionsFor(
  *  hasRole = the item names a role the move can land on. */
 export function outcomeLabel(a: QuickAction, kind: string, hasRole = true): string {
   const clears = kind === "mail" ? "thread clears" : "item clears";
+  if (kind === "remind") {
+    if (a.id === "nudge") return "next reminder set · item clears";
+    if (a.stage === "rejected") return hasRole ? "stage moves to Rejected · reminder ends" : "reminder ends · no role to move";
+    return "reminder ends · item clears";
+  }
   if (a.stage === "contacted") return hasRole ? `stage moves to Contacted · ${clears}` : `${clears} · no role to move`;
   if (a.stage === "rejected") return hasRole ? `stage moves to Rejected · ${clears}` : `${clears} · no role to move`;
   if (kind === "fdue") return "marked contacted · follow-up clears";
