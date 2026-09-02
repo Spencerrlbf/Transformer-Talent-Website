@@ -12,11 +12,23 @@ import InboxStrip from "@/components/dashboard/inbox/InboxStrip";
 import {
   isTask,
   landingTab,
+  type AlsoItem,
   type InboxData,
   type InboxDone,
   type InboxItem,
   type InboxScope,
 } from "@/components/dashboard/inbox/types";
+import { outcomeLabel, type QuickAction } from "@/lib/quick-actions";
+
+type Quick = {
+  nonce: number;
+  template: string | null;
+  templateName?: string;
+  reply?: boolean;
+  after?: { stage: "contacted" | "rejected"; jobId?: string | null };
+  outcome?: string;
+  allowSilent?: boolean;
+};
 
 type Session = {
   items: InboxItem[];
@@ -38,6 +50,8 @@ export default function InboxPage() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [session, setSession] = useState<Session | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
+  const [quick, setQuick] = useState<Quick | null>(null);
+  const [notice, setNotice] = useState("");
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
   // Items this seat has already opened this session (marks are fire-and-forget).
@@ -82,8 +96,13 @@ export default function InboxPage() {
           if (!s) return s;
           const handled = { ...s.handled };
           const items = s.items.map((old) => {
-            const fresh = d.items.find((n) => n.id === old.id);
+            // Rows are people: the same person may lead with a different
+            // item after a reload (their reply handled, a task remains).
+            // The fresh row replaces the old one wholesale — Done and marks
+            // must target what is actually there now.
+            const fresh = d.items.find((n) => n.id === old.id) || d.items.find((n) => n.candidateKey && n.candidateKey === old.candidateKey);
             if (!fresh && !handled[old.id]) handled[old.id] = "gone";
+            if (fresh && fresh.id !== old.id && handled[old.id] && !handled[fresh.id]) handled[fresh.id] = handled[old.id];
             return fresh ? { ...fresh, seen: fresh.seen || seenRef.current.has(fresh.id) } : old;
           });
           return { ...s, items, handled };
@@ -137,9 +156,8 @@ export default function InboxPage() {
     }).catch(() => {});
   };
 
-  /** Clear an item without acting: the right call for its kind. */
-  const tick = async (item: InboxItem): Promise<boolean> => {
-    setBusy(item.id, true);
+  /** Clear one thing without acting: the right call for its kind. */
+  const tickOne = async (item: Pick<InboxItem, "id" | "kind" | "taskId" | "candidateKey" | "title">): Promise<boolean> => {
     let res: Response | null = null;
     if (isTask(item.kind) && item.taskId) {
       res = await fetch(`/api/dashboard/tasks/${item.taskId}`, {
@@ -156,8 +174,20 @@ export default function InboxPage() {
         body: JSON.stringify({ id: item.id, handled: "done", kind: item.kind, label: item.title, candidateKey: item.candidateKey }),
       }).catch(() => null);
     }
+    return Boolean(res?.ok);
+  };
+
+  /** Done on a row clears the person's arrivals and threads together. A
+   *  task or a due follow-up riding along is not done by proxy: it stays
+   *  and the person's row stays with it. */
+  const tick = async (item: InboxItem): Promise<boolean> => {
+    setBusy(item.id, true);
+    const ok = await tickOne(item);
+    for (const x of item.also || []) {
+      if (isTask(x.kind) || x.kind === "fdue") continue;
+      await tickOne({ ...x, candidateKey: item.candidateKey } as AlsoItem & { candidateKey: string | null }).catch(() => false);
+    }
     setBusy(item.id, false);
-    const ok = Boolean(res?.ok);
     if (ok) {
       setData((d) =>
         d
@@ -229,6 +259,7 @@ export default function InboxPage() {
     const s = sessionRef.current;
     if (!s || index < 0 || index >= s.items.length) return;
     markSeen(s.items[index]);
+    setQuick(null);
     setSession({ ...s, index });
   };
   const nextUnhandled = (s: Session): number => {
@@ -238,13 +269,58 @@ export default function InboxPage() {
   };
   const closeSession = () => {
     setSession(null);
+    setQuick(null);
     load();
   };
   const noteHandled = (id: string, reason: string) =>
     setSession((s) => (s ? { ...s, handled: { ...s.handled, [id]: reason } } : s));
 
   const current = session ? session.items[session.index] : null;
-  const onActivity = (ev: { type: "stage" | "sent" | "contacted"; label?: string }) => {
+
+  /** A quick action: hand the drawer a template + outcome; the composer opens. */
+  const runAction = (a: QuickAction, kind: string) => {
+    const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
+    if (!cur) return;
+    // The rule may belong to a rider (their application under a lead task):
+    // move the stage on that item's role, not the lead's.
+    const rider = (cur.also || []).find((x) => x.kind === kind);
+    const jobId = (kind === cur.kind ? cur.jobId : rider?.jobId || cur.jobId) || null;
+    setQuick({
+      nonce: Date.now(),
+      template: a.template,
+      templateName: a.templateName,
+      reply: a.reply,
+      // No role to move = no move. The strip and the composer both say so.
+      after: a.stage && jobId ? { stage: a.stage, jobId } : undefined,
+      outcome: a.template ? outcomeLabel(a, kind, Boolean(jobId)) : undefined,
+      allowSilent: a.allowSilent,
+    });
+  };
+
+  /** "Reject without emailing": the stage move alone. Only ever a stage
+   *  move — a failure says so rather than quietly ticking the row. */
+  const silentReject = async () => {
+    const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
+    if (!cur || !cur.candidateKey) return;
+    const jobId = cur.jobId || (cur.also || []).find((x) => x.jobId)?.jobId || null;
+    if (!jobId) {
+      setNotice("There is no role to reject them for. Use Done to clear the item instead.");
+      return;
+    }
+    const res = await fetch(`/api/dashboard/candidates/v2/${cur.candidateKey}/status`, {
+      method: "PUT",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId, status: "rejected" }),
+    }).catch(() => null);
+    if (res?.ok) {
+      setNotice("");
+      noteHandled(cur.id, "stage:Rejected");
+      load();
+    } else {
+      setNotice("Couldn't move them to Rejected. Nothing changed; try again.");
+    }
+  };
+  const onActivity = (ev: { type: "stage" | "sent" | "contacted"; label?: string; staged?: string | null }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
     if (!cur) {
@@ -254,7 +330,10 @@ export default function InboxPage() {
     let reason: string | null = null;
     if (ev.type === "stage" && (cur.kind === "app" || cur.kind === "drop")) reason = `stage:${ev.label || "moved"}`;
     if (ev.type === "sent") {
-      if (cur.kind === "mail") reason = "reply";
+      // A quick action's Send reports the move the server actually made.
+      if (ev.staged) reason = `stage:${ev.staged.charAt(0).toUpperCase() + ev.staged.slice(1)}`;
+      else if (cur.kind === "mail") reason = "reply";
+      else if (cur.kind === "app") reason = "email";
       else if (cur.kind === "ask" || cur.kind === "ref" || cur.kind === "drop" || cur.kind === "fdue" || cur.kind === "temail") reason = "email";
     }
     if (ev.type === "contacted" && cur.kind === "fdue") reason = "contacted";
@@ -265,6 +344,7 @@ export default function InboxPage() {
   return (
     <>
       {error && <p className="cv2d-err">Couldn&apos;t load the Inbox. Refresh to try again.</p>}
+      {notice && <p className="cv2d-err">{notice}</p>}
       <InboxView
         data={data}
         scope={scope}
@@ -291,6 +371,8 @@ export default function InboxPage() {
           onActivity={onActivity}
           completeTaskId={current.kind === "temail" ? current.taskId : null}
           inboxThreadId={current.kind === "mail" ? current.threadId : null}
+          quickAction={quick}
+          onSilentReject={silentReject}
           contextStrip={
             <InboxStrip
               item={current}
@@ -306,6 +388,7 @@ export default function InboxPage() {
               onSkip={() => goto(nextUnhandled(session))}
               onNext={() => goto(nextUnhandled(session))}
               onClose={closeSession}
+              onAction={runAction}
             />
           }
           onClose={closeSession}

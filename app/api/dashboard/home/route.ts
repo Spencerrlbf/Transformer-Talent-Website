@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const today = url.searchParams.get("today");
   const tz = Number(url.searchParams.get("tz") || 0);
   const data = await homeMetrics(
-    { orgId: member.org.id, email: member.email, userId: member.userId, memberRole: member.memberRole },
+    { orgId: member.org.id, email: member.email, userId: member.userId, memberRole: member.memberRole, orgSlug: member.org.slug },
     scope,
     period,
     today,

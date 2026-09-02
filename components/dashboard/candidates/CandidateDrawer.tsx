@@ -308,6 +308,8 @@ export default function CandidateDrawer({
   onActivity,
   completeTaskId,
   inboxThreadId,
+  quickAction,
+  onSilentReject,
 }: {
   candKey: string | null;
   roleContext?: string;
@@ -325,11 +327,23 @@ export default function CandidateDrawer({
   navIndex?: number;
   onNavigateItem?: (index: number) => void;
   /** Inbox: something happened in here that may clear the current item. */
-  onActivity?: (ev: { type: "stage" | "sent" | "contacted"; label?: string }) => void;
+  onActivity?: (ev: { type: "stage" | "sent" | "contacted"; label?: string; staged?: string | null }) => void;
   /** Inbox: the email task a send from here fulfils. */
   completeTaskId?: string | null;
   /** Inbox: the thread a fresh email from here answers. */
   inboxThreadId?: string | null;
+  /** Inbox quick action: open a composer with this template and outcome. */
+  quickAction?: {
+    nonce: number;
+    template: string | null;
+    templateName?: string;
+    reply?: boolean;
+    after?: { stage: "contacted" | "rejected"; jobId?: string | null };
+    outcome?: string;
+    allowSilent?: boolean;
+  } | null;
+  /** Inbox quick action: "Reject without emailing" chosen in the composer. */
+  onSilentReject?: () => void;
 }) {
   const { token } = useDash();
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -372,6 +386,31 @@ export default function CandidateDrawer({
   const [contactErr, setContactErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  // Quick action routing: a reply-style action goes to the Email tab's
+  // composer (it knows the thread); anything else opens the header composer.
+  const [quickHead, setQuickHead] = useState<NonNullable<typeof quickAction> | null>(null);
+  const [quickTab, setQuickTab] = useState<NonNullable<typeof quickAction> | null>(null);
+  const quickNonce = useRef(0);
+  useEffect(() => {
+    if (!quickAction || quickAction.nonce === quickNonce.current) return;
+    quickNonce.current = quickAction.nonce;
+    if (quickAction.reply && initialThreadId) {
+      setTab("email");
+      setQuickTab(quickAction);
+    } else {
+      setQuickHead(quickAction);
+      setEmailOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickAction?.nonce]);
+  // Moving to another person or item drops any pending quick action: a
+  // composer must never reopen on the next candidate with the last one's
+  // template or stage move armed.
+  useEffect(() => {
+    setQuickHead(null);
+    setQuickTab(null);
+    setEmailOpen(false);
+  }, [candKey, navItemIndex]);
   // Bumped on send so an already-open Notes/Email tab remounts and refetches.
   const [notesBump, setNotesBump] = useState(0);
   // Threads where the candidate spoke last — the Email tab's badge.
@@ -655,15 +694,34 @@ export default function CandidateDrawer({
       <JobDrawer jobId={openJob} onClose={() => setOpenJob(null)} />
       {emailOpen && detail && candKey && (
         <EmailModal
+          key={quickHead?.nonce || "plain"}
           candKey={candKey}
           candidateName={detail.name}
           completeTaskId={completeTaskId || undefined}
           inboxThreadId={inboxThreadId || undefined}
-          onClose={() => setEmailOpen(false)}
-          onSent={() => {
+          initialTemplate={quickHead?.template || undefined}
+          initialTemplateName={quickHead?.templateName}
+          after={quickHead?.after}
+          outcome={quickHead?.outcome}
+          allowSilent={quickHead?.allowSilent}
+          onSilent={
+            onSilentReject
+              ? () => {
+                  setEmailOpen(false);
+                  setQuickHead(null);
+                  onSilentReject();
+                }
+              : undefined
+          }
+          onClose={() => {
+            setEmailOpen(false);
+            setQuickHead(null);
+          }}
+          onSent={(result) => {
+            setQuickHead(null);
             setTab("email");
             setNotesBump((b) => b + 1);
-            onActivity?.({ type: "sent" });
+            onActivity?.({ type: "sent", staged: result?.staged ?? null });
           }}
         />
       )}
@@ -1296,7 +1354,12 @@ export default function CandidateDrawer({
                   openThreadId={initialThreadId || undefined}
                   completeTaskId={completeTaskId || undefined}
                   inboxThreadId={inboxThreadId || undefined}
-                  onSent={() => onActivity?.({ type: "sent" })}
+                  onSent={(result) => {
+                    setQuickTab(null);
+                    onActivity?.({ type: "sent", staged: result?.staged ?? null });
+                  }}
+                  openCompose={quickTab}
+                  onSilent={onSilentReject}
                 />
               )}
               {tab === "notes" && isNet && (

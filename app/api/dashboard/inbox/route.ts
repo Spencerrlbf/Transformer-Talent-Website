@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const scope: InboxScope = url.searchParams.get("scope") === "team" ? "team" : "me";
   const today = url.searchParams.get("today");
-  const m = { orgId: member.org.id, email: member.email, userId: member.userId, memberRole: member.memberRole };
+  const m = { orgId: member.org.id, email: member.email, userId: member.userId, memberRole: member.memberRole, orgSlug: member.org.slug };
   if (url.searchParams.get("count")) {
     return NextResponse.json(await inboxCounts(m, scope, today));
   }

@@ -49,6 +49,18 @@ export type InboxItem = {
   taskId: string | null;
   subject: string | null;
   extra: string | null;
+  /** One row per person: the person's other open items ride along here. */
+  also?: AlsoItem[];
+};
+
+export type AlsoItem = {
+  id: string;
+  kind: InboxKind;
+  title: string;
+  taskId: string | null;
+  threadId: string | null;
+  jobId: string | null;
+  overdue: boolean;
 };
 
 export type InboxDone = {
@@ -83,12 +95,14 @@ const KIND_TITLE: Record<string, string> = {
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Subjects mail clients generate on the candidate's behalf. */
+const AUTO_REPLY = /^\s*(?:(?:accepted|declined|tentative|tentatively accepted):\s|automatic reply|auto(?:-| )?reply|autoreply|out of (?:the )?office)/i;
 const ARRIVAL_WINDOW_DAYS = 45;
 const DONE_WINDOW_DAYS = 7;
 const PAGE = 1000;
 const CHUNK = 100;
 
-type Member = { orgId: string; email: string; userId: string; memberRole: string };
+type Member = { orgId: string; email: string; userId: string; memberRole: string; orgSlug?: string };
 
 type AppRow = {
   id: string; name: string | null; email: string | null; source: string | null;
@@ -219,7 +233,8 @@ export async function listInbox(
     // The TT org's own site roles aren't org_roles rows: fill their titles too.
     const wanted = new Set<string>();
     for (const a of [...apps, ...dueRows]) for (const id of [...(a.role_ids || []), ...(a.matched_role_ids || [])]) if (!roleTitle.has(id)) wanted.add(id);
-    if (wanted.size) {
+    // Only the TT org's own site roles live outside org_roles.
+    if (wanted.size && member.orgSlug === "transformer-talent") {
       const site = await getRoles().catch(() => [] as { jobId: string; title: string }[]);
       for (const r of site) if (wanted.has(r.jobId)) roleTitle.set(r.jobId, r.title);
     }
@@ -371,6 +386,9 @@ export async function listInbox(
     list.sort((a, b) => a.created_at.localeCompare(b.created_at));
     const last = list[list.length - 1];
     if (last.direction !== "in") continue;
+    // Calendar responses and auto-replies are not the candidate waiting on
+    // you; they stay in the Email tab but never become an Inbox item.
+    if (AUTO_REPLY.test(last.subject || "")) continue;
     const owner = last.member_email;
     if (visibility === "private" && !isMine(owner)) continue;
     if (scope === "me" && !isMine(owner)) continue;
@@ -461,6 +479,29 @@ export async function listInbox(
     if (aTask !== bTask) return aTask ? -1 : 1;
     return b.at.localeCompare(a.at);
   });
+
+  // ---- one row per person: the most urgent item (section order) leads,
+  // the rest ride along as `also`, so one Done clears the lot and the
+  // badge counts people. Items with no candidate stay as they are.
+  const byPerson = new Map<string, InboxItem>();
+  const grouped: InboxItem[] = [];
+  for (const it of items) {
+    if (!it.candidateKey) {
+      grouped.push(it);
+      continue;
+    }
+    const head = byPerson.get(it.candidateKey);
+    if (!head) {
+      it.also = [];
+      byPerson.set(it.candidateKey, it);
+      grouped.push(it);
+    } else {
+      head.also!.push({ id: it.id, kind: it.kind, title: it.title, taskId: it.taskId, threadId: it.threadId, jobId: it.jobId, overdue: it.overdue });
+      if (it.overdue) head.overdue = true;
+      if (!head.jobId && it.jobId) head.jobId = it.jobId;
+    }
+  }
+  items.splice(0, items.length, ...grouped);
 
   const counts = { today: items.length, overdue: items.filter((i) => i.overdue).length, upcoming: 0, done: 0 };
   if (lean) return { scope, today, items, upcoming: [], done: [], counts, emailVisibility: visibility };

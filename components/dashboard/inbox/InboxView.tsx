@@ -129,6 +129,15 @@ export default function InboxView({
             <i className="ib-dot" aria-hidden="true" />
             {item.title}
             {item.extra && <span className="ib-lbl box">{item.extra}</span>}
+            {item.also && item.also.length > 0 && (
+              <span className="ib-also">
+                {item.also.map((x) => (
+                  <span key={x.id} className={`ib-lbl ${KIND_TONE[x.kind]}`} title={x.title}>
+                    {KIND_LABEL[x.kind]}
+                  </span>
+                ))}
+              </span>
+            )}
           </span>
           {item.detail && <span className="d">{item.detail}</span>}
         </span>

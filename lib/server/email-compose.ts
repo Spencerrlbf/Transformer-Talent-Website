@@ -81,15 +81,28 @@ export type Template = {
   name: string;
   subject: string;
   bodyHtml: string;
+  /** Stable key a quick action finds the template by (null for the org's own). */
+  actionKey: string | null;
 };
 
-const TPL_COLS = "id,name,subject,body_html";
-const shapeTpl = (t: { id: string; name: string; subject: string; body_html: string }): Template => ({
+const TPL_COLS = "id,name,subject,body_html,action_key";
+const shapeTpl = (t: { id: string; name: string; subject: string; body_html: string; action_key?: string | null }): Template => ({
   id: t.id,
   name: t.name,
   subject: t.subject,
   bodyHtml: t.body_html,
+  actionKey: t.action_key || null,
 });
+
+/** Stamp the quick-action key on a template (seeding older rows). */
+export async function setTemplateActionKey(orgId: string, id: string, key: string): Promise<boolean> {
+  const res = await sbRest(`email_templates?id=eq.${id}&organization_id=eq.${orgId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action_key: key }),
+    prefer: "return=minimal",
+  });
+  return res.ok;
+}
 
 export async function listTemplates(orgId: string): Promise<Template[]> {
   const res = await sbRest(
@@ -106,6 +119,7 @@ export async function createTemplate(args: {
   subject: string;
   bodyHtml: string;
   byEmail: string;
+  actionKey?: string;
 }): Promise<Template | { error: string }> {
   const name = args.name.trim().slice(0, 80);
   if (!name) return { error: "bad_name" };
@@ -117,6 +131,7 @@ export async function createTemplate(args: {
       subject: args.subject.slice(0, 300),
       body_html: sanitizeEmailHtml(args.bodyHtml),
       created_by_email: args.byEmail,
+      ...(args.actionKey ? { action_key: args.actionKey } : {}),
     },
     true
   ).catch(() => null);

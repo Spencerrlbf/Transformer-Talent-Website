@@ -24,6 +24,18 @@ export type InboxItem = {
   taskId: string | null;
   subject: string | null;
   extra: string | null;
+  /** One row per person: the person's other open items ride along here. */
+  also?: AlsoItem[];
+};
+
+export type AlsoItem = {
+  id: string;
+  kind: InboxKind;
+  title: string;
+  taskId: string | null;
+  threadId: string | null;
+  jobId: string | null;
+  overdue: boolean;
 };
 
 export type InboxDone = {
