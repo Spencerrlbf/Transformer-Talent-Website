@@ -17,6 +17,7 @@ import { getRoles } from "@/lib/roles";
 import { passesHardGates, passesProfileGates, screenRolesWithCache } from "./screening";
 import { loadOrgRoles, matchOrgRolesForApplicant, type BoardRole } from "./org-board";
 import { llamaParsePdf } from "./llamaparse";
+import { extractEmails, extractPhone, fillExtractedContact, normalizePhone, pdfText } from "./contact-extract";
 import {
   recordEnrichment,
   syncExperiences,
@@ -64,18 +65,6 @@ function clean(s: unknown, max: number): string {
     .slice(0, max);
 }
 
-async function extractPdfText(buf: Buffer): Promise<string> {
-  try {
-    const mod = await import("pdf-parse/lib/pdf-parse.js");
-    const pdf = (mod.default || mod) as (b: Buffer) => Promise<{ text: string }>;
-    const out = await pdf(buf);
-    return clean(out.text, 60000);
-  } catch (err) {
-    console.error("pdf extraction failed", err);
-    return "";
-  }
-}
-
 function nameFromProfile(
   harvest: Record<string, unknown> | null,
   fallback: string
@@ -104,7 +93,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     if (resumeText) {
       resumeParser = "llamaparse";
     } else {
-      resumeText = (await extractPdfText(resumeBuf)) || null;
+      resumeText = (await pdfText(resumeBuf)) || null;
       if (resumeText) resumeParser = "pdf-parse";
     }
     if (resumeText) {
@@ -315,6 +304,31 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       prefer: "return=minimal",
     }).catch(() => {});
 
+    // Contact details off the resume — written AFTER the profile above so
+    // the drawer never shows a phone before the LinkedIn history is there.
+    // The model's read is authoritative
+    // when it was consulted: a null phone means the resume shows none, and
+    // the primary email back means there is no second address — the regex
+    // must not then attach a referee's number or a careers@ mailbox. The
+    // regex only decides when the model wasn't asked at all (no key, parse
+    // failure), plus one narrow backstop: a phone in the contact block the
+    // model missed. Fills gaps only — never overwrites a typed value.
+    if (resumeText) {
+      const foundPhone = parsed
+        ? normalizePhone(parsed.phone) || extractPhone(resumeText.slice(0, 1500))
+        : extractPhone(resumeText);
+      const modelEmail = (parsed?.email || "").trim();
+      const found = parsed
+        ? { phone: foundPhone, email: modelEmail && modelEmail.toLowerCase() !== email.toLowerCase() ? modelEmail : null }
+        : { phone: foundPhone, emails: extractEmails(resumeText, email) };
+      if (found.phone || found.email || (found.emails && found.emails.length)) {
+        await fillExtractedContact(`app_${submissionId}`, found).catch((err) =>
+          console.error("contact fill failed", err)
+        );
+      }
+    }
+
+
     // Future interest travels with the person, not just the application —
     // the pool record carries the date and what to come back with.
     if (p.followUpAt && candidateId) {
@@ -349,6 +363,14 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       body: JSON.stringify({ status: "received" }),
       prefer: "return=minimal",
     }).catch(() => {});
+    // Enrichment fell over (Harvest / model outage): the deterministic
+    // contact fill still runs, so the phone isn't lost with it.
+    if (resumeText) {
+      await fillExtractedContact(`app_${submissionId}`, {
+        phone: extractPhone(resumeText),
+        emails: extractEmails(resumeText, email),
+      }).catch(() => {});
+    }
   }
 
   // Review row for EVERY entry — even when enrichment failed above.

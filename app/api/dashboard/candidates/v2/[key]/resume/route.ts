@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
 import { saveUnifiedResumePath, resumeNameFromPath } from "@/lib/server/candidates-unified";
+import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "@/lib/server/contact-extract";
 
 export const maxDuration = 60;
 
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
 
   const safeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
   const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
   const up = await fetch(`${base}/storage/v1/object/resumes/${path}`, {
     method: "POST",
     headers: {
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
       apikey: storageKey,
       "Content-Type": "application/pdf",
     },
-    body: new Uint8Array(await file.arrayBuffer()),
+    body: bytes,
   });
   if (!up.ok) {
     console.error("drawer resume upload failed", up.status, await up.text());
@@ -52,9 +54,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   if (!(await saveUnifiedResumePath(member.org.id, key, path)))
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+  // Phone (and any extra email) off the resume into the contact block —
+  // gaps only, a typed value always wins. Local pdf-parse of the first
+  // pages, time-boxed: the upload is already saved, and a slow PDF must
+  // never turn it into a failure. Returns only what changed so the drawer
+  // can merge it into its own (sourced + application) view of the person.
+  let filled: Awaited<ReturnType<typeof fillExtractedContact>> = null;
+  try {
+    const text = await Promise.race([
+      pdfText(Buffer.from(bytes), 3),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 10_000)),
+    ]);
+    const phone = extractPhone(text);
+    const emails = extractEmails(text);
+    if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
+  } catch (err) {
+    console.error("resume contact extraction failed", err);
+  }
+
   return NextResponse.json({
     resumeUrl: await signResumeUrl(path),
     resumeName: resumeNameFromPath(path),
     hasResume: true,
+    filled,
   });
 }
