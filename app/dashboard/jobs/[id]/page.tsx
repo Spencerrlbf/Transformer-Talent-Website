@@ -115,7 +115,7 @@ function JobWorkspace({ id }: { id: string }) {
     return (
       <>
         <p className="dash-muted">Job not found.</p>
-        <Link href="/dashboard">← Back to jobs</Link>
+        <Link href="/dashboard/jobs">← Back to jobs</Link>
       </>
     );
 
@@ -123,7 +123,7 @@ function JobWorkspace({ id }: { id: string }) {
   return (
     <>
       <div className="dash-crumb">
-        <Link href="/dashboard">Jobs</Link> / {job.title}
+        <Link href="/dashboard/jobs">Jobs</Link> / {job.title}
       </div>
       <div className="dash-jobhead">
         <div>

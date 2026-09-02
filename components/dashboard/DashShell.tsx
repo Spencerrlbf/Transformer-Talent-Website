@@ -12,8 +12,15 @@ import type { Session } from "@supabase/supabase-js";
 import { supabaseBrowser } from "./supabaseBrowser";
 
 type Org = { id: string; slug: string; name: string };
-type MyPage = { published: boolean; slug: string } | null;
-type DashContext = { token: string; org: Org; email: string; role: string };
+type MyPage = { published: boolean; slug: string; displayName?: string | null } | null;
+type DashContext = {
+  token: string;
+  org: Org;
+  email: string;
+  role: string;
+  /** Recruiter-page display name when set; empty otherwise. */
+  name: string;
+};
 
 const Ctx = createContext<DashContext | null>(null);
 export function useDash(): DashContext {
@@ -23,8 +30,9 @@ export function useDash(): DashContext {
 }
 
 const NAV = [
+  { href: "/dashboard", label: "Home" },
   { href: "/dashboard/inbox", label: "Inbox" },
-  { href: "/dashboard", label: "Jobs" },
+  { href: "/dashboard/jobs", label: "Jobs" },
   { href: "/dashboard/candidates", label: "Candidates" },
   { href: "/dashboard/my-page", label: "My page" },
   { href: "/dashboard/settings", label: "Settings" },
@@ -41,7 +49,7 @@ const CRUMBS: [string, string][] = [
   ["/dashboard/settings", "Settings"],
   ["/dashboard/jobs/new", "New job"],
   ["/dashboard/jobs", "Jobs"],
-  ["/dashboard", "Jobs"],
+  ["/dashboard", "Home"],
 ];
 
 const initials = (name: string) =>
@@ -126,6 +134,7 @@ export default function DashShell({ children }: { children: ReactNode }) {
         org: me.org,
         email: me.email,
         role: me.memberRole || "member",
+        name: me.myPage?.displayName || "",
       }}
     >
       <div className="dash-app">
