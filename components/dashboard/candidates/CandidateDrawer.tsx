@@ -611,8 +611,8 @@ export default function CandidateDrawer({
                     <button
                       type="button"
                       className="cv2d-mail"
-                      title={`Email ${detail.name.split(/\s+/)[0] || "them"}`}
-                      aria-label="Send email"
+                      data-tip="Send an email"
+                      aria-label="Send an email"
                       onClick={() => setEmailOpen(true)}
                     >
                       ✉

@@ -3779,10 +3779,19 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 
 /* ---- Send-as-you email (compose modal, templates, timeline, team card) ---- */
 .cv2d-mail {
-  font: inherit; font-size: 15px; line-height: 1; color: var(--faint); background: none; border: 0;
-  cursor: pointer; padding: 2px 4px; vertical-align: 2px;
+  position: relative; font: inherit; font-size: 19px; line-height: 1; color: var(--faint);
+  background: none; border: 0; cursor: pointer; padding: 2px 5px; vertical-align: 2px;
 }
 .cv2d-mail:hover { color: var(--accent-press); }
+/* Hover tooltip, same ink-on-white treatment as the pipeline tip. */
+.cv2d-mail::after {
+  content: attr(data-tip); position: absolute; left: 50%; top: calc(100% + 8px);
+  transform: translateX(-50%); z-index: 30; white-space: nowrap;
+  background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0;
+  padding: 5px 9px; border-radius: 6px; box-shadow: var(--sh-tooltip);
+  opacity: 0; pointer-events: none; transition: opacity .12s;
+}
+.cv2d-mail:hover::after, .cv2d-mail:focus-visible::after { opacity: 1; }
 
 .em-tkm { width: 580px; }
 .em-provbtn {
