@@ -64,7 +64,8 @@ export default function InboxStrip({
   onSkip: () => void;
   onNext: () => void;
   onClose: () => void;
-  onAction: (a: QuickAction) => void;
+  /** The action, and the kind it belongs to (the lead's, or a rider's). */
+  onAction: (a: QuickAction, kind: string) => void;
 }) {
   const tone = KIND_TONE[item.kind];
   const also = item.also || [];
@@ -98,7 +99,20 @@ export default function InboxStrip({
     );
   }
   const doneLabel = item.kind === "fdue" ? "Mark contacted" : isTask(item.kind) ? "Mark done" : "Done";
-  const actions = actionsFor(item.kind, { hasRole: Boolean(item.jobId), month: monthOf(item) });
+  // A task leading the row has no buttons of its own; the person's other
+  // open item (their application, their resume drop) still gets its rule.
+  let actionKind = item.kind;
+  let actions = actionsFor(item.kind, { hasRole: Boolean(item.jobId), month: monthOf(item) });
+  if (actions.length === 0) {
+    for (const x of also) {
+      const a = actionsFor(x.kind, { hasRole: Boolean(x.jobId || item.jobId), month: monthOf({ ...item, title: x.title }) });
+      if (a.length) {
+        actions = a;
+        actionKind = x.kind;
+        break;
+      }
+    }
+  }
   return (
     <div className={`ibs ${tone}`} role="status">
       <span className={`ib-kind ${tone}`}>
@@ -129,7 +143,7 @@ export default function InboxStrip({
               type="button"
               className={`qa${a.primary ? " pri" : ""}${a.danger ? " bad" : ""}`}
               title={a.template ? `Opens the composer with "${a.template}" merged for them` : "Opens the composer"}
-              onClick={() => onAction(a)}
+              onClick={() => onAction(a, actionKind)}
             >
               <KindIcon kind={ACTION_ICON[a.id] || "email"} className="tk-ico" />
               {a.label}
@@ -152,7 +166,8 @@ export default function InboxStrip({
       )}
       {actions.length > 0 && (
         <span className="ibs-also">
-          Every button opens the composer first. After Send: <b>{outcomeLabel(actions[0], item.kind)}</b>
+          {actionKind !== item.kind ? `Buttons are for their ${KIND_LABEL[actionKind].toLowerCase()} · ` : ""}
+          Every button opens the composer first. After Send: <b>{outcomeLabel(actions[0], actionKind)}</b>
           {also.length > 0 && (
             <>
               {" · "}Also open for them: <b>{also.map((x) => KIND_LABEL[x.kind]).join(" · ")}</b>

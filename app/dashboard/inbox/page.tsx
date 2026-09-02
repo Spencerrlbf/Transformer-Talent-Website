@@ -270,15 +270,18 @@ export default function InboxPage() {
   const current = session ? session.items[session.index] : null;
 
   /** A quick action: hand the drawer a template + outcome; the composer opens. */
-  const runAction = (a: QuickAction) => {
+  const runAction = (a: QuickAction, kind: string) => {
     const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
     if (!cur) return;
+    // The rule may belong to a rider (their application under a lead task):
+    // move the stage on that item's role, not the lead's.
+    const rider = (cur.also || []).find((x) => x.kind === kind);
     setQuick({
       nonce: Date.now(),
       template: a.template,
       reply: a.reply,
-      after: a.stage ? { stage: a.stage, jobId: cur.jobId || null } : undefined,
-      outcome: a.template ? outcomeLabel(a, cur.kind) : undefined,
+      after: a.stage ? { stage: a.stage, jobId: (kind === cur.kind ? cur.jobId : rider?.jobId || cur.jobId) || null } : undefined,
+      outcome: a.template ? outcomeLabel(a, kind) : undefined,
       allowSilent: a.allowSilent,
     });
   };
