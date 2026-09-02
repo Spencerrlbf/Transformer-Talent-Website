@@ -131,28 +131,6 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     if (!harvest) harvest = await harvestProfile(linkedin);
     const parsed = await parseProfile(resumeText || "", harvest);
 
-    // Contact details off the resume. The model's read is authoritative
-    // when it was consulted: a null phone means the resume shows none, and
-    // the primary email back means there is no second address — the regex
-    // must not then attach a referee's number or a careers@ mailbox. The
-    // regex only decides when the model wasn't asked at all (no key, parse
-    // failure), plus one narrow backstop: a phone in the contact block the
-    // model missed. Fills gaps only — never overwrites a typed value.
-    if (resumeText) {
-      const foundPhone = parsed
-        ? normalizePhone(parsed.phone) || extractPhone(resumeText.slice(0, 1500))
-        : extractPhone(resumeText);
-      const modelEmail = (parsed?.email || "").trim();
-      const found = parsed
-        ? { phone: foundPhone, email: modelEmail && modelEmail.toLowerCase() !== email.toLowerCase() ? modelEmail : null }
-        : { phone: foundPhone, emails: extractEmails(resumeText, email) };
-      if (found.phone || found.email || (found.emails && found.emails.length)) {
-        await fillExtractedContact(`app_${submissionId}`, found).catch((err) =>
-          console.error("contact fill failed", err)
-        );
-      }
-    }
-
     // Referrals arrive with no name — take it from the profile.
     if (!name) {
       name = nameFromProfile(harvest as Record<string, unknown> | null, username || email);
@@ -325,6 +303,31 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       }),
       prefer: "return=minimal",
     }).catch(() => {});
+
+    // Contact details off the resume — written AFTER the profile above so
+    // the drawer never shows a phone before the LinkedIn history is there.
+    // The model's read is authoritative
+    // when it was consulted: a null phone means the resume shows none, and
+    // the primary email back means there is no second address — the regex
+    // must not then attach a referee's number or a careers@ mailbox. The
+    // regex only decides when the model wasn't asked at all (no key, parse
+    // failure), plus one narrow backstop: a phone in the contact block the
+    // model missed. Fills gaps only — never overwrites a typed value.
+    if (resumeText) {
+      const foundPhone = parsed
+        ? normalizePhone(parsed.phone) || extractPhone(resumeText.slice(0, 1500))
+        : extractPhone(resumeText);
+      const modelEmail = (parsed?.email || "").trim();
+      const found = parsed
+        ? { phone: foundPhone, email: modelEmail && modelEmail.toLowerCase() !== email.toLowerCase() ? modelEmail : null }
+        : { phone: foundPhone, emails: extractEmails(resumeText, email) };
+      if (found.phone || found.email || (found.emails && found.emails.length)) {
+        await fillExtractedContact(`app_${submissionId}`, found).catch((err) =>
+          console.error("contact fill failed", err)
+        );
+      }
+    }
+
 
     // Future interest travels with the person, not just the application —
     // the pool record carries the date and what to come back with.
