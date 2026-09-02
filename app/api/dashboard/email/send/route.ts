@@ -11,7 +11,7 @@ import {
   sanitizeEmailHtml,
 } from "@/lib/server/email-compose";
 import { noteEmailSent } from "@/lib/server/inbox";
-import { updateTask } from "@/lib/server/tasks";
+import { completeEmailTask } from "@/lib/server/tasks";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
     replyToMessageId?: unknown;
     /** Inbox email task this send fulfils — marked done on success. */
     completeTaskId?: unknown;
+    /** The viewer's local date (YYYY-MM-DD), so "follow-up due" agrees with the Inbox. */
+    today?: unknown;
   };
   try {
     body = await req.json();
@@ -119,11 +121,11 @@ export async function POST(req: NextRequest) {
     key,
     threadId: target?.threadId || null,
     subject,
+    today: typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : null,
   }).catch(() => {});
   let taskDone = false;
   if (completeTaskId) {
-    const r = await updateTask(member.org.id, completeTaskId, { status: "done" }).catch(() => null);
-    taskDone = Boolean(r && !("error" in r));
+    taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
   }
   return NextResponse.json({ ok: true, taskDone });
 }

@@ -58,13 +58,20 @@ export default function InboxStrip({
 }) {
   const tone = KIND_TONE[item.kind];
   if (handledReason) {
+    // "gone" = it left the list for a reason this session didn't cause
+    // (rescheduled, a teammate acted, the date moved): say so, don't claim it.
+    const gone = handledReason === "gone";
     return (
       <div className="ibs handled" role="status">
         <span className={`ib-kind ${tone}`}>
           <KindIcon kind={KIND_ICON[item.kind]} className="tk-ico" />
         </span>
-        <span className="ibs-txt ok">
-          <b>✓ {isTask(item.kind) && handledReason !== "email" ? "Task done" : `Handled · ${reasonLabel(handledReason, item.kind)}`}</b>
+        <span className={`ibs-txt${gone ? "" : " ok"}`}>
+          <b>
+            {gone
+              ? "No longer in your Inbox"
+              : `✓ ${isTask(item.kind) && handledReason !== "email" ? "Task done" : `Handled · ${reasonLabel(handledReason, item.kind)}`}`}
+          </b>
           <span>{remaining ? `${remaining} left for today` : "Your Inbox is clear for today"}</span>
         </span>
         {hasNext ? (

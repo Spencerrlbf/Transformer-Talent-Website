@@ -188,6 +188,21 @@ export async function updateTask(
   return row ? shapeTask(row) : { error: "not_found" };
 }
 
+/** Complete the email task a send fulfilled — only if it is this
+ *  candidate's, an email task, and still open. Anything else is left alone. */
+export async function completeEmailTask(orgId: string, id: string, candidateKey: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !KEY_RE.test(candidateKey)) return false;
+  const res = await sbRest(
+    `tasks?id=eq.${id}&organization_id=eq.${orgId}&candidate_key=eq.${candidateKey}&kind=eq.email&status=eq.open&select=id`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status: "done", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+      prefer: "return=representation",
+    }
+  );
+  return res.ok && ((await res.json()) as unknown[]).length > 0;
+}
+
 export async function deleteTask(orgId: string, id: string): Promise<boolean> {
   const res = await sbRest(`tasks?id=eq.${id}&organization_id=eq.${orgId}`, { method: "DELETE" });
   return res.ok;

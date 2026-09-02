@@ -117,6 +117,8 @@ export function reasonLabel(reason: string, kind?: InboxKind | "task"): string {
       return "marked contacted";
     case "task_done":
       return "task done";
+    case "gone":
+      return "no longer in your Inbox";
     default:
       return kind && (kind === "task" || isTask(kind as InboxKind)) ? "task done" : "marked done";
   }

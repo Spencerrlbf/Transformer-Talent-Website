@@ -166,6 +166,7 @@ export default function EmailTab({
           text,
           ...(target ? { replyToMessageId: target.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
+          today: new Date().toLocaleDateString("en-CA"),
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };

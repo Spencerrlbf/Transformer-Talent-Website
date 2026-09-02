@@ -167,7 +167,7 @@ export default function NotesTab({
         <button className="cv2n-newbtn" onClick={() => setEmailOpen(true)}>
           ✉ Send email
         </button>
-        <span className="cv2n-hint">Notes are shared with your team; tasks land in your Tasks tab.</span>
+        <span className="cv2n-hint">Notes are shared with your team; tasks show in your Inbox on their due day.</span>
       </div>
 
       {error && <p className="cv2d-err">Couldn&apos;t load the timeline. Reopen to try again.</p>}

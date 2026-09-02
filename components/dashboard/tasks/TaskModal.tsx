@@ -184,8 +184,8 @@ export default function TaskModal({
           {isRequest
             ? `${name} asked to hear from you later. Move the date here; their full ask (roles, salary, visa) is in their profile.`
             : creating
-              ? "Create a task for this candidate and get it into your Tasks tab."
-              : `On ${name}'s timeline and your Tasks tab.`}
+              ? "Create a task for this candidate; it shows in your Inbox on its due day."
+              : `On ${name}'s timeline and in your Inbox on its due day.`}
         </p>
 
         {!isRequest && (

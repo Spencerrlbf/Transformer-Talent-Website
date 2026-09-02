@@ -438,6 +438,7 @@ export default function EmailModal({
           html: el.innerHTML,
           ...(reply ? { replyToMessageId: reply.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
+          today: new Date().toLocaleDateString("en-CA"),
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };

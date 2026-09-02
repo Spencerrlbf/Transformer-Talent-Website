@@ -217,9 +217,10 @@ function InboxBadge({ token }: { token: string }) {
   const [overdue, setOverdue] = useState(0);
   useEffect(() => {
     let gone = false;
-    const today = new Date().toLocaleDateString("en-CA");
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
+      // Recomputed per poll: a tab left open across midnight moves on too.
+      const today = new Date().toLocaleDateString("en-CA");
       fetch(`/api/dashboard/inbox?count=1&scope=me&today=${today}&_=${Date.now()}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
@@ -237,11 +238,14 @@ function InboxBadge({ token }: { token: string }) {
     const id = window.setInterval(refresh, 60_000);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
+    // The Inbox page announces its own changes so the badge never lags it.
+    window.addEventListener("tt-inbox-changed", refresh);
     return () => {
       gone = true;
       window.clearInterval(id);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("tt-inbox-changed", refresh);
     };
   }, [token]);
   if (n === null || n === 0) return null;

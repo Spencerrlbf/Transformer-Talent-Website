@@ -11,9 +11,12 @@
 // follow-ups clear through the followup route; a stage move clears an
 // application by itself. Those routes call noteXxx() below so the Done view
 // can say why something cleared.
+//
+// Every lookup is scoped to the org, lists are paged rather than capped,
+// and long id lists are chunked so no URL can outgrow the gateway.
 import { sbRest } from "./supabase";
 import { clearFollowUp } from "./candidates-unified";
-import { orgEmailVisibility } from "./email-compose";
+import { orgEmailVisibility, viewerMailboxEmails } from "./email-compose";
 import { getRoles } from "@/lib/roles";
 
 export type InboxKind =
@@ -74,11 +77,16 @@ const SECTION_OF: Record<InboxKind, InboxSection> = {
   mail: "emails", temail: "emails", tcall: "calls", tmsg: "messages", ttask: "other",
   app: "new", drop: "new", ref: "new", ask: "new", fdue: "fdue",
 };
+const KIND_TITLE: Record<string, string> = {
+  app: "Applied", drop: "Dropped a resume", ref: "Referred", ask: "Asked to hear from you later",
+};
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ARRIVAL_WINDOW_DAYS = 45;
 const DONE_WINDOW_DAYS = 7;
+const PAGE = 1000;
+const CHUNK = 100;
 
 type Member = { orgId: string; email: string; userId: string; memberRole: string };
 
@@ -89,11 +97,10 @@ type AppRow = {
   status: string | null; resume_path: string | null; location: string | null; visa_status: string | null;
   comp_expectation: string | null; preferred_roles: string[] | null; preferred_workplace: string[] | null;
   preferred_locations: string[] | null; parsed_profile: { current_title?: string | null; current_company?: string | null; location?: string | null } | null;
-  contact: { email?: string | null; phone?: string | null } | null; linkedin_url: string | null;
 };
 type LogRow = {
   id: string; direction: "out" | "in"; member_email: string; candidate_key: string; subject: string;
-  snippet: string; body_text: string; thread_id: string; created_at: string;
+  snippet: string; thread_id: string; created_at: string;
 };
 type TaskRow = {
   id: string; candidate_key: string | null; candidate_name: string; kind: string; title: string;
@@ -110,12 +117,40 @@ const str = (v: unknown): string | null => {
 };
 const ago = (days: number) => new Date(Date.now() - days * 86400_000).toISOString();
 const inList = (ids: string[]) => ids.map((s) => `"${s.replace(/"/g, "")}"`).join(",");
+const chunk = <T,>(arr: T[], n = CHUNK): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+};
 const monthOf = (iso: string, today: string) => {
   const d = new Date(iso.slice(0, 10) + "T12:00:00");
   const sameYear = iso.slice(0, 4) === today.slice(0, 4);
   return d.toLocaleDateString("en-GB", { month: "long", ...(sameYear ? {} : { year: "numeric" }) });
 };
 const firstLine = (s: string) => (s || "").split("\n").map((l) => l.trim()).filter(Boolean)[0] || "";
+
+/** PostgREST pages at 1000 rows; walk them so a window is a window. */
+async function pageAll<T>(pathFor: (limit: number, offset: number) => string): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const res = await sbRest(pathFor(PAGE, offset));
+    if (!res.ok) break;
+    const batch = (await res.json()) as T[];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
+/** in.() lists in 100-id chunks, results concatenated. */
+async function fetchIn<T>(pathFor: (list: string) => string, ids: string[]): Promise<T[]> {
+  const out: T[] = [];
+  for (const part of chunk([...new Set(ids)])) {
+    const res = await sbRest(pathFor(inList(part)));
+    if (res.ok) out.push(...((await res.json()) as T[]));
+  }
+  return out;
+}
 
 /** What kind of arrival an application row is. */
 export function arrivalKind(a: { source: string | null; role_ids: string[] | null; follow_up_at: string | null }): "app" | "drop" | "ref" | "ask" {
@@ -126,81 +161,95 @@ export function arrivalKind(a: { source: string | null; role_ids: string[] | nul
   return "drop";
 }
 
-export async function listInbox(member: Member, scope: InboxScope, todayIn?: string | null): Promise<InboxData> {
+export async function listInbox(
+  member: Member,
+  scope: InboxScope,
+  todayIn?: string | null,
+  opts: { lean?: boolean } = {}
+): Promise<InboxData> {
   const today = todayIn && DATE_RE.test(todayIn) ? todayIn : new Date().toISOString().slice(0, 10);
   const org = member.orgId;
   const viewer = member.email;
   const isOwner = member.memberRole === "owner";
+  const lean = Boolean(opts.lean);
 
   const APP_COLS =
     "id,name,email,source,role_ids,role_titles,matched_role_ids,created_at,follow_up_at,recruiter_profile_id,status," +
-    "resume_path,location,visa_status,comp_expectation,preferred_roles,preferred_workplace,preferred_locations,parsed_profile,contact,linkedin_url";
+    "resume_path,location,visa_status,comp_expectation,preferred_roles,preferred_workplace,preferred_locations,parsed_profile";
   const TASK_COLS = "id,candidate_key,candidate_name,kind,title,due_date,due_time,status,created_by_email,completed_at";
+  const windowIso = ago(ARRIVAL_WINDOW_DAYS);
+  const stateIso = ago(ARRIVAL_WINDOW_DAYS + DONE_WINDOW_DAYS);
 
-  const [visibility, membersRes, profilesRes, rolesRes, appsRes, dueRes, mailRes, tasksRes, doneTasksRes, stateRes] =
+  const [visibility, aliases, membersRes, profilesRes, rolesRes, apps, dueRows, logs, openTasks, doneTasksRes, stateRows, movedRows] =
     await Promise.all([
       orgEmailVisibility(org),
+      viewerMailboxEmails(org, viewer),
       sbRest(`org_members?organization_id=eq.${org}&select=user_id,email,member_role`),
       sbRest(`recruiter_profiles?organization_id=eq.${org}&select=id,user_id`),
       sbRest(`org_roles?organization_id=eq.${org}&select=external_id,title`),
-      sbRest(`website_applications?organization_id=eq.${org}&created_at=gte.${ago(ARRIVAL_WINDOW_DAYS)}&select=${APP_COLS}&order=created_at.desc&limit=500`),
-      sbRest(`website_applications?organization_id=eq.${org}&follow_up_at=not.is.null&select=${APP_COLS}&order=follow_up_at.asc&limit=500`),
-      sbRest(`candidate_email_log?organization_id=eq.${org}&created_at=gte.${ago(ARRIVAL_WINDOW_DAYS)}&select=id,direction,member_email,candidate_key,subject,snippet,body_text,thread_id,created_at&order=created_at.desc&limit=1500`),
-      sbRest(`tasks?organization_id=eq.${org}&status=eq.open&select=${TASK_COLS}&order=due_date.asc,due_time.asc.nullslast,created_at.asc&limit=500`),
-      sbRest(`tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${ago(DONE_WINDOW_DAYS)}&select=${TASK_COLS}&order=completed_at.desc&limit=200`),
-      sbRest(`inbox_items?organization_id=eq.${org}&member_email=eq.${encodeURIComponent(viewer)}&select=item_key,kind,label,candidate_key,seen_at,handled_at,handled_by`),
+      pageAll<AppRow>((l, o) => `website_applications?organization_id=eq.${org}&created_at=gte.${windowIso}&select=${APP_COLS}&order=created_at.desc&limit=${l}&offset=${o}`),
+      pageAll<AppRow>((l, o) => `website_applications?organization_id=eq.${org}&follow_up_at=not.is.null&select=${APP_COLS}&order=follow_up_at.asc&limit=${l}&offset=${o}`),
+      pageAll<LogRow>((l, o) => `candidate_email_log?organization_id=eq.${org}&created_at=gte.${windowIso}&select=id,direction,member_email,candidate_key,subject,snippet,thread_id,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
+      pageAll<TaskRow>((l, o) => `tasks?organization_id=eq.${org}&status=eq.open&select=${TASK_COLS}&order=due_date.asc,due_time.asc.nullslast,created_at.asc&limit=${l}&offset=${o}`),
+      lean
+        ? null
+        : sbRest(`tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${ago(DONE_WINDOW_DAYS)}&select=${TASK_COLS}&order=completed_at.desc&limit=200`),
+      // Only marks that can still matter: inside the arrival window (+ the Done week).
+      pageAll<StateRow>((l, o) =>
+        `inbox_items?organization_id=eq.${org}&member_email=eq.${encodeURIComponent(viewer)}` +
+        `&or=(handled_at.gte.${stateIso},seen_at.gte.${stateIso})&select=item_key,kind,label,candidate_key,seen_at,handled_at,handled_by&limit=${l}&offset=${o}`
+      ),
+      // Every human stage move in the org; intersected in memory (no id list in the URL).
+      pageAll<{ candidate_key: string; job_id: string; status: string }>((l, o) =>
+        `candidate_role_statuses?organization_id=eq.${org}&status=neq.new&select=candidate_key,job_id,status&limit=${l}&offset=${o}`
+      ),
     ]);
 
   const members = membersRes.ok ? ((await membersRes.json()) as { user_id: string; email: string; member_role: string }[]) : [];
   const profiles = profilesRes.ok ? ((await profilesRes.json()) as { id: string; user_id: string }[]) : [];
   const roles = rolesRes.ok ? ((await rolesRes.json()) as { external_id: string; title: string }[]) : [];
-  const apps = appsRes.ok ? ((await appsRes.json()) as AppRow[]) : [];
-  const dueRows = dueRes.ok ? ((await dueRes.json()) as AppRow[]) : [];
-  const logs = mailRes.ok ? ((await mailRes.json()) as LogRow[]) : [];
-  const openTasks = tasksRes.ok ? ((await tasksRes.json()) as TaskRow[]) : [];
-  const doneTasks = doneTasksRes.ok ? ((await doneTasksRes.json()) as TaskRow[]) : [];
+  const doneTasks = doneTasksRes?.ok ? ((await doneTasksRes.json()) as TaskRow[]) : [];
   const state = new Map<string, StateRow>();
-  for (const s of stateRes.ok ? ((await stateRes.json()) as StateRow[]) : []) state.set(s.item_key, s);
+  for (const s of stateRows) state.set(s.item_key, s);
 
   const emailByUser = new Map(members.map((m) => [m.user_id, m.email]));
   const profileOwner = new Map(profiles.map((p) => [p.id, emailByUser.get(p.user_id) || null]));
   const roleTitle = new Map(roles.map((r) => [r.external_id, r.title]));
-  // The TT org's own site roles aren't org_roles rows: fill their titles too.
-  const wanted = new Set<string>();
-  for (const a of [...apps, ...dueRows]) for (const id of [...(a.role_ids || []), ...(a.matched_role_ids || [])]) if (!roleTitle.has(id)) wanted.add(id);
-  if (wanted.size) {
-    const site = await getRoles().catch(() => [] as { jobId: string; title: string }[]);
-    for (const r of site) if (wanted.has(r.jobId)) roleTitle.set(r.jobId, r.title);
+  if (!lean) {
+    // The TT org's own site roles aren't org_roles rows: fill their titles too.
+    const wanted = new Set<string>();
+    for (const a of [...apps, ...dueRows]) for (const id of [...(a.role_ids || []), ...(a.matched_role_ids || [])]) if (!roleTitle.has(id)) wanted.add(id);
+    if (wanted.size) {
+      const site = await getRoles().catch(() => [] as { jobId: string; title: string }[]);
+      for (const r of site) if (wanted.has(r.jobId)) roleTitle.set(r.jobId, r.title);
+    }
   }
 
   // Referral attribution lives on the referrals row, not the application.
   const refIds = apps.filter((a) => /^referral:/.test(a.source || "")).map((a) => a.id);
   const refOwner = new Map<string, string | null>();
-  if (refIds.length) {
-    const r = await sbRest(`referrals?application_id=in.(${inList(refIds)})&select=application_id,recruiter_profile_id`);
-    for (const row of r.ok ? ((await r.json()) as { application_id: string; recruiter_profile_id: string | null }[]) : []) {
-      refOwner.set(row.application_id, row.recruiter_profile_id ? profileOwner.get(row.recruiter_profile_id) || null : null);
-    }
+  for (const row of await fetchIn<{ application_id: string; recruiter_profile_id: string | null }>(
+    (list) => `referrals?organization_id=eq.${org}&application_id=in.(${list})&select=application_id,recruiter_profile_id`,
+    refIds
+  )) {
+    refOwner.set(row.application_id, row.recruiter_profile_id ? profileOwner.get(row.recruiter_profile_id) || null : null);
   }
 
   // Human stage rows for the arrivals: any move off New clears an application.
-  const appKeys = apps.map((a) => `app_${a.id}`);
   const moved = new Map<string, { jobId: string; status: string }[]>();
-  if (appKeys.length) {
-    const r = await sbRest(
-      `candidate_role_statuses?organization_id=eq.${org}&candidate_key=in.(${inList(appKeys)})&status=neq.new&select=candidate_key,job_id,status`
-    );
-    for (const row of r.ok ? ((await r.json()) as { candidate_key: string; job_id: string; status: string }[]) : []) {
-      moved.set(row.candidate_key, [...(moved.get(row.candidate_key) || []), { jobId: row.job_id, status: row.status }]);
-    }
-  }
+  for (const row of movedRows) moved.set(row.candidate_key, [...(moved.get(row.candidate_key) || []), { jobId: row.job_id, status: row.status }]);
 
-  // Outbound emails per candidate (newest first) — "you emailed them" clears asks/referrals/drops.
-  const lastOut = new Map<string, string>();
+  // Outbound emails per candidate — anyone's (org truth for asks/referrals/
+  // drops) and this mailbox's (answers a thread the viewer owns).
+  const isMine = (owner: string) => aliases.has(owner);
+  const lastOutAny = new Map<string, string>();
+  const lastOutMine = new Map<string, string>();
   const hasThread = new Set<string>();
   for (const l of logs) {
-    hasThread.add(l.candidate_key);
-    if (l.direction === "out" && !lastOut.has(l.candidate_key)) lastOut.set(l.candidate_key, l.created_at);
+    if (visibility === "team" || isMine(l.member_email)) hasThread.add(l.candidate_key);
+    if (l.direction !== "out") continue;
+    if (!lastOutAny.has(l.candidate_key)) lastOutAny.set(l.candidate_key, l.created_at);
+    if (isMine(l.member_email) && !lastOutMine.has(l.candidate_key)) lastOutMine.set(l.candidate_key, l.created_at);
   }
 
   const attribution = (a: AppRow): string | null => {
@@ -224,8 +273,14 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
     [str(a.parsed_profile?.current_title), str(a.parsed_profile?.current_company)].filter(Boolean).join(" @ ");
 
   const items: InboxItem[] = [];
-  const seenOf = (id: string) => Boolean(state.get(id)?.seen_at);
-  const handled = (id: string) => Boolean(state.get(id)?.handled_at);
+  const seenOf = (id: string, since?: string) => {
+    const s = state.get(id)?.seen_at;
+    return Boolean(s && (!since || s >= since));
+  };
+  const handled = (id: string, since?: string) => {
+    const h = state.get(id)?.handled_at;
+    return Boolean(h && (!since || h >= since));
+  };
 
   // ---- follow-ups due (and the future ones, for Upcoming) ----------------
   const upcomingFdue: InboxItem[] = [];
@@ -243,10 +298,10 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
       overdue: a.follow_up_at < today, seen: seenOf(`fdue:${a.id}`), forEmail,
       jobId: null, threadId: null, taskId: null, subject: null, extra: null,
     };
-    if (a.follow_up_at <= today) {
+    if (due) {
       dueNowIds.add(a.id);
       if (scope === "team" || mine(forEmail)) items.push(item);
-    } else {
+    } else if (!lean) {
       upcomingFdue.push(item);
     }
   }
@@ -259,10 +314,10 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
     const key = `app_${a.id}`;
     const forEmail = attribution(a);
     if (scope === "me" && !mine(forEmail)) continue;
-    const movedRows = moved.get(key) || [];
-    const outAfter = (lastOut.get(key) || "") > a.created_at;
-    if (kind === "app" && movedRows.some((m) => (a.role_ids || []).includes(m.jobId))) continue;
-    if ((kind === "drop" || kind === "ref") && (movedRows.length || outAfter)) continue;
+    const movedRowsFor = moved.get(key) || [];
+    const outAfter = (lastOutAny.get(key) || "") > a.created_at;
+    if (kind === "app" && movedRowsFor.some((m) => (a.role_ids || []).includes(m.jobId))) continue;
+    if ((kind === "drop" || kind === "ref") && (movedRowsFor.length || outAfter)) continue;
     if (kind === "ask" && (!a.follow_up_at || dueNowIds.has(a.id) || outAfter)) continue;
 
     const base = {
@@ -319,10 +374,15 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
     const last = list[list.length - 1];
     if (last.direction !== "in") continue;
     const owner = last.member_email;
-    if (visibility === "private" && owner !== viewer) continue;
-    if (scope === "me" && owner !== viewer) continue;
+    if (visibility === "private" && !isMine(owner)) continue;
+    if (scope === "me" && !isMine(owner)) continue;
     const id = `mail:${tid}`;
-    if (handled(id)) continue;
+    // Marks are relative to the newest message: a later reply resurfaces the thread.
+    if (handled(id, last.created_at)) continue;
+    // Answered outside the thread: a fresh email from this mailbox, or (when
+    // the team shares mail) any colleague's email after the candidate spoke.
+    const answeredBy = lastOutMine.get(last.candidate_key) || (visibility === "team" ? lastOutAny.get(last.candidate_key) : "") || "";
+    if (answeredBy > last.created_at) continue;
     const subject = (list[0].subject || "").replace(/^(re|fwd?):\s*/i, "") || "(no subject)";
     nameNeeded.add(last.candidate_key);
     mailItems.push({
@@ -330,8 +390,8 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
       item: {
         id, kind: "mail", section: "emails", candidateKey: last.candidate_key, candidateName: "",
         title: `Replied · ${subject}`,
-        detail: firstLine(last.body_text || last.snippet).slice(0, 140),
-        at: last.created_at, dueDate: null, dueTime: null, overdue: false, seen: seenOf(id), forEmail: owner,
+        detail: firstLine(last.snippet).slice(0, 140),
+        at: last.created_at, dueDate: null, dueTime: null, overdue: false, seen: seenOf(id, last.created_at), forEmail: owner,
         jobId: null, threadId: tid, taskId: null, subject, extra: null,
       },
     });
@@ -354,21 +414,25 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
       jobId: null, threadId: null, taskId: t.id, subject: null, extra: null,
     };
     if (t.due_date <= today) items.push(item);
-    else upcomingTasks.push(item);
+    else if (!lean) upcomingTasks.push(item);
   }
 
-  // ---- names + contact hints for tasks and threads ----------------------
+  // ---- names + contact hints for tasks and threads (org-scoped, chunked) --
   const info = new Map<string, { name: string; phone: string | null; linkedin: string | null }>();
-  const appIds = [...nameNeeded].filter((k) => k.startsWith("app_")).map((k) => k.slice(4));
-  const srcIds = [...nameNeeded].filter((k) => k.startsWith("src_")).map((k) => k.slice(4));
-  const [ar, sr] = await Promise.all([
-    appIds.length ? sbRest(`website_applications?id=in.(${inList(appIds)})&select=id,name,contact,linkedin_url`) : null,
-    srcIds.length ? sbRest(`sourced_candidates?id=in.(${inList(srcIds)})&select=id,full_name,contact,linkedin_url`) : null,
-  ]);
-  for (const r of ar?.ok ? ((await ar.json()) as { id: string; name: string | null; contact: { phone?: string | null } | null; linkedin_url: string | null }[]) : [])
-    info.set(`app_${r.id}`, { name: str(r.name) || "Candidate", phone: str(r.contact?.phone), linkedin: str(r.linkedin_url) });
-  for (const r of sr?.ok ? ((await sr.json()) as { id: string; full_name: string | null; contact: { phone?: string | null } | null; linkedin_url: string | null }[]) : [])
-    info.set(`src_${r.id}`, { name: str(r.full_name) || "Candidate", phone: str(r.contact?.phone), linkedin: str(r.linkedin_url) });
+  const loadInfo = async (keys: Iterable<string>, withContact: boolean) => {
+    const appIds = [...keys].filter((k) => k.startsWith("app_") && !info.has(k)).map((k) => k.slice(4));
+    const srcIds = [...keys].filter((k) => k.startsWith("src_") && !info.has(k)).map((k) => k.slice(4));
+    const sel = withContact ? "contact,linkedin_url" : "";
+    const [ar, sr] = await Promise.all([
+      fetchIn<{ id: string; name: string | null; contact?: { phone?: string | null } | null; linkedin_url?: string | null }>(
+        (list) => `website_applications?organization_id=eq.${org}&id=in.(${list})&select=id,name${sel ? "," + sel : ""}`, appIds),
+      fetchIn<{ id: string; full_name: string | null; contact?: { phone?: string | null } | null; linkedin_url?: string | null }>(
+        (list) => `sourced_candidates?organization_id=eq.${org}&id=in.(${list})&select=id,full_name${sel ? "," + sel : ""}`, srcIds),
+    ]);
+    for (const r of ar) info.set(`app_${r.id}`, { name: str(r.name) || "Candidate", phone: str(r.contact?.phone), linkedin: str(r.linkedin_url) });
+    for (const r of sr) info.set(`src_${r.id}`, { name: str(r.full_name) || "Candidate", phone: str(r.contact?.phone), linkedin: str(r.linkedin_url) });
+  };
+  if (!lean) await loadInfo(nameNeeded, true);
 
   for (const m of mailItems) {
     m.item.candidateName = info.get(m.key)?.name || "Candidate";
@@ -382,8 +446,10 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
     else if (it.kind === "tmsg") it.detail = i?.linkedin ? i.linkedin.replace(/^https?:\/\/(www\.)?/, "") : "no LinkedIn on file";
     else it.detail = it.candidateKey ? "" : "no candidate · tick when done";
   };
-  items.filter((i) => i.taskId).forEach(decorateTask);
-  upcomingTasks.forEach(decorateTask);
+  if (!lean) {
+    items.filter((i) => i.taskId).forEach(decorateTask);
+    upcomingTasks.forEach(decorateTask);
+  }
 
   // ---- order: section, overdue first, tasks by due time, arrivals newest first
   const secIdx = (s: InboxSection) => SECTION_ORDER.indexOf(s);
@@ -398,6 +464,9 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
     return b.at.localeCompare(a.at);
   });
 
+  const counts = { today: items.length, overdue: items.filter((i) => i.overdue).length, upcoming: 0, done: 0 };
+  if (lean) return { scope, today, items, upcoming: [], done: [], counts, emailVisibility: visibility };
+
   // ---- upcoming: dated work later than today, by day ---------------------
   const byDay = new Map<string, InboxItem[]>();
   for (const it of [...upcomingTasks, ...upcomingFdue]) {
@@ -411,21 +480,14 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
 
   // ---- done: this seat's handled marks + tasks completed this week -------
   const done: InboxDone[] = [];
+  const doneSince = ago(DONE_WINDOW_DAYS);
   const doneNames = new Set<string>();
-  for (const s of state.values()) if (s.handled_at && s.handled_at >= ago(DONE_WINDOW_DAYS) && s.candidate_key) doneNames.add(s.candidate_key);
+  for (const s of state.values()) if (s.handled_at && s.handled_at >= doneSince && s.candidate_key) doneNames.add(s.candidate_key);
   for (const t of doneTasks) if (t.candidate_key) doneNames.add(t.candidate_key);
-  const missing = [...doneNames].filter((k) => !info.has(k));
-  const mApp = missing.filter((k) => k.startsWith("app_")).map((k) => k.slice(4));
-  const mSrc = missing.filter((k) => k.startsWith("src_")).map((k) => k.slice(4));
-  const [dar, dsr] = await Promise.all([
-    mApp.length ? sbRest(`website_applications?id=in.(${inList(mApp)})&select=id,name`) : null,
-    mSrc.length ? sbRest(`sourced_candidates?id=in.(${inList(mSrc)})&select=id,full_name`) : null,
-  ]);
-  for (const r of dar?.ok ? ((await dar.json()) as { id: string; name: string | null }[]) : []) info.set(`app_${r.id}`, { name: str(r.name) || "Candidate", phone: null, linkedin: null });
-  for (const r of dsr?.ok ? ((await dsr.json()) as { id: string; full_name: string | null }[]) : []) info.set(`src_${r.id}`, { name: str(r.full_name) || "Candidate", phone: null, linkedin: null });
+  await loadInfo(doneNames, false);
 
   for (const s of state.values()) {
-    if (!s.handled_at || s.handled_at < ago(DONE_WINDOW_DAYS)) continue;
+    if (!s.handled_at || s.handled_at < doneSince) continue;
     done.push({
       id: s.item_key, kind: ((s.kind as InboxKind) || "app"), title: s.label || "",
       candidateKey: s.candidate_key, candidateName: s.candidate_key ? info.get(s.candidate_key)?.name || "Candidate" : "",
@@ -442,21 +504,14 @@ export async function listInbox(member: Member, scope: InboxScope, todayIn?: str
   }
   done.sort((a, b) => b.at.localeCompare(a.at));
 
-  return {
-    scope, today, items, upcoming, done,
-    counts: {
-      today: items.length,
-      overdue: items.filter((i) => i.overdue).length,
-      upcoming: upcoming.reduce((n, d) => n + d.items.length, 0),
-      done: done.length,
-    },
-    emailVisibility: visibility,
-  };
+  counts.upcoming = upcoming.reduce((n, d) => n + d.items.length, 0);
+  counts.done = done.length;
+  return { scope, today, items, upcoming, done, counts, emailVisibility: visibility };
 }
 
-/** Badge counts only — the same derivation, cheap enough to poll. */
+/** Badge counts only — the same derivation without names, Done or Upcoming. */
 export async function inboxCounts(member: Member, scope: InboxScope, today?: string | null): Promise<{ today: number; overdue: number }> {
-  const d = await listInbox(member, scope, today);
+  const d = await listInbox(member, scope, today, { lean: true });
   return { today: d.counts.today, overdue: d.counts.overdue };
 }
 
@@ -464,7 +519,8 @@ export async function inboxCounts(member: Member, scope: InboxScope, today?: str
 const ITEM_RE = /^(arr|mail|fdue):\S{1,300}$/;
 
 /** Upsert this seat's mark on an item. handled: reason string to close,
- *  null to reopen, undefined to leave as is. */
+ *  null to reopen, undefined to leave as is. Reopen only undoes a plain
+ *  Done — a stage move, a sent email or a reply is history, not a mark. */
 export async function markInbox(
   orgId: string,
   viewer: string,
@@ -476,8 +532,15 @@ export async function markInbox(
   const row: Record<string, unknown> = { organization_id: orgId, member_email: viewer, item_key: id };
   if (mark.seen) row.seen_at = now;
   if (mark.handled !== undefined) {
-    row.handled_at = mark.handled ? now : null;
-    row.handled_by = mark.handled ? mark.handled.slice(0, 40) : null;
+    if (mark.handled === null) {
+      const res = await sbRest(
+        `inbox_items?organization_id=eq.${orgId}&member_email=eq.${encodeURIComponent(viewer)}&item_key=eq.${encodeURIComponent(id)}&handled_by=eq.done`,
+        { method: "PATCH", body: JSON.stringify({ handled_at: null, handled_by: null }), prefer: "return=representation" }
+      );
+      return res.ok && ((await res.json()) as unknown[]).length > 0;
+    }
+    row.handled_at = now;
+    row.handled_by = mark.handled.slice(0, 40);
   }
   if (mark.kind) row.kind = mark.kind;
   if (mark.label !== undefined) row.label = (mark.label || "").slice(0, 300);
@@ -491,43 +554,72 @@ export async function markInbox(
   return res.ok;
 }
 
+async function arrivalRow(orgId: string, key: string) {
+  const res = await sbRest(
+    `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}&select=id,source,role_ids,follow_up_at,created_at`
+  );
+  const [a] = res.ok ? ((await res.json()) as { id: string; source: string | null; role_ids: string[] | null; follow_up_at: string | null; created_at: string }[]) : [];
+  return a || null;
+}
+
 /** Called by the status route: a stage move off New clears the arrival by
- *  derivation; this just records the reason for the actor's Done view. */
-export async function noteStageMoved(orgId: string, viewer: string, key: string, stageLabel: string): Promise<void> {
+ *  derivation; this records the reason for the actor's Done view — only
+ *  when the move actually clears it (an applied role, inside the window). */
+export async function noteStageMoved(orgId: string, viewer: string, key: string, stageLabel: string, jobId?: string | null): Promise<void> {
   if (!key.startsWith("app_") || !KEY_RE.test(key)) return;
-  await markInbox(orgId, viewer, `arr:${key.slice(4)}`, {
-    handled: `stage:${stageLabel}`, kind: "app", candidateKey: key,
+  const a = await arrivalRow(orgId, key);
+  if (!a || a.created_at < ago(ARRIVAL_WINDOW_DAYS)) return;
+  const kind = arrivalKind(a);
+  if (kind === "app" && jobId && !(a.role_ids || []).includes(jobId)) return;
+  if (kind === "ask") return;
+  await markInbox(orgId, viewer, `arr:${a.id}`, {
+    handled: `stage:${stageLabel}`, kind, label: KIND_TITLE[kind], candidateKey: key,
   }).catch(() => {});
 }
 
 /** Called by the send route after a successful send: clears asks, drops and
- *  referrals for the sender, records the reply on the thread, and — when the
- *  person's follow-up date has come — counts the email as the follow-up. */
+ *  referrals for the sender, records the reply on the thread (or on any of
+ *  the sender's threads the candidate was waiting on, for a fresh email),
+ *  and — when the person's follow-up date has come — counts the email as
+ *  the follow-up. `today` is the viewer's local date when the client sent it. */
 export async function noteEmailSent(args: {
-  orgId: string; viewer: string; key: string; threadId: string | null; subject: string;
+  orgId: string; viewer: string; key: string; threadId: string | null; subject: string; today?: string | null;
 }): Promise<void> {
   const { orgId, viewer, key, threadId, subject } = args;
   if (!KEY_RE.test(key)) return;
+  const today = args.today && DATE_RE.test(args.today) ? args.today : new Date().toISOString().slice(0, 10);
   if (threadId) {
-    await markInbox(orgId, viewer, `mail:${threadId}`, {
-      handled: "reply", kind: "mail", label: subject, candidateKey: key,
-    }).catch(() => {});
+    await markInbox(orgId, viewer, `mail:${threadId}`, { handled: "reply", kind: "mail", label: subject, candidateKey: key }).catch(() => {});
+  } else {
+    // A fresh email answers whatever this mailbox was waiting on with them.
+    const res = await sbRest(
+      `candidate_email_log?organization_id=eq.${orgId}&candidate_key=eq.${key}&select=id,direction,member_email,thread_id,subject,created_at&order=created_at.asc&limit=200`
+    );
+    const rows = res.ok ? ((await res.json()) as LogRow[]) : [];
+    const byThread = new Map<string, LogRow[]>();
+    for (const r of rows) {
+      const tid = r.thread_id || `solo-${r.id}`;
+      byThread.set(tid, [...(byThread.get(tid) || []), r]);
+    }
+    const aliases = await viewerMailboxEmails(orgId, viewer);
+    for (const [tid, list] of byThread) {
+      const last = list[list.length - 1];
+      if (last.direction === "in" && aliases.has(last.member_email)) {
+        await markInbox(orgId, viewer, `mail:${tid}`, { handled: "reply", kind: "mail", label: list[0].subject || subject, candidateKey: key }).catch(() => {});
+      }
+    }
   }
   if (!key.startsWith("app_")) return;
-  const res = await sbRest(
-    `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}&select=id,source,role_ids,follow_up_at`
-  );
-  const [a] = res.ok ? ((await res.json()) as { id: string; source: string | null; role_ids: string[] | null; follow_up_at: string | null }[]) : [];
+  const a = await arrivalRow(orgId, key);
   if (!a) return;
   const kind = arrivalKind(a);
-  const today = new Date().toISOString().slice(0, 10);
   if (a.follow_up_at && a.follow_up_at <= today) {
     // The follow-up is what this email was: clear the date like Mark contacted.
     await clearFollowUp(orgId, key).catch(() => null);
     await markInbox(orgId, viewer, `fdue:${a.id}`, { handled: "email", kind: "fdue", candidateKey: key, label: subject }).catch(() => {});
   }
   if (kind !== "app") {
-    await markInbox(orgId, viewer, `arr:${a.id}`, { handled: "email", kind, candidateKey: key, label: subject }).catch(() => {});
+    await markInbox(orgId, viewer, `arr:${a.id}`, { handled: "email", kind, candidateKey: key, label: KIND_TITLE[kind] }).catch(() => {});
   }
 }
 

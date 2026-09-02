@@ -21,12 +21,13 @@ import {
 type Session = {
   items: InboxItem[];
   index: number;
-  /** item id → reason, for items dealt with in this session. */
+  /** item id → reason, for items dealt with (or gone) in this session. */
   handled: Record<string, string>;
 };
 
 const localDay = () => new Date().toLocaleDateString("en-CA");
 const TASK_KIND: Record<string, string> = { temail: "email", tcall: "call", tmsg: "message", ttask: "task" };
+const announce = () => window.dispatchEvent(new CustomEvent("tt-inbox-changed"));
 
 export default function InboxPage() {
   const { token, email } = useDash();
@@ -34,11 +35,15 @@ export default function InboxPage() {
   const [seg, setSeg] = useState<Seg>("today");
   const [data, setData] = useState<InboxData | null>(null);
   const [error, setError] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [session, setSession] = useState<Session | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
+  // Items this seat has already opened this session (marks are fire-and-forget).
+  const seenRef = useRef<Set<string>>(new Set());
+  // Only the newest request may land: scope toggles and polls overlap.
+  const seqRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -58,6 +63,7 @@ export default function InboxPage() {
   };
 
   const load = useCallback(() => {
+    const seq = ++seqRef.current;
     fetch(`/api/dashboard/inbox?scope=${scope}&today=${localDay()}&_=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -67,22 +73,26 @@ export default function InboxPage() {
         return r.json() as Promise<InboxData>;
       })
       .then((d) => {
+        if (seq !== seqRef.current) return;
         setData(d);
         setError(false);
-        // Keep the open session's items current; anything that vanished was
-        // dealt with (here or by a teammate).
+        // Keep the open session's items current. Anything that left the
+        // list for a reason this session didn't cause is "gone", not done.
         setSession((s) => {
           if (!s) return s;
           const handled = { ...s.handled };
           const items = s.items.map((old) => {
             const fresh = d.items.find((n) => n.id === old.id);
-            if (!fresh && !handled[old.id]) handled[old.id] = "done";
-            return fresh ? { ...fresh, seen: true } : old;
+            if (!fresh && !handled[old.id]) handled[old.id] = "gone";
+            return fresh ? { ...fresh, seen: fresh.seen || seenRef.current.has(fresh.id) } : old;
           });
           return { ...s, items, handled };
         });
+        announce();
       })
-      .catch(() => setError(true));
+      .catch(() => {
+        if (seq === seqRef.current) setError(true);
+      });
   }, [scope, token]);
 
   useEffect(() => {
@@ -107,8 +117,18 @@ export default function InboxPage() {
   }, [load]);
 
   const auth = { Authorization: `Bearer ${token}` };
+  const setBusy = (id: string, on: boolean) =>
+    setBusyIds((s) => {
+      const n = new Set(s);
+      if (on) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+  const busyId = (id: string | null) => (id && busyIds.has(id) ? id : null);
+
   const markSeen = (item: InboxItem) => {
-    if (item.seen || isTask(item.kind)) return;
+    if (isTask(item.kind) || item.seen || seenRef.current.has(item.id)) return;
+    seenRef.current.add(item.id);
     setData((d) => (d ? { ...d, items: d.items.map((i) => (i.id === item.id ? { ...i, seen: true } : i)) } : d));
     fetch("/api/dashboard/inbox/mark", {
       method: "POST",
@@ -119,7 +139,7 @@ export default function InboxPage() {
 
   /** Clear an item without acting: the right call for its kind. */
   const tick = async (item: InboxItem): Promise<boolean> => {
-    setBusyId(item.id);
+    setBusy(item.id, true);
     let res: Response | null = null;
     if (isTask(item.kind) && item.taskId) {
       res = await fetch(`/api/dashboard/tasks/${item.taskId}`, {
@@ -136,17 +156,25 @@ export default function InboxPage() {
         body: JSON.stringify({ id: item.id, handled: "done", kind: item.kind, label: item.title, candidateKey: item.candidateKey }),
       }).catch(() => null);
     }
-    setBusyId(null);
+    setBusy(item.id, false);
     const ok = Boolean(res?.ok);
     if (ok) {
-      setData((d) => (d ? { ...d, items: d.items.filter((i) => i.id !== item.id), counts: { ...d.counts, today: d.counts.today - 1, overdue: d.counts.overdue - (item.overdue ? 1 : 0) } } : d));
+      setData((d) =>
+        d
+          ? {
+              ...d,
+              items: d.items.filter((i) => i.id !== item.id),
+              counts: { ...d.counts, today: Math.max(0, d.counts.today - 1), overdue: Math.max(0, d.counts.overdue - (item.overdue ? 1 : 0)) },
+            }
+          : d
+      );
     }
     load();
     return ok;
   };
 
   const reopen = async (d: InboxDone) => {
-    setBusyId(d.id);
+    setBusy(d.id, true);
     if (d.kind === "task") {
       await fetch(`/api/dashboard/tasks/${d.id.replace(/^task:/, "")}`, {
         method: "PATCH",
@@ -160,7 +188,7 @@ export default function InboxPage() {
         body: JSON.stringify({ id: d.id, handled: null }),
       }).catch(() => null);
     }
-    setBusyId(null);
+    setBusy(d.id, false);
     load();
   };
 
@@ -185,17 +213,23 @@ export default function InboxPage() {
   // ---- the working session --------------------------------------------
   const open = (item: InboxItem) => {
     if (!item.candidateKey || !data) return;
-    const items = data.items.filter((i) => i.candidateKey);
-    const index = Math.max(0, items.findIndex((i) => i.id === item.id));
+    // Step through the list the row came from: Today, or an Upcoming day.
+    const inToday = data.items.some((i) => i.id === item.id);
+    const pool = inToday ? data.items : data.upcoming.flatMap((d) => d.items);
+    let items = pool.filter((i) => i.candidateKey);
+    let index = items.findIndex((i) => i.id === item.id);
+    if (index < 0) {
+      items = [item];
+      index = 0;
+    }
     setSession({ items, index, handled: {} });
     markSeen(item);
   };
   const goto = (index: number) => {
-    setSession((s) => {
-      if (!s || index < 0 || index >= s.items.length) return s;
-      markSeen(s.items[index]);
-      return { ...s, index };
-    });
+    const s = sessionRef.current;
+    if (!s || index < 0 || index >= s.items.length) return;
+    markSeen(s.items[index]);
+    setSession({ ...s, index });
   };
   const nextUnhandled = (s: Session): number => {
     for (let i = s.index + 1; i < s.items.length; i++) if (!s.handled[s.items[i].id]) return i;
@@ -237,7 +271,7 @@ export default function InboxPage() {
         seg={seg}
         viewer={email}
         currentId={current?.id || null}
-        busyId={busyId}
+        busyIds={busyIds}
         onScope={pickScope}
         onSeg={setSeg}
         onOpen={open}
@@ -263,7 +297,7 @@ export default function InboxPage() {
               handledReason={session.handled[current.id] || null}
               remaining={data?.counts.today ?? 0}
               hasNext={nextUnhandled(session) >= 0}
-              busy={busyId === current.id}
+              busy={busyId(current.id) !== null}
               onDone={async () => {
                 const ok = await tick(current);
                 if (ok) noteHandled(current.id, current.kind === "fdue" ? "contacted" : "done");

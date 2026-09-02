@@ -473,7 +473,22 @@ export type EmailPrivateMarker = {
   direction: "out" | "in";
   memberEmail: string;
   createdAt: string;
+  threadId: string;
 };
+
+/** The seats that share the viewer's mailbox. One Nylas grant can be bound
+ *  to several seats (a shared recruiting@ inbox); an inbound message is
+ *  logged once, under whichever binding the webhook met first, so "my
+ *  mailbox" means every member on the same grant, not just my address. */
+export async function viewerMailboxEmails(orgId: string, viewer: string): Promise<Set<string>> {
+  const out = new Set<string>([viewer]);
+  const res = await sbRest(`email_accounts?organization_id=eq.${orgId}&select=member_email,grant_id&limit=200`).catch(() => null);
+  if (!res || !res.ok) return out;
+  const rows = (await res.json()) as { member_email: string; grant_id: string }[];
+  const mine = rows.find((r) => r.member_email === viewer)?.grant_id;
+  if (mine) for (const r of rows) if (r.grant_id === mine) out.add(r.member_email);
+  return out;
+}
 
 /** The one place the privacy rule is applied: what this viewer may read of
  *  a candidate's correspondence, plus markers for what they may not. */
@@ -482,12 +497,22 @@ export async function listCandidateEmailsFor(
   key: string,
   viewer: string
 ): Promise<{ events: EmailEvent[]; hidden: EmailPrivateMarker[]; visibility: "private" | "team" }> {
-  const [rows, visibility] = await Promise.all([listCandidateEmails(orgId, key), orgEmailVisibility(orgId)]);
+  const [rows, visibility, aliases] = await Promise.all([
+    listCandidateEmails(orgId, key),
+    orgEmailVisibility(orgId),
+    viewerMailboxEmails(orgId, viewer),
+  ]);
   if (visibility === "team") return { events: rows, hidden: [], visibility };
-  const events = rows.filter((r) => r.memberEmail === viewer);
+  const events = rows.filter((r) => aliases.has(r.memberEmail));
   const hidden = rows
-    .filter((r) => r.memberEmail !== viewer)
-    .map((r) => ({ id: r.id, direction: r.direction, memberEmail: r.memberEmail, createdAt: r.createdAt }));
+    .filter((r) => !aliases.has(r.memberEmail))
+    .map((r) => ({
+      id: r.id,
+      direction: r.direction,
+      memberEmail: r.memberEmail,
+      createdAt: r.createdAt,
+      threadId: r.threadId || `solo-${r.id}`,
+    }));
   return { events, hidden, visibility };
 }
 
@@ -500,17 +525,8 @@ export async function listThreadsFor(
 ): Promise<{ threads: EmailThread[]; hiddenThreads: number; visibility: "private" | "team" }> {
   const { events, hidden, visibility } = await listCandidateEmailsFor(orgId, key, viewer);
   const threads = threadsFrom(events);
-  const hiddenIds = new Set<string>();
-  if (hidden.length) {
-    // Thread ids of hidden rows: re-read them (cheap; the log is per candidate).
-    const all = await listCandidateEmails(orgId, key);
-    const visibleIds = new Set(threads.map((t) => t.id));
-    for (const r of all) {
-      if (r.memberEmail === viewer) continue;
-      const id = r.threadId || `solo-${r.id}`;
-      if (!visibleIds.has(id)) hiddenIds.add(id);
-    }
-  }
+  const visibleIds = new Set(threads.map((t) => t.id));
+  const hiddenIds = new Set(hidden.map((h) => h.threadId).filter((id) => !visibleIds.has(id)));
   return { threads, hiddenThreads: hiddenIds.size, visibility };
 }
 

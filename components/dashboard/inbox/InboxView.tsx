@@ -71,7 +71,7 @@ export default function InboxView({
   seg,
   viewer,
   currentId,
-  busyId,
+  busyIds,
   onScope,
   onSeg,
   onOpen,
@@ -84,7 +84,7 @@ export default function InboxView({
   seg: Seg;
   viewer: string;
   currentId: string | null;
-  busyId: string | null;
+  busyIds: Set<string>;
   onScope: (s: InboxScope) => void;
   onSeg: (s: Seg) => void;
   onOpen: (item: InboxItem) => void;
@@ -114,7 +114,7 @@ export default function InboxView({
             className="tk-tick"
             title={item.kind === "fdue" ? "Mark contacted" : isTask(item.kind) ? "Mark done" : "Done"}
             aria-label="Done"
-            disabled={busyId === item.id}
+            disabled={busyIds.has(item.id)}
             onClick={(e) => {
               e.stopPropagation();
               onTick(item);
@@ -170,13 +170,13 @@ export default function InboxView({
             <button
               type="button"
               className="tk-doneb"
-              disabled={busyId === item.id}
+              disabled={busyIds.has(item.id)}
               onClick={(e) => {
                 e.stopPropagation();
                 onTick(item);
               }}
             >
-              {busyId === item.id ? "…" : "Done"}
+              {busyIds.has(item.id) ? "…" : "Done"}
             </button>
           )
         )}
@@ -282,7 +282,9 @@ export default function InboxView({
               {data.done.map((d) => {
                 const kind = d.kind === "task" ? "ttask" : d.kind;
                 const tone = KIND_TONE[kind];
-                const canReopen = d.kind === "task" || d.id.startsWith("arr:") || d.id.startsWith("mail:");
+                // Only a plain Done (or a completed task) can come back; a stage
+                // move, a sent email or a reply is history, not a mark.
+                const canReopen = d.kind === "task" || d.reason === "done";
                 return (
                   <div className="tk-row ib-row seen done" key={d.id}>
                     <span className="tk-tick done" aria-hidden="true" />
@@ -302,7 +304,7 @@ export default function InboxView({
                     )}
                     <span className="tk-due">{d.at ? fmtDay(d.at) : ""}</span>
                     {canReopen && (
-                      <button type="button" className="tk-doneb" disabled={busyId === d.id} onClick={() => onReopen(d)}>
+                      <button type="button" className="tk-doneb" disabled={busyIds.has(d.id)} onClick={() => onReopen(d)}>
                         Reopen
                       </button>
                     )}

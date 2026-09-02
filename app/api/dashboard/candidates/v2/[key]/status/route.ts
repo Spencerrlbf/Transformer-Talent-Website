@@ -35,7 +35,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
   // A move off New clears the person's Inbox arrival; record why for the
   // actor's Done view.
   if (body.status !== "new") {
-    await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[body.status as Stage] || body.status);
+    await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[body.status as Stage] || body.status, body.jobId);
   }
   return NextResponse.json({ ok: true, status: body.status });
 }
