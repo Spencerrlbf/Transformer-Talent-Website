@@ -332,6 +332,11 @@ export default function CandidateDrawer({
   const [eSal, setESal] = useState("");
   const [eVisa, setEVisa] = useState("");
   const [editingContact, setEditingContact] = useState(false);
+  // Mirrors editingContact for async work that resolves later (resume upload).
+  const editingRef = useRef(false);
+  useEffect(() => {
+    editingRef.current = editingContact;
+  }, [editingContact]);
   const [openJob, setOpenJob] = useState<string | null>(null);
   // Pool person opened from the internal Network page: read-only extras
   // (no stage edits, no contact edit, no resume upload).
@@ -504,16 +509,33 @@ export default function CandidateDrawer({
     const r = (await res.json()) as {
       resumeUrl: string | null;
       resumeName: string | null;
-      contact?: Detail["contact"] | null;
+      /** What the upload filled off the resume, if anything. */
+      filled?: { phone?: string | null; otherEmails?: string[] } | null;
     };
-    if (detail) {
-      // The upload may have filled a phone / extra email off the resume.
-      const contact = r.contact || detail.contact;
-      setDetail({ ...detail, resumeUrl: r.resumeUrl, resumeName: r.resumeName, hasResume: true, contact });
-      if (r.contact && !editingContact) {
-        setCPhone(r.contact.phone || "");
-        setCOther((r.contact.otherEmails || []).join(", "));
-      }
+    // Merge only the fields the fill can touch into the drawer's own view
+    // of the person (which already folds sourced + application halves) —
+    // and read the current state, not the one captured when the upload
+    // began: a save or an edit may have happened while the PDF parsed.
+    setDetail((d) =>
+      d
+        ? {
+            ...d,
+            resumeUrl: r.resumeUrl,
+            resumeName: r.resumeName,
+            hasResume: true,
+            contact: r.filled
+              ? {
+                  ...d.contact,
+                  phone: d.contact.phone || r.filled.phone || null,
+                  otherEmails: r.filled.otherEmails ?? d.contact.otherEmails,
+                }
+              : d.contact,
+          }
+        : d
+    );
+    if (r.filled && !editingRef.current) {
+      if (r.filled.phone) setCPhone((v) => v || r.filled!.phone || "");
+      if (r.filled.otherEmails) setCOther(r.filled.otherEmails.join(", "));
     }
   };
 

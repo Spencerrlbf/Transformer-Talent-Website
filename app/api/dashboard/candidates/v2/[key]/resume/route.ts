@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
 import { saveUnifiedResumePath, resumeNameFromPath } from "@/lib/server/candidates-unified";
-import { extractEmail, extractPhone, fillExtractedContact, pdfText } from "@/lib/server/contact-extract";
+import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "@/lib/server/contact-extract";
 
 export const maxDuration = 60;
 
@@ -55,13 +55,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   // Phone (and any extra email) off the resume into the contact block —
-  // gaps only, a typed value always wins. Local pdf-parse, no model call.
-  let contact: Awaited<ReturnType<typeof fillExtractedContact>> = null;
+  // gaps only, a typed value always wins. Local pdf-parse of the first
+  // pages, time-boxed: the upload is already saved, and a slow PDF must
+  // never turn it into a failure. Returns only what changed so the drawer
+  // can merge it into its own (sourced + application) view of the person.
+  let filled: Awaited<ReturnType<typeof fillExtractedContact>> = null;
   try {
-    const text = await pdfText(Buffer.from(bytes));
+    const text = await Promise.race([
+      pdfText(Buffer.from(bytes), 3),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 10_000)),
+    ]);
     const phone = extractPhone(text);
-    const email = extractEmail(text);
-    if (phone || email) contact = await fillExtractedContact(key, { phone, email }, member.org.id);
+    const emails = extractEmails(text);
+    if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
   } catch (err) {
     console.error("resume contact extraction failed", err);
   }
@@ -70,6 +76,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     resumeUrl: await signResumeUrl(path),
     resumeName: resumeNameFromPath(path),
     hasResume: true,
-    contact,
+    filled,
   });
 }
