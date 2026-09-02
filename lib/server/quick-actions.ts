@@ -2,7 +2,8 @@
 // list ONCE (organizations.quick_templates_seeded_at). After that they are
 // the org's: rename, reword, delete — a deleted one stays deleted, and the
 // button then says the template is missing rather than sending a stale
-// copy. Quick actions find them by action_key, so renames don't matter.
+// copy. A default added later carries `since`: it is seeded into orgs
+// whose first seed predates it, once, and then follows the same rule. Quick actions find them by action_key, so renames don't matter.
 // Candidate-facing copy: no em-dashes, plain sentences, nothing internal.
 import { sbRest } from "./supabase";
 import { listTemplates, createTemplate, setTemplateActionKey } from "./email-compose";
@@ -10,7 +11,7 @@ import { TEMPLATE } from "@/lib/quick-actions";
 
 const lines = (...ls: string[]) => ls.map((l) => (l ? `<div>${l}</div>` : "<div><br></div>")).join("");
 
-export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bodyHtml: string }[] = [
+export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bodyHtml: string; since?: string }[] = [
   {
     ...TEMPLATE.applyCall,
     subject: "Your application for {{job_title}}",
@@ -46,6 +47,39 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bo
       "Hi {{first_name}},",
       "",
       "Thanks for sending your resume. Nothing is the right fit today, but your profile is on file and I'll come back to you as soon as something matches.",
+      "",
+      "You can see what's open at any time here: {{page_link}}",
+      "",
+      "{{sender_name}}"
+    ),
+  },
+  {
+    ...TEMPLATE.referredCall,
+    since: "2026-09-03T00:00:00Z",
+    subject: "{{referrer_name}} suggested we talk",
+    bodyHtml: lines(
+      "Hi {{first_name}},",
+      "",
+      "{{referrer_name}} passed your name to me and suggested we speak. I've had a look at your profile and a couple of open roles look like a strong fit: {{matched_roles}}.",
+      "",
+      "Pick a time that suits you here: {{booking_link}}",
+      "The roles and the team are on my page: {{page_link}}",
+      "",
+      "I only have your LinkedIn so far. Could you reply with your resume, so I have the full picture before we speak?",
+      "",
+      "{{sender_name}}"
+    ),
+  },
+  {
+    ...TEMPLATE.referredKeep,
+    since: "2026-09-03T00:00:00Z",
+    subject: "{{referrer_name}} passed your name to me",
+    bodyHtml: lines(
+      "Hi {{first_name}},",
+      "",
+      "{{referrer_name}} passed your name to me. Nothing open right now is quite right, but your profile is on file and I'll come back to you as soon as something matches.",
+      "",
+      "I only have your LinkedIn so far. Could you reply with your resume, so I can match you properly when the right role comes up?",
       "",
       "You can see what's open at any time here: {{page_link}}",
       "",
@@ -117,10 +151,12 @@ export async function ensureDefaultTemplates(orgId: string, byEmail: string): Pr
     const existing = have.find((x) => !x.actionKey && x.name.trim().toLowerCase() === t.name.toLowerCase());
     if (existing) await setTemplateActionKey(orgId, existing.id, t.key).catch(() => {});
   }
-  if (org?.quick_templates_seeded_at) return;
+  const seededAt = org?.quick_templates_seeded_at || null;
+  const due = DEFAULT_TEMPLATES.filter((t) => !seededAt || (t.since && t.since > seededAt));
+  if (due.length === 0) return;
 
   const keyed = new Set(have.map((x) => x.actionKey || x.name.trim().toLowerCase()));
-  for (const t of DEFAULT_TEMPLATES) {
+  for (const t of due) {
     if (keyed.has(t.key) || keyed.has(t.name.toLowerCase())) continue;
     await createTemplate({ orgId, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml, byEmail, actionKey: t.key }).catch(() => null);
   }

@@ -27,6 +27,8 @@ export const TEMPLATE = {
   applyCall: { key: "apply_call", name: "Thanks for applying, book a call" },
   rolesForYou: { key: "roles_for_you", name: "We have roles for you" },
   keepPosted: { key: "keep_posted", name: "Keeping you posted" },
+  referredCall: { key: "referred_call", name: "Referred, book a call" },
+  referredKeep: { key: "referred_keep", name: "Referred, keep in touch" },
   notThisTime: { key: "not_this_time", name: "Not this time" },
   speakLater: { key: "speak_later", name: "Thanks, speak later" },
   replyCall: { key: "reply_call", name: "Book a call (reply)" },
@@ -49,7 +51,6 @@ export function actionsFor(
         REPLY,
       ];
     case "drop":
-    case "ref":
       return ctx.hasRole
         ? [
             { id: "call", label: "Schedule a call", ...t(TEMPLATE.rolesForYou), stage: "contacted", primary: true },
@@ -57,6 +58,16 @@ export function actionsFor(
             REPLY,
           ]
         : [{ id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), primary: true }, REPLY];
+    // A referred person sent nothing themselves: the email names who put
+    // them forward and asks for the resume the referral form never collects.
+    case "ref":
+      return ctx.hasRole
+        ? [
+            { id: "call", label: "Schedule a call", ...t(TEMPLATE.referredCall), stage: "contacted", primary: true },
+            { id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep) },
+            REPLY,
+          ]
+        : [{ id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), primary: true }, REPLY];
     case "ask":
       return [
         { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", ...t(TEMPLATE.speakLater), primary: true },

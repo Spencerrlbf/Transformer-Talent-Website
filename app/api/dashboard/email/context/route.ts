@@ -51,8 +51,8 @@ export async function POST(req: NextRequest) {
     loadProfile(member.org.id, member.userId),
     key.startsWith("app_")
       ? sbRest(
-          `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${member.org.id}&select=role_ids,matched_role_ids,follow_up_at&limit=1`
-        ).then(async (r) => (r.ok ? ((await r.json()) as { role_ids: string[] | null; matched_role_ids: string[] | null; follow_up_at: string | null }[])[0] || null : null))
+          `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${member.org.id}&select=role_ids,matched_role_ids,follow_up_at,source&limit=1`
+        ).then(async (r) => (r.ok ? ((await r.json()) as { role_ids: string[] | null; matched_role_ids: string[] | null; follow_up_at: string | null; source: string | null }[])[0] || null : null))
       : Promise.resolve(null),
   ]);
 
@@ -77,6 +77,11 @@ export async function POST(req: NextRequest) {
   }
   const matchedRoles = wantIds.map((id) => titleOf.get(id) || "").filter(Boolean);
 
+  // {{referrer_name}}: who put them forward (the referral form's name, never
+  // the email); empty for everyone who wasn't referred, so a template that
+  // names a referrer shows a pill on the wrong person.
+  const referrerName = ((app?.source || "").match(/^referral: by (.+?) <[^>]+>/) || [])[1]?.trim() || "";
+
   return NextResponse.json({
     connected: Boolean(account),
     address: account?.address || "",
@@ -88,6 +93,7 @@ export async function POST(req: NextRequest) {
     bookingLink: profile?.booking_url || "",
     pageLink,
     matchedRoles,
+    referrerName,
     month: app?.follow_up_at ? MONTH(app.follow_up_at) : "",
     appliedRoleId: (app?.role_ids || [])[0] || (app?.matched_role_ids || [])[0] || "",
   });

@@ -29,6 +29,7 @@ type Ctx = {
   bookingLink?: string;
   pageLink?: string;
   matchedRoles?: string[];
+  referrerName?: string;
   month?: string;
   appliedRoleId?: string;
 };
@@ -376,6 +377,7 @@ export default function EmailModal({
         html: role?.url ? `<a href="${esc(role.url)}">${esc(shortUrl(role.url))}</a>` : undefined,
       },
       matched_roles: { value: joinTitles(c.matchedRoles || []), label: "matched roles" },
+      referrer_name: { value: c.referrerName || "", label: "referrer" },
       month: { value: c.month || "", label: "month" },
       subject: {
         value: (threadSubject || reply?.subject || "").replace(/^(re|fwd?):\s*/i, "").replace(/\{\{|\}\}/g, "").slice(0, 200),
