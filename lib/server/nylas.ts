@@ -153,6 +153,15 @@ export async function fetchMessage(
   };
 }
 
+/** The provider's own list of message ids in a conversation. */
+export async function fetchThreadMessageIds(grantId: string, threadId: string): Promise<string[]> {
+  if (!threadId) return [];
+  const res = await nylas(`/v3/grants/${encodeURIComponent(grantId)}/threads/${encodeURIComponent(threadId)}`);
+  if (!res.ok) return [];
+  const json = (await res.json()) as { data?: { message_ids?: string[] } };
+  return (json.data?.message_ids || []).filter((x) => typeof x === "string" && x);
+}
+
 // ---- webhooks ---------------------------------------------------------
 
 /** Nylas signs the raw body with the webhook secret (HMAC-SHA256 hex). */

@@ -679,6 +679,23 @@ export async function matchCandidateByMessageId(
   return row ? { candidateKey: row.candidate_key, threadId: row.thread_id || "" } : null;
 }
 
+/** Any of these provider message ids one we logged? The provider's list of
+ *  a conversation's messages includes ours, whatever thread id it filed the
+ *  reply under, so this links a reply back even when nothing else does. */
+export async function matchCandidateByMessageIds(
+  orgId: string,
+  messageIds: string[]
+): Promise<{ candidateKey: string; threadId: string } | null> {
+  const ids = messageIds.filter((x) => x && !x.startsWith("local-") && x.length <= 300).slice(0, 50);
+  if (!ids.length) return null;
+  const list = ids.map((x) => `"${x.replace(/"/g, "")}"`).join(",");
+  const res = await sbRest(
+    `candidate_email_log?organization_id=eq.${orgId}&message_id=in.(${list})&select=candidate_key,thread_id&order=created_at.desc&limit=1`
+  );
+  const [row] = res.ok ? ((await res.json()) as { candidate_key: string; thread_id: string | null }[]) : [];
+  return row ? { candidateKey: row.candidate_key, threadId: row.thread_id || "" } : null;
+}
+
 /** Is this address one of the org's own seats? Their messages are never a
  *  candidate's reply, whatever thread they arrive in. */
 export async function isOrgMemberAddress(orgId: string, address: string): Promise<boolean> {

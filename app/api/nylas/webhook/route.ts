@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cancelReminders } from "@/lib/server/reminders";
 import { clearNoReply } from "@/lib/server/no-reply";
-import { fetchMessage, verifyWebhookSignature } from "@/lib/server/nylas";
+import { fetchMessage, fetchThreadMessageIds, verifyWebhookSignature } from "@/lib/server/nylas";
 import {
   accountsByGrant,
   cleanInbound,
@@ -9,6 +9,7 @@ import {
   logEmail,
   matchCandidateByAddress,
   matchCandidateByMessageId,
+  matchCandidateByMessageIds,
   matchCandidateByThread,
 } from "@/lib/server/email-compose";
 
@@ -108,6 +109,17 @@ export async function POST(req: NextRequest) {
         }
       }
       if (!candidateKey && threadId) candidateKey = await matchCandidateByThread(account.orgId, threadId).catch(() => null);
+      // Still nothing: ask the provider which messages make up this
+      // conversation; if any of them is one we sent, the reply is that
+      // candidate's, filed into the thread as the app knows it.
+      if (!candidateKey && threadId) {
+        const ids = await fetchThreadMessageIds(grantId, threadId).catch(() => [] as string[]);
+        const hit = ids.length ? await matchCandidateByMessageIds(account.orgId, ids).catch(() => null) : null;
+        if (hit) {
+          candidateKey = hit.candidateKey;
+          if (hit.threadId) logThread = hit.threadId;
+        }
+      }
     }
     if (!candidateKey) candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
     if (!candidateKey) continue;
