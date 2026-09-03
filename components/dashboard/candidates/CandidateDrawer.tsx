@@ -419,8 +419,13 @@ export default function CandidateDrawer({
   }, [quickAction?.nonce]);
   // Moving to another person or item drops any pending quick action: a
   // composer must never reopen on the next candidate with the last one's
-  // template or stage move armed.
+  // template or stage move armed. Only a real change drops it: a drawer
+  // opened with an action already armed (Home's attention rows) keeps it.
+  const personRef = useRef(`${candKey}|${navItemIndex}`);
   useEffect(() => {
+    const who = `${candKey}|${navItemIndex}`;
+    if (personRef.current === who) return;
+    personRef.current = who;
     setQuickHead(null);
     setQuickTab(null);
     setEmailOpen(false);

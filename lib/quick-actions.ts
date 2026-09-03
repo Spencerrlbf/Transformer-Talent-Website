@@ -39,6 +39,8 @@ export const TEMPLATE = {
   followUpOpen: { key: "follow_up_open", name: "Follow-up: what's open" },
   followUp: { key: "follow_up_nudge", name: "Following up" },
   checkBack: { key: "check_back", name: "Checking back in" },
+  checkIn: { key: "check_in", name: "How did it go" },
+  offerTimes: { key: "offer_times", name: "Offer times" },
 } as const;
 
 const REPLY: QuickAction = { id: "reply", label: "Reply…", template: null };

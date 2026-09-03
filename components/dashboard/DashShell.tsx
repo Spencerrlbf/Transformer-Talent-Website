@@ -22,6 +22,8 @@ type DashContext = {
   name: string;
   /** Seat default for "remind me if no reply" (0 = off). */
   reminderDays: number;
+  /** The seat's recruiter page, when they have one. */
+  myPage: { published: boolean; slug: string } | null;
 };
 
 const Ctx = createContext<DashContext | null>(null);
@@ -152,6 +154,7 @@ export default function DashShell({ children }: { children: ReactNode }) {
         role: me.memberRole || "member",
         name: me.myPage?.displayName || "",
         reminderDays: typeof me.reminderDays === "number" ? me.reminderDays : 3,
+        myPage: me.myPage ? { published: me.myPage.published, slug: me.myPage.slug } : null,
       }}
     >
       <div className="dash-app">

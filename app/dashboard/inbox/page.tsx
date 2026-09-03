@@ -61,6 +61,15 @@ export default function InboxPage() {
   const seenRef = useRef<Set<string>>(new Set());
   // Only the newest request may land: scope toggles and polls overlap.
   const seqRef = useRef(0);
+  // /dashboard/inbox?open=<item id>: open that row once (Home's reply rows land here).
+  const openParam = useRef<string | null>(null);
+  useEffect(() => {
+    try {
+      openParam.current = new URLSearchParams(window.location.search).get("open");
+    } catch {
+      /* no window */
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -121,6 +130,15 @@ export default function InboxPage() {
     setData(null);
     load();
   }, [load]);
+
+  useEffect(() => {
+    const want = openParam.current;
+    if (!want || !data) return;
+    const hit = data.items.find((i) => i.id === want) || data.upcoming.flatMap((d) => d.items).find((i) => i.id === want);
+    openParam.current = null;
+    if (hit) open(hit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   // Replies and applications arrive while the page is open: poll gently,
   // refetch on focus.

@@ -62,7 +62,7 @@ export async function markNoReply(args: {
   // On the role: out of the active pipeline, into Past under "No reply".
   let staged = false;
   if (args.jobId) {
-    const r = await saveUnifiedStatus(orgId, key, args.jobId, "rejected", null, "no_reply").catch(() => ({ ok: false as const, error: "save_failed" }));
+    const r = await saveUnifiedStatus(orgId, key, args.jobId, "rejected", null, "no_reply", args.memberEmail).catch(() => ({ ok: false as const, error: "save_failed" }));
     staged = r.ok;
   }
 

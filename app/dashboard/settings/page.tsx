@@ -4,6 +4,8 @@ import { useDash } from "@/components/dashboard/DashShell";
 import StageEditor, { type StageDef } from "@/components/dashboard/jobs/StageEditor";
 import CompanyPageEditor from "@/components/dashboard/CompanyPageEditor";
 import ReminderDefault from "@/components/dashboard/settings/ReminderDefault";
+import WeeklyTargets from "@/components/dashboard/settings/WeeklyTargets";
+import AttentionRulesCard from "@/components/dashboard/settings/AttentionRulesCard";
 
 type CreditData = {
   summary: { granted: number; spent: number; held: number; balance: number; available: number };
@@ -146,6 +148,18 @@ export default function SettingsPage() {
               replied. Change it on any email before you send; it&apos;s off by
               default on emails that don&apos;t need an answer.
             </small>
+          </div>
+        </div>
+        <div className="dash-setting">
+          <label>Weekly targets</label>
+          <div>
+            <WeeklyTargets />
+          </div>
+        </div>
+        <div className="dash-setting">
+          <label>Attention rules</label>
+          <div>
+            <AttentionRulesCard />
           </div>
         </div>
         <div className="dash-setting">

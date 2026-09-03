@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
   let staged: string | null = null;
   if (after && (after.stage === "contacted" || after.stage === "rejected") && typeof after.jobId === "string" && after.jobId) {
     if (await quickMoveAllowed(member.org.id, key, after.jobId, after.stage)) {
-      const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage).catch(() => ({ ok: false as const, error: "save_failed" }));
+      const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage, null, null, member.email).catch(() => ({ ok: false as const, error: "save_failed" }));
       if (res.ok) {
         staged = after.stage;
         await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], after.jobId).catch(() => {});

@@ -6,6 +6,17 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
+import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
+import EmailModal from "@/components/dashboard/email/EmailModal";
+import TaskModal, { type TaskModalTarget } from "@/components/dashboard/tasks/TaskModal";
+import Shortcuts from "@/components/dashboard/home/Shortcuts";
+import PersonPicker from "@/components/dashboard/home/PersonPicker";
+import RolePicker from "@/components/dashboard/home/RolePicker";
+import GoalsCard from "@/components/dashboard/home/GoalsCard";
+import AttentionCard, { type AttentionAction } from "@/components/dashboard/home/AttentionCard";
+import { TEMPLATE } from "@/lib/quick-actions";
+import { addDays } from "@/lib/reminders";
+import type { AttentionData, AttentionRow, GoalsData } from "@/lib/server/home-goals";
 
 type Stage = "new" | "contacted" | "replied" | "interviewing" | "offer" | "hired";
 type Data = {
@@ -28,6 +39,8 @@ type Data = {
   page: { views: number; viewsPrev: number; roleOpens: number; appsViaPage: number; bookingClicks: number; linksSent: number; linksOpened: number; referrals: number };
   sourcing: { available: number; usedPeriod: number; usedPrev: number; imported: number; runsDone: number; inProgress: { title: string; status: string }[] };
   team: { email: string; sent: number; replies: number; tasksDone: number; overdue: number; appsViaPage: number }[] | null;
+  goals: GoalsData;
+  attention: AttentionData;
 };
 
 const localDay = () => new Date().toLocaleDateString("en-CA");
@@ -54,6 +67,12 @@ const STAGE_COLOR: Record<Stage, string> = {
   interviewing: "var(--stage-interview)", offer: "var(--stage-offer)", hired: "#155A37",
 };
 const STAGE_LABEL: Record<Stage, string> = { new: "New", contacted: "Contacted", replied: "Replied", interviewing: "Interviewing", offer: "Offer", hired: "Hired" };
+// Attention row buttons open the composer with these templates merged.
+const TEMPLATE_OF = {
+  nudge: { template: TEMPLATE.followUp.key, templateName: TEMPLATE.followUp.name },
+  checkin: { template: TEMPLATE.checkIn.key, templateName: TEMPLATE.checkIn.name },
+  offer: { template: TEMPLATE.offerTimes.key, templateName: TEMPLATE.offerTimes.name },
+};
 const authorName = (email: string) => {
   const local = email.split("@")[0] || "Teammate";
   return local.charAt(0).toUpperCase() + local.slice(1);
@@ -66,9 +85,17 @@ export default function HomePage() {
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState(false);
-  // Orgs with a big open list (the TT site syncs ~100 roles) get the busiest few, expandable.
-  const [allRoles, setAllRoles] = useState(false);
-  const ROLE_CAP = 8;
+  // Shortcuts + attention rows open the same drawer, composer and task modal
+  // the rest of the product uses; the pickers choose who first.
+  const [picker, setPicker] = useState<"compose" | "task" | "role" | null>(null);
+  const [compose, setCompose] = useState<{ key: string; name: string } | null>(null);
+  const [task, setTask] = useState<TaskModalTarget | null>(null);
+  const [drawer, setDrawer] = useState<{
+    key: string;
+    tab: "profile" | "email";
+    threadId: string | null;
+    quick: { nonce: number; template: string | null; templateName?: string; reply?: boolean; outcome?: string; remind?: boolean } | null;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -98,6 +125,46 @@ export default function HomePage() {
     setData(null);
     load();
   }, [load]);
+
+  const openDrawer = (row: AttentionRow, quick: NonNullable<typeof drawer>["quick"]) => {
+    if (!row.candidateKey) return;
+    setDrawer({ key: row.candidateKey, tab: quick ? "email" : "profile", threadId: row.threadId, quick });
+  };
+  const onAttention = (action: AttentionAction, row: AttentionRow) => {
+    const first = row.name.split(/\s+/)[0] || row.name;
+    switch (action) {
+      case "inbox":
+        router.push(`/dashboard/inbox${row.inboxId ? `?open=${encodeURIComponent(row.inboxId)}` : ""}`);
+        return;
+      case "nudge":
+        openDrawer(row, { nonce: Date.now(), ...TEMPLATE_OF.nudge, reply: true, outcome: "reply reminder set", remind: true });
+        return;
+      case "email":
+        openDrawer(row, { nonce: Date.now(), template: null, outcome: "reply reminder set", remind: true });
+        return;
+      case "checkin":
+        openDrawer(row, { nonce: Date.now(), ...TEMPLATE_OF.checkin, reply: Boolean(row.threadId), outcome: "reply reminder set", remind: true });
+        return;
+      case "offer":
+        openDrawer(row, { nonce: Date.now(), ...TEMPLATE_OF.offer, reply: Boolean(row.threadId), outcome: "reply reminder set", remind: true });
+        return;
+      case "task":
+        if (row.candidateKey) setTask({ mode: "create", candidateKey: row.candidateKey, candidateName: row.name, title: `Follow up with ${first}`, dueDate: addDays(localDay(), 1) });
+        return;
+      case "open":
+        openDrawer(row, null);
+        return;
+      case "sourcing":
+        if (row.jobId) router.push(`/dashboard/jobs/${row.jobId}?tab=sourcing`);
+        return;
+      case "job":
+        if (row.jobId) router.push(`/dashboard/jobs/${row.jobId}`);
+        return;
+      case "changed":
+        load();
+        return;
+    }
+  };
 
   const periodLabel = period === "week" ? "this week" : "last 30 days";
   const prevLabel = period === "week" ? "vs last week" : "vs the 30 days before";
@@ -136,6 +203,8 @@ export default function HomePage() {
           </span>
         </div>
       </div>
+
+      <Shortcuts onCompose={() => setPicker("compose")} onNewTask={() => setPicker("task")} onSourcing={() => setPicker("role")} />
 
       {error && <p className="cv2d-err">Couldn&apos;t load your numbers. Refresh to try again.</p>}
       {!data && !error && <p className="dash-muted">Loading…</p>}
@@ -218,80 +287,11 @@ export default function HomePage() {
           )}
 
           <div className="tk-day-h hm-sec">
-            Open roles <span className="hm-why">applicants, what&apos;s new, how far the pipeline has got</span>
+            This week <span className="hm-why">your targets, and what needs a look</span>
           </div>
-          <div className="hm-grid2">
-            <div className="hm-card">
-              <h4>
-                {data.roles.length} open role{data.roles.length === 1 ? "" : "s"}
-              </h4>
-              <p className="cs">Sorted by new applicants {periodLabel}. Click a row to open the job.</p>
-              {data.roles.length === 0 ? (
-                <p className="tk-empty">No open roles. <Link href="/dashboard/jobs/new">Post one</Link>.</p>
-              ) : (
-                <div className="board-scroll">
-                  <table className="hm-table">
-                    <thead>
-                      <tr>
-                        <th>Role</th>
-                        <th>Applicants</th>
-                        <th>New</th>
-                        <th>Pipeline</th>
-                        <th>Furthest</th>
-                        <th>Updated</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(allRoles ? data.roles : data.roles.slice(0, ROLE_CAP)).map((r) => {
-                        const total = Object.values(r.pipe).reduce((a, b) => a + b, 0) || 1;
-                        return (
-                          <tr key={r.id} className="hm-click" onClick={() => router.push(`/dashboard/jobs/${r.id}`)}>
-                            <td className="rt">
-                              {r.title}
-                              <span>{[r.company, `#${r.id}`].filter(Boolean).join(" · ")}</span>
-                            </td>
-                            <td>{r.applicants}</td>
-                            <td>{r.newInPeriod ? <span className="new">+{r.newInPeriod}</span> : "0"}</td>
-                            <td>
-                              <span className="hm-bar" title={Object.entries(r.pipe).map(([s, n]) => `${STAGE_LABEL[s as Stage]} ${n}`).join(" · ")}>
-                                {(["contacted", "replied", "interviewing", "offer", "hired"] as Stage[]).map((s) =>
-                                  r.pipe[s] > 0 ? <i key={s} style={{ width: `${(r.pipe[s] / total) * 100}%`, background: STAGE_COLOR[s] }} /> : null
-                                )}
-                              </span>
-                            </td>
-                            <td>
-                              {r.furthest ? (
-                                <span className={`hm-fur ${r.furthest.stage === "Offer" || r.furthest.stage === "Hired" ? "o" : r.furthest.stage === "Interviewing" ? "i" : "s"}`}>
-                                  {r.furthest.stage} · {r.furthest.n}
-                                </span>
-                              ) : (
-                                <span className="hm-fur s">New</span>
-                              )}
-                            </td>
-                            <td>
-                              <span className={`hm-age${r.updatedDays > 30 ? " old" : ""}`}>{r.updatedDays}d ago</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {data.roles.length > ROLE_CAP && (
-                    <button type="button" className="hm-more" onClick={() => setAllRoles((v) => !v)}>
-                      {allRoles ? "Show the busiest 8" : `Show all ${data.roles.length} roles`}
-                    </button>
-                  )}
-                </div>
-              )}
-              <div className="hm-legend">
-                {(["contacted", "replied", "interviewing", "offer", "hired"] as Stage[]).map((s) => (
-                  <span key={s}>
-                    <i style={{ background: STAGE_COLOR[s] }} />
-                    {STAGE_LABEL[s]}
-                  </span>
-                ))}
-              </div>
-            </div>
+          <div className="hm-week">
+            <GoalsCard goals={data.goals} scope={scope} today={data.today} onSaved={load} />
+            <AttentionCard attention={data.attention} today={data.today} onAction={onAttention} />
           </div>
 
           <div className="hm-grid3">
@@ -502,6 +502,68 @@ export default function HomePage() {
             </>
           )}
         </>
+      )}
+      {picker === "compose" && (
+        <PersonPicker
+          title="Compose email"
+          hint="Who is it to? The email goes from your connected mailbox and is logged on their record."
+          onPick={(p) => {
+            setPicker(null);
+            setCompose(p);
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === "task" && (
+        <PersonPicker
+          title="New task"
+          hint="Who is it about? Tasks land in your Inbox on the day they are due."
+          onPick={(p) => {
+            setPicker(null);
+            setTask({ mode: "create", candidateKey: p.key, candidateName: p.name });
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === "role" && (
+        <RolePicker
+          onPick={(id) => {
+            setPicker(null);
+            router.push(`/dashboard/jobs/${id}?tab=sourcing`);
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {compose && (
+        <EmailModal
+          candKey={compose.key}
+          candidateName={compose.name}
+          onClose={() => setCompose(null)}
+          onSent={() => {
+            setCompose(null);
+            load();
+          }}
+        />
+      )}
+      {task && (
+        <TaskModal
+          target={task}
+          onClose={() => setTask(null)}
+          onChanged={load}
+        />
+      )}
+      {drawer && (
+        <CandidateDrawer
+          candKey={drawer.key}
+          initialTab={drawer.tab}
+          initialThreadId={drawer.threadId}
+          quickAction={drawer.quick}
+          onActivity={() => load()}
+          onClose={() => {
+            setDrawer(null);
+            load();
+          }}
+        />
       )}
     </>
   );

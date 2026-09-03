@@ -6,6 +6,10 @@
 // belong to owners. Stage moves, sourcing and credits are org-wide.
 import { sbRest, sbRpc } from "./supabase";
 import { listInbox, type InboxScope } from "./inbox";
+import { orgEmailVisibility, viewerMailboxEmails } from "./email-compose";
+import { loadAttentionRules, loadSnoozes, loadTargets } from "./goals";
+import { computeAttention, computeGoals, type AttentionData, type GoalsData } from "./home-goals";
+import { weekStart } from "@/lib/goals";
 
 export type Period = "week" | "month";
 type Member = { orgId: string; email: string; userId: string; memberRole: string; orgSlug?: string };
@@ -59,6 +63,8 @@ export type HomeData = {
     inProgress: { title: string; status: string }[];
   };
   team: { email: string; sent: number; replies: number; tasksDone: number; overdue: number; appsViaPage: number }[] | null;
+  goals: GoalsData;
+  attention: AttentionData;
 };
 
 const DAY = 86400_000;
@@ -89,6 +95,8 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
   const prevSince = now - 2 * days * DAY;
   const sinceIso = new Date(since).toISOString();
   const prevIso = new Date(prevSince).toISOString();
+  // Activity window for the attention rules (the longest rule is 90 days).
+  const actIso = new Date(Math.min(prevSince, now - 90 * DAY)).toISOString();
   const inPeriod = (iso: string | null) => Boolean(iso) && Date.parse(iso!) >= since;
   const inPrev = (iso: string | null) => Boolean(iso) && Date.parse(iso!) >= prevSince && Date.parse(iso!) < since;
   // The viewer's local calendar day for an instant (tzOffsetMin = Date#getTimezoneOffset()).
@@ -97,30 +105,38 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
   const [
     inbox, membersRes, profilesRes, rolesRes, statuses, apps, logs, done, open, moves,
     links, refs, credit, usage, runsRes,
+    visibility, aliases, notes, marks, snoozed, targets, rules,
   ] = await Promise.all([
     listInbox(member, scope, today, { lean: true }),
     sbRest(`org_members?organization_id=eq.${org}&select=user_id,email,member_role`),
     sbRest(`recruiter_profiles?organization_id=eq.${org}&select=id,user_id`),
-    sbRest(`org_roles?organization_id=eq.${org}&select=id,external_id,title,company_name,status,updated_at&order=title.asc`),
-    pageAll<{ job_id: string; candidate_key: string; status: string; reason: string | null }>((l, o) => `candidate_role_statuses?organization_id=eq.${org}&select=job_id,candidate_key,status,reason&order=id.asc&limit=${l}&offset=${o}`),
-    pageAll<{ id: string; created_at: string; role_ids: string[] | null; source: string | null; recruiter_profile_id: string | null }>((l, o) => `website_applications?organization_id=eq.${org}&select=id,created_at,role_ids,source,recruiter_profile_id&order=created_at.desc&limit=${l}&offset=${o}`),
-    pageAll<{ direction: "out" | "in"; member_email: string; candidate_key: string; thread_id: string; created_at: string }>((l, o) => `candidate_email_log?organization_id=eq.${org}&created_at=gte.${prevIso}&select=direction,member_email,candidate_key,thread_id,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
-    pageAll<{ completed_at: string; created_by_email: string }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${prevIso}&select=completed_at,created_by_email&order=completed_at.desc&limit=${l}&offset=${o}`),
-    pageAll<{ due_date: string; created_by_email: string }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.open&select=due_date,created_by_email&order=due_date.asc&limit=${l}&offset=${o}`),
-    pageAll<{ to_status: string; created_at: string }>((l, o) => `stage_events?organization_id=eq.${org}&created_at=gte.${prevIso}&select=to_status,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
+    sbRest(`org_roles?organization_id=eq.${org}&select=id,external_id,title,company_name,status,updated_at,source&order=title.asc`),
+    pageAll<{ job_id: string; candidate_key: string; status: string; reason: string | null; updated_at: string }>((l, o) => `candidate_role_statuses?organization_id=eq.${org}&select=job_id,candidate_key,status,reason,updated_at&order=id.asc&limit=${l}&offset=${o}`),
+    pageAll<{ id: string; name: string | null; created_at: string; role_ids: string[] | null; source: string | null; recruiter_profile_id: string | null; follow_up_at: string | null }>((l, o) => `website_applications?organization_id=eq.${org}&select=id,name,created_at,role_ids,source,recruiter_profile_id,follow_up_at&order=created_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ direction: "out" | "in"; member_email: string; candidate_key: string; thread_id: string; subject: string; created_at: string }>((l, o) => `candidate_email_log?organization_id=eq.${org}&created_at=gte.${actIso}&select=direction,member_email,candidate_key,thread_id,subject,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ completed_at: string; created_by_email: string; kind: string; candidate_key: string | null }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${actIso}&select=completed_at,created_by_email,kind,candidate_key&order=completed_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ due_date: string; created_by_email: string; kind: string; candidate_key: string | null }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.open&select=due_date,created_by_email,kind,candidate_key&order=due_date.asc&limit=${l}&offset=${o}`),
+    pageAll<{ to_status: string; from_status: string | null; moved_by_email: string | null; created_at: string }>((l, o) => `stage_events?organization_id=eq.${org}&created_at=gte.${prevIso}&select=to_status,from_status,moved_by_email,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
     // Only links that could count: minted or opened inside the two periods.
     pageAll<{ created_by: string | null; created_at: string; last_opened_at: string | null; open_count: number }>((l, o) => `tracked_links?organization_id=eq.${org}&or=(created_at.gte.${prevIso},last_opened_at.gte.${prevIso})&select=created_by,created_at,last_opened_at,open_count&order=created_at.desc&limit=${l}&offset=${o}`),
     pageAll<{ recruiter_profile_id: string | null; created_at: string }>((l, o) => `referrals?organization_id=eq.${org}&created_at=gte.${prevIso}&select=recruiter_profile_id,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
     sbRpc<{ available: number }[]>("org_credit_summary", { p_org: org }).catch(() => [] as { available: number }[]),
     pageAll<{ credits: number; created_at: string; run_id: string | null }>((l, o) => `usage_events?organization_id=eq.${org}&credits=gt.0&created_at=gte.${prevIso}&select=credits,created_at,run_id&order=created_at.desc&limit=${l}&offset=${o}`),
     sbRest(`sourcing_runs?organization_id=eq.${org}&select=status,created_at,finished_at,imported_count,org_role_id&order=created_at.desc&limit=200`),
+    orgEmailVisibility(org),
+    viewerMailboxEmails(org, viewer),
+    pageAll<{ candidate_key: string; created_at: string }>((l, o) => `candidate_notes?organization_id=eq.${org}&created_at=gte.${actIso}&select=candidate_key,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
+    pageAll<{ candidate_key: string }>((l, o) => `no_reply_marks?organization_id=eq.${org}&cleared_at=is.null&select=candidate_key&limit=${l}&offset=${o}`),
+    loadSnoozes(org, viewer, today).catch(() => new Set<string>()),
+    loadTargets(org),
+    loadAttentionRules(org),
   ]);
   // Thread pairing below walks oldest → newest.
   logs.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   const members = membersRes.ok ? ((await membersRes.json()) as { user_id: string; email: string; member_role: string }[]) : [];
   const profiles = profilesRes.ok ? ((await profilesRes.json()) as { id: string; user_id: string }[]) : [];
-  const roles = rolesRes.ok ? ((await rolesRes.json()) as { id: string; external_id: string; title: string; company_name: string | null; status: string; updated_at: string }[]) : [];
+  const roles = rolesRes.ok ? ((await rolesRes.json()) as { id: string; external_id: string; title: string; company_name: string | null; status: string; updated_at: string; source: string | null }[]) : [];
   const available = Number(credit?.[0]?.available ?? 0);
   const runs = runsRes.ok ? ((await runsRes.json()) as { status: string; created_at: string; finished_at: string | null; imported_count: number | null; org_role_id: string | null }[]) : [];
 
@@ -324,6 +340,20 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
       .sort((a, b) => b.sent + b.tasksDone - (a.sent + a.tasksDone));
   }
 
+  // ---- goals + needs attention ----------------------------------------------
+  // The week starts on the viewer's Monday, at their midnight.
+  const weekStartIso = new Date(Date.parse(weekStart(today) + "T00:00:00Z") + tzOffsetMin * 60_000).toISOString();
+  const goals = computeGoals({ today, weekStartIso, scope, viewer, isOwner, members, logs, done, moves, targets });
+  // The Inbox owns anyone with an open reminder or check-back, or a live no-reply mark.
+  const hidden = new Set<string>(marks.map((m) => m.candidate_key));
+  for (const t of open) if (t.candidate_key && (t.kind === "reminder" || t.kind === "recontact")) hidden.add(t.candidate_key);
+  const attention = await computeAttention({
+    orgId: org, orgSlug: member.orgSlug || "", today, now, scope, viewer, isOwner, rules, snoozed, hidden,
+    inboxItems: inbox.items, roles, statuses, apps, logs, done, notes, runs,
+    canSeeLog: (l) => visibility === "team" || aliases.has(l.member_email),
+    mineApp,
+  });
+
   // ---- today strip from the Inbox derivation ---------------------------------
   const overdueItem = inbox.items.find((i) => i.overdue);
   const awaitingItems = inbox.items.filter((i) => i.kind === "mail");
@@ -357,5 +387,7 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
     page,
     sourcing,
     team,
+    goals,
+    attention,
   };
 }

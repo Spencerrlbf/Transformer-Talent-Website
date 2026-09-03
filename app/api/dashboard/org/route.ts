@@ -7,6 +7,7 @@ import {
   remapDeletedStages,
   type InterviewStage,
 } from "@/lib/server/interview-stages";
+import { DEFAULT_RULES, sanitizeRules } from "@/lib/goals";
 
 // Org-level settings: company website, referral amount, and the default
 // interview stage template. GET for any member; PATCH owner-only.
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const res = await sbRest(
-    `organizations?id=eq.${member.org.id}&select=website,referral_amount,interview_stages,email_visibility`
+    `organizations?id=eq.${member.org.id}&select=website,referral_amount,interview_stages,email_visibility,attention_rules`
   );
   const [row] = res.ok
     ? ((await res.json()) as {
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
         referral_amount: number | null;
         interview_stages: unknown;
         email_visibility: string | null;
+        attention_rules: unknown;
       }[])
     : [];
   return NextResponse.json({
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest) {
     referralAmount: row?.referral_amount ?? 5000,
     interviewStages: (row && sanitizeStages(row.interview_stages)) || DEFAULT_STAGES,
     emailVisibility: row?.email_visibility === "team" ? "team" : "private",
+    attentionRules: row?.attention_rules ? sanitizeRules(row.attention_rules) : DEFAULT_RULES,
     canEdit: member.memberRole === "owner",
   });
 }
@@ -39,7 +42,7 @@ export async function PATCH(req: NextRequest) {
   if (member.memberRole !== "owner")
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
 
-  let body: { website?: string; referralAmount?: number; interviewStages?: unknown; emailVisibility?: unknown };
+  let body: { website?: string; referralAmount?: number; interviewStages?: unknown; emailVisibility?: unknown; attentionRules?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -63,6 +66,11 @@ export async function PATCH(req: NextRequest) {
     if (body.emailVisibility !== "private" && body.emailVisibility !== "team")
       return NextResponse.json({ error: "bad_visibility" }, { status: 400 });
     patch.email_visibility = body.emailVisibility;
+  }
+  if ("attentionRules" in body) {
+    if (!body.attentionRules || typeof body.attentionRules !== "object")
+      return NextResponse.json({ error: "bad_rules" }, { status: 400 });
+    patch.attention_rules = sanitizeRules(body.attentionRules);
   }
   if ("referralAmount" in body) {
     const amount = Math.round(Number(body.referralAmount));
