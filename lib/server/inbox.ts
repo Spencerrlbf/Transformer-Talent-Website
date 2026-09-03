@@ -701,6 +701,21 @@ export async function noteEmailSent(args: {
   }
 }
 
+/** Called by the no-reply route: the conversation (if any) and the person's
+ *  arrival (if any) are dealt with for the actor's Inbox and Done view. */
+export async function noteNoReply(orgId: string, viewer: string, key: string, threadId: string | null, subject: string | null): Promise<void> {
+  if (!KEY_RE.test(key)) return;
+  if (threadId) {
+    await markInbox(orgId, viewer, `mail:${threadId}`, { handled: "noreply", kind: "mail", label: subject || "", candidateKey: key }).catch(() => {});
+  }
+  if (!key.startsWith("app_")) return;
+  const a = await arrivalRow(orgId, key);
+  if (!a) return;
+  const kind = arrivalKind(a);
+  if (kind === "ask") return;
+  await markInbox(orgId, viewer, `arr:${a.id}`, { handled: "noreply", kind, candidateKey: key, label: KIND_TITLE[kind] }).catch(() => {});
+}
+
 /** Called by the followup route on Mark contacted. */
 export async function noteContacted(orgId: string, viewer: string, key: string): Promise<void> {
   if (!key.startsWith("app_") || !KEY_RE.test(key)) return;

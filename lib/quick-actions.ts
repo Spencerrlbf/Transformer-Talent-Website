@@ -84,6 +84,7 @@ export function actionsFor(
       return [
         { id: "call", label: "Schedule a call", ...t(TEMPLATE.replyCall), stage: "contacted", primary: true, reply: true },
         { ...REPLY, reply: true },
+        NO_REPLY,
       ];
     // A reply reminder came due: nudge in the same thread (Send sets the
     // next one), or mark no reply. After two nudges, No reply leads.
@@ -116,6 +117,7 @@ export function actionsFor(
  *  hasRole = the item names a role the move can land on. */
 export function outcomeLabel(a: QuickAction, kind: string, hasRole = true): string {
   const clears = kind === "mail" ? "thread clears" : "item clears";
+  if (a.noReply) return hasRole ? `marked no reply · moves to Past on the role · ${clears}` : `marked no reply · ${clears}`;
   if (kind === "remind") {
     if (a.id === "nudge") return "next reminder set · item clears";
     return "reminder ends · item clears";

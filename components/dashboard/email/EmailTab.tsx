@@ -340,7 +340,7 @@ export default function EmailTab({
                   <span className="emc-meta">
                     {t.messages.length} message{t.messages.length === 1 ? "" : "s"} · {fmtWhen(t.lastAt)}
                   </span>
-                  {!t.awaiting && !(data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id)) && (
+                  {!(data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id)) && (
                     <button
                       type="button"
                       className="emc-nr"

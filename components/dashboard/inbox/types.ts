@@ -165,6 +165,8 @@ export function reasonLabel(reason: string, kind?: InboxKind | "task"): string {
       return "marked contacted";
     case "task_done":
       return "task done";
+    case "noreply":
+      return "marked no reply";
     case "gone":
       return "no longer in your Inbox";
     default:

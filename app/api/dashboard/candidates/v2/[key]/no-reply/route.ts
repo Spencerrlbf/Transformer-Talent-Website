@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { candidateContact } from "@/lib/server/email-compose";
 import { markNoReply } from "@/lib/server/no-reply";
-import { noteStageMoved } from "@/lib/server/inbox";
+import { noteNoReply, noteStageMoved } from "@/lib/server/inbox";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,7 +40,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     checkBack,
   });
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: res.error === "save_failed" ? 502 : 400 });
-  // The person's arrival (a drop, a referral) is dealt with by this too.
+  // The conversation and the person's arrival are dealt with by this too.
+  const threadId = typeof body.threadId === "string" && body.threadId ? body.threadId.slice(0, 300) : null;
+  await noteNoReply(member.org.id, member.email, key, threadId, typeof body.subject === "string" ? body.subject : null).catch(() => {});
   if (res.staged && jobId) await noteStageMoved(member.org.id, member.email, key, "No reply", jobId).catch(() => {});
   return NextResponse.json({ ok: true, staged: res.staged, checkBack });
 }
