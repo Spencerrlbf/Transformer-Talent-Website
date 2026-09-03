@@ -18,7 +18,6 @@ import { sbRest } from "./supabase";
 import { clearFollowUp } from "./candidates-unified";
 import { orgEmailVisibility, viewerMailboxEmails } from "./email-compose";
 import { getRoles } from "@/lib/roles";
-import { daysBetween } from "@/lib/reminders";
 
 export type InboxKind =
   | "mail" | "temail" | "tcall" | "tmsg" | "ttask" | "remind"
@@ -452,8 +451,10 @@ export async function listInbox(
       // "No reply from Ana · 3 days since you emailed · <subject>", with the
       // ladder ("nudged once") from how many emails went out in the thread.
       const out = t.thread_id ? outByThread.get(t.thread_id) : undefined;
-      const sentDay = (out?.last || t.created_at || "").slice(0, 10);
-      const since = sentDay ? daysBetween(sentDay, today) : null;
+      // Elapsed time from the instant it went, not calendar days in UTC:
+      // an email sent late in the viewer's evening must not read "-1 days".
+      const sentAt = out?.last || t.created_at || "";
+      const since = sentAt ? Math.max(0, Math.floor((Date.now() - new Date(sentAt).getTime()) / 86400_000)) : null;
       item.title = `No reply from ${t.candidate_name || "them"}`;
       item.detail = [since !== null ? `${since} day${since === 1 ? "" : "s"} since you emailed` : null, t.title].filter(Boolean).join(" · ");
       item.subject = t.title;
