@@ -20,7 +20,7 @@ import { orgEmailVisibility, viewerMailboxEmails } from "./email-compose";
 import { getRoles } from "@/lib/roles";
 
 export type InboxKind =
-  | "mail" | "temail" | "tcall" | "tmsg" | "ttask" | "remind"
+  | "mail" | "temail" | "tcall" | "tmsg" | "ttask" | "remind" | "cback"
   | "app" | "drop" | "ref" | "ask" | "fdue";
 export type InboxSection = "emails" | "calls" | "messages" | "new" | "fdue" | "other";
 export type InboxScope = "me" | "team";
@@ -49,6 +49,8 @@ export type InboxItem = {
   taskId: string | null;
   subject: string | null;
   extra: string | null;
+  /** Reply reminders: emails sent since they last spoke, minus the first. */
+  nudges?: number;
   /** One row per person: the person's other open items ride along here. */
   also?: AlsoItem[];
 };
@@ -86,7 +88,7 @@ export type InboxData = {
 
 export const SECTION_ORDER: InboxSection[] = ["emails", "calls", "messages", "new", "fdue", "other"];
 const SECTION_OF: Record<InboxKind, InboxSection> = {
-  mail: "emails", temail: "emails", tcall: "calls", tmsg: "messages", ttask: "other", remind: "emails",
+  mail: "emails", temail: "emails", tcall: "calls", tmsg: "messages", ttask: "other", remind: "emails", cback: "fdue",
   app: "new", drop: "new", ref: "new", ask: "new", fdue: "fdue",
 };
 const KIND_TITLE: Record<string, string> = {
@@ -432,7 +434,7 @@ export async function listInbox(
 
   // ---- tasks --------------------------------------------------------------
   const taskKind = (k: string): InboxKind =>
-    k === "email" ? "temail" : k === "call" ? "tcall" : k === "message" ? "tmsg" : k === "reminder" ? "remind" : "ttask";
+    k === "email" ? "temail" : k === "call" ? "tcall" : k === "message" ? "tmsg" : k === "reminder" ? "remind" : k === "recontact" ? "cback" : "ttask";
   const upcomingTasks: InboxItem[] = [];
   for (const t of openTasks) {
     if (scope === "me" && t.created_by_email !== viewer) continue;
@@ -461,7 +463,20 @@ export async function listInbox(
       item.threadId = t.thread_id || null;
       item.jobId = t.job_id || null;
       const nudges = Math.max(0, (out?.n || 1) - 1);
+      item.nudges = nudges;
       item.extra = nudges === 0 ? null : nudges === 1 ? "nudged once" : nudges === 2 ? "nudged twice" : `nudged ${nudges}×`;
+    }
+    if (kind === "cback") {
+      // "Check back with Ana · you marked no reply 2 Sep · <subject>"
+      const ago = t.created_at ? Math.max(0, Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400_000)) : null;
+      item.title = `Check back with ${t.candidate_name || "them"}`;
+      item.detail = [
+        ago === null ? "you marked no reply" : ago === 0 ? "you marked no reply today" : `you marked no reply ${ago} day${ago === 1 ? "" : "s"} ago`,
+        t.title,
+      ].filter(Boolean).join(" · ");
+      item.subject = t.title;
+      item.threadId = t.thread_id || null;
+      item.jobId = t.job_id || null;
     }
     if (t.due_date <= today) items.push(item);
     else if (!lean) upcomingTasks.push(item);
@@ -493,7 +508,7 @@ export async function listInbox(
   const decorateTask = (it: InboxItem) => {
     const i = it.candidateKey ? info.get(it.candidateKey) : null;
     if (i && !it.candidateName) it.candidateName = i.name;
-    if (it.kind === "remind") return;
+    if (it.kind === "remind" || it.kind === "cback") return;
     if (it.kind === "temail") it.detail = it.candidateKey && hasThread.has(it.candidateKey) ? "reply in the open thread" : "no thread yet · opens a new email";
     else if (it.kind === "tcall") it.detail = i?.phone || "no phone on file";
     else if (it.kind === "tmsg") it.detail = i?.linkedin ? i.linkedin.replace(/^https?:\/\/(www\.)?/, "") : "no LinkedIn on file";
@@ -573,11 +588,14 @@ export async function listInbox(
   for (const t of doneTasks) {
     if (scope === "me" && t.created_by_email !== viewer) continue;
     const remind = t.kind === "reminder";
+    const cback = t.kind === "recontact";
     done.push({
-      id: `task:${t.id}`, kind: remind ? "remind" : "task",
-      title: remind ? `No reply from ${t.candidate_name || "them"} · ${t.title}` : t.title, candidateKey: t.candidate_key,
+      id: `task:${t.id}`, kind: remind ? "remind" : cback ? "cback" : "task",
+      title: remind ? `No reply from ${t.candidate_name || "them"} · ${t.title}` : cback ? `Check back with ${t.candidate_name || "them"} · ${t.title}` : t.title,
+      candidateKey: t.candidate_key,
       candidateName: t.candidate_name || (t.candidate_key ? info.get(t.candidate_key)?.name || "" : ""),
-      reason: remind ? `remind:${t.ended_reason || "done"}` : "task_done", at: t.completed_at || "", forEmail: t.created_by_email,
+      reason: remind ? `remind:${t.ended_reason || "done"}` : cback ? `cback:${t.ended_reason || "done"}` : "task_done",
+      at: t.completed_at || "", forEmail: t.created_by_email,
     });
   }
   done.sort((a, b) => b.at.localeCompare(a.at));

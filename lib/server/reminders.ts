@@ -5,14 +5,14 @@
 // Nothing here ever sends anything.
 import { sbInsert, sbRest } from "./supabase";
 
-export type EndReason = "replied" | "closed" | "nudged" | "cancelled" | "done";
+export type EndReason = "replied" | "closed" | "nudged" | "cancelled" | "done" | "no_reply" | "contacted";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 const ID_RE = /^[0-9a-f-]{36}$/i;
 const now = () => new Date().toISOString();
 
-type Open = { id: string; thread_id: string | null; due_date: string; created_by_email: string; candidate_key: string | null };
-const OPEN_COLS = "id,thread_id,due_date,created_by_email,candidate_key";
+type Open = { id: string; thread_id: string | null; due_date: string; created_by_email: string; candidate_key: string | null; job_id: string | null };
+const OPEN_COLS = "id,thread_id,due_date,created_by_email,candidate_key,job_id";
 
 /** Set (or move) the sender's reminder on this conversation. */
 export async function setReplyReminder(args: {
@@ -92,11 +92,11 @@ export async function cancelReminders(args: {
   return res.ok ? ((await res.json()) as unknown[]).length : 0;
 }
 
-/** End one specific open reminder (the one an Inbox nudge is answering). */
+/** End one specific open reminder or check-back (the one an Inbox send answers). */
 export async function endReminder(orgId: string, id: string, candidateKey: string, reason: EndReason): Promise<boolean> {
   if (!ID_RE.test(id) || !KEY_RE.test(candidateKey)) return false;
   const res = await sbRest(
-    `tasks?id=eq.${id}&organization_id=eq.${orgId}&candidate_key=eq.${candidateKey}&kind=eq.reminder&status=eq.open&select=id`,
+    `tasks?id=eq.${id}&organization_id=eq.${orgId}&candidate_key=eq.${candidateKey}&kind=in.(reminder,recontact)&status=eq.open&select=id`,
     {
       method: "PATCH",
       body: JSON.stringify({ status: "done", completed_at: now(), updated_at: now(), ended_reason: reason }),
@@ -111,14 +111,14 @@ export async function openReminders(
   orgId: string,
   candidateKey: string,
   memberEmail: string
-): Promise<{ id: string; threadId: string; dueDate: string }[]> {
+): Promise<{ id: string; threadId: string; dueDate: string; jobId: string | null }[]> {
   if (!KEY_RE.test(candidateKey)) return [];
   const res = await sbRest(
     `tasks?organization_id=eq.${orgId}&candidate_key=eq.${candidateKey}&kind=eq.reminder&status=eq.open` +
       `&created_by_email=eq.${encodeURIComponent(memberEmail)}&select=${OPEN_COLS}&order=due_date.asc&limit=50`
   );
   const rows = res.ok ? ((await res.json()) as Open[]) : [];
-  return rows.filter((r) => r.thread_id).map((r) => ({ id: r.id, threadId: r.thread_id!, dueDate: r.due_date }));
+  return rows.filter((r) => r.thread_id).map((r) => ({ id: r.id, threadId: r.thread_id!, dueDate: r.due_date, jobId: r.job_id }));
 }
 
 /** Earliest live reminder per person across the org, for the Candidates

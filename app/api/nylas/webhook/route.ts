@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cancelReminders } from "@/lib/server/reminders";
+import { clearNoReply } from "@/lib/server/no-reply";
 import { fetchMessage, verifyWebhookSignature } from "@/lib/server/nylas";
 import {
   accountsByGrant,
@@ -109,6 +110,8 @@ export async function POST(req: NextRequest) {
     });
     // Their reply ends the sender's reminder on this conversation.
     await cancelReminders({ orgId: account.orgId, candidateKey, threadId: threadId || null, reason: "replied" }).catch(() => {});
+    // A "no reply" mark ends the moment they do reply; on the role they come back to Replied.
+    await clearNoReply({ orgId: account.orgId, candidateKey, reason: "replied" }).catch(() => {});
   }
   return NextResponse.json({ ok: true });
 }

@@ -23,6 +23,8 @@ export type QuickAction = {
   reply?: boolean;
   /** Composer default for "remind me if no reply": false = start on Off. */
   remind?: boolean;
+  /** Opens the "Mark no reply" panel instead of the composer. */
+  noReply?: boolean;
 };
 
 export const TEMPLATE = {
@@ -36,15 +38,17 @@ export const TEMPLATE = {
   replyCall: { key: "reply_call", name: "Book a call (reply)" },
   followUpOpen: { key: "follow_up_open", name: "Follow-up: what's open" },
   followUp: { key: "follow_up_nudge", name: "Following up" },
+  checkBack: { key: "check_back", name: "Checking back in" },
 } as const;
 
 const REPLY: QuickAction = { id: "reply", label: "Reply…", template: null };
+const NO_REPLY: QuickAction = { id: "noreply", label: "No reply", template: null, noReply: true };
 const t = (x: { key: string; name: string }) => ({ template: x.key, templateName: x.name });
 
 /** The buttons for one item. hasRole = a role to move (applied or matched). */
 export function actionsFor(
   kind: string,
-  ctx: { hasRole: boolean; month?: string | null }
+  ctx: { hasRole: boolean; month?: string | null; nudges?: number }
 ): QuickAction[] {
   switch (kind) {
     case "app":
@@ -82,12 +86,21 @@ export function actionsFor(
         { ...REPLY, reply: true },
       ];
     // A reply reminder came due: nudge in the same thread (Send sets the
-    // next one), or let go. Every button opens the composer first.
-    case "remind":
+    // next one), or mark no reply. After two nudges, No reply leads.
+    case "remind": {
+      const tired = (ctx.nudges || 0) >= 2;
       return [
-        { id: "nudge", label: "Nudge", ...t(TEMPLATE.followUp), primary: true, reply: true },
-        { id: "no", label: "Not this time", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true, remind: false },
+        { id: "nudge", label: "Nudge", ...t(TEMPLATE.followUp), primary: !tired, reply: true },
         { ...REPLY, reply: true },
+        { ...NO_REPLY, primary: tired },
+      ];
+    }
+    // A check-back came due: pick the conversation up again, or push it out.
+    case "cback":
+      return [
+        { id: "cback", label: "Check back in", ...t(TEMPLATE.checkBack), stage: "contacted", primary: true, reply: true },
+        { ...REPLY, reply: true },
+        NO_REPLY,
       ];
     case "fdue":
       return [
@@ -105,8 +118,11 @@ export function outcomeLabel(a: QuickAction, kind: string, hasRole = true): stri
   const clears = kind === "mail" ? "thread clears" : "item clears";
   if (kind === "remind") {
     if (a.id === "nudge") return "next reminder set · item clears";
-    if (a.stage === "rejected") return hasRole ? "stage moves to Rejected · reminder ends" : "reminder ends · no role to move";
     return "reminder ends · item clears";
+  }
+  if (kind === "cback") {
+    if (a.id === "cback") return hasRole ? "mark clears · stage moves to Contacted · item clears" : "mark clears · item clears";
+    return "mark clears · item clears";
   }
   if (a.stage === "contacted") return hasRole ? `stage moves to Contacted · ${clears}` : `${clears} · no role to move`;
   if (a.stage === "rejected") return hasRole ? `stage moves to Rejected · ${clears}` : `${clears} · no role to move`;

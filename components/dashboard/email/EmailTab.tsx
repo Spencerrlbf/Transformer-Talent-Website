@@ -6,6 +6,7 @@
 // reply; "Open in composer" hands the same text to the full composer.
 import { useCallback, useEffect, useRef, useState } from "react";
 import RemindChips from "@/components/dashboard/email/RemindChips";
+import NoReplyPanel from "@/components/dashboard/email/NoReplyPanel";
 import { fmtDue, localDay as todayDay, reminderDue, type RemindChoice } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import EmailModal from "@/components/dashboard/email/EmailModal";
@@ -30,7 +31,9 @@ type Data = {
   /** Teammates' conversations the org's private setting keeps from this viewer. */
   hiddenThreads?: number;
   /** This seat's live reply reminders, by thread. */
-  reminders?: { id: string; threadId: string; dueDate: string }[];
+  reminders?: { id: string; threadId: string; dueDate: string; jobId?: string | null }[];
+  /** "No reply" mark on this person, when live. */
+  noReply?: { markedAt: string; checkBackAt: string | null; threadId: string | null } | null;
 };
 
 const localDay = (d: Date) => d.toLocaleDateString("en-CA");
@@ -64,6 +67,7 @@ export default function EmailTab({
   onSent,
   openCompose,
   onSilent,
+  onNoReply,
 }: {
   candKey: string;
   name: string;
@@ -89,6 +93,8 @@ export default function EmailTab({
     remind?: boolean;
   } | null;
   onSilent?: () => void;
+  /** "No reply" confirmed from a thread header here. */
+  onNoReply?: (r: { checkBack: string | null; staged: boolean }) => void;
 }) {
   const { token, reminderDays } = useDash();
   const first = name.split(/\s+/)[0] || name;
@@ -105,6 +111,7 @@ export default function EmailTab({
   const [remindQ, setRemindQ] = useState<Record<string, RemindChoice>>({});
   const remindFor = (id: string): RemindChoice => (id in remindQ ? remindQ[id] : reminderDays ? { days: reminderDays } : null);
   const [changing, setChanging] = useState<string | null>(null);
+  const [nrThread, setNrThread] = useState<string | null>(null);
   const patchReminder = async (id: string, body: Record<string, unknown>) => {
     await fetch(`/api/dashboard/tasks/${id}`, {
       method: "PATCH",
@@ -321,14 +328,50 @@ export default function EmailTab({
               <div className={`emc-thread${isOpen ? " open" : ""}`} key={t.id}>
                 <div className="emc-head" onClick={() => setOpen(isOpen ? null : t.id)}>
                   <span className="emc-subj">{t.subject}</span>
-                  <span className={`emc-chip ${t.awaiting ? "wait" : "done"}`}>
-                    {t.awaiting ? "Awaiting your reply" : hasInbound ? "Replied" : "Sent"}
-                  </span>
+                  {data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id) ? (
+                    <span className="emc-chip nr" title="You stopped chasing them; a reply or a new email clears this">
+                      No reply · {new Date(data.noReply.markedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </span>
+                  ) : (
+                    <span className={`emc-chip ${t.awaiting ? "wait" : "done"}`}>
+                      {t.awaiting ? "Awaiting your reply" : hasInbound ? "Replied" : "Sent"}
+                    </span>
+                  )}
                   <span className="emc-meta">
                     {t.messages.length} message{t.messages.length === 1 ? "" : "s"} · {fmtWhen(t.lastAt)}
                   </span>
+                  {!t.awaiting && !(data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id)) && (
+                    <button
+                      type="button"
+                      className="emc-nr"
+                      title="Stop chasing them. No email goes out."
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNrThread(nrThread === t.id ? null : t.id);
+                      }}
+                    >
+                      No reply
+                    </button>
+                  )}
                   <span className="emc-caret">{isOpen ? "▾" : "▸"}</span>
                 </div>
+                {nrThread === t.id && (
+                  <div className="emc-nrwrap">
+                    <NoReplyPanel
+                      candKey={candKey}
+                      first={first}
+                      threadId={t.id}
+                      jobId={data.reminders?.find((r) => r.threadId === t.id)?.jobId || null}
+                      subject={t.subject}
+                      onCancel={() => setNrThread(null)}
+                      onDone={(r) => {
+                        setNrThread(null);
+                        load();
+                        onNoReply?.(r);
+                      }}
+                    />
+                  </div>
+                )}
 
                 {isOpen && (
                   <>

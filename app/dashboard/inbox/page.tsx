@@ -39,7 +39,7 @@ type Session = {
 };
 
 const localDay = () => new Date().toLocaleDateString("en-CA");
-const TASK_KIND: Record<string, string> = { temail: "email", tcall: "call", tmsg: "message", ttask: "task", remind: "reminder" };
+const TASK_KIND: Record<string, string> = { temail: "email", tcall: "call", tmsg: "message", ttask: "task", remind: "reminder", cback: "recontact" };
 const announce = () => window.dispatchEvent(new CustomEvent("tt-inbox-changed"));
 
 export default function InboxPage() {
@@ -53,6 +53,8 @@ export default function InboxPage() {
   const [taskModal, setTaskModal] = useState<TaskModalTarget | null>(null);
   const [quick, setQuick] = useState<Quick | null>(null);
   const [notice, setNotice] = useState("");
+  // Bumped after a strip action the drawer can't see (No reply), so it refetches.
+  const [drawerRefresh, setDrawerRefresh] = useState(0);
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
   // Items this seat has already opened this session (marks are fire-and-forget).
@@ -164,7 +166,7 @@ export default function InboxPage() {
       res = await fetch(`/api/dashboard/tasks/${item.taskId}`, {
         method: "PATCH",
         headers: { ...auth, "Content-Type": "application/json" },
-        body: JSON.stringify(item.kind === "remind" ? { status: "done", endedReason: "done" } : { status: "done" }),
+        body: JSON.stringify(item.kind === "remind" || item.kind === "cback" ? { status: "done", endedReason: "done" } : { status: "done" }),
       }).catch(() => null);
     } else if (item.kind === "fdue" && item.candidateKey) {
       res = await fetch(`/api/dashboard/candidates/v2/${item.candidateKey}/followup`, { method: "POST", headers: auth }).catch(() => null);
@@ -322,7 +324,7 @@ export default function InboxPage() {
       setNotice("Couldn't move them to Rejected. Nothing changed; try again.");
     }
   };
-  const onActivity = (ev: { type: "stage" | "sent" | "contacted"; label?: string; staged?: string | null; reminded?: string | null }) => {
+  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; reminded?: string | null; checkBack?: string | null }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
     if (!cur) {
@@ -335,11 +337,13 @@ export default function InboxPage() {
       // A quick action's Send reports the move the server actually made.
       if (ev.staged) reason = `stage:${ev.staged.charAt(0).toUpperCase() + ev.staged.slice(1)}`;
       else if (cur.kind === "remind") reason = ev.reminded ? `remind:${ev.reminded}` : "remind:nudged";
+      else if (cur.kind === "cback") reason = "email";
       else if (cur.kind === "mail") reason = "reply";
       else if (cur.kind === "app") reason = "email";
       else if (cur.kind === "ask" || cur.kind === "ref" || cur.kind === "drop" || cur.kind === "fdue" || cur.kind === "temail") reason = "email";
     }
     if (ev.type === "contacted" && cur.kind === "fdue") reason = "contacted";
+    if (ev.type === "noreply") reason = ev.checkBack ? `noreply:${ev.checkBack}` : "noreply:never";
     if (reason) noteHandled(cur.id, reason);
     load();
   };
@@ -372,10 +376,11 @@ export default function InboxPage() {
           navIndex={session.index}
           onNavigateItem={goto}
           onActivity={onActivity}
-          completeTaskId={current.kind === "temail" || current.kind === "remind" ? current.taskId : null}
-          inboxThreadId={current.kind === "mail" || current.kind === "remind" ? current.threadId : null}
+          completeTaskId={current.kind === "temail" || current.kind === "remind" || current.kind === "cback" ? current.taskId : null}
+          inboxThreadId={current.kind === "mail" || current.kind === "remind" || current.kind === "cback" ? current.threadId : null}
           quickAction={quick}
           onSilentReject={silentReject}
+          refreshKey={drawerRefresh}
           contextStrip={
             <InboxStrip
               item={current}
@@ -392,6 +397,11 @@ export default function InboxPage() {
               onNext={() => goto(nextUnhandled(session))}
               onClose={closeSession}
               onAction={runAction}
+              onNoReply={(r) => {
+                noteHandled(current.id, r.checkBack ? `noreply:${r.checkBack}` : "noreply:never");
+                setDrawerRefresh((n) => n + 1);
+                load();
+              }}
             />
           }
           onClose={closeSession}

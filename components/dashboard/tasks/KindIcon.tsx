@@ -40,6 +40,13 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M8 4.6V8l2.4 1.6" />
     </>
   ),
+  // Check back: the turn-back arrow, mirrored.
+  recontact: (
+    <>
+      <path d="M2.8 8A5.2 5.2 0 1 0 4.4 4.2" />
+      <path d="M4.7 1.6l-.7 2.9 2.9.6" />
+    </>
+  ),
   // Reply reminder: a turn-back arrow.
   reminder: (
     <>

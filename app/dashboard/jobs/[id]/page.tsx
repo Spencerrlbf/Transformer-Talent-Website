@@ -342,8 +342,8 @@ function JobWorkspace({ id }: { id: string }) {
       {tab === "past" && (
         <>
           <p className="dash-sub jobws-past-lead">
-            Candidates you rejected on this role. Profiles and reviews are kept — restore anyone to
-            put them back in the active pipeline.
+            People you rejected on this role, and people you stopped chasing (No reply). Profiles and
+            reviews are kept; restore anyone to put them back in the active pipeline.
           </p>
           <CandidatesTable
             jobId={job.id}

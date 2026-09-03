@@ -17,6 +17,7 @@ import { saveUnifiedStatus, STAGE_LABEL } from "@/lib/server/candidates-unified"
 import { sbRest } from "@/lib/server/supabase";
 import { parseRemind, reminderDue } from "@/lib/reminders";
 import { endReminder, setReplyReminder } from "@/lib/server/reminders";
+import { clearNoReply } from "@/lib/server/no-reply";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -32,10 +33,11 @@ async function quickMoveAllowed(orgId: string, key: string, jobId: string, stage
   }
   if (stage === "contacted") {
     const r = await sbRest(
-      `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${key}&job_id=eq.${encodeURIComponent(jobId)}&select=status&limit=1`
+      `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${key}&job_id=eq.${encodeURIComponent(jobId)}&select=status,reason&limit=1`
     );
-    const [row] = r.ok ? ((await r.json()) as { status: string }[]) : [];
-    if (row && row.status !== "new" && row.status !== "contacted") return false;
+    const [row] = r.ok ? ((await r.json()) as { status: string; reason: string | null }[]) : [];
+    // Someone we stopped chasing (Past, "no reply") may be brought back to Contacted.
+    if (row && row.status !== "new" && row.status !== "contacted" && !(row.status === "rejected" && row.reason === "no_reply")) return false;
   }
   return true;
 }
@@ -170,6 +172,9 @@ export async function POST(req: NextRequest) {
   const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
   const remindThread = target?.threadId || inboxThreadId || sent.threadId || "";
   const due = reminderDue(today, parseRemind(body.remind));
+  // Emailing someone we'd stopped chasing starts again: the mark clears,
+  // the check-back is cancelled, and on the role they leave Past.
+  await clearNoReply({ orgId: member.org.id, candidateKey: key, reason: "contacted" }).catch(() => false);
   let taskDone = false;
   if (completeTaskId) {
     taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
