@@ -696,13 +696,15 @@ export async function matchCandidateByMessageIds(
   return row ? { candidateKey: row.candidate_key, threadId: row.thread_id || "" } : null;
 }
 
-/** Is this address one of the org's own seats? Their messages are never a
- *  candidate's reply, whatever thread they arrive in. */
+/** Is this address one of the org's connected sending mailboxes? A
+ *  message from one of those is a teammate's, never a candidate's reply,
+ *  whatever thread it arrives in. Login emails are deliberately not
+ *  included: a seat's personal address may well be a candidate's too. */
 export async function isOrgMemberAddress(orgId: string, address: string): Promise<boolean> {
   const addr = address.trim().toLowerCase();
   if (!addr) return false;
   const pat = encodeURIComponent(addr.replace(/([%_\\])/g, "\\$1"));
-  const res = await sbRest(`org_members?organization_id=eq.${orgId}&email=ilike.${pat}&select=id&limit=1`);
+  const res = await sbRest(`email_accounts?organization_id=eq.${orgId}&address=ilike.${pat}&select=id&limit=1`);
   return res.ok && ((await res.json()) as unknown[]).length > 0;
 }
 
