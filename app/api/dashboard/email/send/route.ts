@@ -164,20 +164,23 @@ export async function POST(req: NextRequest) {
     subject,
     today,
   }).catch(() => {});
-  let taskDone = false;
-  if (completeTaskId) {
-    taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
-    // An Inbox nudge answers a reply reminder: it closes as "nudged" and the
-    // send below sets the next one on the same conversation.
-    if (!taskDone) taskDone = await endReminder(member.org.id, completeTaskId, key, "nudged").catch(() => false);
-  }
-
   // Reply reminder: the sender's, on this conversation, N days from today
   // (weekends roll to Monday). A newer email in the thread moves the
   // existing one rather than adding a second.
   const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
   const remindThread = target?.threadId || inboxThreadId || sent.threadId || "";
   const due = reminderDue(today, parseRemind(body.remind));
+  let taskDone = false;
+  if (completeTaskId) {
+    taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
+    // An Inbox action on a reply reminder closes it, and the reason says
+    // which: "nudged" when this send sets the next one, "closed" when the
+    // send rejects them, "done" when it simply answers without another.
+    if (!taskDone) {
+      const why = after?.stage === "rejected" ? "closed" : due ? "nudged" : "done";
+      taskDone = await endReminder(member.org.id, completeTaskId, key, why).catch(() => false);
+    }
+  }
   let reminded: string | null = null;
   if (due && remindThread) {
     const ok = await setReplyReminder({
