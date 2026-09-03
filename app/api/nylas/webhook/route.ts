@@ -4,8 +4,10 @@ import { fetchMessage, verifyWebhookSignature } from "@/lib/server/nylas";
 import {
   accountsByGrant,
   cleanInbound,
+  isOrgMemberAddress,
   logEmail,
   matchCandidateByAddress,
+  matchCandidateByThread,
 } from "@/lib/server/email-compose";
 
 // Nylas message.created webhook: this is how candidate replies reach the
@@ -83,7 +85,14 @@ export async function POST(req: NextRequest) {
   const { own, quoted } = cleanInbound(bodyHtml, snippet);
 
   for (const account of accounts) {
-    const candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
+    // The conversation decides who this is: a reply in a thread we started
+    // with a candidate is theirs even from another address. A teammate's
+    // message in that thread is not. Unknown thread: match the sender.
+    let candidateKey: string | null = null;
+    if (threadId && !(await isOrgMemberAddress(account.orgId, fromAddr).catch(() => false))) {
+      candidateKey = await matchCandidateByThread(account.orgId, threadId).catch(() => null);
+    }
+    if (!candidateKey) candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
     if (!candidateKey) continue;
     await logEmail({
       orgId: account.orgId,
