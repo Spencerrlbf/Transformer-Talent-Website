@@ -649,6 +649,30 @@ export async function logEmail(args: {
 
 /** Find the org candidate a from-address belongs to, or null — in which
  *  case the message is none of our business and must not be stored. */
+/** The candidate a conversation belongs to: whoever we logged that thread
+ *  for. A reply in a thread we started is theirs even when it comes from a
+ *  different address (a personal account, a plus-alias collapsing to the
+ *  base address), so the thread wins over the sender when both are known. */
+export async function matchCandidateByThread(orgId: string, threadId: string): Promise<string | null> {
+  const tid = threadId.trim();
+  if (!tid || tid.length > 300) return null;
+  const res = await sbRest(
+    `candidate_email_log?organization_id=eq.${orgId}&thread_id=eq.${encodeURIComponent(tid)}&select=candidate_key&order=created_at.desc&limit=1`
+  );
+  const [row] = res.ok ? ((await res.json()) as { candidate_key: string }[]) : [];
+  return row?.candidate_key || null;
+}
+
+/** Is this address one of the org's own seats? Their messages are never a
+ *  candidate's reply, whatever thread they arrive in. */
+export async function isOrgMemberAddress(orgId: string, address: string): Promise<boolean> {
+  const addr = address.trim().toLowerCase();
+  if (!addr) return false;
+  const pat = encodeURIComponent(addr.replace(/([%_\\])/g, "\\$1"));
+  const res = await sbRest(`org_members?organization_id=eq.${orgId}&email=ilike.${pat}&select=id&limit=1`);
+  return res.ok && ((await res.json()) as unknown[]).length > 0;
+}
+
 export async function matchCandidateByAddress(orgId: string, address: string): Promise<string | null> {
   const addr = address.trim().toLowerCase();
   if (!addr || addr.length > 254) return null;

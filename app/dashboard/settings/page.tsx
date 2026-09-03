@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import StageEditor, { type StageDef } from "@/components/dashboard/jobs/StageEditor";
 import CompanyPageEditor from "@/components/dashboard/CompanyPageEditor";
+import ReminderDefault from "@/components/dashboard/settings/ReminderDefault";
 
 type CreditData = {
   summary: { granted: number; spent: number; held: number; balance: number; available: number };
@@ -133,6 +134,18 @@ export default function SettingsPage() {
             ) : (
               <small>Loading…</small>
             )}
+          </div>
+        </div>
+        <div className="dash-setting">
+          <label>Reply reminders</label>
+          <div>
+            <ReminderDefault />
+            <small>
+              Your default when you send an email that expects an answer: the
+              person comes back to your Inbox on that day if they haven&apos;t
+              replied. Change it on any email before you send; it&apos;s off by
+              default on emails that don&apos;t need an answer.
+            </small>
           </div>
         </div>
         <div className="dash-setting">

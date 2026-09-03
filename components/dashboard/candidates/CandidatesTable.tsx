@@ -44,6 +44,9 @@ export type Cv2Row = {
   stageUpdatedAt?: string | null;
   screeningPending?: boolean;
   followUpAt?: string | null;
+  reminderDue?: string | null;
+  noReply?: { markedAt: string; checkBackAt: string | null } | null;
+  stageReason?: string | null;
   skills?: string[] | null;
   visa?: string | null;
   link?: { path: string; openCount: number; lastOpenedAt: string | null } | null;
@@ -1264,14 +1267,19 @@ export default function CandidatesTable({
                   {jobId && (
                     <td className="cv2-stagecell" onClick={(e) => e.stopPropagation()}>
                       {past ? (
-                        <button
-                          className="cv2-restore"
-                          disabled={savingStage === r.key}
-                          title="Move back to the active pipeline (stage: New)"
-                          onClick={() => restore(r.key)}
-                        >
-                          {savingStage === r.key ? "Restoring…" : "↩ Restore"}
-                        </button>
+                        <span className="cv2-pastcell">
+                          <span className={`cv2-past${r.stageReason === "no_reply" ? " nr" : ""}`} title={r.stageReason === "no_reply" ? "You stopped chasing them" : "Not suitable for this role"}>
+                            {r.stageReason === "no_reply" ? "No reply" : "Rejected"}
+                          </span>
+                          <button
+                            className="cv2-restore"
+                            disabled={savingStage === r.key}
+                            title="Move back to the active pipeline (stage: New)"
+                            onClick={() => restore(r.key)}
+                          >
+                            {savingStage === r.key ? "Restoring…" : "↩ Restore"}
+                          </button>
+                        </span>
                       ) : (
                         <StageSelect
                           value={r.stage || "new"}
@@ -1326,6 +1334,14 @@ export default function CandidatesTable({
                       {r.followUpAt ? (
                         <span className={`cv2-fu${r.followUpAt <= TODAY ? " due" : ""}`}>
                           {fuLabel(r.followUpAt)}
+                        </span>
+                      ) : r.noReply ? (
+                        <span className="cv2-fu nr" title="You stopped chasing them">
+                          No reply · {r.noReply.checkBackAt ? `↻ ${fuLabel(r.noReply.checkBackAt)}` : fuLabel(r.noReply.markedAt.slice(0, 10))}
+                        </span>
+                      ) : r.reminderDue ? (
+                        <span className="cv2-fu rem" title="Reply reminder: back in the Inbox on this day if they haven't replied">
+                          ↺ {fuLabel(r.reminderDue)}
                         </span>
                       ) : (
                         <span className="cv2-dim">—</span>

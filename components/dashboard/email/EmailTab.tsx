@@ -5,6 +5,9 @@
 // quoted chain sits behind a toggle. Quick reply sends a true threaded
 // reply; "Open in composer" hands the same text to the full composer.
 import { useCallback, useEffect, useRef, useState } from "react";
+import RemindChips from "@/components/dashboard/email/RemindChips";
+import NoReplyPanel from "@/components/dashboard/email/NoReplyPanel";
+import { fmtDue, localDay as todayDay, reminderDue, type RemindChoice } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import EmailModal from "@/components/dashboard/email/EmailModal";
 
@@ -27,6 +30,10 @@ type Data = {
   threads: Thread[];
   /** Teammates' conversations the org's private setting keeps from this viewer. */
   hiddenThreads?: number;
+  /** This seat's live reply reminders, by thread. */
+  reminders?: { id: string; threadId: string; dueDate: string; jobId?: string | null }[];
+  /** "No reply" mark on this person, when live. */
+  noReply?: { markedAt: string; checkBackAt: string | null; threadId: string | null } | null;
 };
 
 const localDay = (d: Date) => d.toLocaleDateString("en-CA");
@@ -60,6 +67,7 @@ export default function EmailTab({
   onSent,
   openCompose,
   onSilent,
+  onNoReply,
 }: {
   candKey: string;
   name: string;
@@ -72,7 +80,7 @@ export default function EmailTab({
   /** Inbox: the thread a fresh (unthreaded) email answers. */
   inboxThreadId?: string | null;
   /** Inbox: a send went out (quick reply or composer), with what the server did. */
-  onSent?: (result?: { staged: string | null; taskDone: boolean }) => void;
+  onSent?: (result?: { staged: string | null; taskDone: boolean; reminded?: string | null }) => void;
   /** Inbox quick action: open the composer on the current thread with a template. */
   openCompose?: {
     nonce: number;
@@ -82,10 +90,13 @@ export default function EmailTab({
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
     allowSilent?: boolean;
+    remind?: boolean;
   } | null;
   onSilent?: () => void;
+  /** "No reply" confirmed from a thread header here. */
+  onNoReply?: (r: { checkBack: string | null; staged: boolean }) => void;
 }) {
-  const { token } = useDash();
+  const { token, reminderDays } = useDash();
   const first = name.split(/\s+/)[0] || name;
 
   const [data, setData] = useState<Data | null>(null);
@@ -95,6 +106,21 @@ export default function EmailTab({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  // "Remind me if no reply" for each thread's quick-reply box: the seat
+  // default until touched. Change/Cancel on a live reminder patch its task.
+  const [remindQ, setRemindQ] = useState<Record<string, RemindChoice>>({});
+  const remindFor = (id: string): RemindChoice => (id in remindQ ? remindQ[id] : reminderDays ? { days: reminderDays } : null);
+  const [changing, setChanging] = useState<string | null>(null);
+  const [nrThread, setNrThread] = useState<string | null>(null);
+  const patchReminder = async (id: string, body: Record<string, unknown>) => {
+    await fetch(`/api/dashboard/tasks/${id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => null);
+    setChanging(null);
+    load();
+  };
   const [compose, setCompose] = useState<null | {
     threadId?: string;
     reply?: { messageId: string; subject: string };
@@ -106,6 +132,7 @@ export default function EmailTab({
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
     allowSilent?: boolean;
+    remind?: boolean;
     nonce?: number;
   }>(null);
 
@@ -127,6 +154,7 @@ export default function EmailTab({
       after: openCompose.after,
       outcome: openCompose.outcome,
       allowSilent: openCompose.allowSilent,
+      remind: openCompose.remind,
       nonce: openCompose.nonce,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -217,13 +245,14 @@ export default function EmailTab({
           // answers this conversation.
           ...(!target ? { inboxThreadId: t.id } : {}),
           today: new Date().toLocaleDateString("en-CA"),
+          remind: remindFor(t.id),
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean };
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean; reminded?: string | null };
       if (r.ok && j.ok) {
         setDrafts((d) => ({ ...d, [t.id]: "" }));
         load();
-        onSent?.({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone) });
+        onSent?.({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone), reminded: j.reminded ?? null });
       } else if (j.error === "not_connected" || j.error === "grant_invalid") {
         setErr("Your email connection expired — reconnect from the Team page, then try again.");
       } else if (j.error === "no_candidate_email") {
@@ -299,17 +328,85 @@ export default function EmailTab({
               <div className={`emc-thread${isOpen ? " open" : ""}`} key={t.id}>
                 <div className="emc-head" onClick={() => setOpen(isOpen ? null : t.id)}>
                   <span className="emc-subj">{t.subject}</span>
-                  <span className={`emc-chip ${t.awaiting ? "wait" : "done"}`}>
-                    {t.awaiting ? "Awaiting your reply" : hasInbound ? "Replied" : "Sent"}
-                  </span>
+                  {data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id) ? (
+                    <span className="emc-chip nr" title="You stopped chasing them; a reply or a new email clears this">
+                      No reply · {new Date(data.noReply.markedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </span>
+                  ) : (
+                    <span className={`emc-chip ${t.awaiting ? "wait" : "done"}`}>
+                      {t.awaiting ? "Awaiting your reply" : hasInbound ? "Replied" : "Sent"}
+                    </span>
+                  )}
                   <span className="emc-meta">
                     {t.messages.length} message{t.messages.length === 1 ? "" : "s"} · {fmtWhen(t.lastAt)}
                   </span>
+                  {!(data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id)) && (
+                    <button
+                      type="button"
+                      className="emc-nr"
+                      title="Stop chasing them. No email goes out."
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNrThread(nrThread === t.id ? null : t.id);
+                      }}
+                    >
+                      No reply
+                    </button>
+                  )}
                   <span className="emc-caret">{isOpen ? "▾" : "▸"}</span>
                 </div>
+                {nrThread === t.id && (
+                  <div className="emc-nrwrap">
+                    <NoReplyPanel
+                      candKey={candKey}
+                      first={first}
+                      threadId={t.id}
+                      jobId={data.reminders?.find((r) => r.threadId === t.id)?.jobId || null}
+                      subject={t.subject}
+                      onCancel={() => setNrThread(null)}
+                      onDone={(r) => {
+                        setNrThread(null);
+                        load();
+                        onNoReply?.(r);
+                      }}
+                    />
+                  </div>
+                )}
 
                 {isOpen && (
                   <>
+                    {(() => {
+                      const rem = data.reminders?.find((r) => r.threadId === t.id);
+                      if (!rem) return null;
+                      return (
+                        <div className="emc-remind">
+                          <span>
+                            ↺ <b>Reminder {fmtDue(rem.dueDate)}</b> if {first} hasn&apos;t replied
+                          </span>
+                          {changing === rem.id ? (
+                            <RemindChips
+                              compact
+                              label="Move to"
+                              value={null}
+                              today={todayDay()}
+                              onChange={(v) => {
+                                const due = reminderDue(todayDay(), v);
+                                if (due) patchReminder(rem.id, { dueDate: due });
+                              }}
+                            />
+                          ) : (
+                            <span className="a">
+                              <button type="button" onClick={() => setChanging(rem.id)}>
+                                Change
+                              </button>
+                              <button type="button" onClick={() => patchReminder(rem.id, { status: "done", endedReason: "cancelled" })}>
+                                Cancel
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="emc-conv">
                       {t.messages.map((m) => {
                         const me = m.direction === "out";
@@ -364,7 +461,13 @@ export default function EmailTab({
                           >
                             Open in composer
                           </button>
-                          <span className="hint">Sends as a reply in the same thread, from your inbox</span>
+                          <RemindChips
+                            compact
+                            value={remindFor(t.id)}
+                            onChange={(v) => setRemindQ((q) => ({ ...q, [t.id]: v }))}
+                            today={todayDay()}
+                            disabled={sending === t.id}
+                          />
                           <button
                             className="emc-btn"
                             disabled={!(drafts[t.id] || "").trim() || sending === t.id}
@@ -399,6 +502,7 @@ export default function EmailTab({
           after={compose.after}
           outcome={compose.outcome}
           allowSilent={compose.allowSilent}
+          remindMode={compose.remind === false ? "off" : "on"}
           onSilent={onSilent ? () => { setCompose(null); onSilent(); } : undefined}
           onClose={() => setCompose(null)}
           onSent={(result) => {

@@ -6,6 +6,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import KindIcon from "@/components/dashboard/tasks/KindIcon";
+
+/** Why a reply reminder ended, for the timeline. */
+const REMIND_END: Record<string, string> = {
+  replied: "Reply came in, reminder cancelled",
+  nudged: "Nudged, next reminder set",
+  closed: "Stage closed, reminder cancelled",
+  cancelled: "Reminder cancelled",
+  done: "Reminder marked done",
+};
 import NoteModal, { type NoteModalTarget } from "@/components/dashboard/tasks/NoteModal";
 import TaskModal, { type TaskModalTarget } from "@/components/dashboard/tasks/TaskModal";
 import EmailModal from "@/components/dashboard/email/EmailModal";
@@ -28,6 +37,7 @@ type TaskRow = {
   createdByEmail: string;
   createdAt: string;
   completedAt: string | null;
+  endedReason?: string | null;
 };
 type EmailRow = {
   id: string;
@@ -269,35 +279,45 @@ export default function NotesTab({
             return (
               <div className="cv2n-ev" key={`t${t.id}${done ? "d" : "c"}`}>
                 <span className={`av sys${done ? " pos" : ""}`}>
-                  <KindIcon kind={done ? "task" : t.kind} className="tk-ico" />
+                  <KindIcon kind={t.kind === "reminder" ? "reminder" : done ? "task" : t.kind} className="tk-ico" />
                 </span>
                 <div className="b">
                   <div className="m">
-                    <b>{done ? "Task completed" : "Task created"}</b>
+                    <b>
+                      {t.kind === "reminder"
+                        ? done
+                          ? REMIND_END[t.endedReason || "done"] || "Reminder ended"
+                          : "Reply reminder set"
+                        : done
+                          ? "Task completed"
+                          : "Task created"}
+                    </b>
                     <span>
                       by {authorName(t.createdByEmail)} · {fmtWhen(ev.at)}
                     </span>
-                    <button
-                      className="cv2n-edit"
-                      onClick={() =>
-                        setTaskModal({
-                          mode: "edit",
-                          task: {
-                            id: t.id,
-                            kind: t.kind,
-                            title: t.title,
-                            dueDate: t.dueDate,
-                            dueTime: t.dueTime,
-                            candidateName: name,
-                          },
-                        })
-                      }
-                    >
-                      Edit
-                    </button>
+                    {t.kind !== "reminder" && (
+                      <button
+                        className="cv2n-edit"
+                        onClick={() =>
+                          setTaskModal({
+                            mode: "edit",
+                            task: {
+                              id: t.id,
+                              kind: t.kind,
+                              title: t.title,
+                              dueDate: t.dueDate,
+                              dueTime: t.dueTime,
+                              candidateName: name,
+                            },
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                   <p className="sys">
-                    {t.title}
+                    {t.kind === "reminder" ? `No reply from ${first}: ${t.title}` : t.title}
                     {!done && (
                       <span className="cv2n-due">
                         due {fmtDay(t.dueDate)}

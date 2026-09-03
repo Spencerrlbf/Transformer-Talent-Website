@@ -5,7 +5,9 @@
 // jumps by itself, so a note or a shortlist can still happen on this person
 // first. A quick action never sends: it opens the composer with the right
 // template merged; Send does the bookkeeping.
+import { useState } from "react";
 import KindIcon from "@/components/dashboard/tasks/KindIcon";
+import NoReplyPanel from "@/components/dashboard/email/NoReplyPanel";
 import { actionsFor, outcomeLabel, type QuickAction } from "@/lib/quick-actions";
 import {
   KIND_ICON,
@@ -52,6 +54,7 @@ export default function InboxStrip({
   onNext,
   onClose,
   onAction,
+  onNoReply,
 }: {
   item: InboxItem;
   today: string;
@@ -66,7 +69,10 @@ export default function InboxStrip({
   onClose: () => void;
   /** The action, and the kind it belongs to (the lead's, or a rider's). */
   onAction: (a: QuickAction, kind: string) => void;
+  /** "No reply" confirmed from the panel here. */
+  onNoReply: (r: { checkBack: string | null; staged: boolean }) => void;
 }) {
+  const [nrOpen, setNrOpen] = useState(false);
   const tone = KIND_TONE[item.kind];
   const also = item.also || [];
   if (handledReason) {
@@ -82,7 +88,7 @@ export default function InboxStrip({
           <b>
             {gone
               ? "No longer in your Inbox"
-              : `✓ ${isTask(item.kind) && handledReason !== "email" ? "Task done" : `Handled · ${reasonLabel(handledReason, item.kind)}`}`}
+              : `✓ ${isTask(item.kind) && item.kind !== "remind" && item.kind !== "cback" && handledReason !== "email" ? "Task done" : `Handled · ${reasonLabel(handledReason, item.kind)}`}`}
           </b>
           <span>{remaining ? `${remaining} left for today` : "Your Inbox is clear for today"}</span>
         </span>
@@ -98,11 +104,11 @@ export default function InboxStrip({
       </div>
     );
   }
-  const doneLabel = item.kind === "fdue" ? "Mark contacted" : isTask(item.kind) ? "Mark done" : "Done";
+  const doneLabel = item.kind === "fdue" ? "Mark contacted" : item.kind === "remind" ? "Let it go" : isTask(item.kind) ? "Mark done" : "Done";
   // A task leading the row has no buttons of its own; the person's other
   // open item (their application, their resume drop) still gets its rule.
   let actionKind = item.kind;
-  let actions = actionsFor(item.kind, { hasRole: Boolean(item.jobId), month: monthOf(item) });
+  let actions = actionsFor(item.kind, { hasRole: Boolean(item.jobId), month: monthOf(item), nudges: item.nudges });
   if (actions.length === 0) {
     for (const x of also) {
       const a = actionsFor(x.kind, { hasRole: Boolean(x.jobId || item.jobId), month: monthOf({ ...item, title: x.title }) });
@@ -119,7 +125,10 @@ export default function InboxStrip({
         <KindIcon kind={KIND_ICON[item.kind]} className="tk-ico" />
       </span>
       <span className="ibs-txt">
-        <b>{item.title}</b>
+        <b>
+          {item.title}
+          {item.kind === "remind" && item.extra ? <span className="ibs-lad">{item.extra}</span> : null}
+        </b>
         <span>
           <em className={item.overdue ? "bad" : ""}>{fmtWhen(item, today)}</em>
           {stripHint(item) ? ` · ${stripHint(item)}` : ""}
@@ -142,20 +151,22 @@ export default function InboxStrip({
               key={a.id}
               type="button"
               className={`qa${a.primary ? " pri" : ""}${a.danger ? " bad" : ""}`}
-              title={a.template ? `Opens the composer with "${a.templateName || a.template}" merged for them` : "Opens the composer"}
-              onClick={() => onAction(a, actionKind)}
+              title={a.noReply ? "Stop chasing them. No email goes out." : a.template ? `Opens the composer with "${a.templateName || a.template}" merged for them` : "Opens the composer"}
+              onClick={() => (a.noReply ? setNrOpen(true) : onAction(a, actionKind))}
             >
               <KindIcon kind={ACTION_ICON[a.id] || "email"} className="tk-ico" />
               {a.label}
             </button>
           ))}
           <span className="ibs-more">
-            <button type="button" disabled={busy} onClick={onDone} title="Clear without acting">
-              {busy ? "…" : doneLabel}
-            </button>
+            {item.kind !== "remind" && item.kind !== "cback" && (
+              <button type="button" disabled={busy} onClick={onDone} title="Clear without acting">
+                {busy ? "…" : doneLabel}
+              </button>
+            )}
             {hasNext && (
               <>
-                ·
+                {item.kind !== "remind" && item.kind !== "cback" ? "·" : ""}
                 <button type="button" onClick={onSkip} title="Leave it, move on">
                   Skip ›
                 </button>
@@ -163,6 +174,20 @@ export default function InboxStrip({
             )}
           </span>
         </div>
+      )}
+      {nrOpen && item.candidateKey && (
+        <NoReplyPanel
+          candKey={item.candidateKey}
+          first={(item.candidateName || "them").split(/\s+/)[0]}
+          threadId={item.threadId}
+          jobId={actionKind === item.kind ? item.jobId : also.find((x) => x.kind === actionKind)?.jobId || item.jobId}
+          subject={item.subject}
+          onCancel={() => setNrOpen(false)}
+          onDone={(r) => {
+            setNrOpen(false);
+            onNoReply(r);
+          }}
+        />
       )}
       {actions.length > 0 && (
         <span className="ibs-also">

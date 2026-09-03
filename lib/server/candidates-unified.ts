@@ -5,6 +5,8 @@
 // modified. Everything client-facing goes through client-reason or the
 // stored judge reasons; raw verdicts and internal scores never cross here.
 import { sbRest } from "./supabase";
+import { cancelReminders, openReminderDues } from "./reminders";
+import { noReplyMarkFor, noReplyMarksByKey } from "./no-reply-marks";
 import { loadLinksByKey } from "./tracked-links";
 import {
   attachmentsByKey,
@@ -99,11 +101,17 @@ export type UnifiedRow = {
   interviewStage?: string | null;
   /** When the stage was last changed (drives days-in-stage on the board). */
   stageUpdatedAt?: string | null;
+  /** Why they are where they are: "no_reply" (Past, stopped chasing) or null. */
+  stageReason?: string | null;
   /** When bestTag is null: true = screening still running ("Screening…"),
    *  false = finished with nothing to show ("Not screened"). */
   screeningPending: boolean;
   /** "Hear from me later" ask: the date they want contact (null otherwise). */
   followUpAt: string | null;
+  /** A live reply reminder on this person (earliest due day), anyone's. */
+  reminderDue?: string | null;
+  /** "No reply" mark: we stopped chasing them (and when to check back). */
+  noReply?: { markedAt: string; checkBackAt: string | null } | null;
   /** Enriched skills (sourced people); drives the Skills filter + CSV. */
   skills: string[] | null;
   /** Visa status as stated by the applicant (applied people). */
@@ -164,7 +172,7 @@ export type UnifiedListParams = {
 export type UnifiedList = {
   items: UnifiedRow[];
   total: number; // rows matching filters (after Not-now handling)
-  counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number };
+  counts: { all: number; applied: number; sourced: number; notNow: number; rejected: number; noReply: number };
   /** Future-interest summary across the whole pool (pagination-independent). */
   followups: { total: number; due: number; dueNames: string[] };
   /** Filter options present in the current scope (frequency-ordered, capped). */
@@ -229,6 +237,8 @@ export type UnifiedDetail = {
     salary: string | null;
     visa: string | null;
   } | null;
+  /** "No reply" mark, when live: we stopped chasing them. */
+  noReply: { markedAt: string; checkBackAt: string | null; jobId: string | null } | null;
   pipeline: {
     jobId: string;
     title: string;
@@ -241,6 +251,8 @@ export type UnifiedDetail = {
     reason: string | null;
     addedAt: string;
     stage: string;
+    /** "no_reply" when Past because we stopped chasing them. */
+    stageReason?: string | null;
   }[];
   experience: ExperienceGroup[];
   education: {
@@ -551,23 +563,24 @@ const dateText = (v: ExpEntry["startDate"]): string | null =>
 /* ------------------------------------------------------------------ */
 
 /** candidate_key -> status for one job (only keys with an explicit row). */
-type JobStageInfo = { status: string; interviewStage: string | null; updatedAt: string | null };
+type JobStageInfo = { status: string; interviewStage: string | null; updatedAt: string | null; reason: string | null };
 
 async function jobStageMap(orgId: string, jobId: string): Promise<Map<string, JobStageInfo>> {
   const res = await sbRest(
     `candidate_role_statuses?organization_id=eq.${orgId}&job_id=eq.${encodeURIComponent(jobId)}` +
-      `&select=candidate_key,status,interview_stage,updated_at`
+      `&select=candidate_key,status,interview_stage,updated_at,reason`
   );
   const rows: {
     candidate_key: string;
     status: string;
     interview_stage: string | null;
     updated_at: string | null;
+    reason: string | null;
   }[] = res.ok ? await res.json() : [];
   return new Map(
     rows.map((r) => [
       r.candidate_key,
-      { status: r.status, interviewStage: r.interview_stage, updatedAt: r.updated_at },
+      { status: r.status, interviewStage: r.interview_stage, updatedAt: r.updated_at, reason: r.reason },
     ])
   );
 }
@@ -581,11 +594,31 @@ async function attachStages(
   if (!pipeline.length) return;
   const res = await sbRest(
     `candidate_role_statuses?organization_id=eq.${orgId}&candidate_key=eq.${encodeURIComponent(key)}` +
-      `&select=job_id,status`
+      `&select=job_id,status,reason`
   );
-  const rows: { job_id: string; status: string }[] = res.ok ? await res.json() : [];
-  const byJob = new Map(rows.map((r) => [r.job_id, r.status]));
-  for (const entry of pipeline) entry.stage = byJob.get(entry.jobId) || "new";
+  const rows: { job_id: string; status: string; reason: string | null }[] = res.ok ? await res.json() : [];
+  const byJob = new Map(rows.map((r) => [r.job_id, r]));
+  for (const entry of pipeline) {
+    const row = byJob.get(entry.jobId);
+    entry.stage = row?.status || "new";
+    entry.stageReason = row?.reason ?? null;
+  }
+}
+
+/** Attach the role to the person unless they applied to it themselves. Other
+ *  ways in (a verdict, a sourcing run) keep showing as they are: an
+ *  attachment behind them is never displayed twice. */
+async function ensureAttached(orgId: string, key: string, jobId: string): Promise<void> {
+  if (key.startsWith("app_")) {
+    const r = await sbRest(`website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}&select=role_ids&limit=1`);
+    const [a] = r.ok ? ((await r.json()) as { role_ids: string[] | null }[]) : [];
+    if (a && (a.role_ids || []).includes(jobId)) return;
+  }
+  await sbRest(`role_attachments?on_conflict=organization_id,candidate_key,job_id`, {
+    method: "POST",
+    prefer: "resolution=ignore-duplicates,return=minimal",
+    body: JSON.stringify({ organization_id: orgId, candidate_key: key, job_id: jobId, added_by_email: "" }),
+  });
 }
 
 export async function saveUnifiedStatus(
@@ -593,7 +626,9 @@ export async function saveUnifiedStatus(
   key: string,
   jobId: string,
   status: string,
-  interviewStage?: string | null
+  interviewStage?: string | null,
+  /** Why: "no_reply" (we stopped chasing) or null (a judgement). */
+  reason?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!(STAGES as readonly string[]).includes(status)) return { ok: false, error: "bad_status" };
   const roleRes = await sbRest(
@@ -627,11 +662,20 @@ export async function saveUnifiedStatus(
         job_id: jobId,
         status,
         interview_stage: stage,
+        reason: reason ?? null,
         updated_at: new Date().toISOString(),
       }),
     }
   );
   if (!res.ok) return { ok: false, error: "save_failed" };
+
+  // The move must be visible. A role reached through a quick action (a
+  // referral's or drop's matched role) may not be in the person's pipeline
+  // yet; it joins it like a manual "Add to a job", unless they applied to it.
+  await ensureAttached(orgId, key, jobId).catch(() => {});
+
+  // A closed outcome ends any reply reminders on the person: nothing to chase.
+  if (status === "rejected" || status === "hired") await cancelReminders({ orgId, candidateKey: key, reason: "closed" }).catch(() => {});
 
   // The journey, not just the position: append the transition. Best effort —
   // history must never fail a stage change.
@@ -647,6 +691,7 @@ export async function saveUnifiedStatus(
         from_interview_stage: cur?.interview_stage ?? null,
         to_status: status,
         to_interview_stage: stage,
+        reason: reason ?? null,
       }),
     }).catch(() => {});
   }
@@ -761,7 +806,15 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     });
   }
 
+  const [reminderDues, noReplies] = await Promise.all([
+    openReminderDues(params.orgId).catch(() => new Map<string, string>()),
+    noReplyMarksByKey(params.orgId).catch(() => new Map()),
+  ]);
   for (const r of rows) {
+    const rd = reminderDues.get(r.key);
+    if (rd) r.reminderDue = rd;
+    const nr = noReplies.get(r.key);
+    if (nr) r.noReply = { markedAt: nr.markedAt, checkBackAt: nr.checkBackAt };
     const l = linksByKey.get(r.key);
     if (l) r.link = { path: l.path, openCount: l.openCount, lastOpenedAt: l.lastOpenedAt };
     const ls = listsByKey.get(r.key);
@@ -784,6 +837,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   // ---- filters ----
   let visible = rows;
   let rejectedCount = 0;
+  let noReplyCount = 0;
   if (params.jobId) {
     visible = visible.filter((r) => r.roles.some((x) => x.jobId === params.jobId));
     // Human statuses: attach this job's stage; "rejected" leaves the active
@@ -794,9 +848,11 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       r.stage = info?.status || "new";
       r.interviewStage = info?.interviewStage ?? null;
       r.stageUpdatedAt = info?.updatedAt ?? null;
+      r.stageReason = info?.reason ?? null;
     }
     const rejected = visible.filter((r) => r.stage === "rejected");
     rejectedCount = rejected.length;
+    noReplyCount = rejected.filter((r) => r.stageReason === "no_reply").length;
     visible = params.past ? rejected : visible.filter((r) => r.stage !== "rejected");
   }
   // Filter options come from the current scope BEFORE search/filters apply,
@@ -836,6 +892,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     sourced: actionable.filter((r) => r.source === "sourced").length,
     notNow: notNow.length,
     rejected: rejectedCount,
+    noReply: noReplyCount,
   };
 
   // Future-interest summary over the whole pool — the due strip must show
@@ -1407,6 +1464,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       bestTagLabel: labelOf(best.tag),
       screeningPending: true,
       followUp: null,
+      noReply: await noReplyMarkFor(orgId, key),
       pipeline,
       experience: bits.experience,
       education: bits.education,
@@ -1468,6 +1526,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       bestTagLabel: labelOf(best.tag),
       screeningPending: true,
       followUp: null,
+      noReply: await noReplyMarkFor(orgId, key),
       pipeline,
       experience: bits.experience,
       education: bits.education,
@@ -1540,6 +1599,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: a.status === "processing",
+      noReply: await noReplyMarkFor(orgId, key),
       followUp: await (async () => {
         if (!a.follow_up_at) return null;
         // Structured rows use preferred_locations; earliest future rows

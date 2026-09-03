@@ -150,7 +150,7 @@ export default function InboxView({
           </span>
         )}
         <span className={`tk-due${item.overdue ? " bad" : ""}`}>{fmtWhen(item, today)}</span>
-        {isTask(item.kind) || item.kind === "fdue" ? (
+        {(isTask(item.kind) && item.kind !== "remind") || item.kind === "fdue" ? (
           <button
             type="button"
             className="tk-doneb tk-editb"

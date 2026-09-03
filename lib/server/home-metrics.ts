@@ -47,7 +47,7 @@ export type HomeData = {
     furthest: { stage: string; n: number } | null;
     updatedDays: number;
   }[];
-  funnel: Record<StageKey, number> & { total: number };
+  funnel: Record<StageKey, number> & { total: number; noReply: number };
   medianReplyMinutes: number | null;
   series: { day: string; sent: number; replies: number; apps: number }[];
   page: {
@@ -102,7 +102,7 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
     sbRest(`org_members?organization_id=eq.${org}&select=user_id,email,member_role`),
     sbRest(`recruiter_profiles?organization_id=eq.${org}&select=id,user_id`),
     sbRest(`org_roles?organization_id=eq.${org}&select=id,external_id,title,company_name,status,updated_at&order=title.asc`),
-    pageAll<{ job_id: string; candidate_key: string; status: string }>((l, o) => `candidate_role_statuses?organization_id=eq.${org}&select=job_id,candidate_key,status&order=id.asc&limit=${l}&offset=${o}`),
+    pageAll<{ job_id: string; candidate_key: string; status: string; reason: string | null }>((l, o) => `candidate_role_statuses?organization_id=eq.${org}&select=job_id,candidate_key,status,reason&order=id.asc&limit=${l}&offset=${o}`),
     pageAll<{ id: string; created_at: string; role_ids: string[] | null; source: string | null; recruiter_profile_id: string | null }>((l, o) => `website_applications?organization_id=eq.${org}&select=id,created_at,role_ids,source,recruiter_profile_id&order=created_at.desc&limit=${l}&offset=${o}`),
     pageAll<{ direction: "out" | "in"; member_email: string; candidate_key: string; thread_id: string; created_at: string }>((l, o) => `candidate_email_log?organization_id=eq.${org}&created_at=gte.${prevIso}&select=direction,member_email,candidate_key,thread_id,created_at&order=created_at.desc&limit=${l}&offset=${o}`),
     pageAll<{ completed_at: string; created_by_email: string }>((l, o) => `tasks?organization_id=eq.${org}&status=eq.done&completed_at=gte.${prevIso}&select=completed_at,created_by_email&order=completed_at.desc&limit=${l}&offset=${o}`),
@@ -191,13 +191,15 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
     }
   }
   const statusByRole = new Map<string, Map<string, string>>();
+  const noReplyByRole = new Map<string, number>();
   for (const s of statuses) {
     const m = statusByRole.get(s.job_id) || new Map<string, string>();
     m.set(s.candidate_key, s.status);
     statusByRole.set(s.job_id, m);
+    if (s.status === "rejected" && s.reason === "no_reply") noReplyByRole.set(s.job_id, (noReplyByRole.get(s.job_id) || 0) + 1);
   }
   const emptyPipe = (): Record<StageKey, number> => ({ new: 0, contacted: 0, replied: 0, interviewing: 0, offer: 0, hired: 0 });
-  const funnel: Record<StageKey, number> & { total: number } = { ...emptyPipe(), total: 0 };
+  const funnel: Record<StageKey, number> & { total: number; noReply: number } = { ...emptyPipe(), total: 0, noReply: 0 };
   const openRoles = roles.filter((r) => r.status === "open");
   const roleRows = openRoles.map((r) => {
     const pipe = emptyPipe();
@@ -210,6 +212,7 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
       if (s in pipe) pipe[s as StageKey]++;
     }
     for (const k of STAGES) funnel[k] += pipe[k];
+    funnel.noReply += noReplyByRole.get(r.external_id) || 0;
     let furthest: { stage: string; n: number } | null = null;
     for (let i = STAGES.length - 1; i >= 1; i--) {
       if (pipe[STAGES[i]] > 0) {

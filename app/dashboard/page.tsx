@@ -22,7 +22,7 @@ type Data = {
     credits: { used: number; prev: number; available: number; searches: number };
   };
   roles: { id: string; title: string; company: string | null; applicants: number; newInPeriod: number; pipe: Record<Stage, number>; furthest: { stage: string; n: number } | null; updatedDays: number }[];
-  funnel: Record<Stage, number> & { total: number };
+  funnel: Record<Stage, number> & { total: number; noReply: number };
   medianReplyMinutes: number | null;
   series: { day: string; sent: number; replies: number; apps: number }[];
   page: { views: number; viewsPrev: number; roleOpens: number; appsViaPage: number; bookingClicks: number; linksSent: number; linksOpened: number; referrals: number };
@@ -306,6 +306,11 @@ export default function HomePage() {
                     <span className="fn">{data.funnel[s]}</span>
                   </div>
                 ))}
+                <div className="fr">
+                  <span className="fl">No reply</span>
+                  <span className="fb" style={{ width: `${data.funnel.total ? Math.max(2, (data.funnel.noReply / data.funnel.total) * 100) : 2}%`, background: "#C9C6BE" }} />
+                  <span className="fn">{data.funnel.noReply}</span>
+                </div>
               </div>
               <div className="hm-mini">
                 <div className="mr">

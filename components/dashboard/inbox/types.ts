@@ -1,6 +1,7 @@
 // Client-side mirror of lib/server/inbox.ts types (the API's JSON shape).
+import { fmtDue } from "@/lib/reminders";
 export type InboxKind =
-  | "mail" | "temail" | "tcall" | "tmsg" | "ttask"
+  | "mail" | "temail" | "tcall" | "tmsg" | "ttask" | "remind" | "cback"
   | "app" | "drop" | "ref" | "ask" | "fdue";
 export type InboxSection = "emails" | "calls" | "messages" | "new" | "fdue" | "other";
 export type InboxScope = "me" | "team";
@@ -24,6 +25,8 @@ export type InboxItem = {
   taskId: string | null;
   subject: string | null;
   extra: string | null;
+  /** Reply reminders: emails sent since they last spoke, minus the first. */
+  nudges?: number;
   /** One row per person: the person's other open items ride along here. */
   also?: AlsoItem[];
 };
@@ -82,6 +85,8 @@ export const KIND_LABEL: Record<InboxKind, string> = {
   tcall: "Task · call",
   tmsg: "Task · message",
   ttask: "Task",
+  remind: "No reply",
+  cback: "Check back",
   app: "Applied",
   drop: "Resume drop",
   ref: "Referred",
@@ -95,6 +100,8 @@ export const KIND_ICON: Record<InboxKind, string> = {
   tcall: "call",
   tmsg: "message",
   ttask: "task",
+  remind: "reminder",
+  cback: "recontact",
   app: "applied",
   drop: "drop",
   ref: "referred",
@@ -108,6 +115,8 @@ export const KIND_TONE: Record<InboxKind, "mail" | "new" | "ask" | "task"> = {
   tcall: "task",
   tmsg: "task",
   ttask: "task",
+  remind: "mail",
+  cback: "ask",
   app: "new",
   drop: "new",
   ref: "new",
@@ -115,11 +124,38 @@ export const KIND_TONE: Record<InboxKind, "mail" | "new" | "ask" | "task"> = {
   fdue: "ask",
 };
 
-export const isTask = (k: InboxKind) => k === "temail" || k === "tcall" || k === "tmsg" || k === "ttask";
+export const isTask = (k: InboxKind) => k === "temail" || k === "tcall" || k === "tmsg" || k === "ttask" || k === "remind" || k === "cback";
 
 /** Human reason for the Done view and the drawer strip. */
 export function reasonLabel(reason: string, kind?: InboxKind | "task"): string {
   if (reason.startsWith("stage:")) return `moved to ${reason.slice(6)}`;
+  if (reason.startsWith("remind:")) {
+    const r = reason.slice(7);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(r)) return `nudged · next reminder ${fmtDue(r)}`;
+    const why: Record<string, string> = {
+      replied: "they replied, reminder cancelled",
+      nudged: "nudged, next reminder set",
+      closed: "stage closed, reminder cancelled",
+      cancelled: "reminder cancelled",
+      done: "reminder marked done",
+      no_reply: "marked no reply",
+    };
+    return why[r] || "reminder ended";
+  }
+  if (reason.startsWith("noreply:")) {
+    const r = reason.slice(8);
+    return /^\d{4}-\d{2}-\d{2}$/.test(r) ? `marked no reply · check back ${fmtDue(r)}` : "marked no reply";
+  }
+  if (reason.startsWith("cback:")) {
+    const why: Record<string, string> = {
+      done: "check-back done",
+      replied: "they replied",
+      contacted: "you emailed them",
+      replaced: "check-back replaced",
+      no_reply: "marked no reply again",
+    };
+    return why[reason.slice(6)] || "check-back ended";
+  }
   switch (reason) {
     case "reply":
       return "you replied";
@@ -129,6 +165,8 @@ export function reasonLabel(reason: string, kind?: InboxKind | "task"): string {
       return "marked contacted";
     case "task_done":
       return "task done";
+    case "noreply":
+      return "marked no reply";
     case "gone":
       return "no longer in your Inbox";
     default:
@@ -138,7 +176,7 @@ export function reasonLabel(reason: string, kind?: InboxKind | "task"): string {
 
 /** Where a click lands in the drawer. */
 export function landingTab(kind: InboxKind): "profile" | "pipeline" | "email" {
-  if (kind === "mail" || kind === "temail") return "email";
+  if (kind === "mail" || kind === "temail" || kind === "remind" || kind === "cback") return "email";
   if (kind === "app" || kind === "drop") return "pipeline";
   return "profile";
 }
@@ -161,6 +199,10 @@ export function stripHint(item: InboxItem): string {
       return "phone is in the contact block · mark done when you've called";
     case "tmsg":
       return "LinkedIn link is in the contact block · mark done when sent";
+    case "remind":
+      return "nudge them in the same thread, or mark no reply";
+    case "cback":
+      return "pick the conversation back up, or mark no reply again";
     default:
       return "";
   }

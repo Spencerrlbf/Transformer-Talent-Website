@@ -5,6 +5,7 @@
 // one expandable row per role. Resume renders inline when on file. Notes is
 // the shared timeline: team notes, tasks, and the candidate's own ask.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { fmtDue } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
@@ -31,6 +32,7 @@ type PipelineEntry = {
   reason: string | null;
   addedAt: string;
   stage: string;
+  stageReason?: string | null;
 };
 
 type Detail = {
@@ -61,6 +63,7 @@ type Detail = {
     salary: string | null;
     visa: string | null;
   } | null;
+  noReply?: { markedAt: string; checkBackAt: string | null; jobId: string | null } | null;
   pipeline: PipelineEntry[];
   experience: {
     company: string;
@@ -267,11 +270,18 @@ function PipelineRows({
         </td>
         <td onClick={(e) => e.stopPropagation()}>
           {stageEditable ? (
-            <StageSelect
-              value={entry.stage || "new"}
-              busy={stageBusy}
-              onChange={(s) => onStage(entry.jobId, s)}
-            />
+            <span className="cv2d-stagewrap">
+              <StageSelect
+                value={entry.stage || "new"}
+                busy={stageBusy}
+                onChange={(s) => onStage(entry.jobId, s)}
+              />
+              {entry.stage === "rejected" && entry.stageReason === "no_reply" && (
+                <span className="cv2-past nr" title="You stopped chasing them on this role">
+                  No reply
+                </span>
+              )}
+            </span>
           ) : (
             <span className="cv2d-stage">Match</span>
           )}
@@ -310,6 +320,7 @@ export default function CandidateDrawer({
   inboxThreadId,
   quickAction,
   onSilentReject,
+  refreshKey,
 }: {
   candKey: string | null;
   roleContext?: string;
@@ -327,11 +338,13 @@ export default function CandidateDrawer({
   navIndex?: number;
   onNavigateItem?: (index: number) => void;
   /** Inbox: something happened in here that may clear the current item. */
-  onActivity?: (ev: { type: "stage" | "sent" | "contacted"; label?: string; staged?: string | null }) => void;
+  onActivity?: (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; reminded?: string | null; checkBack?: string | null }) => void;
   /** Inbox: the email task a send from here fulfils. */
   completeTaskId?: string | null;
   /** Inbox: the thread a fresh email from here answers. */
   inboxThreadId?: string | null;
+  /** Bumped by the host when something outside the drawer changed this person (an Inbox strip action). */
+  refreshKey?: number;
   /** Inbox quick action: open a composer with this template and outcome. */
   quickAction?: {
     nonce: number;
@@ -341,6 +354,7 @@ export default function CandidateDrawer({
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
     allowSilent?: boolean;
+    remind?: boolean;
   } | null;
   /** Inbox quick action: "Reject without emailing" chosen in the composer. */
   onSilentReject?: () => void;
@@ -483,6 +497,24 @@ export default function CandidateDrawer({
     // initialTab is applied by the effect above; it must not refetch the profile.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candKey, token, roleContext]);
+
+  // A quiet refetch of the profile (header marks, pipeline stages) that
+  // keeps the open tab and any edits in progress.
+  const refetchDetail = () => {
+    if (!candKey) return;
+    fetch(`/api/dashboard/candidates/v2/${candKey}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? ((await r.json()) as Detail) : null))
+      .then((d) => {
+        if (d) setDetail(d);
+      })
+      .catch(() => {});
+  };
+  useEffect(() => {
+    if (!refreshKey) return;
+    refetchDetail();
+    setNotesBump((b) => b + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   // Toggle Shortlist membership from the header star (optimistic).
   const [starBusy, setStarBusy] = useState(false);
@@ -704,6 +736,7 @@ export default function CandidateDrawer({
           after={quickHead?.after}
           outcome={quickHead?.outcome}
           allowSilent={quickHead?.allowSilent}
+          remindMode={quickHead ? (quickHead.remind === false ? "off" : "on") : undefined}
           onSilent={
             onSilentReject
               ? () => {
@@ -721,7 +754,7 @@ export default function CandidateDrawer({
             setQuickHead(null);
             setTab("email");
             setNotesBump((b) => b + 1);
-            onActivity?.({ type: "sent", staged: result?.staged ?? null });
+            onActivity?.({ type: "sent", staged: result?.staged ?? null, reminded: result?.reminded ?? null });
           }}
         />
       )}
@@ -808,6 +841,12 @@ export default function CandidateDrawer({
                     </span>
                   )}
                   {detail.viaTT && <span className="cv2-via">Via TT</span>}
+                  {detail.noReply && (
+                    <span className="cv2-noreply" title="You stopped chasing them. A reply from them, or a new email to them, clears this.">
+                      No reply · {new Date(detail.noReply.markedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      {detail.noReply.checkBackAt ? ` · check back ${fmtDue(detail.noReply.checkBackAt)}` : ""}
+                    </span>
+                  )}
                 </div>
                 {detail.headline && <div className="cv2d-headline">{detail.headline}</div>}
                 <div className="cv2d-meta">
@@ -1356,10 +1395,14 @@ export default function CandidateDrawer({
                   inboxThreadId={inboxThreadId || undefined}
                   onSent={(result) => {
                     setQuickTab(null);
-                    onActivity?.({ type: "sent", staged: result?.staged ?? null });
+                    onActivity?.({ type: "sent", staged: result?.staged ?? null, reminded: result?.reminded ?? null });
                   }}
                   openCompose={quickTab}
                   onSilent={onSilentReject}
+                  onNoReply={(r) => {
+                    refetchDetail();
+                    onActivity?.({ type: "noreply", checkBack: r.checkBack });
+                  }}
                 />
               )}
               {tab === "notes" && isNet && (
