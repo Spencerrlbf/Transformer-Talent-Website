@@ -8,6 +8,7 @@ import {
   isOrgMemberAddress,
   logEmail,
   matchCandidateByAddress,
+  matchCandidateByMessageId,
   matchCandidateByThread,
 } from "@/lib/server/email-compose";
 
@@ -25,6 +26,7 @@ type WebhookMessage = {
   grant_id?: string;
   id?: string;
   thread_id?: string;
+  reply_to_message_id?: string;
   subject?: string;
   snippet?: string;
   body?: string;
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest) {
   let subject = msg.subject || "";
   let snippet = msg.snippet || "";
   let threadId = msg.thread_id || "";
+  let replyTo = msg.reply_to_message_id || "";
   if (!bodyHtml && msg.id) {
     const full = await fetchMessage(grantId, msg.id);
     if (full) {
@@ -81,6 +84,7 @@ export async function POST(req: NextRequest) {
       subject = subject || full.subject;
       snippet = snippet || full.snippet;
       threadId = threadId || full.threadId;
+      replyTo = replyTo || full.replyToMessageId;
     }
   }
   const { own, quoted } = cleanInbound(bodyHtml, snippet);
@@ -90,8 +94,20 @@ export async function POST(req: NextRequest) {
     // with a candidate is theirs even from another address. A teammate's
     // message in that thread is not. Unknown thread: match the sender.
     let candidateKey: string | null = null;
-    if (threadId && !(await isOrgMemberAddress(account.orgId, fromAddr).catch(() => false))) {
-      candidateKey = await matchCandidateByThread(account.orgId, threadId).catch(() => null);
+    let logThread = threadId;
+    const fromSeat = await isOrgMemberAddress(account.orgId, fromAddr).catch(() => false);
+    if (!fromSeat) {
+      // Surest first: the message they replied to is one we sent. That also
+      // gives us our own thread id, so the reply files into the conversation
+      // as the app knows it (and the reminder on it can end).
+      if (replyTo) {
+        const hit = await matchCandidateByMessageId(account.orgId, replyTo).catch(() => null);
+        if (hit) {
+          candidateKey = hit.candidateKey;
+          if (hit.threadId) logThread = hit.threadId;
+        }
+      }
+      if (!candidateKey && threadId) candidateKey = await matchCandidateByThread(account.orgId, threadId).catch(() => null);
     }
     if (!candidateKey) candidateKey = await matchCandidateByAddress(account.orgId, fromAddr);
     if (!candidateKey) continue;
@@ -106,10 +122,10 @@ export async function POST(req: NextRequest) {
       bodyText: own,
       quotedText: quoted,
       messageId: msg.id || "",
-      threadId,
+      threadId: logThread,
     });
     // Their reply ends the sender's reminder on this conversation.
-    await cancelReminders({ orgId: account.orgId, candidateKey, threadId: threadId || null, reason: "replied" }).catch(() => {});
+    await cancelReminders({ orgId: account.orgId, candidateKey, threadId: logThread || null, reason: "replied" }).catch(() => {});
     // A "no reply" mark ends the moment they do reply; on the role they come back to Replied.
     await clearNoReply({ orgId: account.orgId, candidateKey, reason: "replied" }).catch(() => {});
   }

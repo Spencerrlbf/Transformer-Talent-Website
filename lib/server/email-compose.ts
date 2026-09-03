@@ -663,6 +663,22 @@ export async function matchCandidateByThread(orgId: string, threadId: string): P
   return row?.candidate_key || null;
 }
 
+/** The message a reply answers, when it is one we logged: the surest link
+ *  back to the candidate and to our own thread id (which may differ from the
+ *  provider's when the conversation started from the Inbox). */
+export async function matchCandidateByMessageId(
+  orgId: string,
+  messageId: string
+): Promise<{ candidateKey: string; threadId: string } | null> {
+  const id = messageId.trim();
+  if (!id || id.length > 300 || id.startsWith("local-")) return null;
+  const res = await sbRest(
+    `candidate_email_log?organization_id=eq.${orgId}&message_id=eq.${encodeURIComponent(id)}&select=candidate_key,thread_id&limit=1`
+  );
+  const [row] = res.ok ? ((await res.json()) as { candidate_key: string; thread_id: string | null }[]) : [];
+  return row ? { candidateKey: row.candidate_key, threadId: row.thread_id || "" } : null;
+}
+
 /** Is this address one of the org's own seats? Their messages are never a
  *  candidate's reply, whatever thread they arrive in. */
 export async function isOrgMemberAddress(orgId: string, address: string): Promise<boolean> {

@@ -134,17 +134,23 @@ export async function sendAsGrant(args: {
 export async function fetchMessage(
   grantId: string,
   messageId: string
-): Promise<{ body: string; subject: string; snippet: string; threadId: string } | null> {
+): Promise<{ body: string; subject: string; snippet: string; threadId: string; replyToMessageId: string } | null> {
   const res = await nylas(
     `/v3/grants/${encodeURIComponent(grantId)}/messages/${encodeURIComponent(messageId)}?fields=standard`
   );
   if (!res.ok) return null;
   const json = (await res.json()) as {
-    data?: { body?: string; subject?: string; snippet?: string; thread_id?: string };
+    data?: { body?: string; subject?: string; snippet?: string; thread_id?: string; reply_to_message_id?: string };
   };
   const d = json.data;
   if (!d) return null;
-  return { body: d.body || "", subject: d.subject || "", snippet: d.snippet || "", threadId: d.thread_id || "" };
+  return {
+    body: d.body || "",
+    subject: d.subject || "",
+    snippet: d.snippet || "",
+    threadId: d.thread_id || "",
+    replyToMessageId: d.reply_to_message_id || "",
+  };
 }
 
 // ---- webhooks ---------------------------------------------------------
