@@ -26,7 +26,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
     key,
     body.jobId,
     body.status,
-    typeof body.interviewStage === "string" ? body.interviewStage : null
+    typeof body.interviewStage === "string" ? body.interviewStage : null,
+    null,
+    member.email
   );
   if (!result.ok) {
     const code = result.error === "save_failed" ? 502 : result.error === "job_not_found" ? 404 : 400;

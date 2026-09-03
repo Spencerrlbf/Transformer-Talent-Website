@@ -7,7 +7,7 @@ import { useDash } from "@/components/dashboard/DashShell";
 import KindIcon from "@/components/dashboard/tasks/KindIcon";
 
 export type TaskModalTarget =
-  | { mode: "create"; candidateKey: string; candidateName: string }
+  | { mode: "create"; candidateKey: string; candidateName: string; title?: string; dueDate?: string }
   | {
       mode: "edit";
       task: { id: string; kind: string; title: string; dueDate: string; dueTime: string | null; candidateName: string };
@@ -57,9 +57,11 @@ export default function TaskModal({
           : `Follow up with ${first}`;
 
   const [kind, setKind] = useState(target.mode === "edit" ? target.task.kind : "task");
-  const [title, setTitle] = useState(target.mode === "edit" ? target.task.title : defaultTitle("task"));
+  const [title, setTitle] = useState(
+    target.mode === "edit" ? target.task.title : target.mode === "create" && target.title ? target.title : defaultTitle("task")
+  );
   const [date, setDate] = useState(
-    target.mode === "create" ? addDays(7) : target.mode === "edit" ? target.task.dueDate : target.dueDate
+    target.mode === "create" ? target.dueDate || addDays(7) : target.mode === "edit" ? target.task.dueDate : target.dueDate
   );
   const [time, setTime] = useState(target.mode === "edit" ? target.task.dueTime || "" : "");
   const [saving, setSaving] = useState(false);

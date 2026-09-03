@@ -628,7 +628,9 @@ export async function saveUnifiedStatus(
   status: string,
   interviewStage?: string | null,
   /** Why: "no_reply" (we stopped chasing) or null (a judgement). */
-  reason?: string | null
+  reason?: string | null,
+  /** Who made the move (their login email); null = the system. */
+  byEmail?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!(STAGES as readonly string[]).includes(status)) return { ok: false, error: "bad_status" };
   const roleRes = await sbRest(
@@ -692,6 +694,7 @@ export async function saveUnifiedStatus(
         to_status: status,
         to_interview_stage: stage,
         reason: reason ?? null,
+        moved_by_email: byEmail || null,
       }),
     }).catch(() => {});
   }

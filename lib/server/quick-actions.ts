@@ -151,6 +151,38 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bo
       "{{sender_name}}"
     ),
   },
+  // Home "Needs attention": a check-in on someone quiet mid-process, and a
+  // nudge to talk when an offer is out. Sent in their thread when one exists.
+  {
+    ...TEMPLATE.checkIn,
+    since: "2026-09-03T15:00:00Z",
+    subject: "How did it go?",
+    bodyHtml: lines(
+      "Hi {{first_name}},",
+      "",
+      "How did the last conversation with the team go? I'd like to hear your side before we plan the next step.",
+      "",
+      "Reply here, or grab a few minutes with me: {{booking_link}}",
+      "",
+      "{{sender_name}}"
+    ),
+  },
+  {
+    ...TEMPLATE.offerTimes,
+    since: "2026-09-03T15:00:00Z",
+    subject: "Your offer: a few times to talk",
+    bodyHtml: lines(
+      "Hi {{first_name}},",
+      "",
+      "I'd like to talk through the offer and answer anything that's on your mind.",
+      "",
+      "Pick a time that suits you here: {{booking_link}}",
+      "",
+      "If none of those work, reply with a couple of times and I'll fit around you.",
+      "",
+      "{{sender_name}}"
+    ),
+  },
   {
     ...TEMPLATE.followUpOpen,
     subject: "As promised, what's open now",
