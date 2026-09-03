@@ -27,7 +27,7 @@ const when = (r: AttentionRow, today: string): string => {
   const d = `${r.days} day${r.days === 1 ? "" : "s"}`;
   switch (r.kind) {
     case "contacted":
-      return `Contacted · ${d}, no reply`;
+      return `Contacted · no reply in ${d}`;
     case "interviewing":
       return `Interviewing · ${d} quiet`;
     case "fdue":
@@ -247,7 +247,7 @@ export default function AttentionCard({
             : `follow-ups within ${rules.fdue.days}d`
           )
           .join(" · ")}
-        . Activity means a stage move, an email either way, a task done or a note. Anyone with an open reminder, check-back or no-reply mark is left to the Inbox. Snooze hides a row for seven days. The owner changes the rules in Settings.
+        . Activity means a stage move, an email either way, a task done or a note; the no-reply clock runs from your last email to them. Anyone with an open task, reminder, check-back or no-reply mark is left to the Inbox, and a follow-up due soon is listed there only. Snooze hides a row for seven days. The owner changes the rules in Settings.
       </div>
     </div>
   );

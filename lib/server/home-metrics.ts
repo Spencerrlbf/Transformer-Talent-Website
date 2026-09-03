@@ -344,9 +344,10 @@ export async function homeMetrics(member: Member, scope: InboxScope, period: Per
   // The week starts on the viewer's Monday, at their midnight.
   const weekStartIso = new Date(Date.parse(weekStart(today) + "T00:00:00Z") + tzOffsetMin * 60_000).toISOString();
   const goals = computeGoals({ today, weekStartIso, scope, viewer, isOwner, members, logs, done, moves, targets });
-  // The Inbox owns anyone with an open reminder or check-back, or a live no-reply mark.
+  // The Inbox owns anyone with an open task of any kind (a reminder, a
+  // check-back, a call you planned) or a live no-reply mark.
   const hidden = new Set<string>(marks.map((m) => m.candidate_key));
-  for (const t of open) if (t.candidate_key && (t.kind === "reminder" || t.kind === "recontact")) hidden.add(t.candidate_key);
+  for (const t of open) if (t.candidate_key) hidden.add(t.candidate_key);
   const attention = await computeAttention({
     orgId: org, orgSlug: member.orgSlug || "", today, now, scope, viewer, isOwner, rules, snoozed, hidden,
     inboxItems: inbox.items, roles, statuses, apps, logs, done, notes, runs,

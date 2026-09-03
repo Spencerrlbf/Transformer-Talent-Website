@@ -93,7 +93,7 @@ export default function AttentionRulesCard() {
         </div>
       )}
       <small>
-        What lands in Home&apos;s Needs attention card. Nothing here creates a task or sends anything; a row is a prompt with the action next to it. Anyone with an open reply reminder, a check-back or a no-reply mark is left to the Inbox.
+        What lands in Home&apos;s Needs attention card. Nothing here creates a task or sends anything; a row is a prompt with the action next to it. Anyone with an open task, reminder, check-back or no-reply mark is left to the Inbox.
         {canEdit ? "" : " Set by your company's owner account."}
       </small>
     </>

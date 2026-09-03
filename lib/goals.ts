@@ -56,7 +56,7 @@ export const RULE_LABEL: Record<RuleKey, string> = {
 };
 export const RULE_HINT: Record<RuleKey, string> = {
   reply: "a candidate replied and nobody has answered them",
-  contacted: "a backstop; reply reminders catch these sooner",
+  contacted: "days since your last email to them with nothing back; a backstop, reply reminders catch these sooner",
   interviewing: "activity = a stage move, an email either way, a task done or a note",
   offer: "days since the offer went out with no activity",
   role: "no application and no sourcing import in this long",

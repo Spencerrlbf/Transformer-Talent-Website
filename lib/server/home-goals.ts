@@ -2,7 +2,8 @@
 // attention card (the exceptions the Jobs table can't show). Both are
 // derived from what the app already records; home-metrics.ts fetches the
 // rows once and hands them here. Anyone the Inbox already owns — an open
-// reply reminder, an open check-back, a live no-reply mark — is left out.
+// task or reminder, an open check-back, a live no-reply mark — is left out,
+// and a person with a follow-up due soon is listed there and nowhere else.
 import { sbRest } from "./supabase";
 import type { InboxItem } from "./inbox";
 import {
@@ -156,7 +157,7 @@ export async function computeAttention(args: {
   isOwner: boolean;
   rules: AttentionRules;
   snoozed: Set<string>;
-  /** Candidate keys the Inbox owns: open reminder / check-back, live no-reply mark. */
+  /** Candidate keys the Inbox owns: any open task or reminder, live no-reply mark. */
   hidden: Set<string>;
   inboxItems: InboxItem[];
   roles: RoleRow[];
@@ -192,6 +193,7 @@ export async function computeAttention(args: {
       if (!cur || l.created_at > cur.at) thread.set(l.candidate_key, { id: l.thread_id, subject: (l.subject || "").replace(/^(re|fwd?):\s*/i, "") || null, at: l.created_at });
     }
   }
+  for (const list of outs.values()) list.sort();
   for (const t of args.done) {
     if (!t.candidate_key || !t.completed_at) continue;
     if (!lastAny.has(t.candidate_key) || t.completed_at > lastAny.get(t.candidate_key)!) lastAny.set(t.candidate_key, t.completed_at);
@@ -199,14 +201,39 @@ export async function computeAttention(args: {
   for (const n of args.notes) {
     if (!lastAny.has(n.candidate_key) || n.created_at > lastAny.get(n.candidate_key)!) lastAny.set(n.candidate_key, n.created_at);
   }
-  const outboundSince = (key: string, iso: string) => (outs.get(key) || []).filter((t) => t >= iso).length;
+  const outboundSince = (key: string, iso: string) => (outs.get(key) || []).filter((t) => t >= iso);
   const ladder = (n: number, verb: string) => (n <= 0 ? null : n === 1 ? `${verb} once` : n === 2 ? `${verb} twice` : `${verb} ${n}×`);
+
+  // ---- follow-ups due soon (not yet due: the Inbox has those) ----------------
+  // Built first: a person with a dated plan this close is listed here only.
+  const planned = new Set<string>();
+  if (rules.fdue.on) {
+    const until = new Date(Date.parse(today + "T12:00:00Z") + rules.fdue.days * DAY).toISOString().slice(0, 10);
+    const rows: AttentionRow[] = [];
+    for (const a of args.apps) {
+      if (!a.follow_up_at || a.follow_up_at <= today || a.follow_up_at > until) continue;
+      const key = `app_${a.id}`;
+      planned.add(key);
+      if (scope === "me" && !args.mineApp(a)) continue;
+      const id = `fdue:${key}`;
+      if (hidden.has(key) || snoozed.has(id)) continue;
+      const days = Math.round((Date.parse(a.follow_up_at + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / DAY);
+      rows.push({
+        id, kind: "fdue", candidateKey: key, name: str(a.name) || "Candidate", jobId: null, jobTitle: null,
+        days, hot: false, ladder: null, threadId: thread.get(key)?.id || null, subject: thread.get(key)?.subject || null, inboxId: null,
+        url: null, closable: false, dueDay: a.follow_up_at,
+      });
+    }
+    rows.sort((a, b) => a.days - b.days);
+    groups.push({ key: "fdue", total: rows.length, rows: rows.slice(0, CAP) });
+  }
+  const skip = (key: string) => hidden.has(key) || planned.has(key);
 
   // ---- waiting for your reply (the Inbox's mail items, scope already applied)
   if (rules.reply.on) {
     const rows: AttentionRow[] = [];
     for (const it of args.inboxItems) {
-      if (it.kind !== "mail" || !it.candidateKey || hidden.has(it.candidateKey)) continue;
+      if (it.kind !== "mail" || !it.candidateKey || skip(it.candidateKey)) continue;
       const days = daysSince(it.at, now);
       if (days < rules.reply.days) continue;
       const id = `reply:${it.candidateKey}`;
@@ -228,21 +255,24 @@ export async function computeAttention(args: {
     for (const s of args.statuses) {
       if (s.status !== key) continue;
       const role = openRoles.get(s.job_id);
-      if (!role || hidden.has(s.candidate_key)) continue;
+      if (!role || skip(s.candidate_key)) continue;
       const id = `${key}:${s.candidate_key}:${s.job_id}`;
       if (snoozed.has(id)) continue;
       const entered = s.updated_at;
       let days: number;
       let lad: string | null;
       if (key === "contacted") {
-        // No word back since they were contacted; a reply would have moved them on.
+        // Nothing back since they were contacted (a reply would have moved
+        // them on), counted from the last email sent to them: a nudge
+        // restarts the clock, the same way a reply reminder would.
         if ((lastIn.get(s.candidate_key) || "") > entered) continue;
-        days = daysSince(entered, now);
-        lad = ladder(Math.max(0, outboundSince(s.candidate_key, entered) - 1), "nudged");
+        const sent = outboundSince(s.candidate_key, entered);
+        days = daysSince(sent.length ? sent[sent.length - 1] : entered, now);
+        lad = ladder(Math.max(0, sent.length - 1), "nudged");
       } else {
         const last = [entered, lastAny.get(s.candidate_key) || ""].sort().pop()!;
         days = daysSince(last, now);
-        lad = ladder(outboundSince(s.candidate_key, entered), "checked in");
+        lad = ladder(outboundSince(s.candidate_key, entered).length, "checked in");
       }
       if (days < rules[key].days) continue;
       nameNeeded.add(s.candidate_key);
@@ -286,27 +316,6 @@ export async function computeAttention(args: {
     }
     rows.sort((a, b) => b.days - a.days);
     groups.push({ key: "role", total: rows.length, rows: rows.slice(0, CAP) });
-  }
-
-  // ---- follow-ups due soon (not yet due: the Inbox has those) ----------------
-  if (rules.fdue.on) {
-    const until = new Date(Date.parse(today + "T12:00:00Z") + rules.fdue.days * DAY).toISOString().slice(0, 10);
-    const rows: AttentionRow[] = [];
-    for (const a of args.apps) {
-      if (!a.follow_up_at || a.follow_up_at <= today || a.follow_up_at > until) continue;
-      if (scope === "me" && !args.mineApp(a)) continue;
-      const key = `app_${a.id}`;
-      const id = `fdue:${key}`;
-      if (hidden.has(key) || snoozed.has(id)) continue;
-      const days = Math.round((Date.parse(a.follow_up_at + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / DAY);
-      rows.push({
-        id, kind: "fdue", candidateKey: key, name: str(a.name) || "Candidate", jobId: null, jobTitle: null,
-        days, hot: false, ladder: null, threadId: thread.get(key)?.id || null, subject: thread.get(key)?.subject || null, inboxId: null,
-        url: null, closable: false, dueDay: a.follow_up_at,
-      });
-    }
-    rows.sort((a, b) => a.days - b.days);
-    groups.push({ key: "fdue", total: rows.length, rows: rows.slice(0, CAP) });
   }
 
   const names = await namesFor(args.orgId, nameNeeded);
