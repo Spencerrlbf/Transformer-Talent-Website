@@ -591,6 +591,22 @@ async function attachStages(
   for (const entry of pipeline) entry.stage = byJob.get(entry.jobId) || "new";
 }
 
+/** Attach the role to the person unless they applied to it themselves. Other
+ *  ways in (a verdict, a sourcing run) keep showing as they are: an
+ *  attachment behind them is never displayed twice. */
+async function ensureAttached(orgId: string, key: string, jobId: string): Promise<void> {
+  if (key.startsWith("app_")) {
+    const r = await sbRest(`website_applications?id=eq.${key.slice(4)}&organization_id=eq.${orgId}&select=role_ids&limit=1`);
+    const [a] = r.ok ? ((await r.json()) as { role_ids: string[] | null }[]) : [];
+    if (a && (a.role_ids || []).includes(jobId)) return;
+  }
+  await sbRest(`role_attachments?on_conflict=organization_id,candidate_key,job_id`, {
+    method: "POST",
+    prefer: "resolution=ignore-duplicates,return=minimal",
+    body: JSON.stringify({ organization_id: orgId, candidate_key: key, job_id: jobId, added_by_email: "" }),
+  });
+}
+
 export async function saveUnifiedStatus(
   orgId: string,
   key: string,
@@ -635,6 +651,11 @@ export async function saveUnifiedStatus(
     }
   );
   if (!res.ok) return { ok: false, error: "save_failed" };
+
+  // The move must be visible. A role reached through a quick action (a
+  // referral's or drop's matched role) may not be in the person's pipeline
+  // yet; it joins it like a manual "Add to a job", unless they applied to it.
+  await ensureAttached(orgId, key, jobId).catch(() => {});
 
   // A closed outcome ends any reply reminders on the person: nothing to chase.
   if (status === "rejected" || status === "hired") await cancelReminders({ orgId, candidateKey: key, reason: "closed" }).catch(() => {});
