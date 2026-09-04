@@ -83,15 +83,19 @@ export type Template = {
   bodyHtml: string;
   /** Stable key a quick action finds the template by (null for the org's own). */
   actionKey: string | null;
+  updatedAt?: string | null;
+  createdBy?: string;
 };
 
-const TPL_COLS = "id,name,subject,body_html,action_key";
-const shapeTpl = (t: { id: string; name: string; subject: string; body_html: string; action_key?: string | null }): Template => ({
+const TPL_COLS = "id,name,subject,body_html,action_key,updated_at,created_at,created_by_email";
+const shapeTpl = (t: { id: string; name: string; subject: string; body_html: string; action_key?: string | null; updated_at?: string | null; created_at?: string; created_by_email?: string }): Template => ({
   id: t.id,
   name: t.name,
   subject: t.subject,
   bodyHtml: t.body_html,
   actionKey: t.action_key || null,
+  updatedAt: t.updated_at || t.created_at || null,
+  createdBy: t.created_by_email || "",
 });
 
 /** Stamp the quick-action key on a template (seeding older rows). */

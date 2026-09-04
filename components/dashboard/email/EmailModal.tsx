@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import RemindChips from "@/components/dashboard/email/RemindChips";
 import { localDay, type RemindChoice } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
+import { FIELD_HELP } from "@/lib/quick-buttons";
 
 type ComposeJob = {
   id: string;
@@ -26,6 +27,8 @@ type Ctx = {
   senderName: string;
   jobs: ComposeJob[];
   templates: Template[];
+  /** Which template each quick-action button sends (Settings → Email templates). */
+  buttons?: Record<string, string | null>;
   trackedLink: string;
   /** Quick-action merge values (see the context route). */
   bookingLink?: string;
@@ -111,6 +114,7 @@ export default function EmailModal({
   inboxThreadId,
   initialTemplate,
   initialTemplateName,
+  initialButton,
   threadSubject,
   after,
   outcome,
@@ -133,6 +137,8 @@ export default function EmailModal({
   /** Quick action: apply this template (by action key, else by name) as soon as the composer loads. */
   initialTemplate?: string;
   initialTemplateName?: string;
+  /** Quick action: the button pressed, so the org's own mapping wins over the stock key. */
+  initialButton?: string;
   /** The conversation's subject, for {{subject}} even when the send can't thread. */
   threadSubject?: string;
   /** Quick action: the pipeline move Send makes — on this role only, never the merge role. */
@@ -219,7 +225,9 @@ export default function EmailModal({
     }
     if (initialTemplate) {
       const wantName = (initialTemplateName || "").trim().toLowerCase();
+      const mapped = initialButton && ctx.buttons ? ctx.buttons[initialButton] : null;
       const t =
+        (mapped ? ctx.templates.find((x) => x.id === mapped) : undefined) ||
         ctx.templates.find((x) => x.actionKey === initialTemplate) ||
         (wantName ? ctx.templates.find((x) => x.name.trim().toLowerCase() === wantName) : undefined);
       if (t) {
@@ -230,7 +238,7 @@ export default function EmailModal({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, initialText, initialTemplate]);
+  }, [ctx, initialText, initialTemplate, initialButton]);
   const applyRef = useRef<((t: Template) => void) | null>(null);
 
   // Above the drawer: swallow Escape before the drawer's document handler.
@@ -1177,7 +1185,7 @@ export function TemplatesModal({
   );
 }
 
-function TemplateEditor({
+export function TemplateEditor({
   name,
   subject,
   setName,
@@ -1204,6 +1212,7 @@ function TemplateEditor({
   onDelete?: () => void;
   confirmDel?: boolean;
 }) {
+  const [fieldMenu, setFieldMenu] = useState(false);
   return (
     <div className="emt-editbox">
       <span className="lbl em-lbl0">Name</span>
@@ -1229,11 +1238,29 @@ function TemplateEditor({
             <u>U</u>
           </button>
           <span className="em-tbsep" />
-          {["first_name", "full_name", "job_title", "company", "tracked_link", "sender_name"].map((t) => (
-            <button key={t} type="button" className="em-word" onMouseDown={(e) => e.preventDefault()} onClick={() => insertToken(t)}>
-              {t}
+          <div className="em-menuwrap">
+            <button type="button" className="em-word" onMouseDown={(e) => e.preventDefault()} onClick={() => setFieldMenu((v) => !v)}>
+              Insert field ▾
             </button>
-          ))}
+            {fieldMenu && (
+              <div className="em-menu em-fieldmenu">
+                {FIELD_HELP.map(([k, help]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setFieldMenu(false);
+                      insertToken(k);
+                    }}
+                  >
+                    <code>{`{{${k}}}`}</code>
+                    <small>{help}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div
           className="em-body em-tplbody"

@@ -350,6 +350,7 @@ export default function CandidateDrawer({
     nonce: number;
     template: string | null;
     templateName?: string;
+    button?: string;
     reply?: boolean;
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
@@ -738,6 +739,7 @@ export default function CandidateDrawer({
           inboxThreadId={inboxThreadId || undefined}
           initialTemplate={quickHead?.template || undefined}
           initialTemplateName={quickHead?.templateName}
+          initialButton={quickHead?.button}
           after={quickHead?.after}
           outcome={quickHead?.outcome}
           allowSilent={quickHead?.allowSilent}

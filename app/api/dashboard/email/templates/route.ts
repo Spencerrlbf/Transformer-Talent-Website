@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { createTemplate, listTemplates } from "@/lib/server/email-compose";
+import { ensureDefaultTemplates, resolveButtons } from "@/lib/server/quick-actions";
 
+// The org's templates, plus which one each quick-action button sends.
 export async function GET(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
-  return NextResponse.json({ templates: await listTemplates(member.org.id) });
+  await ensureDefaultTemplates(member.org.id, member.email).catch(() => {});
+  const templates = await listTemplates(member.org.id);
+  const buttons = await resolveButtons(member.org.id, templates);
+  return NextResponse.json({ templates, buttons, canMap: member.memberRole === "owner" });
 }
 
 export async function POST(req: NextRequest) {

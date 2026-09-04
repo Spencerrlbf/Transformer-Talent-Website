@@ -86,6 +86,7 @@ export default function EmailTab({
     nonce: number;
     template: string | null;
     templateName?: string;
+    button?: string;
     reply?: boolean;
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
@@ -128,6 +129,7 @@ export default function EmailTab({
     /** Quick action: template + outcome handed in from the Inbox strip. */
     template?: string | null;
     templateName?: string;
+    button?: string;
     threadSubject?: string;
     after?: { stage: "contacted" | "rejected"; jobId?: string | null };
     outcome?: string;
@@ -151,6 +153,7 @@ export default function EmailTab({
       threadSubject: t?.subject,
       template: openCompose.template,
       templateName: openCompose.templateName,
+      button: openCompose.button,
       after: openCompose.after,
       outcome: openCompose.outcome,
       allowSilent: openCompose.allowSilent,
@@ -498,6 +501,7 @@ export default function EmailTab({
           inboxThreadId={compose.threadId || inboxThreadId || undefined}
           initialTemplate={compose.template || undefined}
           initialTemplateName={compose.templateName}
+          initialButton={compose.button}
           threadSubject={compose.threadSubject}
           after={compose.after}
           outcome={compose.outcome}

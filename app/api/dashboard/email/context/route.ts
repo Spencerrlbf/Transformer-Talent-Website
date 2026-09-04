@@ -9,7 +9,7 @@ import {
   trackedLinkUrl,
 } from "@/lib/server/email-compose";
 import { loadProfile } from "@/lib/server/recruiter-profile";
-import { ensureDefaultTemplates } from "@/lib/server/quick-actions";
+import { ensureDefaultTemplates, resolveButtons } from "@/lib/server/quick-actions";
 import { sbRest } from "@/lib/server/supabase";
 import { getRoles } from "@/lib/roles";
 
@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
   // the email); empty for everyone who wasn't referred, so a template that
   // names a referrer shows a pill on the wrong person.
   const referrerName = ((app?.source || "").match(/^referral: by (.+?) <[^>]+>/) || [])[1]?.trim() || "";
+  const buttons = await resolveButtons(member.org.id, templates);
 
   return NextResponse.json({
     connected: Boolean(account),
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
     senderName,
     jobs,
     templates,
+    buttons,
     trackedLink,
     bookingLink: profile?.booking_url || "",
     pageLink,

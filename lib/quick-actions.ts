@@ -25,6 +25,8 @@ export type QuickAction = {
   remind?: boolean;
   /** Opens the "Mark no reply" panel instead of the composer. */
   noReply?: boolean;
+  /** Settings → Email templates row this button is (which template it sends). */
+  button?: string;
 };
 
 export const TEMPLATE = {
@@ -55,36 +57,36 @@ export function actionsFor(
   switch (kind) {
     case "app":
       return [
-        { id: "call", label: "Schedule a call", ...t(TEMPLATE.applyCall), stage: "contacted", primary: true },
-        { id: "no", label: "Not suitable", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true, remind: false },
+        { id: "call", label: "Schedule a call", ...t(TEMPLATE.applyCall), stage: "contacted", primary: true, button: "inbox.app.call" },
+        { id: "no", label: "Not suitable", ...t(TEMPLATE.notThisTime), stage: "rejected", danger: true, allowSilent: true, remind: false, button: "inbox.app.no" },
         REPLY,
       ];
     case "drop":
       return ctx.hasRole
         ? [
-            { id: "call", label: "Schedule a call", ...t(TEMPLATE.rolesForYou), stage: "contacted", primary: true },
-            { id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), remind: false },
+            { id: "call", label: "Schedule a call", ...t(TEMPLATE.rolesForYou), stage: "contacted", primary: true, button: "inbox.drop.call" },
+            { id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), remind: false, button: "inbox.drop.file" },
             REPLY,
           ]
-        : [{ id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), remind: false, primary: true }, REPLY];
+        : [{ id: "file", label: "Keep on file", ...t(TEMPLATE.keepPosted), remind: false, primary: true, button: "inbox.drop.file" }, REPLY];
     // A referred person sent nothing themselves: the email names who put
     // them forward and asks for the resume the referral form never collects.
     case "ref":
       return ctx.hasRole
         ? [
-            { id: "call", label: "Schedule a call", ...t(TEMPLATE.referredCall), stage: "contacted", primary: true },
-            { id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), remind: false },
+            { id: "call", label: "Schedule a call", ...t(TEMPLATE.referredCall), stage: "contacted", primary: true, button: "inbox.ref.call" },
+            { id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), remind: false, button: "inbox.ref.file" },
             REPLY,
           ]
-        : [{ id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), remind: false, primary: true }, REPLY];
+        : [{ id: "file", label: "Keep in touch", ...t(TEMPLATE.referredKeep), remind: false, primary: true, button: "inbox.ref.file" }, REPLY];
     case "ask":
       return [
-        { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", ...t(TEMPLATE.speakLater), primary: true, remind: false },
+        { id: "ack", label: ctx.month ? `Thanks, speak in ${ctx.month}` : "Thanks, speak later", ...t(TEMPLATE.speakLater), primary: true, remind: false, button: "inbox.ask.ack" },
         REPLY,
       ];
     case "mail":
       return [
-        { id: "call", label: "Schedule a call", ...t(TEMPLATE.replyCall), stage: "contacted", primary: true, reply: true },
+        { id: "call", label: "Schedule a call", ...t(TEMPLATE.replyCall), stage: "contacted", primary: true, reply: true, button: "inbox.mail.call" },
         { ...REPLY, reply: true },
         NO_REPLY,
       ];
@@ -93,7 +95,7 @@ export function actionsFor(
     case "remind": {
       const tired = (ctx.nudges || 0) >= 2;
       return [
-        { id: "nudge", label: "Nudge", ...t(TEMPLATE.followUp), primary: !tired, reply: true },
+        { id: "nudge", label: "Nudge", ...t(TEMPLATE.followUp), primary: !tired, reply: true, button: "inbox.remind.nudge" },
         { ...REPLY, reply: true },
         { ...NO_REPLY, primary: tired },
       ];
@@ -101,13 +103,13 @@ export function actionsFor(
     // A check-back came due: pick the conversation up again, or push it out.
     case "cback":
       return [
-        { id: "cback", label: "Check back in", ...t(TEMPLATE.checkBack), stage: "contacted", primary: true, reply: true },
+        { id: "cback", label: "Check back in", ...t(TEMPLATE.checkBack), stage: "contacted", primary: true, reply: true, button: "inbox.cback.cback" },
         { ...REPLY, reply: true },
         NO_REPLY,
       ];
     case "fdue":
       return [
-        { id: "open", label: "Here's what's open", ...t(TEMPLATE.followUpOpen), primary: true },
+        { id: "open", label: "Here's what's open", ...t(TEMPLATE.followUpOpen), primary: true, button: "inbox.fdue.open" },
         REPLY,
       ];
     default:

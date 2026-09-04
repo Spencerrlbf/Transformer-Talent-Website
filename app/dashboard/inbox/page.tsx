@@ -24,6 +24,7 @@ type Quick = {
   nonce: number;
   template: string | null;
   templateName?: string;
+  button?: string;
   reply?: boolean;
   after?: { stage: "contacted" | "rejected"; jobId?: string | null };
   outcome?: string;
@@ -310,6 +311,7 @@ export default function InboxPage() {
       nonce: Date.now(),
       template: a.template,
       templateName: a.templateName,
+      button: a.button,
       reply: a.reply,
       // No role to move = no move. The strip and the composer both say so.
       after: a.stage && jobId ? { stage: a.stage, jobId } : undefined,
