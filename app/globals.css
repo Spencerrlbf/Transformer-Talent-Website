@@ -4362,3 +4362,4 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .tp-head .dash-sub { max-width: 72ch; }
 .tp-list li > * { margin: 0; line-height: 1.35; }
 .tp-list li .sub { margin-top: 1px; }
+.tp-use span.none { background: var(--warn-bg); border-color: #EED9BC; color: var(--warn); }

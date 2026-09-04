@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useDash } from "@/components/dashboard/DashShell";
 import { TemplateEditor } from "@/components/dashboard/email/EmailModal";
 import PersonPicker from "@/components/dashboard/home/PersonPicker";
-import { QUICK_BUTTONS, fieldsUsed } from "@/lib/quick-buttons";
+import { QUICK_BUTTONS, fieldsUsed, type QuickButton } from "@/lib/quick-buttons";
 import { TEMPLATE } from "@/lib/quick-actions";
 import { htmlToLines, mergeText, previewValues, type PreviewCtx } from "@/lib/email-preview";
 import type { Template } from "@/lib/server/email-compose";
@@ -171,7 +171,8 @@ export default function TemplatesPage() {
         <div>
           <h1 className="dash-h1">Email templates</h1>
           <p className="dash-sub">
-            Shared with your whole team. Fields like <code>{"{{first_name}}"}</code> fill in per person when a template is used; a field the composer can&apos;t fill is flagged before Send.{" "}
+            The wording behind every quick-action button, shared with your whole team. Nobody picks a template when they send: pressing a button in the Inbox or on Home opens the composer with its
+            template already merged for that person. The chip under each name says which button, and the table below is the full wiring.{" "}
             <Link href="/dashboard/settings">Back to Settings</Link>
           </p>
         </div>
@@ -188,7 +189,7 @@ export default function TemplatesPage() {
           <div className="ch">
             <div>
               <h4>Templates</h4>
-              <p className="cs">{data ? `${templates.length} · click to edit` : "Loading…"}</p>
+              <p className="cs">{data ? `${templates.length} · click one to edit its wording` : "Loading…"}</p>
             </div>
           </div>
           <ul className="tp-list">
@@ -246,9 +247,17 @@ export default function TemplatesPage() {
                   onDelete={current ? del : undefined}
                   confirmDel={confirmDel}
                 />
-                {current && usedBy(current.id).length > 0 && (
+                {current && (
                   <p className="tp-fine" style={{ marginTop: 8 }}>
-                    Used by {usedBy(current.id).map((b) => `${b.label} (${b.where})`).join(", ")}. Changes apply the next time any of them is pressed.
+                    {usedBy(current.id).length > 0 ? (
+                      <>
+                        <b>Sent when</b> {usedBy(current.id).map((b) => b.sentence).join(", or when ")}. Changes apply the next time it is pressed.
+                      </>
+                    ) : (
+                      <>
+                        <b>No button sends this one.</b> It is there to pick by hand from the composer&apos;s Template menu. Give it a button in the table below if you want it sent by a quick action.
+                      </>
+                    )}
                   </p>
                 )}
                 <div className="tp-preview">
@@ -370,7 +379,7 @@ export default function TemplatesPage() {
       </div>
 
       <p className="tp-fine">
-        Every button fills name, sender, booking link, page link and tracked link. A button that names a role also fills the job title, company and role link. Drops, referrals and follow-ups fill matched roles; referrals fill the referrer; asks fill the month; in-thread buttons fill the subject. The table warns when a template uses a field its button can&apos;t fill, so nobody finds out at Send.
+        A template with no button is still there to pick by hand from any composer&apos;s Template menu. Every button fills name, sender, booking link, page link and tracked link. A button that names a role also fills the job title, company and role link. Drops, referrals and follow-ups fill matched roles; referrals fill the referrer; asks fill the month; in-thread buttons fill the subject. The table warns when a template uses a field its button can&apos;t fill, so nobody finds out at Send.
         {data && !data.canMap ? " Changing which template a button sends is for your company's owner account; the wording is everyone's to edit." : ""}
       </p>
 
@@ -389,13 +398,21 @@ export default function TemplatesPage() {
   );
 }
 
-function TemplateRow({ t, on, used, onPick }: { t: Template; on: boolean; used: { key: string; label: string }[]; onPick: () => void }) {
+function TemplateRow({ t, on, used, onPick }: { t: Template; on: boolean; used: QuickButton[]; onPick: () => void }) {
   return (
     <li className={on ? "on" : ""} onClick={onPick} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && onPick()}>
       <b>{t.name}</b>
       <span className="sub">{t.subject || "(no subject)"}</span>
       <span className="tp-use">
-        {used.length === 0 ? <span>no button</span> : used.map((b) => <span key={b.key} className={b.key.startsWith("home") ? "home" : ""}>{b.label}</span>)}
+        {used.length === 0 ? (
+          <span className="none">composer only</span>
+        ) : (
+          used.map((b) => (
+            <span key={b.key} className={b.key.startsWith("home") ? "home" : ""} title={`Sent when ${b.sentence}`}>
+              {b.short} · {b.label}
+            </span>
+          ))
+        )}
       </span>
     </li>
   );
