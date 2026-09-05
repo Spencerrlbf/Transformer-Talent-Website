@@ -332,7 +332,11 @@ export async function listInbox(
     if (scope === "me" && !mine(forEmail)) continue;
     const movedRowsFor = moved.get(key) || [];
     const outAfter = (lastOutAny.get(key) || "") > a.created_at;
-    if (kind === "app" && movedRowsFor.some((m) => (a.role_ids || []).includes(m.jobId))) continue;
+    // Every applied role must have an answer. `some` used to be enough, which
+    // is how a person rejected on one role vanished while their other
+    // applications sat at New with nobody left to look at them.
+    const appliedIds = a.role_ids || [];
+    if (kind === "app" && appliedIds.length && appliedIds.every((id) => movedRowsFor.some((m) => m.jobId === id))) continue;
     if ((kind === "drop" || kind === "ref") && (movedRowsFor.length || outAfter)) continue;
     if (kind === "ask" && (!a.follow_up_at || dueNowIds.has(a.id) || outAfter)) continue;
 

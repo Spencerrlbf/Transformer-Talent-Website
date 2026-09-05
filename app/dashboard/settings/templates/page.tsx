@@ -1,13 +1,13 @@
 "use client";
-// Settings → Email templates: the wording the whole team sends, and which
-// quick-action button sends which template. Wording is everyone's to edit;
-// the mapping and Restore default are the owner's.
+// Settings → Email templates: the wording the whole team sends. Which button
+// uses which template is fixed in the code, so there is nothing to configure;
+// this is the list, the editor and a preview. Restore is the owner's.
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useDash } from "@/components/dashboard/DashShell";
 import { TemplateEditor } from "@/components/dashboard/email/EmailModal";
 import PersonPicker from "@/components/dashboard/home/PersonPicker";
-import { QUICK_BUTTONS, fieldsUsed, type QuickButton } from "@/lib/quick-buttons";
+import { QUICK_BUTTONS, type QuickButton } from "@/lib/quick-buttons";
 import { htmlToLines, mergeText, previewValues, type PreviewCtx } from "@/lib/email-preview";
 import type { Template } from "@/lib/server/email-compose";
 
@@ -335,19 +335,5 @@ function TemplateRow({ t, on, used, onPick }: { t: Template; on: boolean; used: 
         )}
       </span>
     </li>
-  );
-}
-
-/** A table row, with a group header row above it when `head` is set. */
-function FragmentRows({ head, children }: { head: string | null; children: React.ReactNode }) {
-  return (
-    <>
-      {head && (
-        <tr className="where">
-          <td colSpan={4}>{head}</td>
-        </tr>
-      )}
-      <tr>{children}</tr>
-    </>
   );
 }

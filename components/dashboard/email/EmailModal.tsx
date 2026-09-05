@@ -146,12 +146,12 @@ export default function EmailModal({
   outcome?: string;
   /** Quick action: offer "Reject without emailing". */
   allowSilent?: boolean;
-  onSilent?: () => void;
+  onSilent?: (jobIds: string[]) => void;
   /** Quick action: start the reply reminder On (seat default) or Off. */
   remindMode?: "on" | "off";
   onClose: () => void;
   /** Called after a successful send with what the server did. */
-  onSent: (result?: { staged: string | null; taskDone: boolean; reminded?: string | null }) => void;
+  onSent: (result?: { staged: string | null; stagedJobs?: string[]; asked?: number; taskDone: boolean; reminded?: string | null }) => void;
 }) {
   const { token, reminderDays } = useDash();
   const [ctx, setCtx] = useState<Ctx | null>(null);
@@ -528,8 +528,9 @@ export default function EmailModal({
   const whenYouSend = (): { tone: "pos" | "rej" | "plain"; text: string } => {
     const due = reminderDue(localDay(), remind);
     const back = due ? ` They come back to your Inbox on ${fmtDue(due)} if they haven't replied.` : "";
-    if (after?.stage && stageOn && moveRoles.length) {
-      const where = movePhrase(moveRoles.map((r) => r.title));
+    const named = moveRoles.filter((r) => r.title);
+    if (after?.stage && stageOn && named.length) {
+      const where = movePhrase(named.map((r) => r.title));
       const rejected = after.stage === "rejected";
       return {
         tone: rejected ? "rej" : "pos",
@@ -538,7 +539,7 @@ export default function EmailModal({
           (rejected ? ` Any reply reminders for ${first} are cancelled.` : back),
       };
     }
-    if (due) return { tone: "plain", text: `${first} gets your email${outcome ? "" : ""}.${back}` };
+    if (due) return { tone: "plain", text: `${first} gets your email.${back}` };
     return { tone: "plain", text: `${first} gets your email. Nothing else changes.` };
   };
 
@@ -567,15 +568,23 @@ export default function EmailModal({
           ...(completeTaskId ? { completeTaskId } : {}),
           ...(inboxThreadId ? { inboxThreadId } : {}),
           ...(after?.stage && stageOn && moveRoles.length
-            ? { after: { stage: after.stage, jobIds: moveRoles.map((r) => r.id) } }
-            : {}),
+            ? { after: { stage: after.stage, jobId: moveRoles[0].id, jobIds: moveRoles.map((r) => r.id) } }
+            : after?.jobId
+              ? { after: { stage: after.stage, jobId: after.jobId, jobIds: [] } }
+              : {}),
           today: new Date().toLocaleDateString("en-CA"),
           remind,
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; taskDone?: boolean; reminded?: string | null };
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; staged?: string | null; stagedJobs?: string[]; taskDone?: boolean; reminded?: string | null };
       if (r.ok && j.ok) {
-        onSent({ staged: j.staged ?? null, taskDone: Boolean(j.taskDone), reminded: j.reminded ?? null });
+        onSent({
+          staged: j.staged ?? null,
+          stagedJobs: j.stagedJobs ?? [],
+          asked: after?.stage && stageOn ? moveRoles.length : 0,
+          taskDone: Boolean(j.taskDone),
+          reminded: j.reminded ?? null,
+        });
         onClose();
         return;
       }
@@ -993,22 +1002,22 @@ export default function EmailModal({
                   <div className={`em-then ${w.tone}`}>
                     <div className="t">When you press Send</div>
                     <p>{w.text}</p>
-                    {after?.stage && moveRoles.length > 0 && (
+                    {after?.stage && moveRoles.filter((r) => r.title).length > 0 && (
                       <label>
                         <input type="checkbox" checked={stageOn} disabled={sending} onChange={(e) => setStageOn(e.target.checked)} />
                         Also move {first} to {after.stage === "rejected" ? "Rejected" : "Contacted"}
-                        {moveRoles.length > 1 ? ` on ${movePhrase(moveRoles.map((r) => r.title))}` : ""}
+                        {moveRoles.filter((r) => r.title).length > 1 ? ` on ${movePhrase(moveRoles.filter((r) => r.title).map((r) => r.title))}` : ""}
                       </label>
                     )}
-                    {moveRoles.length > 1 && (
-                      <em className="em-thenroles">{moveRoles.map((r) => r.title).join(" · ")}</em>
+                    {moveRoles.filter((r) => r.title).length > 1 && (
+                      <em className="em-thenroles">{moveRoles.filter((r) => r.title).map((r) => r.title).join(" · ")}</em>
                     )}
                   </div>
                 );
               })()}
               <div className="tkm-foot">
                 {allowSilent && onSilent && (
-                  <button type="button" className="em-silent" onClick={onSilent} disabled={sending}>
+                  <button type="button" className="em-silent" onClick={() => onSilent(moveRoles.map((r) => r.id))} disabled={sending}>
                     Reject without emailing
                   </button>
                 )}

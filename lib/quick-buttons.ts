@@ -1,8 +1,8 @@
 // Every quick-action button that sends a template: where it appears, when,
-// the stock template it starts with, what Send does afterwards, and the
-// merge fields the composer can fill for it. Settings → Email templates
-// lists these and lets the owner point any of them at any template.
-// Keys are stable; the labels are what the button says.
+// the template it uses, what Send does afterwards, and the merge fields the
+// composer can fill for it. Settings → Email templates reads this to say
+// which button uses a template and when it goes out. Which template a button
+// uses is fixed here, deliberately: it is not configuration.
 import { TEMPLATE } from "./quick-actions";
 
 export type QuickButton = {

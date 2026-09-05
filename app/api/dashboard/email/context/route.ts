@@ -78,14 +78,24 @@ export async function POST(req: NextRequest) {
   const matchedRoles = wantIds.map((id) => titleOf.get(id) || "").filter(Boolean);
 
   // The roles they actually APPLIED to, as opposed to the matcher's guesses.
-  // Both quick actions on an application act on every one of these, so the
-  // ids and the titles are kept in step: a role whose title we cannot resolve
-  // (closed, or another org's) is left out of both.
-  const appliedRoles: { id: string; title: string }[] = [];
-  for (const id of app?.role_ids || []) {
-    const title = titleOf.get(id);
-    if (title && !appliedRoles.some((r) => r.id === id)) appliedRoles.push({ id, title });
+  // Both quick actions on an application act on every one of these, so a role
+  // that has CLOSED since they applied has to be here too: leaving it out
+  // would skip its stage move and drop it from the email, which is exactly
+  // the silent stranding this is meant to end. composeJobs only returns open
+  // roles, so closed ones are looked up separately.
+  const appliedIds = [...new Set(app?.role_ids || [])];
+  const unresolved = appliedIds.filter((id) => !titleOf.has(id));
+  if (unresolved.length) {
+    const res = await sbRest(
+      `org_roles?organization_id=eq.${member.org.id}&external_id=in.(${unresolved.map((s) => `"${s.replace(/"/g, "")}"`).join(",")})&select=external_id,title`
+    ).catch(() => null);
+    for (const r of res && res.ok ? ((await res.json()) as { external_id: string; title: string }[]) : []) {
+      titleOf.set(r.external_id, r.title);
+    }
   }
+  const appliedRoles = appliedIds
+    .map((id) => ({ id, title: titleOf.get(id) || "" }))
+    .filter((r) => r.title);
 
   // {{referrer_name}}: who put them forward (the referral form's name, never
   // the email); empty for everyone who wasn't referred, so a template that

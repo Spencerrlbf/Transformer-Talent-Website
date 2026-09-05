@@ -319,30 +319,37 @@ export default function InboxPage() {
     });
   };
 
-  /** "Reject without emailing": the stage move alone. Only ever a stage
-   *  move — a failure says so rather than quietly ticking the row. */
-  const silentReject = async () => {
+  /** "Reject without emailing": the stage move alone, on the same roles the
+   *  emailed rejection would have used, so the two paths cannot disagree.
+   *  A failure says so rather than quietly ticking the row. */
+  const silentReject = async (jobIds: string[] = []) => {
     const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
     if (!cur || !cur.candidateKey) return;
-    const jobId = cur.jobId || (cur.also || []).find((x) => x.jobId)?.jobId || null;
-    if (!jobId) {
+    const ids = jobIds.length ? jobIds : [cur.jobId || (cur.also || []).find((x) => x.jobId)?.jobId].filter((v): v is string => Boolean(v));
+    if (!ids.length) {
       setNotice("There is no role to reject them for. Use Done to clear the item instead.");
       return;
     }
-    const res = await fetch(`/api/dashboard/candidates/v2/${cur.candidateKey}/status`, {
-      method: "PUT",
-      headers: { ...auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId, status: "rejected" }),
-    }).catch(() => null);
-    if (res?.ok) {
+    let done = 0;
+    for (const jobId of ids) {
+      const res = await fetch(`/api/dashboard/candidates/v2/${cur.candidateKey}/status`, {
+        method: "PUT",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, status: "rejected" }),
+      }).catch(() => null);
+      if (res?.ok) done++;
+    }
+    if (done === ids.length) {
       setNotice("");
       noteHandled(cur.id, "stage:Rejected");
-      load();
+    } else if (done > 0) {
+      setNotice(`Moved them to Rejected on ${done} of ${ids.length} roles. Try the rest from the job's pipeline.`);
     } else {
       setNotice("Couldn't move them to Rejected. Nothing changed; try again.");
     }
+    load();
   };
-  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; reminded?: string | null; checkBack?: string | null }) => {
+  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
     if (!cur) {
@@ -352,6 +359,14 @@ export default function InboxPage() {
     let reason: string | null = null;
     if (ev.type === "stage" && (cur.kind === "app" || cur.kind === "drop")) reason = `stage:${ev.label || "moved"}`;
     if (ev.type === "sent") {
+      // The email is out either way; the move is the part that can fail, so
+      // say when it did rather than letting "email sent" imply both.
+      if (ev.asked) {
+        const moved = ev.stagedJobs?.length ?? (ev.staged ? 1 : 0);
+        if (moved === 0) setNotice("The email went out, but the pipeline move did not. Set the stage from the job's pipeline.");
+        else if (moved < ev.asked) setNotice(`The email went out and they moved on ${moved} of ${ev.asked} roles. Set the rest from the job's pipeline.`);
+        else setNotice("");
+      }
       // A quick action's Send reports the move the server actually made.
       if (ev.staged) reason = `stage:${ev.staged.charAt(0).toUpperCase() + ev.staged.slice(1)}`;
       else if (cur.kind === "remind") reason = ev.reminded ? `remind:${ev.reminded}` : "remind:nudged";

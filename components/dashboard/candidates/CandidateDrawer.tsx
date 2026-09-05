@@ -338,7 +338,7 @@ export default function CandidateDrawer({
   navIndex?: number;
   onNavigateItem?: (index: number) => void;
   /** Inbox: something happened in here that may clear the current item. */
-  onActivity?: (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; reminded?: string | null; checkBack?: string | null }) => void;
+  onActivity?: (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => void;
   /** Inbox: the email task a send from here fulfils. */
   completeTaskId?: string | null;
   /** Inbox: the thread a fresh email from here answers. */
@@ -357,7 +357,7 @@ export default function CandidateDrawer({
     remind?: boolean;
   } | null;
   /** Inbox quick action: "Reject without emailing" chosen in the composer. */
-  onSilentReject?: () => void;
+  onSilentReject?: (jobIds: string[]) => void;
 }) {
   const { token } = useDash();
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -744,10 +744,10 @@ export default function CandidateDrawer({
           remindMode={quickHead ? (quickHead.remind === false ? "off" : "on") : undefined}
           onSilent={
             onSilentReject
-              ? () => {
+              ? (jobIds: string[]) => {
                   setEmailOpen(false);
                   setQuickHead(null);
-                  onSilentReject();
+                  onSilentReject(jobIds);
                 }
               : undefined
           }
@@ -759,7 +759,7 @@ export default function CandidateDrawer({
             setQuickHead(null);
             setTab("email");
             setNotesBump((b) => b + 1);
-            onActivity?.({ type: "sent", staged: result?.staged ?? null, reminded: result?.reminded ?? null });
+            onActivity?.({ type: "sent", staged: result?.staged ?? null, stagedJobs: result?.stagedJobs, asked: result?.asked, reminded: result?.reminded ?? null });
           }}
         />
       )}
@@ -1400,7 +1400,7 @@ export default function CandidateDrawer({
                   inboxThreadId={inboxThreadId || undefined}
                   onSent={(result) => {
                     setQuickTab(null);
-                    onActivity?.({ type: "sent", staged: result?.staged ?? null, reminded: result?.reminded ?? null });
+                    onActivity?.({ type: "sent", staged: result?.staged ?? null, stagedJobs: result?.stagedJobs, asked: result?.asked, reminded: result?.reminded ?? null });
                   }}
                   openCompose={quickTab}
                   onSilent={onSilentReject}

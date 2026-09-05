@@ -192,7 +192,7 @@ export default function InboxStrip({
       {actions.length > 0 && (
         <span className="ibs-also">
           {actionKind !== item.kind ? `Buttons are for their ${KIND_LABEL[actionKind].toLowerCase()} · ` : ""}
-          Every button opens the composer first. After Send: <b>{outcomeLabel(actions[0], actionKind, Boolean(actionKind === item.kind ? item.jobId : also.find((x) => x.kind === actionKind)?.jobId || item.jobId))}</b>
+          Every button opens the composer first, and says there what Send will do before you send it.
           {also.length > 0 && (
             <>
               {" · "}Also open for them: <b>{also.map((x) => KIND_LABEL[x.kind]).join(" · ")}</b>

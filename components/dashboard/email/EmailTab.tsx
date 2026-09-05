@@ -80,7 +80,7 @@ export default function EmailTab({
   /** Inbox: the thread a fresh (unthreaded) email answers. */
   inboxThreadId?: string | null;
   /** Inbox: a send went out (quick reply or composer), with what the server did. */
-  onSent?: (result?: { staged: string | null; taskDone: boolean; reminded?: string | null }) => void;
+  onSent?: (result?: { staged: string | null; stagedJobs?: string[]; asked?: number; taskDone: boolean; reminded?: string | null }) => void;
   /** Inbox quick action: open the composer on the current thread with a template. */
   openCompose?: {
     nonce: number;
@@ -92,7 +92,7 @@ export default function EmailTab({
     allowSilent?: boolean;
     remind?: boolean;
   } | null;
-  onSilent?: () => void;
+  onSilent?: (jobIds: string[]) => void;
   /** "No reply" confirmed from a thread header here. */
   onNoReply?: (r: { checkBack: string | null; staged: boolean }) => void;
 }) {
@@ -503,7 +503,7 @@ export default function EmailTab({
           outcome={compose.outcome}
           allowSilent={compose.allowSilent}
           remindMode={compose.remind === false ? "off" : "on"}
-          onSilent={onSilent ? () => { setCompose(null); onSilent(); } : undefined}
+          onSilent={onSilent ? (jobIds: string[]) => { setCompose(null); onSilent(jobIds); } : undefined}
           onClose={() => setCompose(null)}
           onSent={(result) => {
             // The draft went out through the composer: clear it here so the
