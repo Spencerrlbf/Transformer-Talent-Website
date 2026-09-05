@@ -3,9 +3,13 @@
 // role select); this shows the words a person would read, with any field
 // the composer couldn't fill shown as [field].
 
+import { appliedSubject, rolesPhrase } from "./email-roles";
+
 export type PreviewCtx = {
   candidate: { name: string };
   senderName: string;
+  appliedRoles?: { id: string; title: string }[];
+  orgName?: string;
   jobs: { id: string; title: string; company: string; url: string }[];
   trackedLink: string;
   bookingLink?: string;
@@ -30,6 +34,8 @@ export function previewValues(c: PreviewCtx, subject = ""): Record<string, strin
     company: role?.company || "",
     role_link: role?.url || "",
     matched_roles: (c.matchedRoles || []).join(", "),
+    applied_roles: rolesPhrase((c.appliedRoles || []).map((r) => r.title)),
+    applied_subject: appliedSubject((c.appliedRoles || []).map((r) => r.title), c.orgName || ""),
     referrer_name: c.referrerName || "",
     month: c.month || "",
     subject,

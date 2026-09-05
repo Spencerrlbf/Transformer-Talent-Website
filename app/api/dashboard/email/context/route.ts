@@ -9,7 +9,7 @@ import {
   trackedLinkUrl,
 } from "@/lib/server/email-compose";
 import { loadProfile } from "@/lib/server/recruiter-profile";
-import { ensureDefaultTemplates, resolveButtons } from "@/lib/server/quick-actions";
+import { ensureDefaultTemplates } from "@/lib/server/quick-actions";
 import { sbRest } from "@/lib/server/supabase";
 import { getRoles } from "@/lib/roles";
 
@@ -77,11 +77,20 @@ export async function POST(req: NextRequest) {
   }
   const matchedRoles = wantIds.map((id) => titleOf.get(id) || "").filter(Boolean);
 
+  // The roles they actually APPLIED to, as opposed to the matcher's guesses.
+  // Both quick actions on an application act on every one of these, so the
+  // ids and the titles are kept in step: a role whose title we cannot resolve
+  // (closed, or another org's) is left out of both.
+  const appliedRoles: { id: string; title: string }[] = [];
+  for (const id of app?.role_ids || []) {
+    const title = titleOf.get(id);
+    if (title && !appliedRoles.some((r) => r.id === id)) appliedRoles.push({ id, title });
+  }
+
   // {{referrer_name}}: who put them forward (the referral form's name, never
   // the email); empty for everyone who wasn't referred, so a template that
   // names a referrer shows a pill on the wrong person.
   const referrerName = ((app?.source || "").match(/^referral: by (.+?) <[^>]+>/) || [])[1]?.trim() || "";
-  const buttons = await resolveButtons(member.org.id, templates);
 
   return NextResponse.json({
     connected: Boolean(account),
@@ -90,11 +99,12 @@ export async function POST(req: NextRequest) {
     senderName,
     jobs,
     templates,
-    buttons,
     trackedLink,
     bookingLink: profile?.booking_url || "",
     pageLink,
     matchedRoles,
+    appliedRoles,
+    orgName: member.org.name,
     referrerName,
     month: app?.follow_up_at ? MONTH(app.follow_up_at) : "",
     appliedRoleId: (app?.role_ids || [])[0] || (app?.matched_role_ids || [])[0] || "",

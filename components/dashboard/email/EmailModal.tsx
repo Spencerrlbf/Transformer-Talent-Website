@@ -6,9 +6,10 @@
 // becomes an atomic red pill that blocks Send until dealt with.
 import { useCallback, useEffect, useRef, useState } from "react";
 import RemindChips from "@/components/dashboard/email/RemindChips";
-import { localDay, type RemindChoice } from "@/lib/reminders";
+import { fmtDue, localDay, reminderDue, type RemindChoice } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import { FIELD_HELP } from "@/lib/quick-buttons";
+import { appliedSubject, movePhrase, rolesPhrase } from "@/lib/email-roles";
 
 type ComposeJob = {
   id: string;
@@ -27,13 +28,14 @@ type Ctx = {
   senderName: string;
   jobs: ComposeJob[];
   templates: Template[];
-  /** Which template each quick-action button sends (Settings → Email templates). */
-  buttons?: Record<string, string | null>;
   trackedLink: string;
   /** Quick-action merge values (see the context route). */
   bookingLink?: string;
   pageLink?: string;
   matchedRoles?: string[];
+  /** The roles they applied to. Both quick actions on an application act on all of them. */
+  appliedRoles?: { id: string; title: string }[];
+  orgName?: string;
   referrerName?: string;
   month?: string;
   appliedRoleId?: string;
@@ -114,7 +116,6 @@ export default function EmailModal({
   inboxThreadId,
   initialTemplate,
   initialTemplateName,
-  initialButton,
   threadSubject,
   after,
   outcome,
@@ -137,8 +138,6 @@ export default function EmailModal({
   /** Quick action: apply this template (by action key, else by name) as soon as the composer loads. */
   initialTemplate?: string;
   initialTemplateName?: string;
-  /** Quick action: the button pressed, so the org's own mapping wins over the stock key. */
-  initialButton?: string;
   /** The conversation's subject, for {{subject}} even when the send can't thread. */
   threadSubject?: string;
   /** Quick action: the pipeline move Send makes — on this role only, never the merge role. */
@@ -168,6 +167,9 @@ export default function EmailModal({
   const [connecting, setConnecting] = useState(false);
   // "Remind me if no reply": the seat default unless the action says Off.
   const [remind, setRemind] = useState<RemindChoice>(remindMode === "off" || !reminderDays ? null : { days: reminderDays });
+  // The pipeline move a quick action carries, on by default and switchable
+  // off, so nothing happens to anyone without it being said first.
+  const [stageOn, setStageOn] = useState(true);
 
   const [menu, setMenu] = useState<"" | "tpl" | "fields" | "job" | "link" | "joblink">("");
   const [jobQ, setJobQ] = useState("");
@@ -225,9 +227,7 @@ export default function EmailModal({
     }
     if (initialTemplate) {
       const wantName = (initialTemplateName || "").trim().toLowerCase();
-      const mapped = initialButton && ctx.buttons ? ctx.buttons[initialButton] : null;
       const t =
-        (mapped ? ctx.templates.find((x) => x.id === mapped) : undefined) ||
         ctx.templates.find((x) => x.actionKey === initialTemplate) ||
         (wantName ? ctx.templates.find((x) => x.name.trim().toLowerCase() === wantName) : undefined);
       if (t) {
@@ -238,7 +238,7 @@ export default function EmailModal({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, initialText, initialTemplate, initialButton]);
+  }, [ctx, initialText, initialTemplate]);
   const applyRef = useRef<((t: Template) => void) | null>(null);
 
   // Above the drawer: swallow Escape before the drawer's document handler.
@@ -392,6 +392,8 @@ export default function EmailModal({
         html: role?.url ? `<a href="${esc(role.url)}">${esc(shortUrl(role.url))}</a>` : undefined,
       },
       matched_roles: { value: joinTitles(c.matchedRoles || []), label: "matched roles" },
+      applied_roles: { value: rolesPhrase((c.appliedRoles || []).map((r) => r.title)), label: "roles they applied for" },
+      applied_subject: { value: appliedSubject((c.appliedRoles || []).map((r) => r.title), c.orgName || ""), label: "subject" },
       referrer_name: { value: c.referrerName || "", label: "referrer" },
       month: { value: c.month || "", label: "month" },
       subject: {
@@ -512,6 +514,34 @@ export default function EmailModal({
     setConnecting(false);
   };
 
+  // Applications move on every role they applied for; a matched role (a resume
+  // drop or a referral) is a guess, so it stays the one the item named.
+  const moveRoles: { id: string; title: string }[] = (() => {
+    if (!after?.stage) return [];
+    const applied = ctx?.appliedRoles || [];
+    if (applied.length) return applied;
+    const j = after.jobId ? ctx?.jobs.find((x) => x.id === after.jobId) : null;
+    return after.jobId ? [{ id: after.jobId, title: j?.title || "" }] : [];
+  })();
+
+  /** What Send will do, in a sentence, before it is done. */
+  const whenYouSend = (): { tone: "pos" | "rej" | "plain"; text: string } => {
+    const due = reminderDue(localDay(), remind);
+    const back = due ? ` They come back to your Inbox on ${fmtDue(due)} if they haven't replied.` : "";
+    if (after?.stage && stageOn && moveRoles.length) {
+      const where = movePhrase(moveRoles.map((r) => r.title));
+      const rejected = after.stage === "rejected";
+      return {
+        tone: rejected ? "rej" : "pos",
+        text:
+          `${first} gets your email and moves to ${rejected ? "Rejected" : "Contacted"} on ${where}.` +
+          (rejected ? ` Any reply reminders for ${first} are cancelled.` : back),
+      };
+    }
+    if (due) return { tone: "plain", text: `${first} gets your email${outcome ? "" : ""}.${back}` };
+    return { tone: "plain", text: `${first} gets your email. Nothing else changes.` };
+  };
+
   const send = async () => {
     const el = bodyRef.current;
     if (!el || sending) return;
@@ -536,7 +566,9 @@ export default function EmailModal({
           ...(reply ? { replyToMessageId: reply.messageId } : {}),
           ...(completeTaskId ? { completeTaskId } : {}),
           ...(inboxThreadId ? { inboxThreadId } : {}),
-          ...(after && after.jobId ? { after: { stage: after.stage, jobId: after.jobId } } : {}),
+          ...(after?.stage && stageOn && moveRoles.length
+            ? { after: { stage: after.stage, jobIds: moveRoles.map((r) => r.id) } }
+            : {}),
           today: new Date().toLocaleDateString("en-CA"),
           remind,
         }),
@@ -955,24 +987,32 @@ export default function EmailModal({
               <div className="em-remindrow">
                 <RemindChips value={remind} onChange={setRemind} today={localDay()} disabled={sending} />
               </div>
+              {(() => {
+                const w = whenYouSend();
+                return (
+                  <div className={`em-then ${w.tone}`}>
+                    <div className="t">When you press Send</div>
+                    <p>{w.text}</p>
+                    {after?.stage && moveRoles.length > 0 && (
+                      <label>
+                        <input type="checkbox" checked={stageOn} disabled={sending} onChange={(e) => setStageOn(e.target.checked)} />
+                        Also move {first} to {after.stage === "rejected" ? "Rejected" : "Contacted"}
+                        {moveRoles.length > 1 ? ` on ${movePhrase(moveRoles.map((r) => r.title))}` : ""}
+                      </label>
+                    )}
+                    {moveRoles.length > 1 && (
+                      <em className="em-thenroles">{moveRoles.map((r) => r.title).join(" · ")}</em>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="tkm-foot">
                 {allowSilent && onSilent && (
                   <button type="button" className="em-silent" onClick={onSilent} disabled={sending}>
                     Reject without emailing
                   </button>
                 )}
-                <span className="em-foothint">
-                  {outcome ? (
-                    <>
-                      Then: <b>{outcome}</b>
-                      {after?.jobId && ctx?.jobs.find((j) => j.id === after.jobId) && (
-                        <> · {ctx.jobs.find((j) => j.id === after.jobId)!.title}</>
-                      )}
-                    </>
-                  ) : (
-                    <>Logged to {first}&apos;s timeline on send</>
-                  )}
-                </span>
+                <span className="em-foothint">Logged to {first}&apos;s timeline on send</span>
                 <button className="tkm-cancel" onClick={onClose} disabled={sending}>
                   Cancel
                 </button>

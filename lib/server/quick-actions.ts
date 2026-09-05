@@ -8,21 +8,20 @@
 import { sbRest } from "./supabase";
 import { listTemplates, createTemplate, setTemplateActionKey, type Template } from "./email-compose";
 import { TEMPLATE } from "@/lib/quick-actions";
-import { QUICK_BUTTONS, buttonByKey } from "@/lib/quick-buttons";
 
 const lines = (...ls: string[]) => ls.map((l) => (l ? `<div>${l}</div>` : "<div><br></div>")).join("");
 
 export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bodyHtml: string; since?: string }[] = [
   {
     ...TEMPLATE.applyCall,
-    subject: "Your application for {{job_title}}",
+    subject: "{{applied_subject}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
       "",
-      "Thanks for applying for the {{job_title}} role. I've read your profile and would like to talk.",
+      "Thank you for applying for {{applied_roles}}. I've read your profile and would like to talk.",
       "",
       "Pick a time that suits you here: {{booking_link}}",
-      "The role and the team are on my page: {{page_link}}",
+      "The roles and the team are on my page: {{page_link}}",
       "",
       "Looking forward to it,",
       "{{sender_name}}"
@@ -89,11 +88,11 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bo
   },
   {
     ...TEMPLATE.notThisTime,
-    subject: "Your application for {{job_title}}",
+    subject: "{{applied_subject}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
       "",
-      "Thank you for applying for the {{job_title}} role. I won't be taking your application forward this time.",
+      "Thank you for applying for {{applied_roles}}. I won't be taking things forward this time.",
       "",
       "I'll keep your profile on file and get in touch if a closer match comes up.",
       "",
@@ -228,45 +227,6 @@ export async function ensureDefaultTemplates(orgId: string, byEmail: string): Pr
   }).catch(() => {});
 }
 
-// ---- which template each button sends ---------------------------------------
-// Default: the org's copy of the stock wording, found by action_key. A row in
-// quick_action_templates points a button somewhere else; a row whose template
-// is gone (deleted → null) falls back to the default again.
-
-/** Resolved template id per button key (null = nothing to send). */
-export async function resolveButtons(orgId: string, templates: Template[]): Promise<Record<string, string | null>> {
-  const res = await sbRest(`quick_action_templates?organization_id=eq.${orgId}&select=button_key,template_id&limit=200`).catch(() => null);
-  const rows = res && res.ok ? ((await res.json()) as { button_key: string; template_id: string | null }[]) : [];
-  const mapped = new Map(rows.map((r) => [r.button_key, r.template_id]));
-  const ids = new Set(templates.map((t) => t.id));
-  const byKey = new Map<string, string>();
-  for (const t of templates) if (t.actionKey && !byKey.has(t.actionKey)) byKey.set(t.actionKey, t.id);
-  const out: Record<string, string | null> = {};
-  for (const b of QUICK_BUTTONS) {
-    const m = mapped.get(b.key);
-    out[b.key] = m && ids.has(m) ? m : byKey.get(b.defaultKey) || null;
-  }
-  return out;
-}
-
-/** Point a button at a template (owner). templateId null = back to the default. */
-export async function setButtonTemplate(orgId: string, byEmail: string, buttonKey: string, templateId: string | null): Promise<boolean> {
-  if (!buttonByKey(buttonKey)) return false;
-  if (!templateId) {
-    const res = await sbRest(`quick_action_templates?organization_id=eq.${orgId}&button_key=eq.${encodeURIComponent(buttonKey)}`, { method: "DELETE" });
-    return res.ok;
-  }
-  // The template must be this org's.
-  const chk = await sbRest(`email_templates?id=eq.${templateId}&organization_id=eq.${orgId}&select=id&limit=1`);
-  if (!chk.ok || ((await chk.json()) as unknown[]).length === 0) return false;
-  const res = await sbRest(`quick_action_templates?on_conflict=organization_id,button_key`, {
-    method: "POST",
-    prefer: "resolution=merge-duplicates,return=minimal",
-    body: JSON.stringify({ organization_id: orgId, button_key: buttonKey, template_id: templateId, updated_by_email: byEmail, updated_at: new Date().toISOString() }),
-  });
-  return res.ok;
-}
-
 /** Bring a deleted stock template back (a new row with the stock wording)
  *  and let its buttons fall back to it. Returns the template, or the
  *  existing one when nothing was missing. */
@@ -281,7 +241,6 @@ export async function restoreDefault(orgId: string, byEmail: string, defaultKey:
   const name = taken.has(stock.name.toLowerCase()) ? `${stock.name} (default)` : stock.name;
   const made = await createTemplate({ orgId, name, subject: stock.subject, bodyHtml: stock.bodyHtml, byEmail, actionKey: stock.key });
   if ("error" in made) return null;
-  // Buttons that pointed at the deleted copy fall back by themselves (null template_id).
   return made;
 }
 

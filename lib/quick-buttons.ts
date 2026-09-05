@@ -62,6 +62,8 @@ export const FIELD_HELP: [string, string][] = [
   ["job_title", "the role the button is about"],
   ["company", "that role's company"],
   ["role_link", "that role's public page"],
+  ["applied_roles", "the roles they applied for, named in a sentence"],
+  ["applied_subject", "a subject line: names the role when there is one"],
   ["matched_roles", "roles they match (drops, referrals, follow-ups)"],
   ["referrer_name", "who referred them (referrals only)"],
   ["month", "the month they asked to hear back"],

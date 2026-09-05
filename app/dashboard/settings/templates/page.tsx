@@ -8,13 +8,11 @@ import { useDash } from "@/components/dashboard/DashShell";
 import { TemplateEditor } from "@/components/dashboard/email/EmailModal";
 import PersonPicker from "@/components/dashboard/home/PersonPicker";
 import { QUICK_BUTTONS, fieldsUsed, type QuickButton } from "@/lib/quick-buttons";
-import { TEMPLATE } from "@/lib/quick-actions";
 import { htmlToLines, mergeText, previewValues, type PreviewCtx } from "@/lib/email-preview";
 import type { Template } from "@/lib/server/email-compose";
 
-type Data = { templates: Template[]; buttons: Record<string, string | null>; canMap: boolean };
+type Data = { templates: Template[]; canRestore: boolean };
 
-const stockName = (key: string) => Object.values(TEMPLATE).find((t) => t.key === key)?.name || "the stock wording";
 const who = (email?: string) => {
   const local = (email || "").split("@")[0];
   return local ? local.charAt(0).toUpperCase() + local.slice(1) : "";
@@ -150,14 +148,15 @@ export default function TemplatesPage() {
   };
 
   const templates = data?.templates || [];
-  const buttons = data?.buttons || {};
   const byId = new Map(templates.map((t) => [t.id, t]));
-  const defaultIdFor = (defaultKey: string) => templates.find((t) => t.actionKey === defaultKey)?.id || null;
-  const usedBy = (id: string) => QUICK_BUTTONS.filter((b) => buttons[b.key] === id);
+  const keys = new Set(templates.map((t) => t.actionKey).filter(Boolean));
+  // Which buttons send a template is fixed in the code: a button uses the
+  // org's copy of its stock wording, found by action key.
+  const usedBy = (t: Template | null) => (t?.actionKey ? QUICK_BUTTONS.filter((b) => b.defaultKey === t.actionKey) : []);
   const current = selected && selected !== "new" ? byId.get(selected) || null : null;
   const stock = templates.filter((t) => t.actionKey);
   const own = templates.filter((t) => !t.actionKey);
-  const missing = QUICK_BUTTONS.filter((b) => !buttons[b.key]).length;
+  const missing = QUICK_BUTTONS.filter((b) => !keys.has(b.defaultKey));
 
   // Preview text from what is in the editor right now.
   const values = pctx ? previewValues(pctx, "(the thread's subject)") : null;
@@ -171,8 +170,8 @@ export default function TemplatesPage() {
         <div>
           <h1 className="dash-h1">Email templates</h1>
           <p className="dash-sub">
-            The wording behind every quick-action button, shared with your whole team. Nobody picks a template when they send: pressing a button in the Inbox or on Home opens the composer with its
-            template already merged for that person. The chip under each name says which button, and the table below is the full wiring.{" "}
+            The wording your team sends, shared by everyone. Pressing a button in the Inbox or on Home opens the composer with its wording already merged for that person, and you can swap to any
+            other template from the composer before you send. The chip under each name says which button uses it. There is nothing to configure here.{" "}
             <Link href="/dashboard/settings">Back to Settings</Link>
           </p>
         </div>
@@ -195,11 +194,11 @@ export default function TemplatesPage() {
           <ul className="tp-list">
             {stock.length > 0 && <li className="grp" style={{ cursor: "default" }}>Default wording</li>}
             {stock.map((t) => (
-              <TemplateRow key={t.id} t={t} on={selected === t.id} used={usedBy(t.id)} onPick={() => startEdit(t)} />
+              <TemplateRow key={t.id} t={t} on={selected === t.id} used={usedBy(t)} onPick={() => startEdit(t)} />
             ))}
             {own.length > 0 && <li className="grp" style={{ cursor: "default" }}>Your own</li>}
             {own.map((t) => (
-              <TemplateRow key={t.id} t={t} on={selected === t.id} used={usedBy(t.id)} onPick={() => startEdit(t)} />
+              <TemplateRow key={t.id} t={t} on={selected === t.id} used={usedBy(t)} onPick={() => startEdit(t)} />
             ))}
             {selected === "new" && (
               <li className="on">
@@ -220,7 +219,7 @@ export default function TemplatesPage() {
                     {current
                       ? [
                           current.updatedAt ? `Edited ${when(current.updatedAt)}${who(current.createdBy) ? ` by ${who(current.createdBy)}` : ""}` : null,
-                          `used by ${usedBy(current.id).length} button${usedBy(current.id).length === 1 ? "" : "s"}`,
+                          `used by ${usedBy(current).length} button${usedBy(current).length === 1 ? "" : "s"}`,
                         ]
                           .filter(Boolean)
                           .join(" · ")
@@ -249,13 +248,13 @@ export default function TemplatesPage() {
                 />
                 {current && (
                   <p className="tp-fine" style={{ marginTop: 8 }}>
-                    {usedBy(current.id).length > 0 ? (
+                    {usedBy(current).length > 0 ? (
                       <>
-                        <b>Sent when</b> {usedBy(current.id).map((b) => b.sentence).join(", or when ")}. Changes apply the next time it is pressed.
+                        <b>Sent when</b> {usedBy(current).map((b) => b.sentence).join(", or when ")}. Changes apply the next time it is pressed.
                       </>
                     ) : (
                       <>
-                        <b>No button sends this one.</b> It is there to pick by hand from the composer&apos;s Template menu. Give it a button in the table below if you want it sent by a quick action.
+                        <b>No button sends this one.</b> It is there to pick by hand from the composer&apos;s Template dropdown, on any email.
                       </>
                     )}
                   </p>
@@ -286,101 +285,22 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      <div className="tk-day-h hm-sec">
-        Buttons <span className="hm-why">which template each quick action sends, and what Send does afterwards</span>
-      </div>
-      <div className="tp-card">
-        <div className="board-scroll">
-          <table className="tp-map">
-            <thead>
-              <tr>
-                <th>Button</th>
-                <th>Shows when</th>
-                <th>Template</th>
-                <th>Then</th>
-              </tr>
-            </thead>
-            <tbody>
-              {QUICK_BUTTONS.map((b, i) => {
-                const head = i === 0 || QUICK_BUTTONS[i - 1].where !== b.where;
-                const id = buttons[b.key];
-                const t = id ? byId.get(id) : undefined;
-                const isDefault = !id || id === defaultIdFor(b.defaultKey);
-                const bad = t ? fieldsUsed(t.subject, t.bodyHtml).filter((f) => !b.fields.includes(f)) : [];
-                return (
-                  <FragmentRows key={b.key} head={head ? b.where : null}>
-                    <td className="bt">
-                      <b>{b.label}</b>
-                      <small>{b.where}</small>
-                    </td>
-                    <td>{b.when}</td>
-                    <td className="tpl">
-                      {data?.canMap ? (
-                        <select
-                          className={t ? "" : "miss"}
-                          value={t ? t.id : ""}
-                          disabled={mapBusy === b.key}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (!v) return;
-                            if (v === defaultIdFor(b.defaultKey)) post({ button: b.key, reset: true }, b.key);
-                            else post({ button: b.key, templateId: v }, b.key);
-                          }}
-                        >
-                          {!t && <option value="">No template</option>}
-                          {templates.map((x) => (
-                            <option key={x.id} value={x.id}>
-                              {x.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span>{t ? t.name : <span className="hm-chip warn">No template</span>}</span>
-                      )}
-                      {t && (
-                        <button type="button" className="hm-lnk" onClick={() => startEdit(t)}>
-                          Edit
-                        </button>
-                      )}
-                      {!t && (
-                        <span className="note warn">
-                          Template deleted.{" "}
-                          {data?.canMap && (
-                            <>
-                              <button type="button" className="hm-lnk" disabled={mapBusy === b.key} onClick={() => post({ restore: b.key }, b.key)}>
-                                Restore default ({stockName(b.defaultKey)})
-                              </button>{" "}
-                              or pick one.
-                            </>
-                          )}
-                        </span>
-                      )}
-                      {t && bad.length > 0 && <span className="note warn">Uses {bad.map((f) => `{{${f}}}`).join(", ")}, which this button can&apos;t fill.</span>}
-                      {t && bad.length === 0 && <span className="note ok">{isDefault ? "Stock wording · fills every field it uses." : "Fills every field it uses."}</span>}
-                    </td>
-                    <td className="then">{b.then}</td>
-                  </FragmentRows>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="tp-mapfoot">
-          <span>
-            A button with no template says <b>template missing</b> in the composer and opens it empty. Restore default brings the stock wording back as a new template and maps the button to it.
-            {missing > 0 ? ` ${missing} button${missing === 1 ? " needs" : "s need"} a template.` : ""}
-          </span>
-          {data?.canMap && (
-            <button type="button" className="hm-lnk" disabled={mapBusy === "all"} onClick={() => post({ restoreAll: true }, "all")}>
-              Restore all default wording
+      {missing.length > 0 && (
+        <div className="tp-card tp-missing">
+          <p>
+            <b>{missing.length} button{missing.length === 1 ? " has" : "s have"} no wording.</b>{" "}
+            {missing.map((b) => `${b.short} · ${b.label}`).join(", ")}. The stock template was deleted, so the composer opens empty when it is pressed.
+          </p>
+          {data?.canRestore && (
+            <button type="button" className="dash-btn dash-btn-2" disabled={mapBusy === "all"} onClick={() => post({ restoreAll: true }, "all")}>
+              {mapBusy === "all" ? "Restoring…" : "Restore the missing wording"}
             </button>
           )}
         </div>
-      </div>
+      )}
 
       <p className="tp-fine">
-        A template with no button is still there to pick by hand from any composer&apos;s Template menu. Every button fills name, sender, booking link, page link and tracked link. A button that names a role also fills the job title, company and role link. Drops, referrals and follow-ups fill matched roles; referrals fill the referrer; asks fill the month; in-thread buttons fill the subject. The table warns when a template uses a field its button can&apos;t fill, so nobody finds out at Send.
-        {data && !data.canMap ? " Changing which template a button sends is for your company's owner account; the wording is everyone's to edit." : ""}
+        Every button fills the person&apos;s name, your name, your booking link, your page link and a tracked link. A button that names a role also fills the job title, company and role link, and an application fills the roles they applied for. Drops, referrals and follow-ups fill matched roles; referrals fill the referrer; asks fill the month; replies fill the subject. A field a button cannot fill shows as a highlighted pill in the composer, so it is caught before Send rather than after.
       </p>
 
       {picker && (

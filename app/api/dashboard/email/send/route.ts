@@ -169,7 +169,13 @@ export async function POST(req: NextRequest) {
   // Reply reminder: the sender's, on this conversation, N days from today
   // (weekends roll to Monday). A newer email in the thread moves the
   // existing one rather than adding a second.
-  const after = body.after as { stage?: unknown; jobId?: unknown } | undefined;
+  const after = body.after as { stage?: unknown; jobId?: unknown; jobIds?: unknown } | undefined;
+  // An application can name several roles; a matched role is always one.
+  const afterJobIds: string[] = Array.isArray(after?.jobIds)
+    ? (after!.jobIds as unknown[]).filter((v): v is string => typeof v === "string" && Boolean(v)).slice(0, 20)
+    : typeof after?.jobId === "string" && after.jobId
+      ? [after.jobId]
+      : [];
   const remindThread = target?.threadId || inboxThreadId || sent.threadId || "";
   const due = reminderDue(today, parseRemind(body.remind));
   // Emailing someone we'd stopped chasing starts again: the mark clears,
@@ -206,14 +212,16 @@ export async function POST(req: NextRequest) {
   // Quick action outcome: the email is out, now the pipeline move. Only the
   // two moves a rule can name, on a role this org has.
   let staged: string | null = null;
-  if (after && (after.stage === "contacted" || after.stage === "rejected") && typeof after.jobId === "string" && after.jobId) {
-    if (await quickMoveAllowed(member.org.id, key, after.jobId, after.stage)) {
-      const res = await saveUnifiedStatus(member.org.id, key, after.jobId, after.stage, null, null, member.email).catch(() => ({ ok: false as const, error: "save_failed" }));
-      if (res.ok) {
-        staged = after.stage;
-        await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], after.jobId).catch(() => {});
-      }
+  const stagedJobs: string[] = [];
+  if (after && (after.stage === "contacted" || after.stage === "rejected") && afterJobIds.length) {
+    for (const jobId of afterJobIds) {
+      if (!(await quickMoveAllowed(member.org.id, key, jobId, after.stage))) continue;
+      const res = await saveUnifiedStatus(member.org.id, key, jobId, after.stage, null, null, member.email).catch(() => ({ ok: false as const, error: "save_failed" }));
+      if (!res.ok) continue;
+      staged = after.stage;
+      stagedJobs.push(jobId);
+      await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], jobId).catch(() => {});
     }
   }
-  return NextResponse.json({ ok: true, taskDone, staged, reminded });
+  return NextResponse.json({ ok: true, taskDone, staged, stagedJobs, reminded });
 }

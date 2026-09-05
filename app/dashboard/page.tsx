@@ -69,9 +69,9 @@ const STAGE_COLOR: Record<Stage, string> = {
 const STAGE_LABEL: Record<Stage, string> = { new: "New", contacted: "Contacted", replied: "Replied", interviewing: "Interviewing", offer: "Offer", hired: "Hired" };
 // Attention row buttons open the composer with these templates merged.
 const TEMPLATE_OF = {
-  nudge: { template: TEMPLATE.followUp.key, templateName: TEMPLATE.followUp.name, button: "home.contacted.nudge" },
-  checkin: { template: TEMPLATE.checkIn.key, templateName: TEMPLATE.checkIn.name, button: "home.interviewing.checkin" },
-  offer: { template: TEMPLATE.offerTimes.key, templateName: TEMPLATE.offerTimes.name, button: "home.offer.times" },
+  nudge: { template: TEMPLATE.followUp.key, templateName: TEMPLATE.followUp.name },
+  checkin: { template: TEMPLATE.checkIn.key, templateName: TEMPLATE.checkIn.name },
+  offer: { template: TEMPLATE.offerTimes.key, templateName: TEMPLATE.offerTimes.name },
 };
 const authorName = (email: string) => {
   const local = email.split("@")[0] || "Teammate";
@@ -94,7 +94,7 @@ export default function HomePage() {
     key: string;
     tab: "profile" | "email";
     threadId: string | null;
-    quick: { nonce: number; template: string | null; templateName?: string; button?: string; reply?: boolean; outcome?: string; remind?: boolean } | null;
+    quick: { nonce: number; template: string | null; templateName?: string; reply?: boolean; outcome?: string; remind?: boolean } | null;
   } | null>(null);
 
   useEffect(() => {

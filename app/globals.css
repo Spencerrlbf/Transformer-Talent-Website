@@ -4363,3 +4363,21 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .tp-list li > * { margin: 0; line-height: 1.35; }
 .tp-list li .sub { margin-top: 1px; }
 .tp-use span.none { background: var(--warn-bg); border-color: #EED9BC; color: var(--warn); }
+/* The composer's "when you press Send" box: what happens, before it happens. */
+.em-then { margin-top: 12px; border: 1px solid #BFE3CC; background: var(--pos-bg); border-radius: var(--r-card); padding: 10px 12px; }
+.em-then .t { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pos); margin-bottom: 4px; }
+.em-then p { margin: 0; font-size: 12.5px; line-height: 1.5; color: #14532d; }
+.em-then label { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #BFE3CC; font-size: 12px; color: #14532d; cursor: pointer; }
+.em-then label input { width: 14px; height: 14px; margin: 0; accent-color: var(--pos); }
+.em-then .em-thenroles { display: block; font-style: normal; font-size: 11.5px; color: #2f6b4a; margin-top: 6px; }
+.em-then.rej { border-color: #EBC3BC; background: var(--bad-bg); }
+.em-then.rej .t { color: var(--bad); }
+.em-then.rej p, .em-then.rej label { color: #7a2a1e; }
+.em-then.rej label { border-top-color: #EBC3BC; }
+.em-then.rej label input { accent-color: var(--bad); }
+.em-then.plain { border-color: var(--hair); background: var(--surface); }
+.em-then.plain .t { color: var(--body-2); }
+.em-then.plain p, .em-then.plain .em-thenroles { color: var(--body); }
+.tp-missing { padding: 13px 15px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border-color: #EED9BC; background: var(--warn-bg); margin-top: 16px; }
+.tp-missing p { margin: 0; font-size: 12.5px; color: var(--warn); flex: 1; min-width: 260px; line-height: 1.5; }
+.tp-missing p b { color: #7a4a11; }

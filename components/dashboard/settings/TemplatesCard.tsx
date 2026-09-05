@@ -11,10 +11,11 @@ export default function TemplatesCard() {
 
   useEffect(() => {
     fetch("/api/dashboard/email/templates", { headers: { Authorization: `Bearer ${token}` } })
-      .then(async (r) => (r.ok ? (r.json() as Promise<{ templates: unknown[]; buttons: Record<string, string | null> }>) : null))
+      .then(async (r) => (r.ok ? (r.json() as Promise<{ templates: { actionKey: string | null }[] }>) : null))
       .then((d) => {
         if (!d) return;
-        setN({ templates: d.templates.length, missing: QUICK_BUTTONS.filter((b) => !d.buttons[b.key]).length });
+        const keys = new Set(d.templates.map((t) => t.actionKey).filter(Boolean));
+        setN({ templates: d.templates.length, missing: QUICK_BUTTONS.filter((b) => !keys.has(b.defaultKey)).length });
       })
       .catch(() => {});
   }, [token]);
@@ -23,12 +24,12 @@ export default function TemplatesCard() {
     <>
       <div className="set-tpl">
         <span className="val">
-          {n ? `${n.templates} template${n.templates === 1 ? "" : "s"} · ${QUICK_BUTTONS.length} buttons` : "Loading…"}
+          {n ? `${n.templates} template${n.templates === 1 ? "" : "s"}` : "Loading…"}
           {n && n.missing > 0 && (
             <>
               {" · "}
               <span className="hm-chip warn">
-                {n.missing} button{n.missing === 1 ? " has" : "s have"} no template
+                {n.missing} button{n.missing === 1 ? " has" : "s have"} no wording
               </span>
             </>
           )}
@@ -38,7 +39,7 @@ export default function TemplatesCard() {
         </Link>
       </div>
       <small>
-        Shared with your whole team. Every quick-action button in the Inbox and on Home sends one of these; edit the wording, or change which template a button uses.
+        The wording your team sends. Every quick-action button in the Inbox and on Home uses one of these, and anyone can swap to a different one in the composer before sending.
       </small>
     </>
   );
