@@ -9,6 +9,7 @@ import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 import TaskModal, { type TaskModalTarget } from "@/components/dashboard/tasks/TaskModal";
 import InboxView, { type Seg } from "@/components/dashboard/inbox/InboxView";
 import InboxStrip from "@/components/dashboard/inbox/InboxStrip";
+import { undoNoReplyRequest } from "@/components/dashboard/email/NoReplyPanel";
 import {
   isTask,
   landingTab,
@@ -300,6 +301,31 @@ export default function InboxPage() {
   };
   const noteHandled = (id: string, reason: string) =>
     setSession((s) => (s ? { ...s, handled: { ...s.handled, [id]: reason } } : s));
+  const unhandle = (id: string) =>
+    setSession((s) => {
+      if (!s) return s;
+      const handled = { ...s.handled };
+      delete handled[id];
+      return { ...s, handled };
+    });
+  // "Undo" on a No reply confirmed this session: the mark was a slip.
+  const undoNoReply = async () => {
+    const s = sessionRef.current;
+    const cur = s ? s.items[s.index] : null;
+    if (!cur?.candidateKey) return;
+    setBusy(cur.id, true);
+    const r = await undoNoReplyRequest(token, cur.candidateKey);
+    setBusy(cur.id, false);
+    if (!r.ok) {
+      setNotice("Couldn't undo that. Nothing changed; try again.");
+      return;
+    }
+    const first = (cur.candidateName || "They").split(/\s+/)[0];
+    setNotice(`Undone. ${first} is back${r.restoredLabel ? ` at ${r.restoredLabel}` : ""}${r.reopened ? " and the reply reminder is open again" : ""}.`);
+    unhandle(cur.id);
+    setDrawerRefresh((n) => n + 1);
+    load();
+  };
 
   const current = session ? session.items[session.index] : null;
 
@@ -354,10 +380,16 @@ export default function InboxPage() {
     }
     load();
   };
-  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => {
+  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply" | "undone"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
     if (!cur) {
+      load();
+      return;
+    }
+    if (ev.type === "undone") {
+      unhandle(cur.id);
+      setDrawerRefresh((n) => n + 1);
       load();
       return;
     }
@@ -440,6 +472,7 @@ export default function InboxPage() {
                 setDrawerRefresh((n) => n + 1);
                 load();
               }}
+              onUndo={undoNoReply}
             />
           }
           onClose={closeSession}

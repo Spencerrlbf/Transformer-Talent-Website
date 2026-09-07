@@ -722,6 +722,24 @@ export async function noteNoReply(orgId: string, viewer: string, key: string, th
   await markInbox(orgId, viewer, `arr:${a.id}`, { handled: "noreply", kind, candidateKey: key, label: KIND_TITLE[kind] }).catch(() => {});
 }
 
+/** Called by the no-reply route's undo: the Done records the mark wrote for
+ *  this seat (the conversation, the arrival) go away again. */
+export async function unnoteNoReply(orgId: string, viewer: string, key: string, threadId: string | null): Promise<void> {
+  if (!KEY_RE.test(key)) return;
+  const base = `inbox_items?organization_id=eq.${orgId}&member_email=eq.${encodeURIComponent(viewer)}`;
+  const drop = (itemKey: string, handledBy: string) =>
+    sbRest(`${base}&item_key=eq.${encodeURIComponent(itemKey)}&handled_by=eq.${encodeURIComponent(handledBy)}`, {
+      method: "DELETE",
+      prefer: "return=minimal",
+    }).catch(() => null);
+  if (threadId) await drop(`mail:${threadId}`, "noreply");
+  if (!key.startsWith("app_")) return;
+  const a = await arrivalRow(orgId, key);
+  if (!a) return;
+  await drop(`arr:${a.id}`, "noreply");
+  await drop(`arr:${a.id}`, "stage:No reply");
+}
+
 /** Called by the followup route on Mark contacted. */
 export async function noteContacted(orgId: string, viewer: string, key: string): Promise<void> {
   if (!key.startsWith("app_") || !KEY_RE.test(key)) return;

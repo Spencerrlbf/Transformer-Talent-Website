@@ -338,7 +338,7 @@ export default function CandidateDrawer({
   navIndex?: number;
   onNavigateItem?: (index: number) => void;
   /** Inbox: something happened in here that may clear the current item. */
-  onActivity?: (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => void;
+  onActivity?: (ev: { type: "stage" | "sent" | "contacted" | "noreply" | "undone"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => void;
   /** Inbox: the email task a send from here fulfils. */
   completeTaskId?: string | null;
   /** Inbox: the thread a fresh email from here answers. */
@@ -758,6 +758,8 @@ export default function CandidateDrawer({
           onSent={(result) => {
             setQuickHead(null);
             setTab("email");
+            // A send can clear a "no reply" mark: the header must show it.
+            refetchDetail();
             setNotesBump((b) => b + 1);
             onActivity?.({ type: "sent", staged: result?.staged ?? null, stagedJobs: result?.stagedJobs, asked: result?.asked, reminded: result?.reminded ?? null });
           }}
@@ -1400,6 +1402,7 @@ export default function CandidateDrawer({
                   inboxThreadId={inboxThreadId || undefined}
                   onSent={(result) => {
                     setQuickTab(null);
+                    refetchDetail();
                     onActivity?.({ type: "sent", staged: result?.staged ?? null, stagedJobs: result?.stagedJobs, asked: result?.asked, reminded: result?.reminded ?? null });
                   }}
                   openCompose={quickTab}
@@ -1407,6 +1410,10 @@ export default function CandidateDrawer({
                   onNoReply={(r) => {
                     refetchDetail();
                     onActivity?.({ type: "noreply", checkBack: r.checkBack });
+                  }}
+                  onUndoNoReply={() => {
+                    refetchDetail();
+                    onActivity?.({ type: "undone" });
                   }}
                 />
               )}

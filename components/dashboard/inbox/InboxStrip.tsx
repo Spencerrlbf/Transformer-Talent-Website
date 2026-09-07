@@ -55,6 +55,7 @@ export default function InboxStrip({
   onClose,
   onAction,
   onNoReply,
+  onUndo,
 }: {
   item: InboxItem;
   today: string;
@@ -71,6 +72,8 @@ export default function InboxStrip({
   onAction: (a: QuickAction, kind: string) => void;
   /** "No reply" confirmed from the panel here. */
   onNoReply: (r: { checkBack: string | null; staged: boolean }) => void;
+  /** Take back a "No reply" confirmed here this session (it was a slip). */
+  onUndo?: () => void;
 }) {
   const [nrOpen, setNrOpen] = useState(false);
   const tone = KIND_TONE[item.kind];
@@ -92,6 +95,11 @@ export default function InboxStrip({
           </b>
           <span>{remaining ? `${remaining} left for today` : "Your Inbox is clear for today"}</span>
         </span>
+        {handledReason.startsWith("noreply:") && onUndo && (
+          <button type="button" className="ibs-btn" onClick={onUndo} disabled={busy} title="Take the mark back. Nothing is sent.">
+            Undo
+          </button>
+        )}
         {hasNext ? (
           <button type="button" className="ibs-btn pri" onClick={onNext}>
             Next ›

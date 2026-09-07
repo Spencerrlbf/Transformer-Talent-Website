@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
   const due = reminderDue(today, parseRemind(body.remind));
   // Emailing someone we'd stopped chasing starts again: the mark clears,
   // the check-back is cancelled, and on the role they leave Past.
-  await clearNoReply({ orgId: member.org.id, candidateKey: key, reason: "contacted" }).catch(() => false);
+  const cleared = await clearNoReply({ orgId: member.org.id, candidateKey: key, reason: "contacted" }).catch(() => false);
   let taskDone = false;
   if (completeTaskId) {
     taskDone = await completeEmailTask(member.org.id, completeTaskId, key).catch(() => false);
@@ -223,5 +223,5 @@ export async function POST(req: NextRequest) {
       await noteStageMoved(member.org.id, member.email, key, STAGE_LABEL[after.stage], jobId).catch(() => {});
     }
   }
-  return NextResponse.json({ ok: true, taskDone, staged, stagedJobs, reminded });
+  return NextResponse.json({ ok: true, taskDone, staged, stagedJobs, reminded, cleared });
 }

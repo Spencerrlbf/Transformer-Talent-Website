@@ -6,6 +6,16 @@ import { useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { addDays, fmtDue, localDay, rollWeekend } from "@/lib/reminders";
 
+/** Undo a mark made by mistake: DELETE on the same route. Nothing is sent. */
+export async function undoNoReplyRequest(token: string, candKey: string): Promise<{ ok: boolean; restoredLabel: string | null; reopened: number }> {
+  const r = await fetch(`/api/dashboard/candidates/v2/${candKey}/no-reply`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => null);
+  const j = ((await r?.json().catch(() => ({}))) || {}) as { ok?: boolean; restoredLabel?: string | null; reopened?: number };
+  return { ok: Boolean(r?.ok && j.ok), restoredLabel: j.restoredLabel ?? null, reopened: j.reopened ?? 0 };
+}
+
 const CHOICES: [string, string][] = [
   ["never", "Never"],
   ["2", "2 weeks"],

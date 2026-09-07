@@ -39,6 +39,8 @@ type Ctx = {
   referrerName?: string;
   month?: string;
   appliedRoleId?: string;
+  /** A live "no reply" mark on them; any send clears it. */
+  noReply?: { markedAt: string; checkBackAt: string | null; jobId: string | null; jobTitle: string } | null;
 };
 
 /** "A", "A and B", "A, B and C". */
@@ -528,6 +530,12 @@ export default function EmailModal({
   const whenYouSend = (): { tone: "pos" | "rej" | "plain"; text: string } => {
     const due = reminderDue(localDay(), remind);
     const back = due ? ` They come back to your Inbox on ${fmtDue(due)} if they haven't replied.` : "";
+    // Emailing someone marked "no reply" starts chasing them again: the
+    // mark clears and, on the role it held them out of, they come back.
+    const nr = ctx?.noReply;
+    const unmark = nr
+      ? ` The no-reply mark on ${first} clears${nr.jobId && nr.jobTitle ? `, and they go back to Contacted on ${nr.jobTitle}` : ""}.`
+      : "";
     const named = moveRoles.filter((r) => r.title);
     if (after?.stage && stageOn && named.length) {
       const where = movePhrase(named.map((r) => r.title));
@@ -536,9 +544,11 @@ export default function EmailModal({
         tone: rejected ? "rej" : "pos",
         text:
           `${first} gets your email and moves to ${rejected ? "Rejected" : "Contacted"} on ${where}.` +
+          (nr ? ` The no-reply mark on ${first} clears too.` : "") +
           (rejected ? ` Any reply reminders for ${first} are cancelled.` : back),
       };
     }
+    if (unmark) return { tone: "pos", text: `${first} gets your email.${unmark}${back}` };
     if (due) return { tone: "plain", text: `${first} gets your email.${back}` };
     return { tone: "plain", text: `${first} gets your email. Nothing else changes.` };
   };
