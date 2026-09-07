@@ -1415,6 +1415,7 @@ export default function CandidateDrawer({
                     refetchDetail();
                     onActivity?.({ type: "undone" });
                   }}
+                  onComposeClosed={() => setQuickTab(null)}
                 />
               )}
               {tab === "notes" && isNet && (

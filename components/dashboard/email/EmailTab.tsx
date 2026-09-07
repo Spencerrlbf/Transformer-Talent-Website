@@ -69,6 +69,7 @@ export default function EmailTab({
   onSilent,
   onNoReply,
   onUndoNoReply,
+  onComposeClosed,
 }: {
   candKey: string;
   name: string;
@@ -98,6 +99,9 @@ export default function EmailTab({
   onNoReply?: (r: { checkBack: string | null; staged: boolean }) => void;
   /** "Undo" on a No reply confirmed here this session (it was a slip). */
   onUndoNoReply?: () => void;
+  /** The quick-action composer closed without sending: the host must forget
+   *  the action, or a rebuild of this tab would open it again. */
+  onComposeClosed?: () => void;
 }) {
   const { token, reminderDays } = useDash();
   const first = name.split(/\s+/)[0] || name;
@@ -542,8 +546,11 @@ export default function EmailTab({
           outcome={compose.outcome}
           allowSilent={compose.allowSilent}
           remindMode={compose.remind === false ? "off" : "on"}
-          onSilent={onSilent ? (jobIds: string[]) => { setCompose(null); onSilent(jobIds); } : undefined}
-          onClose={() => setCompose(null)}
+          onSilent={onSilent ? (jobIds: string[]) => { setCompose(null); onComposeClosed?.(); onSilent(jobIds); } : undefined}
+          onClose={() => {
+            setCompose(null);
+            onComposeClosed?.();
+          }}
           onSent={(result) => {
             // The draft went out through the composer: clear it here so the
             // quick-reply box can't send it a second time.
