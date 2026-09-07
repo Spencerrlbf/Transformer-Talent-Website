@@ -461,7 +461,9 @@ export async function listInbox(
       // an email sent late in the viewer's evening must not read "-1 days".
       const sentAt = out?.last || t.created_at || "";
       const since = sentAt ? Math.max(0, Math.floor((Date.now() - new Date(sentAt).getTime()) / 86400_000)) : null;
-      item.title = `No reply from ${t.candidate_name || "them"}`;
+      // Due: the reminder has fired, so "No reply from Ana". Not due yet:
+      // nothing has happened, and in Upcoming it must not read as a verdict.
+      item.title = t.due_date <= today ? `No reply from ${t.candidate_name || "them"}` : `Waiting on ${t.candidate_name || "them"} to reply`;
       item.detail = [since !== null ? `${since} day${since === 1 ? "" : "s"} since you emailed` : null, t.title].filter(Boolean).join(" · ");
       item.subject = t.title;
       item.threadId = t.thread_id || null;

@@ -112,7 +112,12 @@ export default function InboxPage() {
             // item after a reload (their reply handled, a task remains).
             // The fresh row replaces the old one wholesale — Done and marks
             // must target what is actually there now.
-            const fresh = d.items.find((n) => n.id === old.id) || d.items.find((n) => n.candidateKey && n.candidateKey === old.candidateKey);
+            // Upcoming rows open into a session too, so look there as well
+            // before calling anything gone: a poll must not end a session
+            // on a reminder that is simply not due yet.
+            const later = d.upcoming.flatMap((u) => u.items);
+            const byKey = (n: InboxItem) => Boolean(n.candidateKey) && n.candidateKey === old.candidateKey;
+            const fresh = d.items.find((n) => n.id === old.id) || later.find((n) => n.id === old.id) || d.items.find(byKey) || later.find(byKey);
             if (!fresh && !handled[old.id]) handled[old.id] = "gone";
             if (fresh && fresh.id !== old.id && handled[old.id] && !handled[fresh.id]) handled[fresh.id] = handled[old.id];
             return fresh ? { ...fresh, seen: fresh.seen || seenRef.current.has(fresh.id) } : old;
