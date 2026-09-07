@@ -4215,8 +4215,9 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 /* ---- No reply ------------------------------------------------------ */
 .nr-panel { flex-basis: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--paper); border: 1px solid var(--control-line); border-radius: 8px; font-size: 12.5px; margin-top: 4px; }
 .nr-panel > b { font-weight: 700; color: var(--ink); }
-.nr-go { margin-left: auto; display: inline-flex; gap: 6px; }
-.nr-fine { flex-basis: 100%; margin: 0; font-size: 11.5px; color: var(--muted); }
+.nr-go { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 6px; }
+.nr-fine { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.nr-fine b { color: var(--ink); font-weight: 700; }
 .nr-panel .em-warn { flex-basis: 100%; margin: 0; }
 .cv2-noreply { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 2px 9px; background: #eeece7; color: var(--body-2); white-space: nowrap; }
 .emc-chip.nr { background: #eeece7; color: var(--body-2); }
