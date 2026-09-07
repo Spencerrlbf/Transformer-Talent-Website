@@ -6,7 +6,7 @@
 // reply; "Open in composer" hands the same text to the full composer.
 import { useCallback, useEffect, useRef, useState } from "react";
 import RemindChips from "@/components/dashboard/email/RemindChips";
-import NoReplyPanel from "@/components/dashboard/email/NoReplyPanel";
+import NoReplyPanel, { undoNoReplyRequest } from "@/components/dashboard/email/NoReplyPanel";
 import { fmtDue, localDay as todayDay, reminderDue, type RemindChoice } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import EmailModal from "@/components/dashboard/email/EmailModal";
@@ -33,7 +33,7 @@ type Data = {
   /** This seat's live reply reminders, by thread. */
   reminders?: { id: string; threadId: string; dueDate: string; jobId?: string | null }[];
   /** "No reply" mark on this person, when live. */
-  noReply?: { markedAt: string; checkBackAt: string | null; threadId: string | null } | null;
+  noReply?: { markedAt: string; checkBackAt: string | null; threadId: string | null; jobId?: string | null } | null;
 };
 
 const localDay = (d: Date) => d.toLocaleDateString("en-CA");
@@ -68,6 +68,8 @@ export default function EmailTab({
   openCompose,
   onSilent,
   onNoReply,
+  onUndoNoReply,
+  onComposeClosed,
 }: {
   candKey: string;
   name: string;
@@ -80,7 +82,7 @@ export default function EmailTab({
   /** Inbox: the thread a fresh (unthreaded) email answers. */
   inboxThreadId?: string | null;
   /** Inbox: a send went out (quick reply or composer), with what the server did. */
-  onSent?: (result?: { staged: string | null; taskDone: boolean; reminded?: string | null }) => void;
+  onSent?: (result?: { staged: string | null; stagedJobs?: string[]; asked?: number; taskDone: boolean; reminded?: string | null }) => void;
   /** Inbox quick action: open the composer on the current thread with a template. */
   openCompose?: {
     nonce: number;
@@ -92,9 +94,14 @@ export default function EmailTab({
     allowSilent?: boolean;
     remind?: boolean;
   } | null;
-  onSilent?: () => void;
+  onSilent?: (jobIds: string[]) => void;
   /** "No reply" confirmed from a thread header here. */
   onNoReply?: (r: { checkBack: string | null; staged: boolean }) => void;
+  /** "Undo" on a No reply confirmed here this session (it was a slip). */
+  onUndoNoReply?: () => void;
+  /** The quick-action composer closed without sending: the host must forget
+   *  the action, or a rebuild of this tab would open it again. */
+  onComposeClosed?: () => void;
 }) {
   const { token, reminderDays } = useDash();
   const first = name.split(/\s+/)[0] || name;
@@ -112,6 +119,9 @@ export default function EmailTab({
   const remindFor = (id: string): RemindChoice => (id in remindQ ? remindQ[id] : reminderDays ? { days: reminderDays } : null);
   const [changing, setChanging] = useState<string | null>(null);
   const [nrThread, setNrThread] = useState<string | null>(null);
+  // The thread whose No reply was confirmed here this session: undoable.
+  const [undoable, setUndoable] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const patchReminder = async (id: string, body: Record<string, unknown>) => {
     await fetch(`/api/dashboard/tasks/${id}`, {
       method: "PATCH",
@@ -329,9 +339,35 @@ export default function EmailTab({
                 <div className="emc-head" onClick={() => setOpen(isOpen ? null : t.id)}>
                   <span className="emc-subj">{t.subject}</span>
                   {data.noReply && (!data.noReply.threadId || data.noReply.threadId === t.id) ? (
-                    <span className="emc-chip nr" title="You stopped chasing them; a reply or a new email clears this">
-                      No reply · {new Date(data.noReply.markedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                    </span>
+                    <>
+                      <span className="emc-chip nr" title="You stopped chasing them; a reply or a new email clears this">
+                        No reply · {new Date(data.noReply.markedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </span>
+                      {undoable === t.id && (
+                        <button
+                          type="button"
+                          className="emc-nr"
+                          title="Take the mark back. Nothing is sent."
+                          disabled={undoing}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (undoing) return;
+                            setUndoing(true);
+                            const r = await undoNoReplyRequest(token, candKey);
+                            setUndoing(false);
+                            if (!r.ok) {
+                              setErr("Couldn't undo that. Nothing changed; try again.");
+                              return;
+                            }
+                            setUndoable(null);
+                            load();
+                            onUndoNoReply?.();
+                          }}
+                        >
+                          {undoing ? "Undoing…" : "Undo"}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <span className={`emc-chip ${t.awaiting ? "wait" : "done"}`}>
                       {t.awaiting ? "Awaiting your reply" : hasInbound ? "Replied" : "Sent"}
@@ -366,6 +402,7 @@ export default function EmailTab({
                       onCancel={() => setNrThread(null)}
                       onDone={(r) => {
                         setNrThread(null);
+                        setUndoable(t.id);
                         load();
                         onNoReply?.(r);
                       }}
@@ -476,6 +513,12 @@ export default function EmailTab({
                             {sending === t.id ? "SENDING…" : "SEND REPLY →"}
                           </button>
                         </div>
+                        {data.noReply && (
+                          <p className="emc-note">
+                            Sending this clears the no-reply mark on {first}
+                            {data.noReply.jobId ? " and puts them back at Contacted on that role" : ""}.
+                          </p>
+                        )}
                         {err && sending === null && <p className="em-warn">{err}</p>}
                       </div>
                     )}
@@ -503,8 +546,11 @@ export default function EmailTab({
           outcome={compose.outcome}
           allowSilent={compose.allowSilent}
           remindMode={compose.remind === false ? "off" : "on"}
-          onSilent={onSilent ? () => { setCompose(null); onSilent(); } : undefined}
-          onClose={() => setCompose(null)}
+          onSilent={onSilent ? (jobIds: string[]) => { setCompose(null); onComposeClosed?.(); onSilent(jobIds); } : undefined}
+          onClose={() => {
+            setCompose(null);
+            onComposeClosed?.();
+          }}
           onSent={(result) => {
             // The draft went out through the composer: clear it here so the
             // quick-reply box can't send it a second time.

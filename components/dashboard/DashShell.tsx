@@ -50,6 +50,7 @@ const CRUMBS: [string, string][] = [
   ["/dashboard/network", "Network"],
   ["/dashboard/my-page", "My page"],
   ["/dashboard/team", "Team"],
+  ["/dashboard/settings/templates", "Email templates"],
   ["/dashboard/settings", "Settings"],
   ["/dashboard/jobs/new", "New job"],
   ["/dashboard/jobs", "Jobs"],

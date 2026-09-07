@@ -6,7 +6,7 @@
 // whose first seed predates it, once, and then follows the same rule. Quick actions find them by action_key, so renames don't matter.
 // Candidate-facing copy: no em-dashes, plain sentences, nothing internal.
 import { sbRest } from "./supabase";
-import { listTemplates, createTemplate, setTemplateActionKey } from "./email-compose";
+import { listTemplates, createTemplate, setTemplateActionKey, type Template } from "./email-compose";
 import { TEMPLATE } from "@/lib/quick-actions";
 
 const lines = (...ls: string[]) => ls.map((l) => (l ? `<div>${l}</div>` : "<div><br></div>")).join("");
@@ -14,14 +14,14 @@ const lines = (...ls: string[]) => ls.map((l) => (l ? `<div>${l}</div>` : "<div>
 export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bodyHtml: string; since?: string }[] = [
   {
     ...TEMPLATE.applyCall,
-    subject: "Your application for {{job_title}}",
+    subject: "{{applied_subject}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
       "",
-      "Thanks for applying for the {{job_title}} role. I've read your profile and would like to talk.",
+      "Thank you for applying for {{applied_roles}}. I've read your profile and would like to talk.",
       "",
       "Pick a time that suits you here: {{booking_link}}",
-      "The role and the team are on my page: {{page_link}}",
+      "The roles and the team are on my page: {{page_link}}",
       "",
       "Looking forward to it,",
       "{{sender_name}}"
@@ -88,11 +88,11 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; subject: string; bo
   },
   {
     ...TEMPLATE.notThisTime,
-    subject: "Your application for {{job_title}}",
+    subject: "{{applied_subject}}",
     bodyHtml: lines(
       "Hi {{first_name}},",
       "",
-      "Thank you for applying for the {{job_title}} role. I won't be taking your application forward this time.",
+      "Thank you for applying for {{applied_roles}}. I won't be taking things forward this time.",
       "",
       "I'll keep your profile on file and get in touch if a closer match comes up.",
       "",
@@ -225,4 +225,33 @@ export async function ensureDefaultTemplates(orgId: string, byEmail: string): Pr
     body: JSON.stringify({ quick_templates_seeded_at: new Date().toISOString() }),
     prefer: "return=minimal",
   }).catch(() => {});
+}
+
+/** Bring a deleted stock template back (a new row with the stock wording)
+ *  and let its buttons fall back to it. Returns the template, or the
+ *  existing one when nothing was missing. */
+export async function restoreDefault(orgId: string, byEmail: string, defaultKey: string): Promise<Template | null> {
+  const stock = DEFAULT_TEMPLATES.find((t) => t.key === defaultKey);
+  if (!stock) return null;
+  const have = await listTemplates(orgId);
+  const existing = have.find((t) => t.actionKey === defaultKey);
+  if (existing) return existing;
+  // A renamed template may already own the stock name: give the restored copy a suffix.
+  const taken = new Set(have.map((t) => t.name.trim().toLowerCase()));
+  const name = taken.has(stock.name.toLowerCase()) ? `${stock.name} (default)` : stock.name;
+  const made = await createTemplate({ orgId, name, subject: stock.subject, bodyHtml: stock.bodyHtml, byEmail, actionKey: stock.key });
+  if ("error" in made) return null;
+  return made;
+}
+
+/** Every stock template that is missing, restored. Returns how many. */
+export async function restoreAllDefaults(orgId: string, byEmail: string): Promise<number> {
+  const have = await listTemplates(orgId);
+  const keys = new Set(have.map((t) => t.actionKey).filter(Boolean));
+  let n = 0;
+  for (const t of DEFAULT_TEMPLATES) {
+    if (keys.has(t.key)) continue;
+    if (await restoreDefault(orgId, byEmail, t.key)) n++;
+  }
+  return n;
 }

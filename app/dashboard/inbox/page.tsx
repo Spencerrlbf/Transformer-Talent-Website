@@ -9,6 +9,7 @@ import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
 import TaskModal, { type TaskModalTarget } from "@/components/dashboard/tasks/TaskModal";
 import InboxView, { type Seg } from "@/components/dashboard/inbox/InboxView";
 import InboxStrip from "@/components/dashboard/inbox/InboxStrip";
+import { undoNoReplyRequest } from "@/components/dashboard/email/NoReplyPanel";
 import {
   isTask,
   landingTab,
@@ -112,7 +113,12 @@ export default function InboxPage() {
             // item after a reload (their reply handled, a task remains).
             // The fresh row replaces the old one wholesale — Done and marks
             // must target what is actually there now.
-            const fresh = d.items.find((n) => n.id === old.id) || d.items.find((n) => n.candidateKey && n.candidateKey === old.candidateKey);
+            // Upcoming rows open into a session too, so look there as well
+            // before calling anything gone: a poll must not end a session
+            // on a reminder that is simply not due yet.
+            const later = d.upcoming.flatMap((u) => u.items);
+            const byKey = (n: InboxItem) => Boolean(n.candidateKey) && n.candidateKey === old.candidateKey;
+            const fresh = d.items.find((n) => n.id === old.id) || later.find((n) => n.id === old.id) || d.items.find(byKey) || later.find(byKey);
             if (!fresh && !handled[old.id]) handled[old.id] = "gone";
             if (fresh && fresh.id !== old.id && handled[old.id] && !handled[fresh.id]) handled[fresh.id] = handled[old.id];
             return fresh ? { ...fresh, seen: fresh.seen || seenRef.current.has(fresh.id) } : old;
@@ -295,6 +301,31 @@ export default function InboxPage() {
   };
   const noteHandled = (id: string, reason: string) =>
     setSession((s) => (s ? { ...s, handled: { ...s.handled, [id]: reason } } : s));
+  const unhandle = (id: string) =>
+    setSession((s) => {
+      if (!s) return s;
+      const handled = { ...s.handled };
+      delete handled[id];
+      return { ...s, handled };
+    });
+  // "Undo" on a No reply confirmed this session: the mark was a slip.
+  const undoNoReply = async () => {
+    const s = sessionRef.current;
+    const cur = s ? s.items[s.index] : null;
+    if (!cur?.candidateKey) return;
+    setBusy(cur.id, true);
+    const r = await undoNoReplyRequest(token, cur.candidateKey);
+    setBusy(cur.id, false);
+    if (!r.ok) {
+      setNotice("Couldn't undo that. Nothing changed; try again.");
+      return;
+    }
+    const first = (cur.candidateName || "They").split(/\s+/)[0];
+    setNotice(`Undone. ${first} is back${r.restoredLabel ? ` at ${r.restoredLabel}` : ""}${r.reopened ? " and the reply reminder is open again" : ""}.`);
+    unhandle(cur.id);
+    setDrawerRefresh((n) => n + 1);
+    load();
+  };
 
   const current = session ? session.items[session.index] : null;
 
@@ -319,39 +350,60 @@ export default function InboxPage() {
     });
   };
 
-  /** "Reject without emailing": the stage move alone. Only ever a stage
-   *  move — a failure says so rather than quietly ticking the row. */
-  const silentReject = async () => {
+  /** "Reject without emailing": the stage move alone, on the same roles the
+   *  emailed rejection would have used, so the two paths cannot disagree.
+   *  A failure says so rather than quietly ticking the row. */
+  const silentReject = async (jobIds: string[] = []) => {
     const cur = sessionRef.current ? sessionRef.current.items[sessionRef.current.index] : null;
     if (!cur || !cur.candidateKey) return;
-    const jobId = cur.jobId || (cur.also || []).find((x) => x.jobId)?.jobId || null;
-    if (!jobId) {
+    const ids = jobIds.length ? jobIds : [cur.jobId || (cur.also || []).find((x) => x.jobId)?.jobId].filter((v): v is string => Boolean(v));
+    if (!ids.length) {
       setNotice("There is no role to reject them for. Use Done to clear the item instead.");
       return;
     }
-    const res = await fetch(`/api/dashboard/candidates/v2/${cur.candidateKey}/status`, {
-      method: "PUT",
-      headers: { ...auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId, status: "rejected" }),
-    }).catch(() => null);
-    if (res?.ok) {
+    let done = 0;
+    for (const jobId of ids) {
+      const res = await fetch(`/api/dashboard/candidates/v2/${cur.candidateKey}/status`, {
+        method: "PUT",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, status: "rejected" }),
+      }).catch(() => null);
+      if (res?.ok) done++;
+    }
+    if (done === ids.length) {
       setNotice("");
       noteHandled(cur.id, "stage:Rejected");
-      load();
+    } else if (done > 0) {
+      setNotice(`Moved them to Rejected on ${done} of ${ids.length} roles. Try the rest from the job's pipeline.`);
     } else {
       setNotice("Couldn't move them to Rejected. Nothing changed; try again.");
     }
+    load();
   };
-  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply"; label?: string; staged?: string | null; reminded?: string | null; checkBack?: string | null }) => {
+  const onActivity = (ev: { type: "stage" | "sent" | "contacted" | "noreply" | "undone"; label?: string; staged?: string | null; stagedJobs?: string[]; asked?: number; reminded?: string | null; checkBack?: string | null }) => {
     const s = sessionRef.current;
     const cur = s ? s.items[s.index] : null;
     if (!cur) {
       load();
       return;
     }
+    if (ev.type === "undone") {
+      unhandle(cur.id);
+      setDrawerRefresh((n) => n + 1);
+      load();
+      return;
+    }
     let reason: string | null = null;
     if (ev.type === "stage" && (cur.kind === "app" || cur.kind === "drop")) reason = `stage:${ev.label || "moved"}`;
     if (ev.type === "sent") {
+      // The email is out either way; the move is the part that can fail, so
+      // say when it did rather than letting "email sent" imply both.
+      if (ev.asked) {
+        const moved = ev.stagedJobs?.length ?? (ev.staged ? 1 : 0);
+        if (moved === 0) setNotice("The email went out, but the pipeline move did not. Set the stage from the job's pipeline.");
+        else if (moved < ev.asked) setNotice(`The email went out and they moved on ${moved} of ${ev.asked} roles. Set the rest from the job's pipeline.`);
+        else setNotice("");
+      }
       // A quick action's Send reports the move the server actually made.
       if (ev.staged) reason = `stage:${ev.staged.charAt(0).toUpperCase() + ev.staged.slice(1)}`;
       else if (cur.kind === "remind") reason = ev.reminded ? `remind:${ev.reminded}` : "remind:nudged";
@@ -420,6 +472,7 @@ export default function InboxPage() {
                 setDrawerRefresh((n) => n + 1);
                 load();
               }}
+              onUndo={undoNoReply}
             />
           }
           onClose={closeSession}

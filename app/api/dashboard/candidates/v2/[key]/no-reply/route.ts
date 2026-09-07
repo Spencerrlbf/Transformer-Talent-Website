@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { candidateContact } from "@/lib/server/email-compose";
-import { markNoReply } from "@/lib/server/no-reply";
-import { noteNoReply, noteStageMoved } from "@/lib/server/inbox";
+import { markNoReply, undoNoReply } from "@/lib/server/no-reply";
+import { noteNoReply, noteStageMoved, unnoteNoReply } from "@/lib/server/inbox";
+import { STAGE_LABEL, type Stage } from "@/lib/server/candidates-unified";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,4 +46,26 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   await noteNoReply(member.org.id, member.email, key, threadId, typeof body.subject === "string" ? body.subject : null).catch(() => {});
   if (res.staged && jobId) await noteStageMoved(member.org.id, member.email, key, "No reply", jobId).catch(() => {});
   return NextResponse.json({ ok: true, staged: res.staged, checkBack });
+}
+
+// Undo the mark on this person, made by mistake. Nothing is sent: the mark
+// clears, the reminder it ended reopens, and on the role they go back.
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ key: string }> }) {
+  const member = await requireMember(req);
+  if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
+  const { key } = await ctx.params;
+  if (!KEY_RE.test(key)) return NextResponse.json({ error: "bad_key" }, { status: 400 });
+
+  const res = await undoNoReply({ orgId: member.org.id, candidateKey: key, memberEmail: member.email });
+  if (!res.ok) {
+    return NextResponse.json({ error: res.error }, { status: res.error === "no_mark" ? 404 : res.error === "save_failed" ? 502 : 400 });
+  }
+  // The Done records the mark wrote go too, and the stage they went back to
+  // is recorded the way any stage move is.
+  await unnoteNoReply(member.org.id, member.email, key, res.threadId).catch(() => {});
+  const label = res.restored ? STAGE_LABEL[res.restored as Stage] || res.restored : null;
+  if (label && res.restored !== "new" && res.jobId) {
+    await noteStageMoved(member.org.id, member.email, key, label, res.jobId).catch(() => {});
+  }
+  return NextResponse.json({ ok: true, restored: res.restored, restoredLabel: label, reopened: res.reopened });
 }

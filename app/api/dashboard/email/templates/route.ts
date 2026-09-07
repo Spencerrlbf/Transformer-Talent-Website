@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { createTemplate, listTemplates } from "@/lib/server/email-compose";
+import { ensureDefaultTemplates } from "@/lib/server/quick-actions";
 
+// The org's templates. Which button sends which is fixed in the code, so
+// there is nothing to resolve and nothing to configure.
 export async function GET(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
-  return NextResponse.json({ templates: await listTemplates(member.org.id) });
+  await ensureDefaultTemplates(member.org.id, member.email).catch(() => {});
+  return NextResponse.json({ templates: await listTemplates(member.org.id), canRestore: member.memberRole === "owner" });
 }
 
 export async function POST(req: NextRequest) {

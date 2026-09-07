@@ -332,7 +332,11 @@ export async function listInbox(
     if (scope === "me" && !mine(forEmail)) continue;
     const movedRowsFor = moved.get(key) || [];
     const outAfter = (lastOutAny.get(key) || "") > a.created_at;
-    if (kind === "app" && movedRowsFor.some((m) => (a.role_ids || []).includes(m.jobId))) continue;
+    // Every applied role must have an answer. `some` used to be enough, which
+    // is how a person rejected on one role vanished while their other
+    // applications sat at New with nobody left to look at them.
+    const appliedIds = a.role_ids || [];
+    if (kind === "app" && appliedIds.length && appliedIds.every((id) => movedRowsFor.some((m) => m.jobId === id))) continue;
     if ((kind === "drop" || kind === "ref") && (movedRowsFor.length || outAfter)) continue;
     if (kind === "ask" && (!a.follow_up_at || dueNowIds.has(a.id) || outAfter)) continue;
 
@@ -457,7 +461,9 @@ export async function listInbox(
       // an email sent late in the viewer's evening must not read "-1 days".
       const sentAt = out?.last || t.created_at || "";
       const since = sentAt ? Math.max(0, Math.floor((Date.now() - new Date(sentAt).getTime()) / 86400_000)) : null;
-      item.title = `No reply from ${t.candidate_name || "them"}`;
+      // Due: the reminder has fired, so "No reply from Ana". Not due yet:
+      // nothing has happened, and in Upcoming it must not read as a verdict.
+      item.title = t.due_date <= today ? `No reply from ${t.candidate_name || "them"}` : `Waiting on ${t.candidate_name || "them"} to reply`;
       item.detail = [since !== null ? `${since} day${since === 1 ? "" : "s"} since you emailed` : null, t.title].filter(Boolean).join(" · ");
       item.subject = t.title;
       item.threadId = t.thread_id || null;
@@ -714,6 +720,24 @@ export async function noteNoReply(orgId: string, viewer: string, key: string, th
   const kind = arrivalKind(a);
   if (kind === "ask") return;
   await markInbox(orgId, viewer, `arr:${a.id}`, { handled: "noreply", kind, candidateKey: key, label: KIND_TITLE[kind] }).catch(() => {});
+}
+
+/** Called by the no-reply route's undo: the Done records the mark wrote for
+ *  this seat (the conversation, the arrival) go away again. */
+export async function unnoteNoReply(orgId: string, viewer: string, key: string, threadId: string | null): Promise<void> {
+  if (!KEY_RE.test(key)) return;
+  const base = `inbox_items?organization_id=eq.${orgId}&member_email=eq.${encodeURIComponent(viewer)}`;
+  const drop = (itemKey: string, handledBy: string) =>
+    sbRest(`${base}&item_key=eq.${encodeURIComponent(itemKey)}&handled_by=eq.${encodeURIComponent(handledBy)}`, {
+      method: "DELETE",
+      prefer: "return=minimal",
+    }).catch(() => null);
+  if (threadId) await drop(`mail:${threadId}`, "noreply");
+  if (!key.startsWith("app_")) return;
+  const a = await arrivalRow(orgId, key);
+  if (!a) return;
+  await drop(`arr:${a.id}`, "noreply");
+  await drop(`arr:${a.id}`, "stage:No reply");
 }
 
 /** Called by the followup route on Mark contacted. */

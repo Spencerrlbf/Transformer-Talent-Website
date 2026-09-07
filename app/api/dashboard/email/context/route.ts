@@ -11,6 +11,7 @@ import {
 import { loadProfile } from "@/lib/server/recruiter-profile";
 import { ensureDefaultTemplates } from "@/lib/server/quick-actions";
 import { sbRest } from "@/lib/server/supabase";
+import { noReplyMarkFor } from "@/lib/server/no-reply-marks";
 import { getRoles } from "@/lib/roles";
 
 const SITE = "https://www.transformertalent.com";
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   await ensureDefaultTemplates(member.org.id, member.email).catch(() => {});
 
-  const [account, jobs, templates, trackedLink, profile, app] = await Promise.all([
+  const [account, jobs, templates, trackedLink, profile, app, mark] = await Promise.all([
     accountFor(member.org.id, member.email),
     composeJobs(member.org.id, member.org.slug),
     listTemplates(member.org.id),
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
           `website_applications?id=eq.${key.slice(4)}&organization_id=eq.${member.org.id}&select=role_ids,matched_role_ids,follow_up_at,source&limit=1`
         ).then(async (r) => (r.ok ? ((await r.json()) as { role_ids: string[] | null; matched_role_ids: string[] | null; follow_up_at: string | null; source: string | null }[])[0] || null : null))
       : Promise.resolve(null),
+    noReplyMarkFor(member.org.id, key).catch(() => null),
   ]);
 
   // {{sender_name}}: the seat's recruiter-page display name when they have
@@ -77,6 +79,26 @@ export async function POST(req: NextRequest) {
   }
   const matchedRoles = wantIds.map((id) => titleOf.get(id) || "").filter(Boolean);
 
+  // The roles they actually APPLIED to, as opposed to the matcher's guesses.
+  // Both quick actions on an application act on every one of these, so a role
+  // that has CLOSED since they applied has to be here too: leaving it out
+  // would skip its stage move and drop it from the email, which is exactly
+  // the silent stranding this is meant to end. composeJobs only returns open
+  // roles, so closed ones are looked up separately.
+  const appliedIds = [...new Set(app?.role_ids || [])];
+  const unresolved = appliedIds.filter((id) => !titleOf.has(id));
+  if (unresolved.length) {
+    const res = await sbRest(
+      `org_roles?organization_id=eq.${member.org.id}&external_id=in.(${unresolved.map((s) => `"${s.replace(/"/g, "")}"`).join(",")})&select=external_id,title`
+    ).catch(() => null);
+    for (const r of res && res.ok ? ((await res.json()) as { external_id: string; title: string }[]) : []) {
+      titleOf.set(r.external_id, r.title);
+    }
+  }
+  const appliedRoles = appliedIds
+    .map((id) => ({ id, title: titleOf.get(id) || "" }))
+    .filter((r) => r.title);
+
   // {{referrer_name}}: who put them forward (the referral form's name, never
   // the email); empty for everyone who wasn't referred, so a template that
   // names a referrer shows a pill on the wrong person.
@@ -93,8 +115,14 @@ export async function POST(req: NextRequest) {
     bookingLink: profile?.booking_url || "",
     pageLink,
     matchedRoles,
+    appliedRoles,
+    orgName: member.org.name,
     referrerName,
     month: app?.follow_up_at ? MONTH(app.follow_up_at) : "",
     appliedRoleId: (app?.role_ids || [])[0] || (app?.matched_role_ids || [])[0] || "",
+    // A live "no reply" mark: sending clears it, so the composer says so.
+    noReply: mark
+      ? { markedAt: mark.markedAt, checkBackAt: mark.checkBackAt, jobId: mark.jobId, jobTitle: mark.jobId ? titleOf.get(mark.jobId) || "" : "" }
+      : null,
   });
 }
