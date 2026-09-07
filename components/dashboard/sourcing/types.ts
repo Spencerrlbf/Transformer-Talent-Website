@@ -1,3 +1,4 @@
+import type { VerdictView } from "@/lib/verdict-view";
 // Shared client types for the sourcing UI. Mirrors the API payloads —
 // client-safe fields only.
 export type QueryDraft = {
@@ -93,8 +94,9 @@ export type RunSummary = {
 export type CandidateRow = {
   membershipId: string;
   rank: number | null;
-  tag: "strong" | "possible" | "stretch" | "strong_yes" | "yes" | "worth_message" | "not_now" | null;
+  tag: "strong" | "possible" | "stretch" | "strong_yes" | "yes" | "worth_message" | "not_now" | "contact" | "message" | "pass" | null;
   reason: string | null;
+  verdict?: VerdictView | null;
   screenStatus: string;
   shortlisted: boolean;
   hidden: boolean;
@@ -110,6 +112,10 @@ export type CandidateRow = {
 };
 
 export const TAG_UI: Record<string, { label: string; cls: string }> = {
+  // the verdict (one judge for every entry path)
+  contact: { label: "Contact now", cls: "t-contact" },
+  message: { label: "Worth a message", cls: "t-message" },
+  pass: { label: "Pass", cls: "t-pass" },
   // 4-tier outreach scale (EM judge)
   strong_yes: { label: "Strong yes", cls: "t-strong" },
   yes: { label: "Yes", cls: "t-yes" },

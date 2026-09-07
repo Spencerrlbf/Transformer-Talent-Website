@@ -26,7 +26,8 @@ import { splitStack } from "../scorecard";
 import { TAG_LABEL } from "../client-reason";
 import { searchLeadsPage, previewLeadCount, getFullProfile, providerMode, type Lead, type LeadSearchQuery } from "./harvest";
 import { profileToFields, sourcedEmbedText } from "./import";
-import { judgeSourcedCandidate, judgeReason, type JudgeSkill } from "./judge";
+import type { JudgeSkill } from "./judge";
+import { buildVerdictView, judgeVerdict } from "../verdict";
 import { getCompanyContexts, companyContextLine, companySlugFromUrl } from "./company-context";
 
 export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
@@ -412,8 +413,8 @@ async function screenOneRow(
 ): Promise<{ outcome: RowOutcome; retryAfterMs?: number }> {
   let llmErr: { status: number; code?: string; retryAfter?: string } | null = null;
   try {
-    const [cand] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null }[]>(
-      `sourced_candidates?id=eq.${row.sourced_candidate_id}&select=profile,skills`
+    const [cand] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null; full_name: string | null }[]>(
+      `sourced_candidates?id=eq.${row.sourced_candidate_id}&select=profile,skills,full_name`
     );
     const profile = cand?.profile;
     if (!profile) {
@@ -437,26 +438,35 @@ async function screenOneRow(
     const ctxMap = employerSlug ? await getCompanyContexts([employerSlug]).catch(() => new Map()) : new Map();
     const employerLine = employerSlug ? companyContextLine(ctxMap.get(employerSlug)) : null;
 
-    const verdict = await judgeSourcedCandidate({
+    // One judge for every entry path: the verdict paragraph, requirement
+    // reads and the technologies strip (see lib/server/verdict.ts).
+    const education = (profile as Record<string, unknown>).education ?? null;
+    const judged = await judgeVerdict({
       roleTitle: ctx.role.title,
       jdText: ctx.jdText,
-      skills: ctx.judgeSkills,
+      skills: ctx.judgeSkills.map((s) => ({ skill: s.skill, mustHave: s.must_have, alternates: s.alternates })),
       minYears: ctx.minYears,
+      targetedCompanies: ctx.targetedCompanies,
+      employerContext: employerLine,
+      candidateName: cand?.full_name || "Candidate",
       profileText: linkedinProfileText(profile).slice(0, 5000),
+      resumeText: null,
       factsBlock: formatFacts(facts),
       careerYears: facts.careerYears,
-      targetedCompanies: ctx.targetedCompanies,
-      currentEmployerContext: employerLine,
+      model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
       timeoutMs: SCREEN_LLM_TIMEOUT_MS,
       onError: (info) => { llmErr = info; },
     });
+    const verdict = judged
+      ? buildVerdictView(judged, (terms) => computeFacts(expRows, [...new Set([...stackTerms, ...terms])], skills, education))
+      : null;
 
     if (verdict) {
       const landed = await fencedRowPatch(row.id, leaseId, {
         screen_status: "done",
         verdict,
-        tag: verdict.tag,
-        reason: judgeReason(verdict),
+        tag: verdict.label,
+        reason: verdict.paragraph,
         screened_at: new Date().toISOString(),
         screen_claim_id: null,
       });

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
+import { isVerdictView } from "@/lib/verdict-view";
 
 type Params = { params: Promise<{ id: string }> };
 const PAGE = 25;
@@ -26,15 +27,15 @@ export async function GET(req: NextRequest, { params }: Params) {
   const filters = [
     `run_id=eq.${encodeURIComponent(id)}`,
     showHidden ? null : "hidden=eq.false",
-    filter === "strong" ? "tag=in.(strong_yes,strong)" : null,
+    filter === "strong" ? "tag=in.(strong_yes,strong,contact)" : null,
     filter === "yes" ? "tag=eq.yes" : null,
-    filter === "message" ? "tag=in.(worth_message,possible)" : null,
+    filter === "message" ? "tag=in.(worth_message,possible,message)" : null,
     filter === "shortlisted" ? "shortlisted=eq.true" : null,
   ].filter(Boolean).join("&");
 
   const res = await sbRest(
     `sourcing_run_candidates?${filters}` +
-      `&select=id,rank,tag,reason,screen_status,shortlisted,hidden,` +
+      `&select=id,rank,tag,reason,verdict,screen_status,shortlisted,hidden,` +
       `sourced_candidates(full_name,headline,location,current_title,current_company,linkedin_url,linkedin_username,years_experience,skills,profile)` +
       `&order=rank.asc.nullslast,created_at.asc&limit=${PAGE}&offset=${(page - 1) * PAGE}`,
     { headers: { Prefer: "count=exact" } }
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!res.ok) return NextResponse.json({ error: "load_failed" }, { status: 502 });
   const total = parseInt((res.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
   type Row = {
-    id: string; rank: number | null; tag: string | null; reason: string | null;
+    id: string; rank: number | null; tag: string | null; reason: string | null; verdict: unknown;
     screen_status: string; shortlisted: boolean; hidden: boolean;
     sourced_candidates: {
       full_name: string | null; headline: string | null; location: string | null;
@@ -62,6 +63,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       rank: r.rank,
       tag: r.tag,
       reason: r.reason,
+      // The verdict view carries no profile or raw model output.
+      verdict: isVerdictView(r.verdict) ? r.verdict : null,
       screenStatus: r.screen_status,
       shortlisted: r.shortlisted,
       hidden: r.hidden,

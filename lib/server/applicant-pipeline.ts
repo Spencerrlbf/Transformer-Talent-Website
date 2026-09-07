@@ -27,7 +27,10 @@ import {
 } from "./spine";
 import { computeFacts, formatFacts } from "./facts";
 import { roleLocationCompatible } from "./locations";
-import { renderScorecard } from "./scorecard";
+import { renderScorecard, splitStack } from "./scorecard";
+import { buildVerdictView, judgeVerdict } from "./verdict";
+import { attachVerdictToMatch } from "./verdict-store";
+import { getOrgId } from "./spine";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
 
 export type ApplicantPipelineInput = {
@@ -283,6 +286,66 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         })
         .sort((a, b) => scoreOf(b) - scoreOf(a));
       matchedIds = ranked.map((m) => m.job_id);
+
+      // The verdict the recruiter reads: the roles they applied to, plus the
+      // best two matches. Stored beside the scorecard on the same verdict row;
+      // best effort, never fails the application.
+      try {
+        const storeOrg = orgId || (await getOrgId());
+        const wantIds = [...new Set([...roleIds, ...ranked.map((m) => m.job_id)])].slice(0, 3);
+        if (storeOrg && candidateId && wantIds.length) {
+          type RoleRow = {
+            id: string; external_id: string; title: string; tech_stack: string | null;
+            jd: { about?: string; doing?: string[]; needs?: string[]; bonus?: string[] } | null;
+            skills: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
+            matching_profile: { must_haves?: string[]; min_years?: number | null } | null;
+            target_companies: { name?: string }[] | null;
+          };
+          const rr = await sbRest(
+            `org_roles?organization_id=eq.${storeOrg}&external_id=in.(${wantIds.map((s) => `"${s.replace(/"/g, "")}"`).join(",")})` +
+              `&select=id,external_id,title,tech_stack,jd,skills,matching_profile,target_companies`
+          );
+          const roleRows = rr.ok ? ((await rr.json()) as RoleRow[]) : [];
+          const profileText = linkedinProfileText(harvest as Record<string, unknown> | null);
+          await Promise.all(
+            roleRows.map(async (role) => {
+              const terms = [...new Set([...splitStack(role.tech_stack), ...(role.skills || []).map((s) => s.skill)])].slice(0, 20);
+              const roleFacts = computeFacts(expRows, terms, harvestSkills, eduList);
+              const jd = role.jd || {};
+              const jdText =
+                [
+                  jd.about,
+                  jd.doing?.length ? `Responsibilities:\n- ${jd.doing.join("\n- ")}` : null,
+                  jd.needs?.length ? `Requirements:\n- ${jd.needs.join("\n- ")}` : null,
+                  jd.bonus?.length ? `Nice to have:\n- ${jd.bonus.join("\n- ")}` : null,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n") || (role.matching_profile?.must_haves || []).join("; ");
+              const judged = await judgeVerdict({
+                roleTitle: role.title,
+                jdText,
+                skills: (role.skills || []).map((s) => ({ skill: s.skill, mustHave: !!s.must_have, alternates: s.alternates || [] })),
+                minYears: role.matching_profile?.min_years ?? null,
+                targetedCompanies: (role.target_companies || []).map((t) => t?.name || "").filter(Boolean),
+                employerContext: null,
+                candidateName: name || "Candidate",
+                profileText,
+                resumeText,
+                factsBlock: formatFacts(roleFacts),
+                careerYears: roleFacts.careerYears,
+                model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
+                timeoutMs: 40_000,
+              }).catch(() => null);
+              if (!judged) return;
+              const view = buildVerdictView(judged, (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList));
+              await attachVerdictToMatch(storeOrg, candidateId, role.id, view).catch(() => false);
+            })
+          );
+        }
+      } catch (err) {
+        console.error("applicant verdict failed", err);
+      }
+
       matches = ranked
         .map((m) => roles.find((r) => r.jobId === m.job_id))
         .filter((r): r is NonNullable<typeof r> => Boolean(r))

@@ -16,7 +16,8 @@ import {
   type RowListEntry,
 } from "./lists";
 import { signResumeUrl } from "./applicants";
-import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
+import { clientTag, clientReason } from "./client-reason";
+import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
 import type { Scorecard } from "./scorecard";
 import {
@@ -31,6 +32,9 @@ import {
 /* ------------------------------------------------------------------ */
 
 export const FIT_LABEL: Record<string, string> = {
+  contact: "Contact now",
+  message: "Worth a message",
+  pass: "Pass",
   strong_yes: "Strong yes",
   strong: "Strong fit",
   yes: "Yes",
@@ -41,6 +45,9 @@ export const FIT_LABEL: Record<string, string> = {
 };
 
 const FIT_RANK: Record<string, number> = {
+  contact: 0,
+  message: 3,
+  pass: 5,
   strong_yes: 0,
   strong: 0,
   yes: 1,
@@ -58,12 +65,12 @@ const labelOf = (tag: string | null | undefined): string | null =>
 
 // Fit-filter groups the UI can ask for.
 const FIT_GROUPS: Record<string, string[]> = {
-  strong: ["strong_yes", "strong"],
+  strong: ["strong_yes", "strong", "contact"],
   yes: ["yes"],
   look: ["possible"],
-  message: ["worth_message"],
+  message: ["worth_message", "message"],
   stretch: ["stretch"],
-  not_now: ["not_now"],
+  not_now: ["not_now", "pass"],
 };
 
 /* ------------------------------------------------------------------ */
@@ -249,6 +256,8 @@ export type UnifiedDetail = {
     tag: string | null;
     tagLabel: string | null;
     reason: string | null;
+    /** The one-paragraph verdict with its technologies strip, when judged. */
+    verdict?: VerdictView | null;
     addedAt: string;
     stage: string;
     /** "no_reply" when Past because we stopped chasing them. */
@@ -322,7 +331,7 @@ type VerdictRow = {
   candidate_id: string;
   source: string;
   created_at: string;
-  verdict: { qualified?: boolean; scorecard?: Scorecard } | null;
+  verdict: { qualified?: boolean; scorecard?: Scorecard; v2?: VerdictView } | null;
   org_roles: { external_id: string; title: string } | null;
 };
 
@@ -368,26 +377,26 @@ function matchedVerdicts(
 
 function appRoles(a: AppRow, pairings: Map<string, VerdictRow>): UnifiedRole[] {
   const applied = (a.role_ids || []).map((jobId, i) => {
-    const sc = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict?.scorecard : undefined;
-    const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const v = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict : undefined;
+    const tag: string | null = v?.v2 ? v.v2.label : v?.scorecard ? clientTag(v.scorecard) : null;
     return {
       jobId,
       title: appRoleTitle(a, jobId, i),
       via: "applied" as const,
       tag,
-      tagLabel: tag ? TAG_LABEL[tag] : null,
+      tagLabel: labelOf(tag),
     };
   });
   if (applied.length > 0) return applied;
   return matchedVerdicts(pairings, a.candidate_id).map(({ jobId, row }) => {
-    const sc = row.verdict?.scorecard;
-    const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const v = row.verdict;
+    const tag: string | null = v?.v2 ? v.v2.label : v?.scorecard ? clientTag(v.scorecard) : null;
     return {
       jobId,
       title: row.org_roles?.title || `Role #${jobId}`,
       via: "matched" as const,
       tag,
-      tagLabel: tag ? TAG_LABEL[tag] : null,
+      tagLabel: labelOf(tag),
     };
   });
 }
@@ -402,6 +411,7 @@ async function fetchApplicants(orgId: string): Promise<AppRow[]> {
 type SrcMembership = {
   tag: string | null;
   reason: string | null;
+  verdict?: unknown;
   created_at: string;
   sourced_candidate_id: string;
   sourcing_runs: { org_role_id: string } | null;
@@ -1266,7 +1276,7 @@ async function sourcedPipeline(
   const memberships = await fetchAllPages<SrcMembership>(
     (limit, offset) =>
       `sourcing_run_candidates?organization_id=eq.${orgId}&sourced_candidate_id=eq.${personId}&hidden=is.false` +
-      `&select=tag,reason,created_at,sourced_candidate_id,sourcing_runs!inner(org_role_id)` +
+      `&select=tag,reason,verdict,created_at,sourced_candidate_id,sourcing_runs!inner(org_role_id)` +
       `&order=created_at.desc&limit=${limit}&offset=${offset}`
   );
   const seen = new Set<string>();
@@ -1285,6 +1295,7 @@ async function sourcedPipeline(
       tag: m.tag,
       tagLabel: labelOf(m.tag),
       reason: m.reason,
+      verdict: isVerdictView(m.verdict) ? m.verdict : null,
       addedAt: m.created_at,
       stage: "new",
     });
@@ -1327,8 +1338,9 @@ function applicantPipeline(
   byExternal?: Map<string, RoleInfo>
 ): UnifiedDetail["pipeline"] {
   const applied = (a.role_ids || []).map((jobId, i) => {
-    const sc = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict?.scorecard : undefined;
-    const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const v = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict : undefined;
+    const sc = v?.scorecard;
+    const tag: string | null = v?.v2 ? v.v2.label : sc ? clientTag(sc) : null;
     const info = byExternal?.get(jobId);
     return {
       jobId,
@@ -1338,8 +1350,9 @@ function applicantPipeline(
       location: info?.location ?? null,
       via: "applied" as const,
       tag,
-      tagLabel: tag ? TAG_LABEL[tag] : null,
-      reason: sc ? clientReason(sc) : null,
+      tagLabel: labelOf(tag),
+      reason: v?.v2 ? v.v2.paragraph : sc ? clientReason(sc) : null,
+      verdict: v?.v2 ?? null,
       addedAt: a.created_at,
       stage: "new",
     };
@@ -1347,8 +1360,9 @@ function applicantPipeline(
   if (applied.length > 0) return applied;
   // No chosen roles (speculative/referral): show the matched-role verdicts.
   return matchedVerdicts(pairings, a.candidate_id).map(({ jobId, row }) => {
-    const sc = row.verdict?.scorecard;
-    const tag: ClientTag | null = sc ? clientTag(sc) : null;
+    const v = row.verdict;
+    const sc = v?.scorecard;
+    const tag: string | null = v?.v2 ? v.v2.label : sc ? clientTag(sc) : null;
     const info = byExternal?.get(jobId);
     return {
       jobId,
@@ -1358,8 +1372,9 @@ function applicantPipeline(
       location: info?.location ?? null,
       via: "matched" as const,
       tag,
-      tagLabel: tag ? TAG_LABEL[tag] : null,
-      reason: sc ? clientReason(sc) : null,
+      tagLabel: labelOf(tag),
+      reason: v?.v2 ? v.v2.paragraph : sc ? clientReason(sc) : null,
+      verdict: v?.v2 ?? null,
       addedAt: row.created_at || a.created_at,
       stage: "new",
     };
@@ -1403,7 +1418,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
-      verdict: { scorecard?: Scorecard } | null;
+      verdict: { scorecard?: Scorecard; v2?: VerdictView } | null;
     }[];
 
     const seenJobs = new Set<string>();
@@ -1411,9 +1426,10 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     for (const v of verdicts) {
       const role = roleIdx.get(v.org_role_id);
       const sc = v.verdict?.scorecard;
-      if (!role || !sc || seenJobs.has(role.jobId)) continue;
+      const v2 = v.verdict?.v2;
+      if (!role || (!sc && !v2) || seenJobs.has(role.jobId)) continue;
       seenJobs.add(role.jobId);
-      const tag = clientTag(sc);
+      const tag: string = v2 ? v2.label : clientTag(sc!);
       pipeline.push({
         jobId: role.jobId,
         title: role.title,
@@ -1422,8 +1438,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         location: role.location,
         via: "sourced",
         tag,
-        tagLabel: TAG_LABEL[tag],
-        reason: clientReason(sc),
+        tagLabel: labelOf(tag),
+        reason: v2 ? v2.paragraph : clientReason(sc!),
+        verdict: v2 ?? null,
         addedAt: v.created_at,
         stage: "new",
       });

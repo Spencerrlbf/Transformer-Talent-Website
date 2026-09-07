@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
+import VerdictCard from "../candidates/VerdictCard";
 
 const ACTIVE = new Set(["previewed", "importing", "ranking", "screening"]);
 
@@ -212,9 +213,11 @@ export default function RunView({
                       )}
                     </td>
                     <td>
-                      {r.tag ? (
+                      {r.verdict ? (
+                        <VerdictCard view={r.verdict} compact />
+                      ) : r.tag ? (
                         <>
-                          <span className={`dash-tag ${TAG_UI[r.tag].cls}`}>{TAG_UI[r.tag].label}</span>
+                          <span className={`dash-tag ${TAG_UI[r.tag]?.cls || "t-pending"}`}>{TAG_UI[r.tag]?.label || r.tag}</span>
                           {r.reason && <div className="dash-src-reason">{r.reason}</div>}
                         </>
                       ) : r.screenStatus === "failed" && !active ? (

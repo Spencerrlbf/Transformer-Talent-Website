@@ -6,15 +6,13 @@
 // Discipline: anchored label definitions, temperature 0, strict schema, code
 // rails after the call (a verified years shortfall caps the label).
 
-export type VerdictLabel = "contact" | "message" | "pass";
+import type { CandidateFacts } from "./facts";
+import { VERDICT_LABEL, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
 
-export const VERDICT_LABEL: Record<VerdictLabel, string> = {
-  contact: "Contact now",
-  message: "Worth a message",
-  pass: "Pass",
-};
+export { VERDICT_LABEL };
+export type { VerdictLabel };
 
-export const VERDICT_PROMPT_VERSION = "v1";
+export const VERDICT_PROMPT_VERSION = "v2";
 
 export interface VerdictSkill {
   skill: string;
@@ -36,6 +34,8 @@ export interface VerdictInput {
   careerYears: number | null;
   model: string;
   timeoutMs?: number;
+  /** Failure visibility for callers that pace retries (rate limit vs dead key). */
+  onError?: (info: { status: number; code?: string; retryAfter?: string }) => void;
 }
 
 export interface Verdict {
@@ -47,6 +47,11 @@ export interface Verdict {
   ask: string[];
   /** For pass/message: where they would fit. */
   betterSuited: string;
+  /** One read per role requirement: met, met through an equivalent, or missing. */
+  requirements: RequirementRead[];
+  /** Technologies evidenced in the current position, and in earlier ones. */
+  technologiesNow: string[];
+  technologiesBefore: string[];
   model: string;
   promptVersion: string;
   usage: { input: number; output: number };
@@ -67,9 +72,11 @@ LABEL (anchor to these):
 - pass: a core requirement is contradicted, or a different discipline or seniority.
 Unconfirmed is not disqualifying; only contradictions push to pass. When torn between two labels, choose the higher.
 
+CATEGORIES: a requirement stated as a category is met by any concrete instance of it: "vector database" by pgvector, Pinecone, Weaviate, Qdrant, Milvus, Chroma or FAISS; "cloud" by AWS, GCP or Azure; "message queue" by Kafka, SQS or RabbitMQ; "orchestration" by Temporal, Airflow or Prefect; and so on. Adjacent evidence without a named instance (embeddings or retrieval work with no vector store named) counts as an equivalent, and the paragraph says so.
+
 RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
 
-ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string).`;
+ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement as written, status met / equivalent / missing, evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).`;
 
 export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null> {
   const key = process.env.OPENAI_API_KEY;
@@ -117,8 +124,23 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
               missing: { type: "array", items: { type: "string" } },
               ask: { type: "array", items: { type: "string" } },
               better_suited: { type: "string" },
+              requirements: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    requirement: { type: "string" },
+                    status: { type: "string", enum: ["met", "equivalent", "missing"] },
+                    evidence: { type: "string" },
+                  },
+                  required: ["requirement", "status", "evidence"],
+                },
+              },
+              technologies_now: { type: "array", items: { type: "string" } },
+              technologies_before: { type: "array", items: { type: "string" } },
             },
-            required: ["label", "paragraph", "missing", "ask", "better_suited"],
+            required: ["label", "paragraph", "missing", "ask", "better_suited", "requirements", "technologies_now", "technologies_before"],
           },
         },
       },
@@ -128,7 +150,18 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       ],
     }),
   }).catch(() => null);
-  if (!res || !res.ok) return null;
+  if (!res || !res.ok) {
+    if (res && input.onError) {
+      let code: string | undefined;
+      try {
+        code = ((await res.json()) as { error?: { code?: string } })?.error?.code;
+      } catch {
+        /* body unreadable */
+      }
+      input.onError({ status: res.status, code, retryAfter: res.headers.get("retry-after") ?? undefined });
+    }
+    return null;
+  }
   try {
     const data = (await res.json()) as {
       choices: { message: { content: string } }[];
@@ -140,6 +173,9 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       missing: string[];
       ask: string[];
       better_suited: string;
+      requirements: RequirementRead[];
+      technologies_now: string[];
+      technologies_before: string[];
     };
     if (!out.label || !out.paragraph) return null;
     let label = out.label;
@@ -156,6 +192,12 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       missing,
       ask: (out.ask || []).slice(0, 3).map((q) => q.slice(0, 200)),
       betterSuited: (out.better_suited || "").slice(0, 250),
+      requirements: (out.requirements || [])
+        .filter((r) => r && typeof r.requirement === "string" && ["met", "equivalent", "missing"].includes(r.status))
+        .slice(0, 16)
+        .map((r) => ({ requirement: r.requirement.slice(0, 120), status: r.status, evidence: (r.evidence || "").slice(0, 120) })),
+      technologiesNow: cleanTech(out.technologies_now),
+      technologiesBefore: cleanTech(out.technologies_before),
       model: input.model,
       promptVersion: VERDICT_PROMPT_VERSION,
       usage: { input: data.usage?.prompt_tokens ?? 0, output: data.usage?.completion_tokens ?? 0 },
@@ -164,4 +206,61 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
   } catch {
     return null;
   }
+}
+
+const cleanTech = (list: unknown): string[] => {
+  const seen = new Set<string>();
+  return (Array.isArray(list) ? list : [])
+    .map((t) => String(t || "").trim().replace(/\s+/g, " "))
+    .filter((t) => t.length >= 2 && t.length <= 40)
+    .filter((t) => {
+      const k = t.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, 8);
+};
+
+const norm = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9+#. ]/g, " ").replace(/\s+/g, " ").trim();
+const mentions = (hay: string, needle: string) => {
+  const h = norm(hay);
+  const n = norm(needle);
+  return n.length >= 2 && (h === n || h.includes(n) || (n.length >= 4 && n.includes(h) && h.length >= 3));
+};
+
+/** The verdict as the product stores and shows it. `factsFor` recomputes the
+ *  facts over the technologies the judge named, so each chip can carry its
+ *  dated years; requirement reads decide each chip's status. */
+export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => CandidateFacts | null): VerdictView {
+  const terms = [...new Set([...v.technologiesNow, ...v.technologiesBefore])];
+  const facts = terms.length ? factsFor(terms) : null;
+  const yearsOf = (name: string): number | null => {
+    const f = (facts?.skills || []).find((s) => !s.listedOnly && mentions(s.skill, name));
+    return f ? f.years : null;
+  };
+  const statusOf = (name: string): { status: ChipStatus; evidence?: string } => {
+    const met = v.requirements.find((r) => r.status === "met" && (mentions(r.evidence, name) || mentions(r.requirement, name)));
+    if (met) return { status: "met", evidence: met.requirement };
+    const eq = v.requirements.find((r) => r.status === "equivalent" && (mentions(r.evidence, name) || mentions(r.requirement, name)));
+    if (eq) return { status: "equivalent", evidence: `stands in for ${eq.requirement}` };
+    return { status: "plain" };
+  };
+  const chip = (name: string): TechChip => ({ name, years: yearsOf(name), ...statusOf(name) });
+  const now = v.technologiesNow.map(chip);
+  const nowSet = new Set(now.map((c) => c.name.toLowerCase()));
+  const before = v.technologiesBefore.filter((t) => !nowSet.has(t.toLowerCase())).map(chip);
+  const gaps = v.requirements.filter((r) => r.status === "missing").map((r) => r.requirement).slice(0, 6);
+  return {
+    v: 2,
+    label: v.label,
+    paragraph: v.paragraph,
+    missing: v.missing,
+    ask: v.ask,
+    betterSuited: v.betterSuited,
+    requirements: v.requirements,
+    tech: { now, before, gaps, nowPosition: facts?.currentTitle ? [facts.currentTitle, facts.currentCompany].filter(Boolean).join(" at ") : null },
+    model: v.model,
+    at: new Date().toISOString(),
+  };
 }

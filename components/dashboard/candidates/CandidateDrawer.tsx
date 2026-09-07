@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { fmtDue } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
+import VerdictCard from "@/components/dashboard/candidates/VerdictCard";
+import type { VerdictView } from "@/lib/verdict-view";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 import MultiSelect from "@/components/MultiSelect";
 import NotesTab from "@/components/dashboard/tasks/NotesTab";
@@ -30,6 +32,7 @@ type PipelineEntry = {
   tag: string | null;
   tagLabel: string | null;
   reason: string | null;
+  verdict?: VerdictView | null;
   addedAt: string;
   stage: string;
   stageReason?: string | null;
@@ -95,6 +98,9 @@ type Detail = {
 };
 
 const TAG_CLASS: Record<string, string> = {
+  contact: "t-contact",
+  message: "t-message",
+  pass: "t-pass",
   strong_yes: "t-strong",
   strong: "t-strong",
   yes: "t-yes",
@@ -180,6 +186,7 @@ function splitReason(reason: string): { why: string; probes: string[]; route: st
 }
 
 function FitReview({ entry }: { entry: PipelineEntry }) {
+  if (entry.verdict) return <VerdictCard view={entry.verdict} />;
   if (!entry.reason) return <p className="cv2d-why cv2d-dim">Not reviewed yet.</p>;
   const { why, probes, route } = splitReason(entry.reason);
   return (
@@ -1195,6 +1202,23 @@ export default function CandidateDrawer({
             <div className="cv2d-body">
               {tab === "profile" && (
                 <>
+                  {detail.pipeline.some((p) => p.verdict) && (
+                    <section className="cv2d-fit">
+                      <h4 className="cv2d-sec">Fit</h4>
+                      {detail.pipeline
+                        .filter((p) => p.verdict)
+                        .slice(0, 3)
+                        .map((p) => (
+                          <div className="cv2d-fit-role" key={p.jobId}>
+                            <div className="cv2d-fit-title">
+                              {p.title} <em>#{p.jobId}</em>
+                              <span className="cv2d-fit-via">{p.via === "applied" ? "applied" : p.via === "sourced" ? "via sourcing run" : p.via}</span>
+                            </div>
+                            <VerdictCard view={p.verdict!} />
+                          </div>
+                        ))}
+                    </section>
+                  )}
                   {detail.about && (
                     <>
                       <h4 className="cv2d-sec">About</h4>
