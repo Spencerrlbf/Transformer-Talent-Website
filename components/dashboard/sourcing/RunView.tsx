@@ -25,6 +25,9 @@ export default function RunView({
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<"all" | "strong" | "yes" | "message" | "shortlisted">("all");
   const [rereviewing, setRereviewing] = useState(false);
+  // "Review again": a two-step button, no native dialog.
+  const [reviewAgainArmed, setReviewAgainArmed] = useState(false);
+  const [reviewAgainBusy, setReviewAgainBusy] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true; // StrictMode remounts reuse the ref — re-arm it
@@ -106,6 +109,24 @@ export default function RunView({
     if (res?.ok) setRereviewing((x) => !x); // re-arms the advance loop
   }
 
+  // Judge every visible person again with the current verdict; no new import.
+  async function reviewAgain() {
+    if (reviewAgainBusy) return;
+    setReviewAgainBusy(true);
+    const res = await fetch(`/api/dashboard/sourcing/runs/${runId}/rereview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ all: true }),
+    }).catch(() => null);
+    setReviewAgainBusy(false);
+    setReviewAgainArmed(false);
+    if (res?.ok) {
+      setRows([]);
+      setPage(1);
+      setRereviewing((x) => !x); // re-arms the advance loop
+    }
+  }
+
   if (!run) return <p className="dash-muted">Loading run…</p>;
 
   const active = ACTIVE.has(run.status);
@@ -153,6 +174,28 @@ export default function RunView({
             </span>
           </div>
           <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+        </div>
+      )}
+
+      {run.status === "done" && (
+        <div className="dash-src-again">
+          {reviewAgainArmed ? (
+            <>
+              <span>
+                Judge all {(total || importedSoFar).toLocaleString()} people again with the current verdict. No new import; a few cents of AI per person.
+              </span>
+              <button className="dash-btn" onClick={reviewAgain} disabled={reviewAgainBusy}>
+                {reviewAgainBusy ? "Starting…" : "Yes, review again"}
+              </button>
+              <button className="dash-btn dash-btn-2" onClick={() => setReviewAgainArmed(false)} disabled={reviewAgainBusy}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button className="dash-btn dash-btn-2" onClick={() => setReviewAgainArmed(true)} title="Judge everyone in this run again with the current verdict">
+              Review again
+            </button>
+          )}
         </div>
       )}
 

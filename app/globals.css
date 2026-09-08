@@ -4429,3 +4429,4 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .cv2d-fit-title em { font-style: normal; font-weight: 500; color: var(--muted); }
 .cv2d-fit-via { font-size: 11.5px; font-weight: 500; color: var(--muted); }
 @media (max-width: 640px) { .vc-tech { grid-template-columns: 1fr; } .vc-lbl { padding-top: 0; } }
+.dash-src-again { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 14px; font-size: 13px; color: var(--body-2); }
