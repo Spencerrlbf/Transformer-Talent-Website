@@ -410,6 +410,8 @@ async function fetchApplicants(orgId: string): Promise<AppRow[]> {
 
 type SrcMembership = {
   tag: string | null;
+  /** The verdict's own label (contact / message / pass) when one was judged; the tag column holds an older word. */
+  label?: string | null;
   reason: string | null;
   verdict?: unknown;
   created_at: string;
@@ -451,7 +453,7 @@ async function fetchAllPages<T>(pathFor: (limit: number, offset: number) => stri
 }
 
 async function fetchMemberships(orgId: string, withReason = false): Promise<SrcMembership[]> {
-  const cols = `tag,${withReason ? "reason," : ""}created_at,sourced_candidate_id,sourcing_runs!inner(org_role_id)`;
+  const cols = `tag,label:verdict->>label,${withReason ? "reason," : ""}created_at,sourced_candidate_id,sourcing_runs!inner(org_role_id)`;
   return fetchAllPages<SrcMembership>(
     (limit, offset) =>
       `sourcing_run_candidates?organization_id=eq.${orgId}&hidden=is.false&select=${cols}` +
@@ -748,7 +750,8 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       for (const m of byPerson.get(sourcedId) || []) {
         const role = roleIdx.get(m.sourcing_runs!.org_role_id);
         if (!role || covered.has(role.jobId)) continue;
-        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
+        const t = m.label || m.tag;
+        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: t, tagLabel: labelOf(t) });
       }
     }
     const best = bestOf(roles);
@@ -789,8 +792,8 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     const roles: UnifiedRole[] = [];
     for (const m of ms) {
       const role = roleIdx.get(m.sourcing_runs!.org_role_id);
-      if (role)
-        roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: m.tag, tagLabel: labelOf(m.tag) });
+      const t = m.label || m.tag;
+      if (role) roles.push({ jobId: role.jobId, title: role.title, via: "sourced", tag: t, tagLabel: labelOf(t) });
     }
     if (!roles.length) continue;
     const best = bestOf(roles);
@@ -1292,8 +1295,8 @@ async function sourcedPipeline(
       salary: role.salary,
       location: role.location,
       via: "sourced",
-      tag: m.tag,
-      tagLabel: labelOf(m.tag),
+      tag: isVerdictView(m.verdict) ? m.verdict.label : m.tag,
+      tagLabel: labelOf(isVerdictView(m.verdict) ? m.verdict.label : m.tag),
       reason: m.reason,
       verdict: isVerdictView(m.verdict) ? m.verdict : null,
       addedAt: m.created_at,

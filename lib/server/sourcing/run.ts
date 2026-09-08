@@ -465,10 +465,15 @@ async function screenOneRow(
       : null;
 
     if (verdict) {
+      // The tag column is constrained to the older vocabulary (a CHECK from
+      // migration 020), so the verdict's label is stored there in its
+      // nearest old word; the verdict itself carries the real label and
+      // every reader prefers it.
+      const LEGACY_TAG = { contact: "strong_yes", message: "worth_message", pass: "not_now" } as const;
       const landed = await fencedRowPatch(row.id, leaseId, {
         screen_status: "done",
         verdict,
-        tag: verdict.label,
+        tag: LEGACY_TAG[verdict.label],
         reason: verdict.paragraph,
         screened_at: new Date().toISOString(),
         screen_claim_id: null,
@@ -502,6 +507,8 @@ async function screenOneRow(
   } catch (err) {
     if (err instanceof RunFailure) throw err;
     // Timeouts / aborts / transport errors: transient, no attempt charged.
+    // Say what it was: a silent retry loop hid a rejected write for hours.
+    console.error("screen row transient", row.id, err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300));
     await fencedRowPatch(row.id, leaseId, {
       screen_status: "failed",
       screen_next_attempt_at: new Date(Date.now() + jitter(20_000)).toISOString(),

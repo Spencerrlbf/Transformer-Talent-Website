@@ -61,9 +61,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     candidates: rows.map((r) => ({
       membershipId: r.id,
       rank: r.rank,
-      tag: r.tag,
+      // The tag column holds an older word for a judged row; the verdict's
+      // label is the one to show. The view carries no profile or raw output.
+      tag: isVerdictView(r.verdict) ? r.verdict.label : r.tag,
       reason: r.reason,
-      // The verdict view carries no profile or raw model output.
       verdict: isVerdictView(r.verdict) ? r.verdict : null,
       screenStatus: r.screen_status,
       shortlisted: r.shortlisted,
