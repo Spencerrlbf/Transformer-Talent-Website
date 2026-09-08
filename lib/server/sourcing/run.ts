@@ -564,8 +564,12 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
     return resultFrom(run);
   }
   // Mode fence: a mock-created run (preview/CLI test) must never be driven
-  // by a live-mode process — that would turn a demo into real spend.
-  if ((run.provider_mode ?? "live") !== providerMode()) {
+  // by a live-mode process — that would turn a demo into real spend. The
+  // fence guards the stages that call the lead provider; ranking and
+  // screening only read stored profiles and call the model, so a run may be
+  // judged again from either mode.
+  const importing = run.status === "previewed" || run.status === "importing";
+  if (importing && (run.provider_mode ?? "live") !== providerMode()) {
     await release();
     return resultFrom(run, { busy: true, error: `provider mode mismatch (run: ${run.provider_mode}, driver: ${providerMode()})` });
   }
