@@ -149,17 +149,23 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
         { role: "user", content: user },
       ],
     }),
-  }).catch(() => null);
-  if (!res || !res.ok) {
-    if (res && input.onError) {
-      let code: string | undefined;
-      try {
-        code = ((await res.json()) as { error?: { code?: string } })?.error?.code;
-      } catch {
-        /* body unreadable */
-      }
-      input.onError({ status: res.status, code, retryAfter: res.headers.get("retry-after") ?? undefined });
+  }).catch((e: unknown) => {
+    // Timeout, abort or transport error: transient, never the row's fault.
+    input.onError?.({ status: 0, code: e instanceof Error ? e.name : "fetch_failed" });
+    return null;
+  });
+  if (!res) return null;
+  if (!res.ok) {
+    let code: string | undefined;
+    let body = "";
+    try {
+      body = await res.text();
+      code = (JSON.parse(body) as { error?: { code?: string } })?.error?.code;
+    } catch {
+      /* body unreadable */
     }
+    console.error("verdict: openai", res.status, code || "", body.slice(0, 300));
+    input.onError?.({ status: res.status, code, retryAfter: res.headers.get("retry-after") ?? undefined });
     return null;
   }
   try {

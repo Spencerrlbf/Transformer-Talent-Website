@@ -33,7 +33,10 @@ import { getCompanyContexts, companyContextLine, companySlugFromUrl } from "./co
 export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
 const PAGE_SIZE = 25;
 const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY || "4", 10) || 4);
-const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "15", 10) || 15);
+// Five at a time: the verdict prompt is ~5k tokens a call, and a burst of
+// fifteen trips a typical OpenAI per-minute limit; rate-limited rows then
+// wait out their retry-after rather than counting as failures.
+const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "5", 10) || 5);
 // Short LLM cap so a wave (2 sequential calls/row) provably fits the window.
 const SCREEN_LLM_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.SOURCING_LLM_TIMEOUT_MS || "15000", 10) || 15_000);
 const WAVE_NEED_MS = 2 * SCREEN_LLM_TIMEOUT_MS + 5_000;
@@ -478,7 +481,7 @@ async function screenOneRow(
     if (err && (err.status === 401 || err.status === 403 || err.code === "insufficient_quota")) {
       throw new RunFailure(`LLM key rejected (${err.status}${err.code ? ` ${err.code}` : ""})`);
     }
-    if (err && (err.status === 429 || err.status >= 500)) {
+    if (err && (err.status === 0 || err.status === 429 || err.status >= 500)) {
       // Rate limit / upstream blip: NOT the row's fault — no attempt charged.
       const retryMs = err.retryAfter ? Math.min(parseInt(err.retryAfter, 10) * 1000 || 30_000, 120_000) : jitter(30_000);
       await fencedRowPatch(row.id, leaseId, {
@@ -717,8 +720,11 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         );
         run.screened_count = screened;
 
-        // Persisted circuit breaker: survives invocation boundaries.
-        const streak = ok === 0 && rows.length > 0 ? run.allfail_streak + 1 : 0;
+        // Persisted circuit breaker: survives invocation boundaries. A wave
+        // that only hit rate limits or timeouts is not a failure of the
+        // rows; those pause and retry below. Only junk output counts.
+        const junk = outcomes.filter((o) => o.outcome === "junk").length;
+        const streak = ok === 0 && junk > 0 ? run.allfail_streak + 1 : ok > 0 ? 0 : run.allfail_streak;
         if (!(await leasePatch(run.id, leaseId, { screened_count: screened, allfail_streak: streak }))) {
           leaseLost = true; break;
         }
