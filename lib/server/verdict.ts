@@ -7,7 +7,7 @@
 // rails after the call (a verified years shortfall caps the label).
 
 import type { CandidateFacts } from "./facts";
-import { VERDICT_LABEL, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
+import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
@@ -76,7 +76,7 @@ CATEGORIES: a requirement stated as a category is met by any concrete instance o
 
 RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
 
-ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement as written, status met / equivalent / missing, evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).`;
+ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement = for a REQUIRED SKILLS line, that skill's name verbatim (add " or similar" when an alternate satisfied it); for a hard requirement from the job description, a short label of at most four words naming the capability, e.g. "Browser automation", "Production infrastructure"; never the sentence from the job description; status met / equivalent / missing; evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).`;
 
 export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null> {
   const key = process.env.OPENAI_API_KEY;
@@ -199,9 +199,9 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       ask: (out.ask || []).slice(0, 3).map((q) => q.slice(0, 200)),
       betterSuited: (out.better_suited || "").slice(0, 250),
       requirements: (out.requirements || [])
-        .filter((r) => r && typeof r.requirement === "string" && ["met", "equivalent", "missing"].includes(r.status))
+        .filter((r) => r && typeof r.requirement === "string" && r.requirement.trim() && ["met", "equivalent", "missing"].includes(r.status))
         .slice(0, 16)
-        .map((r) => ({ requirement: r.requirement.slice(0, 120), status: r.status, evidence: (r.evidence || "").slice(0, 120) })),
+        .map((r) => ({ requirement: r.requirement.trim().slice(0, 120), status: r.status, evidence: (r.evidence || "").slice(0, 120) })),
       technologiesNow: cleanTech(out.technologies_now),
       technologiesBefore: cleanTech(out.technologies_before),
       model: input.model,
@@ -238,17 +238,25 @@ const mentions = (hay: string, needle: string) => {
 /** The verdict as the product stores and shows it. `factsFor` recomputes the
  *  facts over the technologies the judge named, so each chip can carry its
  *  dated years; requirement reads decide each chip's status. */
-export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => CandidateFacts | null): VerdictView {
+export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => CandidateFacts | null, roleSkills: string[] = []): VerdictView {
   const terms = [...new Set([...v.technologiesNow, ...v.technologiesBefore])];
   const facts = terms.length ? factsFor(terms) : null;
   const yearsOf = (name: string): number | null => {
     const f = (facts?.skills || []).find((s) => !s.listedOnly && mentions(s.skill, name));
     return f ? f.years : null;
   };
+  // A chip is "met" when a met requirement names it, or names the role skill
+  // this technology is (so a category label still lights the skill's chip).
+  const skillOfTech = (name: string) => skillIn(name, roleSkills) || (roleSkills.find((s) => skillIn(s, [name])) ?? null);
+  const names = (r: RequirementRead, name: string) => {
+    if (mentions(r.evidence, name) || mentions(r.requirement, name)) return true;
+    const sk = skillOfTech(name);
+    return !!sk && (mentions(r.requirement, sk) || mentions(r.evidence, sk));
+  };
   const statusOf = (name: string): { status: ChipStatus; evidence?: string } => {
-    const met = v.requirements.find((r) => r.status === "met" && (mentions(r.evidence, name) || mentions(r.requirement, name)));
+    const met = v.requirements.find((r) => r.status === "met" && names(r, name));
     if (met) return { status: "met", evidence: met.requirement };
-    const eq = v.requirements.find((r) => r.status === "equivalent" && (mentions(r.evidence, name) || mentions(r.requirement, name)));
+    const eq = v.requirements.find((r) => r.status === "equivalent" && names(r, name));
     if (eq) return { status: "equivalent", evidence: `stands in for ${eq.requirement}` };
     return { status: "plain" };
   };
@@ -256,7 +264,20 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
   const now = v.technologiesNow.map(chip);
   const nowSet = new Set(now.map((c) => c.name.toLowerCase()));
   const before = v.technologiesBefore.filter((t) => !nowSet.has(t.toLowerCase())).map(chip);
-  const gaps = v.requirements.filter((r) => r.status === "missing").map((r) => r.requirement).slice(0, 6);
+  // Gaps: short labels, one per skill, never a name already lit as met or
+  // equivalent on a chip, never empty.
+  const lit = new Set([...now, ...before].filter((c) => c.status !== "plain").map((c) => c.name.toLowerCase()));
+  const seenGap = new Set<string>();
+  const gaps: string[] = [];
+  for (const r of v.requirements) {
+    if (r.status !== "missing") continue;
+    const label = shortRequirement(r.requirement, roleSkills);
+    const key = label.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9+#]/g, "");
+    if (!label || !key || seenGap.has(key) || lit.has(label.toLowerCase())) continue;
+    seenGap.add(key);
+    gaps.push(label);
+    if (gaps.length >= 6) break;
+  }
   return {
     v: 2,
     label: v.label,

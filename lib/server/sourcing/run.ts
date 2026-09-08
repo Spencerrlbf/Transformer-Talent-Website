@@ -461,7 +461,11 @@ async function screenOneRow(
       onError: (info) => { llmErr = info; },
     });
     const verdict = judged
-      ? buildVerdictView(judged, (terms) => computeFacts(expRows, [...new Set([...stackTerms, ...terms])], skills, education))
+      ? buildVerdictView(
+          judged,
+          (terms) => computeFacts(expRows, [...new Set([...stackTerms, ...terms])], skills, education),
+          ctx.judgeSkills.map((s) => s.skill)
+        )
       : null;
 
     if (verdict) {

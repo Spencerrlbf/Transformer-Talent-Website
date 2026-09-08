@@ -337,7 +337,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
                 timeoutMs: 40_000,
               }).catch(() => null);
               if (!judged) return;
-              const view = buildVerdictView(judged, (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList));
+              const view = buildVerdictView(
+                judged,
+                (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList),
+                (role.skills || []).map((s) => s.skill)
+              );
               await attachVerdictToMatch(storeOrg, candidateId, role.id, view).catch(() => false);
             })
           );

@@ -4,7 +4,7 @@
 // marked against the role. `compact` is the table-row form: label, the first
 // two sentences, five chips.
 import { useState } from "react";
-import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, type TechChip, type VerdictView } from "@/lib/verdict-view";
+import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, shortRequirement, type TechChip, type VerdictView } from "@/lib/verdict-view";
 
 function Chip({ c }: { c: TechChip }) {
   const title =
@@ -86,11 +86,15 @@ export default function VerdictCard({ view, compact = false }: { view: VerdictVi
             <>
               <div className="vc-lbl">Required, not shown</div>
               <div className="vc-chips">
-                {gaps.map((g, i) => (
-                  <span className="vc-chip gap" key={`g-${i}`} title="Required by the role; no evidence on the profile or resume">
-                    {g}
-                  </span>
-                ))}
+                {gaps.map((g, i) => {
+                  const label = shortRequirement(g);
+                  const original = view.requirements.find((r) => r.status === "missing" && (r.requirement === g || shortRequirement(r.requirement) === label));
+                  return (
+                    <span className="vc-chip gap" key={`g-${i}`} title={`Required by the role; no evidence on the profile or resume${original && original.requirement !== label ? `: ${original.requirement}` : ""}`}>
+                      {label}
+                    </span>
+                  );
+                })}
               </div>
             </>
           )}

@@ -4,7 +4,7 @@
 // reviewed. Drives the run via /advance in a sequential loop — the engine's
 // lease makes concurrent drivers harmless, and the run resumes from any
 // device (or the scheduled resumer) if this tab closes.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
 import VerdictCard from "../candidates/VerdictCard";
@@ -28,6 +28,15 @@ export default function RunView({
   // "Review again": a two-step button, no native dialog.
   const [reviewAgainArmed, setReviewAgainArmed] = useState(false);
   const [reviewAgainBusy, setReviewAgainBusy] = useState(false);
+  // Rows opened to their full verdict (paragraph, strip, questions).
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggleOpen = (id: string) =>
+    setOpenIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true; // StrictMode remounts reuse the ref — re-arm it
@@ -219,7 +228,7 @@ export default function RunView({
                 onClick={() => { setFilter(f); setPage(1); }}
               >
                 {f === "all" ? `All ${total || importedSoFar}`
-                  : f === "strong" ? "Strong yes"
+                  : f === "strong" ? "Contact now"
                   : f === "yes" ? "Yes"
                   : f === "message" ? "Worth a message"
                   : "Shortlisted ★"}
@@ -238,17 +247,19 @@ export default function RunView({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.membershipId} className={r.hidden ? "is-hidden" : ""}>
+                  <Fragment key={r.membershipId}>
+                  <tr className={r.hidden ? "is-hidden" : ""}>
                     <td className="rk">{r.rank ?? "–"}</td>
                     <td>
                       <span className="nm">{r.name}</span>
                       <div className="sub">{[r.title, r.company, r.location].filter(Boolean).join(" · ")}</div>
-                      {(r.years != null || r.priorCompanies.length > 0 || r.topSkills.length > 0) && (
+                      {(r.years != null || r.priorCompanies.length > 0 || (!r.verdict && r.topSkills.length > 0)) && (
                         <div className="dash-src-snapshot">
                           {[
                             r.years != null ? `${r.years} yrs` : null,
                             r.priorCompanies.length ? `prev: ${r.priorCompanies.join(", ")}` : null,
-                            r.topSkills.length
+                            // The verdict's chips replace LinkedIn's self-declared skill list.
+                            !r.verdict && r.topSkills.length
                               ? r.topSkills.join(", ") + (r.skillCount > r.topSkills.length ? ` +${r.skillCount - r.topSkills.length}` : "")
                               : null,
                           ].filter(Boolean).join(" · ")}
@@ -257,7 +268,12 @@ export default function RunView({
                     </td>
                     <td>
                       {r.verdict ? (
-                        <VerdictCard view={r.verdict} compact />
+                        <>
+                          <VerdictCard view={r.verdict} compact />
+                          <button type="button" className="dash-src-fullbtn" onClick={() => toggleOpen(r.membershipId)}>
+                            {openIds.has(r.membershipId) ? "Hide full verdict ▴" : "Full verdict ▾"}
+                          </button>
+                        </>
                       ) : r.tag ? (
                         <>
                           <span className={`dash-tag ${TAG_UI[r.tag]?.cls || "t-pending"}`}>{TAG_UI[r.tag]?.label || r.tag}</span>
@@ -285,6 +301,15 @@ export default function RunView({
                       <button title="Hide" onClick={() => rowAction(r, { hidden: true })}>✕</button>
                     </td>
                   </tr>
+                  {r.verdict && openIds.has(r.membershipId) && (
+                    <tr className={`dash-src-full${r.hidden ? " is-hidden" : ""}`}>
+                      <td></td>
+                      <td colSpan={4}>
+                        <VerdictCard view={r.verdict} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
