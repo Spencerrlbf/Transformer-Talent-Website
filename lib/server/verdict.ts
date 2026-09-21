@@ -8,11 +8,12 @@
 
 import type { CandidateFacts } from "./facts";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
+import { labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
 
-export const VERDICT_PROMPT_VERSION = "v2";
+export const VERDICT_PROMPT_VERSION = "v3";
 
 export interface VerdictSkill {
   skill: string;
@@ -32,6 +33,11 @@ export interface VerdictInput {
   resumeText: string | null;
   factsBlock: string;
   careerYears: number | null;
+  /** The role's scorecard. When present the judge answers every row and the
+   *  label comes from the rows by fixed rules (lib/rolecard.ts). */
+  criteria?: Criterion[];
+  /** Facts a recruiter confirmed about this person, on any role. */
+  confirmedFacts?: string[];
   model: string;
   timeoutMs?: number;
   /** Failure visibility for callers that pace retries (rate limit vs dead key). */
@@ -49,6 +55,10 @@ export interface Verdict {
   betterSuited: string;
   /** One read per role requirement: met, met through an equivalent, or missing. */
   requirements: RequirementRead[];
+  /** One judged row per scorecard criterion, when the role has a scorecard. */
+  rows: CardRow[];
+  /** The label the judge's own rows give, before any recruiter overrule. */
+  aiLabel: VerdictLabel;
   /** Technologies evidenced in the current position, and in earlier ones. */
   technologiesNow: string[];
   technologiesBefore: string[];
@@ -76,12 +86,22 @@ CATEGORIES: a requirement stated as a category is met by any concrete instance o
 
 RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
 
-ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement = for a REQUIRED SKILLS line, that skill's name verbatim (add " or similar" when an alternate satisfied it); for a hard requirement from the job description, a short label of at most four words naming the capability, e.g. "Browser automation", "Production infrastructure"; never the sentence from the job description; status met / equivalent / missing; evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).`;
+ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement = for a REQUIRED SKILLS line, that skill's name verbatim (add " or similar" when an alternate satisfied it); for a hard requirement from the job description, a short label of at most four words naming the capability, e.g. "Browser automation", "Production infrastructure"; never the sentence from the job description; status met / equivalent / missing; evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).
+
+SCORECARD: when the message carries a SCORECARD block, answer EVERY row in rows, by its id, with one status:
+- yes: the profile, the resume, FACTS or a CONFIRMED fact shows it.
+- equivalent: not shown directly, but an equivalent is: an alternate the row accepts, a concrete instance of a category, or clearly transferable work. Say what stands in.
+- unknown: the profile is silent: nothing for it and nothing against it. The honest answer for anything a LinkedIn profile would not normally say.
+- no: contradicted: FACTS years under the bar, a different discipline, seniority far off, or a detailed history that plainly points elsewhere.
+evidence = the fact that decides it, at most 14 words; for unknown, name what is not shown. With a SCORECARD block return requirements as an empty array, and the label must follow the rows: any required row no gives pass; every required row yes or equivalent gives contact; anything else gives message. Without a SCORECARD block return rows as an empty array.
+
+CONFIRMED: statements under CONFIRMED BY THE RECRUITER were checked by a person (a call, an interview, a closer read). They are true and outrank the profile.`;
 
 export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   const started = Date.now();
+  const criteria = (input.criteria || []).slice(0, 16);
   const skillsBlock = input.skills.length
     ? input.skills
         .map(
@@ -95,12 +115,20 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     `ROLE: ${input.roleTitle}${input.minYears ? ` (${input.minYears}+ years)` : ""}\n\n` +
     `JOB DESCRIPTION:\n${input.jdText.slice(0, 5000)}\n\n` +
     `REQUIRED SKILLS:\n${skillsBlock}\n\n` +
+    (criteria.length
+      ? `SCORECARD (answer every row by id):\n${criteria
+          .map((c) => `- [${c.id}] (${c.tier}) ${c.label}${c.good ? ` :: counts as evidence: ${c.good}` : ""}`)
+          .join("\n")}\n\n`
+      : "") +
     (input.targetedCompanies.length
       ? `SEARCH CONTEXT: the employer explicitly targeted candidates at these companies: ${input.targetedCompanies.join(", ")}\n\n`
       : "") +
     (input.employerContext ? `CANDIDATE'S CURRENT EMPLOYER: ${input.employerContext}\n\n` : "") +
     `CANDIDATE: ${input.candidateName}\nLINKEDIN PROFILE:\n${input.profileText.slice(0, 5000)}\n\n` +
     (input.resumeText ? `RESUME EXCERPT:\n${input.resumeText.slice(0, 3000)}\n\n` : "") +
+    (input.confirmedFacts?.length
+      ? `CONFIRMED BY THE RECRUITER:\n${input.confirmedFacts.slice(0, 12).map((f) => `- ${f}`).join("\n")}\n\n`
+      : "") +
     `FACTS (computed from dated position history; use these numbers verbatim):\n${input.factsBlock}`;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -137,10 +165,23 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
                   required: ["requirement", "status", "evidence"],
                 },
               },
+              rows: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: "string" },
+                    status: { type: "string", enum: ["yes", "equivalent", "unknown", "no"] },
+                    evidence: { type: "string" },
+                  },
+                  required: ["id", "status", "evidence"],
+                },
+              },
               technologies_now: { type: "array", items: { type: "string" } },
               technologies_before: { type: "array", items: { type: "string" } },
             },
-            required: ["label", "paragraph", "missing", "ask", "better_suited", "requirements", "technologies_now", "technologies_before"],
+            required: ["label", "paragraph", "missing", "ask", "better_suited", "requirements", "rows", "technologies_now", "technologies_before"],
           },
         },
       },
@@ -180,28 +221,58 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       ask: string[];
       better_suited: string;
       requirements: RequirementRead[];
+      rows: { id: string; status: RowStatus; evidence: string }[];
       technologies_now: string[];
       technologies_before: string[];
     };
     if (!out.label || !out.paragraph) return null;
     let label = out.label;
     let missing = (out.missing || []).slice(0, 4).map((m) => m.slice(0, 160));
+    // Scorecard mode: one row per criterion, in the scorecard's order. A row
+    // the model skipped is "unknown", never a guess.
+    const rows: CardRow[] = criteria.map((c) => {
+      const r = (out.rows || []).find((x) => x && x.id === c.id);
+      let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";
+      let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 140);
+      // Rail: the dated history is the only source for years. A row that
+      // states a years bar cannot read as met when FACTS fall more than a
+      // year short; it reads "not shown" (dates on profiles are often partial).
+      const bar = yearsBar(c.label);
+      if (bar != null && input.careerYears != null && input.careerYears < bar - 1 && (status === "yes" || status === "equivalent")) {
+        status = "unknown";
+        evidence = `Dated history shows ${input.careerYears} years against ${bar}+.`;
+      }
+      return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, confirmed: null };
+    });
+    if (rows.length) label = labelFromRows(rows, label);
     // Rail: a verified years shortfall of more than a year blocks "contact"
-    // however persuasive the narrative; the number is not negotiable.
+    // however persuasive the narrative; the number is not negotiable. Runs
+    // after the rows so it also holds when the scorecard has no years row.
     if (label === "contact" && input.minYears != null && input.careerYears != null && input.careerYears < input.minYears - 1) {
       label = "message";
       missing = [`Dated history shows ${input.careerYears} years against ${input.minYears}+ required.`, ...missing].slice(0, 4);
     }
+    const requirements: RequirementRead[] = rows.length
+      ? rows
+          .filter((r) => r.status === "yes" || r.status === "equivalent" || r.tier === "required")
+          .map((r) => ({
+            requirement: r.label,
+            status: r.status === "yes" ? ("met" as const) : r.status === "equivalent" ? ("equivalent" as const) : ("missing" as const),
+            evidence: r.evidence,
+          }))
+      : (out.requirements || [])
+          .filter((r) => r && typeof r.requirement === "string" && r.requirement.trim() && ["met", "equivalent", "missing"].includes(r.status))
+          .slice(0, 16)
+          .map((r) => ({ requirement: r.requirement.trim().slice(0, 120), status: r.status, evidence: (r.evidence || "").slice(0, 120) }));
     return {
       label,
       paragraph: out.paragraph.trim().slice(0, 700),
       missing,
       ask: (out.ask || []).slice(0, 3).map((q) => q.slice(0, 200)),
       betterSuited: (out.better_suited || "").slice(0, 250),
-      requirements: (out.requirements || [])
-        .filter((r) => r && typeof r.requirement === "string" && r.requirement.trim() && ["met", "equivalent", "missing"].includes(r.status))
-        .slice(0, 16)
-        .map((r) => ({ requirement: r.requirement.trim().slice(0, 120), status: r.status, evidence: (r.evidence || "").slice(0, 120) })),
+      requirements,
+      rows,
+      aiLabel: label,
       technologiesNow: cleanTech(out.technologies_now),
       technologiesBefore: cleanTech(out.technologies_before),
       model: input.model,
