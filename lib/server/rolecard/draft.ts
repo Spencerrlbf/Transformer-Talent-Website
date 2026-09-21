@@ -15,16 +15,33 @@ export interface DraftInput {
 
 export const DRAFT_MODEL = "gpt-4o";
 
-const SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Each row is one thing a recruiter can verify from a LinkedIn profile, a resume, or a short call.
+// One array per tier, so a tier cannot be skipped the way a single list let it be.
+const ROWS = {
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    properties: { label: { type: "string" }, good: { type: "string" } },
+    required: ["label", "good"],
+  },
+} as const;
 
-THREE TIERS:
-- required: the hiring manager would reject without it. 3 to 6 rows. Include the minimum years when the role states one, and each must-have skill (fold accepted alternates into the row: "TypeScript backend (or Go, Java)").
-- exceptional: what the ideal hire has beyond the bar: the rare thing that makes the hiring manager say yes on sight. 1 to 3 rows. Drawn from the role's core problem, not from generic praise.
-- bonus: nice to have. 0 to 4 rows.
+const SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Each row is one thing a recruiter can verify from a LinkedIn profile, a resume, or a ten-minute call.
 
-EACH ROW: label = a short capability, at most 9 words, no question mark, no "experience with" padding, one fact per row (never join two distinct skills with "and"; "or" alternatives may share a row). good = one plain sentence, at most 22 words, saying what counts as evidence, including equivalents that should pass (a category is met by any instance: "vector database" by pgvector, Pinecone, FAISS).
+THREE TIERS, all three filled:
+- required: the hiring manager would reject without it. 3 to 5 rows. Include the minimum years when the role states one, as its own row in exactly this form: "4+ years software engineering". Include each must-have skill.
+- exceptional: what the ideal hire has beyond the bar, the rare thing that makes the hiring manager say yes on sight. 2 to 3 rows, always. Draw them from the role's core problem and the hardest responsibility in the description (for an agent-platform role: "Has built agent or browser-automation infrastructure in production"), never from generic praise.
+- bonus: nice to have. 1 to 4 rows.
 
-Never invent requirements the description does not support. Never write rows about soft skills, culture, location, visa or salary. Order each tier by importance. 6 to 11 rows in total.`;
+EVERY ROW MUST BE CHECKABLE. A recruiter must be able to answer yes or no to it from evidence.
+- Never copy a sentence from the description. Never use an adjective as the test: no deep, strong, solid, expert, proven, extensive, significant, comfortable, familiar. Replace the adjective with what it means: "Deep TypeScript backend expertise" becomes "TypeScript backend in production, 2+ years".
+- Replace abstractions with the thing done: "Production-grade infrastructure experience" becomes "Has run backend services in production (on-call, deploys, reliability)". "Comfort at the intersection of AI agents and systems engineering" becomes "Has built systems that run LLM agents or tool use".
+- When another technology would do the job, fold it into the row: "TypeScript backend in production, 2+ years (or Node.js; Go or Java with some TypeScript)". Only fold in what a hiring manager for THIS role would accept.
+- One fact per row. Never join two distinct skills with "and". "Or" alternatives may share a row.
+
+label = at most 10 words, no question mark. good = one plain sentence, at most 24 words, saying what counts as evidence and which equivalents pass (a category is met by any instance: "vector database" by pgvector, Pinecone, FAISS).
+
+Never invent requirements the description does not support. No rows about soft skills, culture, location, visa or salary. Order each tier by importance. 7 to 11 rows in total.`;
 
 /** Enough written about the role to draft from. A bare title would make the
  *  model invent requirements, and invented Required rows would pass people. */
@@ -64,22 +81,8 @@ export async function draftScorecard(input: DraftInput, timeoutMs = 40_000): Pro
           schema: {
             type: "object",
             additionalProperties: false,
-            properties: {
-              criteria: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    label: { type: "string" },
-                    tier: { type: "string", enum: ["exceptional", "required", "bonus"] },
-                    good: { type: "string" },
-                  },
-                  required: ["label", "tier", "good"],
-                },
-              },
-            },
-            required: ["criteria"],
+            properties: { required: ROWS, exceptional: ROWS, bonus: ROWS },
+            required: ["required", "exceptional", "bonus"],
           },
         },
       },
@@ -95,7 +98,11 @@ export async function draftScorecard(input: DraftInput, timeoutMs = 40_000): Pro
   }
   try {
     const data = (await res.json()) as { choices: { message: { content: string } }[] };
-    return sanitizeScorecard(JSON.parse(data.choices[0].message.content), "ai");
+    const out = JSON.parse(data.choices[0].message.content) as Record<"required" | "exceptional" | "bonus", { label: string; good: string }[]>;
+    const criteria = (["exceptional", "required", "bonus"] as const).flatMap((tier) =>
+      (Array.isArray(out[tier]) ? out[tier] : []).map((r) => ({ ...r, tier }))
+    );
+    return sanitizeScorecard({ criteria }, "ai");
   } catch {
     return null;
   }

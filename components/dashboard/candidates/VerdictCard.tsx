@@ -7,6 +7,11 @@ import { useState } from "react";
 import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, shortRequirement, type TechChip, type VerdictView } from "@/lib/verdict-view";
 import Checklist, { type VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
 
+const reviewedOn = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+};
+
 function Chip({ c }: { c: TechChip }) {
   const title =
     c.status === "met"
@@ -122,6 +127,11 @@ export default function VerdictCard({
             <span className="l-gap">{hasCard ? "required, not met" : "required, no evidence"}</span>
           </div>
         </div>
+      )}
+      {reviewedOn(view.at) && (
+        <p className="vc-when" title="Years and tenure in this note are as of that day. Review again to refresh it.">
+          Reviewed {reviewedOn(view.at)}
+        </p>
       )}
       {view.ask.length > 0 && (
         <button type="button" className="vc-link" onClick={() => setAskOpen((o) => !o)}>

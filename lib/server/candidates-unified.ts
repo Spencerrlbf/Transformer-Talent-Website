@@ -442,6 +442,17 @@ type SrcPerson = {
 const SRC_COLS =
   "id,full_name,headline,location,current_title,current_company,skills,years_experience,linkedin_username,linkedin_url,contact,resume_path,created_at";
 
+/** Career years as of today. The stored figure is a snapshot from the day
+ *  the profile was pulled; someone in a current role has gained the time
+ *  since. (Screens that load the full profile compute it exactly.) */
+function yearsToday(p: Pick<SrcPerson, "years_experience" | "current_company" | "created_at">): number | null {
+  if (p.years_experience == null) return null;
+  if (!p.current_company) return p.years_experience;
+  const pulled = new Date(p.created_at).getTime(); // a profile is pulled once, when the person is first imported
+  const gained = Number.isNaN(pulled) ? 0 : Math.max(0, (Date.now() - pulled) / (365.25 * 24 * 3600 * 1000));
+  return Math.round((Number(p.years_experience) + gained) * 10) / 10;
+}
+
 // PostgREST caps result pages; loop until a short batch.
 async function fetchAllPages<T>(pathFor: (limit: number, offset: number) => string): Promise<T[]> {
   const LIMIT = 1000;
@@ -816,7 +827,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       roles,
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
-      yearsExperience: p.years_experience,
+      yearsExperience: yearsToday(p),
       addedAt: ms[ms.length - 1]?.created_at || p.created_at,
       stage: null,
       screeningPending: true, // sourced judgments arrive asynchronously

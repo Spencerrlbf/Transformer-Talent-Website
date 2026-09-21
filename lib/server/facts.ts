@@ -91,10 +91,18 @@ function usedSkill(row: ExperienceRow, skill: string): boolean {
 }
 
 // [startMonths, endMonths] since year 0, for interval math.
+// Months are counted the way LinkedIn shows them: inclusive of the last one.
+// "Sep 2023 – Dec 2024" is 16 months, and a current role counts this month.
+// (Counting to the START of the end month lost a month per position: three
+// jobs over exactly three years read as 2.8.) A year-only date has no month
+// to include, so it stays a mid-year estimate.
 function interval(row: ExperienceRow, nowY: number, nowM: number): [number, number] | null {
   if (!row.start_year) return null;
   const start = row.start_year * 12 + (row.start_month ?? 6);
-  const end = row.is_current || !row.end_year ? nowY * 12 + nowM : row.end_year * 12 + (row.end_month ?? 6);
+  const end =
+    row.is_current || !row.end_year
+      ? nowY * 12 + nowM + 1
+      : row.end_year * 12 + (row.end_month != null ? row.end_month + 1 : 6);
   return end > start ? [start, end] : null;
 }
 

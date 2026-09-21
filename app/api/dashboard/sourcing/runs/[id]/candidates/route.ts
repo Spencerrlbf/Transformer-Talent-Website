@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { isVerdictView } from "@/lib/verdict-view";
+import { computeFacts } from "@/lib/server/facts";
+import { harvestToExperiences } from "@/lib/server/spine";
 
 type Params = { params: Promise<{ id: string }> };
 const PAGE = 25;
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       current_title: string | null; current_company: string | null;
       linkedin_url: string | null; linkedin_username: string | null;
       years_experience: number | null; skills: string[] | null;
-      profile: { experience?: { companyName?: string; company?: string }[] } | null;
+      profile: ({ experience?: { companyName?: string; company?: string }[]; education?: unknown } & Record<string, unknown>) | null;
     } | null;
   };
   const rows = (await res.json()) as Row[];
@@ -78,7 +80,14 @@ export async function GET(req: NextRequest, { params }: Params) {
       location: r.sourced_candidates?.location || null,
       linkedinUrl: r.sourced_candidates?.linkedin_url || null,
       // 5-second snapshot: years · company trajectory · top skills
-      years: r.sourced_candidates?.years_experience ?? null,
+      // Career years as of today, from the dated positions. The number stored
+      // at import is a snapshot: it never grew, and read low within weeks.
+      years: (() => {
+        const profile = r.sourced_candidates?.profile;
+        if (!profile) return r.sourced_candidates?.years_experience ?? null;
+        const live = computeFacts(harvestToExperiences(profile), [], [], profile.education ?? null).careerYears;
+        return live ?? r.sourced_candidates?.years_experience ?? null;
+      })(),
       priorCompanies: [...new Set(
         (r.sourced_candidates?.profile?.experience || [])
           .map((e) => e.companyName || e.company)

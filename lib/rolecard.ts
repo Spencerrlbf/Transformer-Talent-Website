@@ -167,15 +167,39 @@ export const tally = (rows: Pick<CardRow, "tier" | "status">[], tier: Tier) => {
 /** A row as a chip label: the years bar when it states one, else a few words. */
 const GENERIC_YEARS = /(years|yrs)\s+(of\s+)?((professional|industry|relevant|total|overall|commercial|hands[- ]on)\s+)*((software|backend|frontend|full[- ]stack)\s+)?(engineering|development|experience|work)\b\s*(experience)?\s*$/i;
 
+/** A row that states nothing but a career-years bar ("4+ years software
+ *  engineering"). Code decides these from the dated history; no model does
+ *  arithmetic. A years row with a subject ("5 years building distributed
+ *  systems") needs reading, so the judge keeps it. */
+export const isCareerYearsRow = (label: string): boolean =>
+  yearsBar(label) != null && GENERIC_YEARS.test(label.replace(/\(.*?\)/g, "").trim());
+
+/** The career-years row by rule. At or over the bar: yes. Within a year of
+ *  it: not shown (dated histories are often partial, and close is worth a
+ *  conversation). More than a year short: no. */
+export function careerYearsStatus(careerYears: number | null, bar: number): { status: RowStatus; evidence: string } {
+  if (careerYears == null) return { status: "unknown", evidence: "No dated positions on the profile." };
+  const said = `${careerYears} years of dated career history against ${bar}+.`;
+  if (careerYears >= bar) return { status: "yes", evidence: said };
+  if (careerYears >= bar - 1) return { status: "unknown", evidence: `${said} Close; early roles may be missing.` };
+  return { status: "no", evidence: said };
+}
+
+const YEARS_PHRASE = /(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?(\d{1,2}\s*(-|–|—|to)\s*)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i;
+const tidyChip = (x: string) => x.replace(/…$/, "").replace(/[,;:.\s]+$/, "").replace(/\s+(in|of|with|and|or|for|on|at)$/i, "").trim();
+
 export function chipLabel(label: string, roleSkills: string[] = []): string {
   const bar = yearsBar(label);
   if (bar == null) return shortRequirement(label, roleSkills);
-  // "4+ years of software engineering" is just the bar; "5 years building
-  // distributed systems" keeps its subject.
-  if (GENERIC_YEARS.test(label.replace(/\(.*?\)/g, "").trim())) return `${bar}+ years`;
-  const rest = label.replace(/(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?(\d{1,2}\s*(-|–|—|to)\s*)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i, "").trim();
-  const subject = shortRequirement(rest, roleSkills).replace(/…$/, "").split(" ").slice(0, 3).join(" ");
-  return subject ? `${bar}+ yrs ${subject}` : `${bar}+ years`;
+  // "4+ years of software engineering" is just the bar.
+  if (isCareerYearsRow(label)) return `${bar}+ years`;
+  const rest = label.replace(YEARS_PHRASE, " ").replace(/\s+/g, " ").trim();
+  const subject = tidyChip(tidyChip(shortRequirement(rest, roleSkills)).split(" ").slice(0, 4).join(" "));
+  if (!subject) return `${bar}+ years`;
+  // "5 years building distributed systems" leads with its bar; a skill row
+  // that carries one ("TypeScript backend in production, 2+ years") leads
+  // with the skill, and the row itself shows the bar.
+  return new RegExp(`^\\s*${YEARS_PHRASE.source}`, "i").test(label) ? `${bar}+ yrs ${subject.split(" ").slice(0, 3).join(" ")}` : subject;
 }
 
 const met = (s: RowStatus) => s === "yes" || s === "equivalent";
@@ -207,7 +231,7 @@ export function applyOverrides(
   if (touched) {
     label = labelFromRows(rows, card.aiLabel);
     const railed = card.aiLabel !== labelFromRows(card.rows.map((r) => ({ tier: r.tier, status: r.ai })), card.aiLabel);
-    const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && yearsBar(r.label) != null);
+    const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && isCareerYearsRow(r.label));
     if (railed && label === "contact" && !yearsConfirmed) label = "message";
   }
   const baseGaps = card.aiGaps ?? judged.tech.gaps;

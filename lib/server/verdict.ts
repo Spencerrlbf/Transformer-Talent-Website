@@ -8,12 +8,12 @@
 
 import type { CandidateFacts } from "./facts";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
-import { chipLabel, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
+import { careerYearsStatus, chipLabel, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
 
-export const VERDICT_PROMPT_VERSION = "v3";
+export const VERDICT_PROMPT_VERSION = "v4";
 
 export interface VerdictSkill {
   skill: string;
@@ -100,13 +100,23 @@ SCORECARD: when the message carries a SCORECARD block, answer EVERY row in rows,
 - no: contradicted: FACTS years under the bar, a different discipline, seniority far off, or a detailed history that plainly points elsewhere.
 evidence = the fact that decides it, at most 14 words; for unknown, name what is not shown. With a SCORECARD block return requirements as an empty array, and the label must follow the rows: any required row no gives pass; every required row yes or equivalent gives contact; anything else gives message. Without a SCORECARD block return rows as an empty array.
 
+SKILL YEARS ARE A FLOOR: a per-skill figure in FACTS counts only the positions where that skill is tagged or named. People under-list skills, so the true figure is usually higher. Never answer no to a skill row because its dated years look low. Answer no only when the whole history plainly points elsewhere (a different stack or discipline throughout). The skill present with few dated years is equivalent or unknown, and the evidence states the dated figure ("1.1 years dated at Perch; depth not shown"). Words like deep, strong or expert in a row mean sustained production use (about two years or more) or clear ownership of systems built with it.
+
+CAREER YEARS rows are not in the SCORECARD block: the minimum-years row is decided from FACTS by rule, outside this note. Still state the career years in the paragraph, and if FACTS put them under the role's minimum, say so plainly.
+
 CONFIRMED: statements under CONFIRMED BY THE RECRUITER were checked by a person (a call, an interview, a closer read). They are true and outrank the profile.`;
 
 export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   const started = Date.now();
-  const criteria = (input.criteria || []).slice(0, 16);
+  const allCriteria = (input.criteria || []).slice(0, 16);
+  // A bare career-years row is decided by rule from the dated history; only
+  // the rows that need reading go to the model.
+  const criteria = allCriteria.filter((c) => !isCareerYearsRow(c.label));
+  const ruled = allCriteria
+    .filter((c) => isCareerYearsRow(c.label))
+    .map((c) => ({ ...c, ...careerYearsStatus(input.careerYears, yearsBar(c.label)!) }));
   const skillsBlock = input.skills.length
     ? input.skills
         .map(
@@ -123,6 +133,12 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     (criteria.length
       ? `SCORECARD (answer every row by id):\n${criteria
           .map((c) => `- [${c.id}] (${c.tier}) ${c.label}${c.good ? ` :: counts as evidence: ${c.good}` : ""}`)
+          .join("\n")}\n\n`
+      : "") +
+    // The rows decided by rule, so the paragraph and its closing call agree with them.
+    (ruled.length
+      ? `ALREADY DECIDED BY RULE (do not answer; take as given):\n${ruled
+          .map((r) => `- (${r.tier}) ${r.label}: ${r.status === "yes" ? "met" : r.status === "no" ? "NOT met" : "not shown"}. ${r.evidence}`)
           .join("\n")}\n\n`
       : "") +
     (input.targetedCompanies.length
@@ -237,7 +253,9 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     // the model skipped is "unknown", never a guess.
     const idOf = (x: string) => String(x || "").replace(/^[\s\[]+|[\s\]]+$/g, "").toLowerCase();
     let unassessed = 0;
-    const rows: CardRow[] = criteria.map((c) => {
+    const rows: CardRow[] = allCriteria.map((c) => {
+      const byRule = ruled.find((r) => r.id === c.id);
+      if (byRule) return { id: c.id, label: c.label, tier: c.tier, status: byRule.status, evidence: byRule.evidence, ai: byRule.status, confirmed: null };
       const r = (out.rows || []).find((x) => x && idOf(x.id) === c.id.toLowerCase());
       if (!r) unassessed++;
       let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";

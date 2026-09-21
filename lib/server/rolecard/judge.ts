@@ -54,7 +54,14 @@ function inputHash(a: JudgeForRoleArgs, factLines: string[]): string {
         targets: [...a.roleTargets].map((t) => t.toLowerCase()).sort(),
         criteria: a.criteria.map((c) => [c.id, c.label, c.tier, c.good || ""]),
       },
-      person: { profile: a.input.profileText, resume: a.input.resumeText || "", facts: factLines },
+      person: {
+        profile: a.input.profileText,
+        resume: a.input.resumeText || "",
+        facts: factLines,
+        // Career years move with the calendar. Whole years are part of what
+        // decides a verdict (a "4+ years" row flips on one); the months are not.
+        wholeYears: a.input.careerYears == null ? null : Math.floor(a.input.careerYears),
+      },
     })
   );
 }

@@ -19,7 +19,7 @@ import {
   applyOverrides,
   labelFromRows,
   tally,
-  yearsBar,
+  isCareerYearsRow,
   type CardRow,
   type RowOverride,
   type RowStatus,
@@ -147,7 +147,7 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
       {held && (
         <p className="ck-held">
           Held at Worth a message: {held}{" "}
-          {card.rows.some((r) => yearsBar(r.label) != null)
+          {card.rows.some((r) => isCareerYearsRow(r.label))
             ? "Confirm the years row to lift it."
             : "Add a years row to the scorecard if you want to confirm it."}
         </p>
