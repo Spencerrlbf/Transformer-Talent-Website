@@ -18,7 +18,7 @@
 // profiles never mention TypeScript, beside a row that said "not shown".
 
 import type { Verdict, VerdictInput } from "../verdict";
-import type { CandidateFacts, JobText } from "../facts";
+import { workKind, type CandidateFacts, type JobText } from "../facts";
 import type { RequirementRead, VerdictLabel } from "@/lib/verdict-view";
 import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
@@ -48,7 +48,7 @@ ALSO RETURN technologies_now (technologies tagged or named on the CURRENT job, o
 const NOTE_SYSTEM = `You write the short note a recruiter reads in ten seconds beside a candidate's scorecard. Everything you may say is in the message: FACTS, computed in code from dated positions, and ROWS, already decided, each with the words from the profile that decided it. You have not seen the profile. Add nothing to what is there.
 
 Write 2 to 4 sentences, at most 70 words:
-1. Who they are, from FACTS: current title and company, how long they have been there, their years in engineering roles. When FACTS says they worked at a company this role targets, say so as a fact.
+1. Who they are, from FACTS: current title and company, how long they have been there, and their years as FACTS words them (in engineering roles, or of career). When FACTS says they worked at a company this role targets, say so as a fact.
 2. What the profile shows for this role: only rows marked yes or equivalent, each with its evidence. For an equivalent, say what stands in for what.
 3. What is not shown, or is against: the Required rows marked unknown or no, plainly ("TypeScript is not shown on the profile"). When most rows are unknown, say the profile is thin in a few words ("The profile is titles only").
 
@@ -59,29 +59,42 @@ ALSO RETURN: missing (0 to 4 short plain statements: the Required rows that are 
 type RowOut = { id: string; status: RowStatus; quote: string; evidence: string };
 
 const HEDGE = /\b(suggests?|impl(y|ies|ied)|indicat(es?|ing)|presumably|probably|likely|potential)\b/i;
+// Words that say nothing about the work: generic title words, seniority,
+// and what a copied profile line drags along with it (dates, tenure, place).
 const GENERIC_WORDS = new Set([
   "software", "engineer", "engineering", "developer", "senior", "junior", "staff", "member", "technical", "intern", "internship",
-  "the", "and", "for", "with", "from", "at", "of", "in", "to", "a", "an", "ii", "iii", "full", "time", "present",
+  "principal", "lead", "sr", "jr", "associate", "head", "mts", "swe", "sde", "founding", "team",
+  "the", "and", "for", "with", "from", "at", "of", "in", "to", "a", "an", "ii", "iii", "iv", "full", "part", "time", "contract", "present",
+  "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+  "january", "february", "march", "april", "june", "july", "august", "september", "october", "november", "december",
+  "yr", "yrs", "year", "years", "mo", "mos", "month", "months", "remote", "hybrid", "onsite", "united", "states", "area", "greater", "city", "new", "york", "san", "francisco", "bay", "london",
 ]);
 const tokens = (s: string) => (s.toLowerCase().match(/[a-z0-9+#]+(?:\.[a-z0-9]+)*/g) || []).filter((t) => t.length >= 2);
 
-/** Is the quote really on the person's profile, and does it say more than a
- *  generic title and an employer's name? */
-export function quoteIsGrounded(quote: string, material: string, employers: string[]): boolean {
+/** Is the quote really on the person's profile, and does it SAY something?
+ *  What is left of the quote once generic title words, seniority, the
+ *  employers' names, dates, tenure and places are taken out must (1) not be
+ *  empty, (2) be on the profile in full, and (3) sit together on one line of
+ *  it. "Software Engineer. at Cognition. Sep 2025 - Present. New York" is a
+ *  copied line and proves nothing; a quote stitched from a skill here and a
+ *  city there proves nothing; one invented word in a real line proves nothing. */
+export function quoteIsGrounded(quote: string, material: string, employers: string[], noise = ""): boolean {
   const q = quote.replace(/["“”‘’…]/g, " ").replace(/\s+/g, " ").trim();
-  if (q.length < 3) return false;
-  const norm = (s: string) => s.toLowerCase().replace(/["“”‘’…]/g, " ").replace(/\s+/g, " ");
-  const qt = tokens(q);
-  if (!qt.length) return false;
-  const mt = new Set(tokens(material));
-  const found = qt.filter((t) => mt.has(t)).length / qt.length;
-  if (!norm(material).includes(norm(q)) && found < 0.8) return false;
-  const employerWords = new Set(employers.flatMap((e) => tokens(e)));
-  // Something must remain once the generic title words and the employers' names are taken out.
-  return qt.some((t) => t.length >= 3 && !GENERIC_WORDS.has(t) && !employerWords.has(t) && mt.has(t));
+  if (q.length < 2) return false;
+  const skip = new Set([...employers.flatMap((e) => tokens(e)), ...tokens(noise)]);
+  const content = tokens(q).filter((t) => !GENERIC_WORDS.has(t) && !skip.has(t) && !/^\d+$/.test(t));
+  if (!content.length) return false;
+  return material.split("\n").some((line) => {
+    const lt = new Set(tokens(line));
+    return content.every((t) => lt.has(t));
+  });
 }
 
-const stripExamples = (label: string) => label.replace(/\(.*?\)/g, " ").replace(/\b(e\.g\.|such as|like|or similar)\b.*$/i, " ");
+const stripExamples = (label: string) => label.replace(/\(.*?\)/g, " ").replace(/(\be\.g\.|\bsuch as\b|\blike\b|\bor similar\b|\bincluding\b).*$/i, " ");
+/** What else the row itself accepts: only what its brackets name. The
+ *  "examples of evidence" note is NOT a list of substitutes (it may well name
+ *  Kubernetes as evidence of backend work on a TypeScript row). */
+const bracketed = (label: string) => (label.match(/\(([^)]*)\)/g) || []).join(" ");
 
 function reasonNotOnAJob(tech: string[][], profileText: string, jobs: JobText[]): string {
   const name = tech[0]?.[0] || "It";
@@ -161,10 +174,18 @@ const cleanTech = (list: unknown, material: string): string[] => {
 
 const years = (n: number) => `${n} ${n === 1 ? "year" : "years"}`;
 
+const companyKey = (name: string) =>
+  name.toLowerCase().replace(/[.,]/g, " ").replace(/\b(inc|llc|lp|ltd|plc|corp|corporation|co|company|investments?|technologies|labs?|ai|the)\b/g, " ").replace(/\s+/g, " ").trim();
+/** "Two Sigma" is "Two Sigma Investments, LP"; "Meta" is not "Metaphor". */
+const sameCompany = (a: string, b: string) => {
+  const x = companyKey(a), y = companyKey(b);
+  return !!x && !!y && (x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `));
+};
+
 /** Facts about the person, written by code from dated positions. Where they
  *  work and what that company does appears here, once, as a fact: never as a
  *  tick or a "likely" on a row. */
-export function factLine(input: VerdictInput, facts: CandidateFacts | null, jobs: JobText[]): string[] {
+export function factLine(input: VerdictInput, facts: CandidateFacts | null, jobs: JobText[], basis: "engineering" | "career" = "engineering"): string[] {
   const out: string[] = [];
   if (facts?.currentTitle) {
     const tenure = facts.currentTenureYears != null ? (facts.currentTenureYears < 1 ? `${Math.max(1, Math.round(facts.currentTenureYears * 12))} months there` : `${years(facts.currentTenureYears)} there`) : "";
@@ -173,44 +194,60 @@ export function factLine(input: VerdictInput, facts: CandidateFacts | null, jobs
   if (facts?.engineeringYears != null) {
     const career = facts.careerYears ?? facts.engineeringYears;
     out.push(
-      career - facts.engineeringYears >= 0.5
-        ? `${years(facts.engineeringYears)} in engineering roles; ${years(career)} of career in all${facts.otherWork[0] ? ` (${facts.otherWork[0]})` : ""}`
-        : `${years(facts.engineeringYears)} in engineering roles`
+      basis === "career"
+        ? `${years(career)} of career`
+        : career - facts.engineeringYears >= 0.5
+          ? `${years(facts.engineeringYears)} in engineering roles; ${years(career)} of career in all${facts.otherWork[0] ? ` (${facts.otherWork[0]})` : ""}`
+          : `${years(facts.engineeringYears)} in engineering roles`
     );
   }
   const current = (facts?.currentCompany || "").toLowerCase();
   const before = [...new Set(jobs.filter((j) => j.career && j.company && j.company.toLowerCase() !== current).map((j) => j.company))].slice(0, 3);
   if (before.length) out.push(`Before: ${before.join(", ")}`);
   for (const target of input.targetedCompanies.slice(0, 6)) {
-    const t = target.toLowerCase();
-    const at = jobs.filter((j) => j.company && (j.company.toLowerCase().includes(t) || t.includes(j.company.toLowerCase())));
+    const at = jobs.filter((j) => j.company && sameCompany(j.company, target));
     const job = at.find((j) => j.career) || at[0];
     if (job) out.push(job.career ? `Worked at ${target}, a company this role targets (${job.title})` : `Interned at ${target}, a company this role targets`);
   }
-  if (input.employerContext) out.push(`Current employer: ${input.employerContext.replace(/\s+/g, " ").slice(0, 170)}`);
+  if (input.employerContext) {
+    // The company's own page, tidied: no dash, cut at a word, never mid-word.
+    const clean = input.employerContext.replace(/\s+/g, " ").replace(/\s+[—–-]\s+/, ": ").trim();
+    const cut = clean.length <= 150 ? clean : `${clean.slice(0, 150).replace(/\s+\S*$/, "")}…`;
+    out.push(`Current employer, from its company page: ${cut}`);
+  }
   return out;
 }
 
 const NEGATION = /\b(not|no|never|without|isn't|aren't|unconfirmed|missing|absent|lacks?|silent)\b/i;
 const PRONOUNS: [RegExp, string][] = [
-  [/\b(He|She) (is|was)\b/g, "They are"], [/\b(he|she) (is|was)\b/g, "they are"],
+  [/\b(He|She) is\b/g, "They are"], [/\b(he|she) is\b/g, "they are"],
+  [/\b(He|She) was\b/g, "They were"], [/\b(he|she) was\b/g, "they were"],
   [/\b(He|She) has\b/g, "They have"], [/\b(he|she) has\b/g, "they have"],
-  [/\b(His|Her) /g, "Their "], [/\b(his|her) /g, "their "], [/\b(He|She)\b/g, "They"], [/\b(he|she)\b/g, "they"], [/\bhim\b/g, "them"],
+  [/\bHis /g, "Their "], [/\bhis /g, "their "],
 ];
 
 /** Keep only sentences that name nothing outside what the rows and facts
- *  carry, and that do not claim a technology whose row is not met. */
-export function guardNote(paragraph: string, rows: CardRow[], allowedText: string, material: string, questions = false): string {
+ *  carry, and that do not claim a technology whose row is not met. `names`
+ *  are words that are people or companies here, whatever else they may be
+ *  elsewhere (a candidate called Ray, an employer called Temporal). */
+export function guardNote(paragraph: string, rows: CardRow[], allowedText: string, material: string, questions = false, names: string[] = []): string {
+  const isName = (group: string[]) => group.some((n) => names.some((x) => x.toLowerCase() === n.toLowerCase()));
   const unmetTech = rows.filter((r) => r.status === "unknown" || r.status === "no").flatMap((r) => technologiesNamed(stripExamples(r.label)));
   const kept = sentences(paragraph).filter((s) => {
     if (HEDGE.test(s) || /\bramp\b/i.test(s)) return false;
     for (const group of technologiesNamed(s)) {
+      if (isName(group)) continue;
       const inAllowed = namesAny(allowedText, [group]) || namesAny(material, [group]);
       if (!inAllowed) return false;
       if (questions) continue; // a question may name what is not shown; it claims nothing
       const unmet = unmetTech.some((g) => g[0] === group[0]);
       const metElsewhere = rows.some((r) => (r.status === "yes" || r.status === "equivalent") && namesAny(`${r.label} ${r.evidence} ${r.quote || ""}`, [group]));
-      if (unmet && !metElsewhere && !NEGATION.test(s)) return false;
+      if (unmet && !metElsewhere) {
+        // The negation must sit with the claim, in the same clause: "has
+        // TypeScript experience, though not at scale" still claims it.
+        const clause = s.split(/[,;:]| but | though | although /i).find((part) => namesAny(part, [group])) || s;
+        if (!NEGATION.test(clause)) return false;
+      }
     }
     return true;
   });
@@ -222,9 +259,11 @@ export function guardNote(paragraph: string, rows: CardRow[], allowedText: strin
 function fallbackNote(first: string, facts: string[], rows: CardRow[]): string {
   const met = rows.filter((r) => r.status === "yes" || r.status === "equivalent").map((r) => r.label);
   const open = rows.filter((r) => r.tier === "required" && r.status === "unknown").map((r) => r.label);
+  const against = rows.filter((r) => r.tier === "required" && r.status === "no");
   return [
-    facts[0] ? `${first} is ${facts[0]}${facts[1] ? `, with ${facts[1].split(";")[0]}` : ""}.` : "",
+    facts[0] ? `${first}: ${facts[0]}${facts[1] ? `; ${facts[1].split(";")[0]}` : ""}.` : "",
     met.length ? `The profile shows: ${met.slice(0, 4).join("; ")}.` : "The profile shows little for this role.",
+    against.length ? `Against: ${against.map((r) => r.evidence).slice(0, 2).join(" ")}` : "",
     open.length ? `Not shown: ${open.slice(0, 3).join("; ")}.` : "",
   ].filter(Boolean).join(" ");
 }
@@ -233,11 +272,21 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   const started = Date.now();
   const facts = input.facts ?? null;
   const jobs = input.jobs ?? [];
-  const employers = [...new Set(jobs.map((j) => j.company).filter(Boolean))];
+  // Names that are not evidence of anything: every employer on the profile,
+  // the companies the role targets, and the current employer's page name.
+  const employers = [...new Set([...jobs.map((j) => j.company), ...input.targetedCompanies, (input.employerContext || "").split(/[(—:-]/)[0]].map((x) => (x || "").trim()).filter(Boolean))];
+  const noise = jobs.map((j) => j.noise).join(" ");
   const asked = allCriteria.filter((c) => !isCareerYearsRow(c.label));
+  // What a recruiter confirmed as TRUE about the person. A confirmed "no"
+  // names the requirement too, and must never be read as evidence for it.
+  const confirmedTrue = (input.confirmedFacts || []).filter((f) => !/:\s*no\b/i.test(f));
   // The person's OWN material: what a quote must come from. Not the FACTS
   // block (code wrote it) and not the employer's description.
-  const material = [input.profileText, input.resumeText || "", ...(input.confirmedFacts || [])].join("\n");
+  const material = [input.profileText, input.resumeText || "", ...confirmedTrue].join("\n");
+  // A years bar is about engineering years on an engineering role, and about
+  // the career on any other (a data science or product role). Decided once.
+  const basis: "engineering" | "career" = workKind(input.roleTitle) === "engineering" || allCriteria.some((c) => isCareerYearsRow(c.label) && /\b(engineer|developer|software)/i.test(c.label)) ? "engineering" : "career";
+  const datedYears = facts?.engineeringYears == null ? null : basis === "career" ? facts.careerYears : Math.round((facts.engineeringYears + facts.unclassifiedYears) * 10) / 10;
 
   // ---- 1. rows ----
   let rowsOut: RowOut[] = [];
@@ -297,8 +346,10 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   const rows: CardRow[] = allCriteria.map((c) => {
     const call = c.tier === "required" && !!c.confirmOnCall;
     if (isCareerYearsRow(c.label)) {
-      const ruled = careerYearsStatus(facts, yearsBar(c.label)!);
-      return { id: c.id, label: c.label, tier: c.tier, status: ruled.status, evidence: ruled.evidence, ai: ruled.status, call, confirmed: null };
+      const ruled = careerYearsStatus(facts, yearsBar(c.label)!, basis);
+      // Exceptional and Bonus rows never count against anyone, this one included.
+      const st: RowStatus = ruled.status === "no" && c.tier !== "required" ? "unknown" : ruled.status;
+      return { id: c.id, label: c.label, tier: c.tier, status: st, evidence: ruled.evidence, ai: st, call, confirmed: null };
     }
     const r = rowsOut.find((x) => x && idOf(x.id) === c.id.toLowerCase());
     if (!r) unassessed++;
@@ -315,42 +366,53 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     if (status === "no" && c.tier !== "required") status = "unknown";
     if (status === "yes" || status === "equivalent") {
       const labelTech = technologiesNamed(stripExamples(c.label));
-      const acceptedTech = technologiesNamed(`${c.label} ${c.good || ""}`).filter((g) => !labelTech.some((l) => l[0] === g[0]));
-      const onAJob = (tech: string[][]) => tech.length > 0 && (jobs.some((j) => j.career && namesAny(j.text, tech)) || (!!input.resumeText && namesAny(input.resumeText, tech)) || namesAny((input.confirmedFacts || []).join("\n"), tech));
+      // What else does the job: what the row's own brackets name, and the
+      // alternatives the employer declared for that skill on the role.
+      const declared = input.skills.filter((sk) => namesAny(sk.skill, labelTech)).flatMap((sk) => sk.alternates);
+      const acceptedTech = technologiesNamed(`${bracketed(c.label)} ${declared.join(", ")}`).filter((g) => !labelTech.some((l) => l[0] === g[0]));
+      // On a job: a career position's title, skill tags or description, or the
+      // resume. Not the profile's skills list, not an internship alone, and
+      // not a confirmed fact (its wording names the requirement, whatever the answer).
+      const onAJob = (tech: string[][]) => tech.length > 0 && (jobs.some((j) => j.career && namesAny(j.text, tech)) || (!!input.resumeText && namesAny(input.resumeText, tech)));
       if (HEDGE.test(evidence)) drop("Not shown on the profile.");
-      else if (!quoteIsGrounded(quote, material, employers)) drop("Not shown on the profile: nothing written there says this.");
       else if (labelTech.length) {
-        // A row that names a technology is met on a job, in code.
+        // A row that names a technology is decided here, on the jobs
+        // themselves: stronger than any quote, so no quote is asked of it.
         if (onAJob(labelTech)) {
           /* the requirement itself is on a job: the judge's yes or equivalent stands */
         } else if (onAJob(acceptedTech)) {
           status = "equivalent";
           const stand = acceptedTech.find((g) => onAJob([g]))!;
           if (!namesAny(evidence, [stand])) evidence = `${stand[0]} on a job stands in for ${labelTech[0][0]}.`;
+        } else if (status === "equivalent" && !acceptedTech.length) {
+          // The row names no alternatives, so the judge's stand-in is allowed
+          // only if every technology it cites is itself on a job.
+          const cited = technologiesNamed(`${evidence} ${quote}`).filter((g) => !labelTech.some((l) => l[0] === g[0]));
+          if (!cited.length || !cited.every((g) => onAJob([g]))) drop(reasonNotOnAJob(labelTech, input.profileText, jobs));
         } else drop(reasonNotOnAJob([...labelTech, ...acceptedTech], input.profileText, jobs));
-      } else {
-        // Any technology the evidence or quote names must be the person's own.
-        const invented = technologiesNamed(`${evidence} ${quote}`).filter((g) => !namesAny(material, [g]));
+      } else if (!quoteIsGrounded(quote, material, employers, noise)) drop("Not shown on the profile: nothing written there says this.");
+      else {
+        // Any technology the evidence or quote names must be the person's own
+        // (an employer that shares a technology's name is not a technology).
+        const invented = technologiesNamed(`${evidence} ${quote}`).filter((g) => !namesAny(material, [g]) && !employers.some((e) => g.some((n) => n.toLowerCase() === e.toLowerCase())));
         if (invented.length) drop(`${invented[0][0]} is not named on the profile or resume.`);
       }
     }
     // Rail: a row with a years bar and a subject ("5 years building X")
-    // cannot be met when the dated engineering history is over a year short.
+    // cannot be met when the dated history is over a year short of it.
     const bar = yearsBar(c.label);
-    const dated = facts?.engineeringYears != null ? facts.engineeringYears + facts.unclassifiedYears : null;
-    if (bar != null && dated != null && dated < bar - 1 && (status === "yes" || status === "equivalent")) drop(`Dated engineering history shows ${dated} years against ${bar}+.`);
+    if (bar != null && datedYears != null && datedYears < bar - 1 && (status === "yes" || status === "equivalent")) drop(`Dated history shows ${datedYears} years against ${bar}+.`);
     return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}) };
   });
   if (removed) console.warn(`verdict: ${removed} tick(s) removed: the profile does not say it`);
 
   let label: VerdictLabel = labelFromRows(rows, "message");
-  let railNote: string | null = null;
-  const datedAll = facts?.engineeringYears != null ? facts.engineeringYears + facts.unclassifiedYears : null;
-  if (label === "contact" && input.minYears != null && datedAll != null && datedAll < input.minYears - 1) {
-    label = "message";
-    railNote = `Dated engineering history shows ${datedAll} years against ${input.minYears}+ required.`;
-  }
-  const factItems = factLine(input, facts, jobs);
+  // Recorded whenever the dated history is over a year short of the role's
+  // minimum, whatever the label is today: the label is recomputed later (an
+  // overrule, the call flag) and the rail must still hold then.
+  const railNote = input.minYears != null && datedYears != null && datedYears < input.minYears - 1 ? `Dated history shows ${datedYears} years against ${input.minYears}+ required.` : null;
+  if (label === "contact" && railNote) label = "message";
+  const factItems = factLine(input, facts, jobs, basis);
 
   // ---- 3. the note, from the rows and facts only ----
   const first = (input.candidateName || "The candidate").split(/\s+/)[0];
@@ -376,12 +438,13 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     false // a missing note never fails the person: code writes one
   );
   const allowedText = `${factItems.join("\n")}\n${rows.map((r) => `${r.label} ${r.evidence} ${r.quote || ""}`).join("\n")}`;
+  const names = [first, ...employers];
   const clean = (list: unknown, max: number, len: number, questions = false) =>
     (Array.isArray(list) ? list : [])
-      .map((x) => guardNote(String(x || ""), rows, allowedText, material, questions).slice(0, len))
+      .map((x) => guardNote(String(x || ""), rows, allowedText, material, questions, names).slice(0, len))
       .filter(Boolean)
       .slice(0, max);
-  let paragraph = n ? guardNote(String(n.out.paragraph || ""), rows, allowedText, material) : "";
+  let paragraph = n ? guardNote(String(n.out.paragraph || ""), rows, allowedText, material, false, names) : "";
   if (sentences(paragraph).length < 2) paragraph = fallbackNote(first, factItems, rows);
   if (n) usage = { input: usage.input + n.usage.input, output: usage.output + n.usage.output };
   const openRequired = rows.filter((r) => r.tier === "required" && r.status !== "yes" && r.status !== "equivalent");
@@ -400,12 +463,15 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     paragraph: paragraph.slice(0, 700),
     missing,
     ask: n ? clean(n.out.ask, 3, 200, true) : [],
-    betterSuited: n ? guardNote(String(n.out.better_suited || ""), rows, allowedText, material).slice(0, 250) : "",
+    betterSuited: n ? guardNote(String(n.out.better_suited || ""), rows, allowedText, material, false, names).slice(0, 250) : "",
     requirements,
     rows,
     aiLabel: label,
     railNote,
-    unassessed,
+    // A note the model could not write (rate limit, timeout) is replaced by
+    // the code-written one and shown, but the verdict is not saved for reuse:
+    // the next review gets a proper note.
+    unassessed: unassessed + (n ? 0 : 1),
     facts: factItems,
     technologiesNow: techNow,
     technologiesBefore: techBefore,

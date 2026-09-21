@@ -164,14 +164,17 @@ export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev
  *  (profiles rarely say it), but at least one required row must actually be
  *  met: nobody reaches contact on silence alone. With no required rows there
  *  is nothing to rule on, so the judge's own label stands. */
-export function labelFromRows(rows: Pick<CardRow, "tier" | "status" | "call">[], fallback: VerdictLabel): VerdictLabel {
+export function labelFromRows(rows: (Pick<CardRow, "tier" | "status" | "call"> & { label?: string })[], fallback: VerdictLabel): VerdictLabel {
   const required = rows.filter((r) => r.tier === "required");
   if (!required.length) return fallback;
   if (required.some((r) => r.status === "no")) return "pass";
   const isMet = (r: Pick<CardRow, "status">) => r.status === "yes" || r.status === "equivalent";
   const deciding = required.filter((r) => !(r.call && r.status === "unknown"));
-  if (deciding.length && deciding.every(isMet)) return "contact";
-  return "message";
+  if (!deciding.length || !deciding.every(isMet)) return "message";
+  // Years alone are not a reason to contact someone: when the card has
+  // Required rows about the work itself, at least one of them must be met.
+  const aboutTheWork = required.filter((r) => !("label" in r) || !isCareerYearsRow((r as { label: string }).label));
+  return aboutTheWork.length && !aboutTheWork.some(isMet) ? "message" : "contact";
 }
 
 /** The required rows still to confirm on a call, for a person the rows make a contact. */
@@ -246,15 +249,24 @@ export interface YearsFacts {
  *  lists do not recognise) to fall more than a year short, so an unusual
  *  title can never make a senior person a Pass. Anything between is "not
  *  shown": close is worth a conversation. */
-export function careerYearsStatus(f: YearsFacts | null, bar: number): { status: RowStatus; evidence: string } {
+export function careerYearsStatus(f: YearsFacts | null, bar: number, basis: "engineering" | "career" = "engineering"): { status: RowStatus; evidence: string } {
   if (!f || f.engineeringYears == null) return { status: "unknown", evidence: "No dated positions on the profile." };
+  if (basis === "career") {
+    // A role that is not an engineering role (data science, product,
+    // research): its years bar is about the career, as it always was.
+    const c = f.careerYears ?? 0;
+    const line = `${c} ${c === 1 ? "year" : "years"} of career against ${bar}+.`;
+    return c >= bar ? { status: "yes", evidence: line } : c >= bar - 1 ? { status: "unknown", evidence: `${line} Close to the bar.` } : { status: "no", evidence: line };
+  }
   const eng = f.engineeringYears;
   const career = f.careerYears ?? eng;
   const y = (n: number) => `${n} ${n === 1 ? "year" : "years"}`;
   const said = career - eng >= 0.5 ? `${y(eng)} in engineering roles (${y(career)} of career in all) against ${bar}+.` : `${y(eng)} in engineering roles against ${bar}+.`;
   if (eng >= bar) return { status: "yes", evidence: said };
   if (eng + f.unclassifiedYears < bar - 1) return { status: "no", evidence: said };
-  return { status: "unknown", evidence: `${said} Close to the bar.` };
+  // Within a year of the bar is close. Otherwise the years exist but sit
+  // under titles that do not say what the work was: a question, not a no.
+  return { status: "unknown", evidence: eng >= bar - 1 ? `${said} Close to the bar.` : `${said} ${y(f.unclassifiedYears)} more are under titles that do not say what the work was.` };
 }
 
 const YEARS_PHRASE = /(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?(\d{1,2}\s*(-|–|—|to)\s*)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i;
@@ -265,8 +277,10 @@ export function chipLabel(label: string, roleSkills: string[] = []): string {
   if (bar == null) {
     // A row that names its technology reads as that technology:
     // "Backend in TypeScript/Node.js (Go, Java accepted)" is "TypeScript/Node.js".
-    const named = technologiesNamed(label.replace(/\(.*?\)/g, " ")).map((g) => g[0]);
-    return named.length && !roleSkills.length ? named.slice(0, 2).join("/") : shortRequirement(label, roleSkills);
+    // The brackets hold what ELSE is accepted, never the requirement itself.
+    const core = label.replace(/\(.*?\)/g, " ");
+    const named = technologiesNamed(core).map((g) => g[0]);
+    return named.length ? named.slice(0, 2).join("/") : shortRequirement(core, roleSkills);
   }
   // "4+ years of software engineering" is just the bar.
   if (isCareerYearsRow(label)) return `${bar}+ years`;
@@ -313,7 +327,7 @@ export function applyOverrides(
   // still holds a contact at message unless a years row was confirmed.
   const railed = !!card.railNote;
   const rail = (l: VerdictLabel, confirmedYears: boolean) => (railed && l === "contact" && !confirmedYears ? "message" : l);
-  const aiRows = rows.map((r) => ({ tier: r.tier, status: r.ai, call: r.call }));
+  const aiRows = rows.map((r) => ({ tier: r.tier, status: r.ai, call: r.call, label: r.label }));
   const aiLabel = rail(labelFromRows(aiRows, card.aiLabel), false);
   const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && isCareerYearsRow(r.label));
   const label = rail(labelFromRows(rows, card.aiLabel), yearsConfirmed);

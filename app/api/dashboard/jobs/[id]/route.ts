@@ -6,6 +6,7 @@ import { roleInputFromBody } from "@/lib/server/job-body";
 import { sendEmail } from "@/lib/server/email";
 import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { saveRoleCard } from "@/lib/server/rolecard/store";
+import { relabelRole } from "@/lib/server/rolecard/feedback";
 
 export const maxDuration = 60;
 
@@ -197,7 +198,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const changed = !prevCard || JSON.stringify(prevCard.criteria) !== JSON.stringify(card.criteria);
     card.editedBy = changed ? member.email : prevCard?.editedBy;
     card.editedAt = changed ? new Date().toISOString() : prevCard?.editedAt;
-    if (changed) await saveRoleCard(job.id, card).catch(() => false);
+    if (changed) {
+      await saveRoleCard(job.id, card).catch(() => false);
+      // Call questions changed: stored verdicts for the role are re-labelled, nobody is judged again.
+      const calls = (c: { criteria: { id: string; confirmOnCall?: boolean }[] } | null) => JSON.stringify((c?.criteria || []).filter((x) => x.confirmOnCall).map((x) => x.id).sort());
+      if (calls(prevCard) !== calls(card)) await relabelRole(member.org.id, job.id, card.criteria).catch((e) => console.error("relabel failed", e));
+    }
   }
   return NextResponse.json({ id: job.external_id });
 }

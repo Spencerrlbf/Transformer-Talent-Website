@@ -212,7 +212,7 @@ export default function RowJudgeComparison() {
                       </td>
                       <td>
                         <Mark s={r.gpt} />
-                        {r.likely && <span className="ck-likely">likely</span>}
+
                       </td>
                       {r.byRule ? (
                         <td colSpan={4} className="dash-muted">decided by rule from the dated history, for both</td>

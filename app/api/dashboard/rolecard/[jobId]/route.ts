@@ -8,6 +8,7 @@ import { sbRest } from "@/lib/server/supabase";
 import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { ROLE_CARD_COLS, ensureRoleCard, saveRoleCard, type RoleForCard } from "@/lib/server/rolecard/store";
 import { canDraft, draftScorecard, type DraftInput } from "@/lib/server/rolecard/draft";
+import { relabelRole } from "@/lib/server/rolecard/feedback";
 
 const roleDraftInput = (role: RoleForCard): DraftInput => ({
   title: role.title,
@@ -61,7 +62,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
     card.editedAt = prev.editedAt;
   }
   if (!(await saveRoleCard(role.id, card))) return NextResponse.json({ error: "save_failed" }, { status: 502 });
-  return NextResponse.json({ scorecard: card });
+  // The role's call questions changed: every stored verdict for the role is
+  // re-labelled from its own rows, with no model call.
+  const calls = (c: { criteria: { id: string; confirmOnCall?: boolean }[] } | null) => JSON.stringify((c?.criteria || []).filter((x) => x.confirmOnCall).map((x) => x.id).sort());
+  let relabelled = 0;
+  if (calls(prev) !== calls(card)) relabelled = await relabelRole(member.org.id, role.id, card.criteria).catch((e) => (console.error("relabel failed", e), -1));
+  return NextResponse.json({ scorecard: card, relabelled });
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

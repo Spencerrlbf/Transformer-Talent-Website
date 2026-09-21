@@ -30,12 +30,17 @@ const TECH: string[][] = [
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** One spelling in a text, on token boundaries. Short names ("Go", "C#",
- *  "Ray", "Bun") must match their own case, or "go beyond" would count. */
+// Names that are also ordinary English words must match their own
+// capitalisation ("Go", never "go beyond"; "Spring", never "spring 2024").
+// Everything else is matched whatever its case: people write aws, JAVA, k8s.
+const ALSO_A_WORD = new Set(["Go", "Ray", "Bun", "Swift", "Rust", "Spring", "Express", "Spark", "Flask", "Rails", "Cypress", "Node", "Vue", "React", "Angular", "Svelte", "Temporal", "Prefect", "Deno", "Java"]);
+
+/** One spelling in a text, on token boundaries. */
 function mentions(text: string, name: string): boolean {
   // "Go-to-market" is not the language.
   if (name === "Go") return /(^|[^A-Za-z0-9+#])Go(?![- ]to[- ]market)(?=$|[^A-Za-z0-9+#])/.test(text);
-  const strict = name.length <= 4 && !/[.+#]/.test(name);
+  if (name === "Java") return /(^|[^A-Za-z0-9+#])(Java|JAVA|java)(?=$|[^A-Za-z0-9+#])/.test(text);
+  const strict = ALSO_A_WORD.has(name);
   const re = new RegExp(`(^|[^A-Za-z0-9+#])${escapeRe(strict ? name : name.toLowerCase())}(?=$|[^A-Za-z0-9+#])`, strict ? "" : "i");
   return re.test(strict ? text : text.toLowerCase());
 }

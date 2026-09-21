@@ -8,7 +8,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
 import VerdictCard from "../candidates/VerdictCard";
-import { isCareerYearsRow, type Criterion } from "@/lib/rolecard";
+import type { Criterion } from "@/lib/rolecard";
 
 const ACTIVE = new Set(["previewed", "importing", "ranking", "screening"]);
 
@@ -32,19 +32,23 @@ export default function RunView({
   // "Review again": a two-step button, no native dialog.
   const [reviewAgainArmed, setReviewAgainArmed] = useState(false);
   const [reviewAgainBusy, setReviewAgainBusy] = useState(false);
-  // The role's scorecard, to notice a Required row that profiles cannot answer.
-  const [criteria, setCriteria] = useState<Criterion[] | null>(null);
+  // A Required row that almost no profile in the run answers, and that would
+  // move someone to Contact now if it were a question for the call instead.
+  // Worked out on the server over the whole run, once it has finished.
+  const [callHint, setCallHint] = useState<{ id: string; label: string; judged: number; silent: number; wouldContact: number } | null>(null);
   const [callBusy, setCallBusy] = useState(false);
+  const [callNote, setCallNote] = useState("");
   useEffect(() => {
+    if (run?.status !== "done") return setCallHint(null);
     let live = true;
-    fetch(`/api/dashboard/rolecard/${encodeURIComponent(jobId)}`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`/api/dashboard/sourcing/runs/${runId}/call-hint`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => live && setCriteria(d?.scorecard?.criteria ?? null))
+      .then((d) => live && setCallHint(d?.hint ?? null))
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [jobId, token]);
+  }, [runId, token, run?.status, rereviewing]);
   // Rows opened to their full verdict (paragraph, strip, questions).
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const toggleOpen = (id: string) =>
@@ -153,32 +157,27 @@ export default function RunView({
     }
   }
 
-  // A Required row that almost no profile here answers holds everyone at
-  // "Worth a message". It is the recruiter's call to make it a question for
-  // the call instead; the label then says what is left to confirm.
-  const judgedRows = rows.filter((r) => r.verdict?.card?.rows.length);
-  const silent = (criteria || [])
-    .filter((c) => c.tier === "required" && !c.confirmOnCall && !isCareerYearsRow(c.label))
-    .map((c) => {
-      const marks = judgedRows.map((r) => r.verdict!.card!.rows.find((x) => x.id === c.id)?.status).filter(Boolean);
-      return { c, judged: marks.length, unknown: marks.filter((m) => m === "unknown").length };
-    })
-    .find((x) => x.judged >= 8 && x.unknown / x.judged >= 0.8);
-
-  async function makeCallQuestion(id: string) {
-    if (!criteria || callBusy) return;
+  async function makeCallQuestion() {
+    if (!callHint || callBusy) return;
     setCallBusy(true);
-    const next = criteria.map((c) => (c.id === id ? { ...c, confirmOnCall: true } : c));
-    const res = await fetch(`/api/dashboard/rolecard/${encodeURIComponent(jobId)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...auth },
-      body: JSON.stringify({ scorecard: { criteria: next } }),
-    }).catch(() => null);
+    setCallNote("");
+    const base = `/api/dashboard/rolecard/${encodeURIComponent(jobId)}`;
+    const got = await fetch(base, { headers: auth }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const criteria = (got?.scorecard?.criteria || []) as Criterion[];
+    const res = criteria.length
+      ? await fetch(base, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...auth },
+          body: JSON.stringify({ scorecard: { criteria: criteria.map((c) => (c.id === callHint.id ? { ...c, confirmOnCall: true } : c)) } }),
+        }).catch(() => null)
+      : null;
+    const d = res ? await res.json().catch(() => null) : null;
     setCallBusy(false);
-    if (!res?.ok) return;
-    setCriteria(next);
-    // Nobody is judged again: saved verdicts are re-labelled under the new setting.
-    await reviewAgain();
+    if (!res?.ok) return setCallNote("That did not save. Nothing was changed; try again.");
+    // Nobody was judged again: the saved verdicts were re-labelled.
+    setCallHint(null);
+    setCallNote(d?.relabelled > 0 ? `Done. ${d.relabelled} ${d.relabelled === 1 ? "person was" : "people were"} re-labelled; nobody was reviewed again.` : "Saved. It is now a question for the call on this role.");
+    loadRows(page, filter);
   }
 
   if (!run) return <p className="dash-muted">Loading run…</p>;
@@ -287,16 +286,18 @@ export default function RunView({
             </p>
           ) : (
             <>
-            {silent && !active && (
+            {callHint && !active && (
               <div className="dash-src-callhint">
                 <span>
-                  <b>{silent.c.label}</b>: {silent.unknown} of {silent.judged} profiles here do not say. LinkedIn rarely does, and it is holding people at Worth a message.
+                  <b>{callHint.label}</b>: {callHint.silent} of {callHint.judged} profiles in this run do not say. Made a question for the call, {callHint.wouldContact}{" "}
+                  {callHint.wouldContact === 1 ? "person" : "people"} would read Contact now, with it still to confirm. It applies to the whole role, and you can turn it off on the scorecard.
                 </span>
-                <button type="button" className="dash-btn dash-btn-2" disabled={callBusy || reviewAgainBusy} onClick={() => makeCallQuestion(silent.c.id)}>
+                <button type="button" className="dash-btn dash-btn-2" disabled={callBusy || reviewAgainBusy} onClick={makeCallQuestion}>
                   {callBusy ? "Saving…" : "Make it a question for the call"}
                 </button>
               </div>
             )}
+            {callNote && <p className="dash-muted">{callNote}</p>}
             <table className="dash-src-table">
               <thead>
                 <tr><th></th><th>Candidate</th><th>Review</th><th></th><th></th></tr>

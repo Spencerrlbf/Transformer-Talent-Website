@@ -62,7 +62,7 @@ function inputHash(a: JudgeForRoleArgs, factLines: string[]): string {
         facts: factLines,
         // Career years move with the calendar. Whole years are part of what
         // decides a verdict (a "4+ years" row flips on one); the months are not.
-        wholeYears: a.input.careerYears == null ? null : Math.floor(a.input.careerYears),
+        wholeYears: [a.input.facts?.engineeringYears, a.input.careerYears].map((y) => (y == null ? null : Math.floor(y))),
       },
     })
   );

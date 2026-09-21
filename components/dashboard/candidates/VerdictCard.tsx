@@ -67,7 +67,7 @@ export default function VerdictCard({
         {moved && <span className="vc-was">with confirmed rows · the AI alone read {VERDICT_LABEL[view.card!.aiLabel]}</span>}
       </div>
       {!!view.card?.facts?.length && (
-        <ul className="vc-facts" title="Worked out from the dated positions on the profile, not written by the AI">
+        <ul className="vc-facts" title="Facts, not the AI's reading: worked out in code from the dated positions on the profile, plus the employer's own company page">
           {view.card.facts.map((f, i) => (
             <li key={i}>{f}</li>
           ))}

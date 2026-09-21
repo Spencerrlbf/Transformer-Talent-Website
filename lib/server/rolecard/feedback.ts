@@ -191,3 +191,59 @@ export async function setWrongRole(t: Target & { on: boolean }): Promise<Feedbac
     return { ok: false, error: "save_failed" };
   }
 }
+
+/** "Confirm on a call" is a setting of the role. When it changes, every stored
+ *  verdict for the role is re-labelled from its own rows: nobody is judged
+ *  again, and every list, board and drawer shows the new label at once.
+ *  Returns how many people's label or call questions changed. */
+export async function relabelRole(orgId: string, orgRoleId: string, criteria: Criterion[]): Promise<number> {
+  const MAX = 3000;
+  const fbRes = await sbRest(
+    `verdict_feedback?organization_id=eq.${orgId}&org_role_id=eq.${orgRoleId}&select=candidate_key,kind,criterion_id,criterion_label,status,note,member_email,member_name,updated_at&limit=5000`
+  );
+  if (!fbRes.ok) throw new Error(`relabel: feedback read ${fbRes.status}`);
+  type Fb = { candidate_key: string; kind: string; criterion_id: string; criterion_label: string | null; status: RowStatus | null; note: string | null; member_email: string; member_name: string | null; updated_at: string };
+  const byPerson = new Map<string, { overrides: Parameters<typeof applyOverrides>[1]; wrongRole: { by: string; at: string } | null }>();
+  for (const f of (await fbRes.json()) as Fb[]) {
+    const p = byPerson.get(f.candidate_key) || { overrides: [], wrongRole: null };
+    const by = f.member_name || f.member_email;
+    if (f.kind === "wrong_role") p.wrongRole = { by, at: f.updated_at };
+    else if (f.status) p.overrides.push({ criterionId: f.criterion_id, label: f.criterion_label, status: f.status, note: f.note, by, at: f.updated_at });
+    byPerson.set(f.candidate_key, p);
+  }
+  const changedFrom = (a: VerdictView, b: VerdictView) =>
+    a.label !== b.label || JSON.stringify(a.card?.confirm || []) !== JSON.stringify(b.card?.confirm || []) || JSON.stringify((a.card?.rows || []).map((r) => !!r.call)) !== JSON.stringify((b.card?.rows || []).map((r) => !!r.call));
+  let changed = 0;
+  const todo: (() => Promise<void>)[] = [];
+
+  const runRes = await sbRest(
+    `sourcing_run_candidates?organization_id=eq.${orgId}&verdict=not.is.null&select=id,sourced_candidate_id,verdict,sourcing_runs!inner(org_role_id)&sourcing_runs.org_role_id=eq.${orgRoleId}&limit=${MAX}`
+  );
+  const runRows = runRes.ok ? ((await runRes.json()) as { id: string; sourced_candidate_id: string; verdict: unknown }[]) : [];
+  for (const r of runRows) {
+    if (!isVerdictView(r.verdict) || !r.verdict.card?.rows.length) continue;
+    const fb = byPerson.get(`src_${r.sourced_candidate_id}`);
+    const next = applyOverrides(r.verdict, fb?.overrides || [], fb?.wrongRole || null, criteria);
+    if (!changedFrom(r.verdict, next)) continue;
+    changed++;
+    todo.push(async () => {
+      await sbRest(`sourcing_run_candidates?id=eq.${r.id}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ verdict: next, tag: LEGACY_TAG[next.label] }) });
+    });
+  }
+  const mvRes = await sbRest(`match_verdicts?organization_id=eq.${orgId}&org_role_id=eq.${orgRoleId}&select=id,candidate_id,verdict&limit=${MAX}`);
+  const mvRows = mvRes.ok ? ((await mvRes.json()) as { id: string; candidate_id: string; verdict: Record<string, unknown> | null }[]) : [];
+  for (const r of mvRows) {
+    const v2 = r.verdict?.v2;
+    if (!isVerdictView(v2) || !v2.card?.rows.length) continue;
+    const fb = byPerson.get(`cand_${r.candidate_id}`);
+    const next = applyOverrides(v2, fb?.overrides || [], fb?.wrongRole || null, criteria);
+    if (!changedFrom(v2, next)) continue;
+    changed++;
+    todo.push(async () => {
+      await sbRest(`match_verdicts?id=eq.${r.id}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ verdict: { ...r.verdict, v2: next } }) });
+    });
+  }
+  if (runRows.length >= MAX || mvRows.length >= MAX) console.warn(`relabel: role ${orgRoleId} has more stored verdicts than ${MAX}; the rest keep their label until reviewed again`);
+  for (let i = 0; i < todo.length; i += 6) await Promise.all(todo.slice(i, i + 6).map((t) => t()));
+  return changed;
+}
