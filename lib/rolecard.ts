@@ -60,12 +60,16 @@ export interface VerdictCardData {
   aiLabel: VerdictLabel;
   /** The technology gaps as judged, so an overrule can be taken back. */
   aiGaps?: string[];
+  /** Why the label is held below what the rows alone would give (the years rail). */
+  railNote?: string | null;
   wrongRole?: { by: string; at: string } | null;
 }
 
 /** What a recruiter said about one row of one person's card. */
 export interface RowOverride {
   criterionId: string;
+  /** The row's wording when it was confirmed; a row since reworded is skipped. */
+  label?: string | null;
   status: RowStatus;
   note?: string | null;
   by: string;
@@ -91,12 +95,18 @@ export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev
   // Ids a client sent are kept first (overrules point at them); rows without
   // one are minted around them, never the other way round.
   const reserved = new Set<string>();
+  const before = new Map((prev?.criteria || []).map((c) => [c.id, c.label]));
   const kept = list.map((c) => {
     const id = cleanId(c);
     if (!id || reserved.has(id)) return "";
+    // A reworded row is a new row: a confirmation made against the old
+    // wording must not attach itself to the new meaning.
+    const was = before.get(id);
+    if (was !== undefined && !sameLabel(was, String((c as Criterion)?.label ?? ""))) return "";
     reserved.add(id);
     return id;
   });
+  for (const id of before.keys()) reserved.add(id); // a retired id is never minted again
   const criteria: Criterion[] = [];
   list.forEach((c, i) => {
     if (criteria.length >= MAX_CRITERIA) return;
@@ -136,8 +146,17 @@ export function labelFromRows(rows: Pick<CardRow, "tier" | "status">[], fallback
 
 /** A criterion that states a years bar ("4+ years of software engineering"). */
 export const yearsBar = (label: string): number | null => {
+  // "3-5 years" and "3 to 5 years" state a bar of 3, not 5.
+  const range = label.match(/(\d{1,2})\s*(?:-|–|—|to)\s*\d{1,2}\s*\+?\s*(?:years|yrs)\b/i);
+  if (range) return parseInt(range[1], 10);
   const m = label.match(/(\d{1,2})\s*\+?\s*(?:or more\s+)?(?:years|yrs)\b/i);
   return m ? parseInt(m[1], 10) : null;
+};
+
+/** Two labels that say the same thing, give or take case and punctuation. */
+export const sameLabel = (a: string, b: string) => {
+  const n = (x: string) => x.toLowerCase().replace(/[^a-z0-9+#]+/g, " ").trim();
+  return n(a) === n(b);
 };
 
 export const tally = (rows: Pick<CardRow, "tier" | "status">[], tier: Tier) => {
@@ -154,7 +173,7 @@ export function chipLabel(label: string, roleSkills: string[] = []): string {
   // "4+ years of software engineering" is just the bar; "5 years building
   // distributed systems" keeps its subject.
   if (GENERIC_YEARS.test(label.replace(/\(.*?\)/g, "").trim())) return `${bar}+ years`;
-  const rest = label.replace(/(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i, "").trim();
+  const rest = label.replace(/(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?(\d{1,2}\s*(-|–|—|to)\s*)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i, "").trim();
   const subject = shortRequirement(rest, roleSkills).replace(/…$/, "").split(" ").slice(0, 3).join(" ");
   return subject ? `${bar}+ yrs ${subject}` : `${bar}+ years`;
 }
@@ -175,7 +194,8 @@ export function applyOverrides(
   if (!card?.rows.length) return judged;
   const byId = new Map(overrides.map((o) => [o.criterionId, o]));
   const rows: CardRow[] = card.rows.map((r) => {
-    const o = byId.get(r.id);
+    const hit = byId.get(r.id);
+    const o = hit && (!hit.label || sameLabel(hit.label, r.label)) ? hit : undefined;
     return o
       ? { ...r, status: o.status, confirmed: { by: o.by, at: o.at, ...(o.note ? { note: o.note } : {}) } }
       : { ...r, status: r.ai, confirmed: null };
@@ -191,9 +211,13 @@ export function applyOverrides(
     if (railed && label === "contact" && !yearsConfirmed) label = "message";
   }
   const baseGaps = card.aiGaps ?? judged.tech.gaps;
-  const closed = new Set(rows.filter((r) => r.confirmed && met(r.status)).map((r) => (r.short || chipLabel(r.label)).toLowerCase()));
-  const opened = rows.filter((r) => r.confirmed && !met(r.status) && r.tier === "required").map((r) => r.short || chipLabel(r.label));
-  const gaps = [...baseGaps.filter((g) => !closed.has(g.toLowerCase()))];
+  const chipOf = (r: CardRow) => r.short || chipLabel(r.label);
+  const closed = new Set(rows.filter((r) => r.confirmed && met(r.status)).map((r) => chipOf(r).toLowerCase()));
+  // Two rows can share a chip ("TypeScript"): it closes only when no unmet
+  // required row still carries it.
+  const stillOpen = new Set(rows.filter((r) => r.tier === "required" && !met(r.status)).map((r) => chipOf(r).toLowerCase()));
+  const opened = rows.filter((r) => r.confirmed && !met(r.status) && r.tier === "required").map(chipOf);
+  const gaps = [...baseGaps.filter((g) => !closed.has(g.toLowerCase()) || stillOpen.has(g.toLowerCase()))];
   for (const g of opened) if (g && !gaps.some((x) => x.toLowerCase() === g.toLowerCase())) gaps.push(g);
   return {
     ...judged,

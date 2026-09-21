@@ -35,6 +35,9 @@ type PipelineEntry = {
   tagLabel: string | null;
   reason: string | null;
   verdict?: VerdictView | null;
+  /** Who the verdict is stored under; differs from the drawer's key for a
+   *  person who both applied and was sourced. */
+  feedbackKey?: string | null;
   addedAt: string;
   stage: string;
   stageReason?: string | null;
@@ -578,14 +581,21 @@ export default function CandidateDrawer({
   const itemNav = Boolean(navItems && onNavigateItem && navItemIndex !== undefined && navItemIndex >= 0);
   // A checked-off scorecard row: the verdict as it now reads replaces the one
   // shown, here and in the role's tag, without refetching the person.
-  const feedbackFor = (jobId: string): VerdictFeedbackTarget | undefined =>
-    candKey && !isNet
+  const keyRef = useRef(candKey);
+  keyRef.current = candKey;
+  const feedbackFor = (p: PipelineEntry): VerdictFeedbackTarget | undefined => {
+    const forKey = candKey; // a late answer must never land on the next person
+    const jobId = p.jobId;
+    return forKey && !isNet && p.feedbackKey
       ? {
-          candidateKey: candKey,
+          candidateKey: p.feedbackKey,
           jobId,
+          onSaved: () => {
+            if (keyRef.current === forKey) refetchDetail();
+          },
           onChanged: (view) =>
             setDetail((d) =>
-              d
+              d && d.key === forKey
                 ? {
                     ...d,
                     pipeline: d.pipeline.map((p) =>
@@ -596,6 +606,7 @@ export default function CandidateDrawer({
             ),
         }
       : undefined;
+  };
 
   const navIndex = itemNav ? navItemIndex! : candKey && navKeys ? navKeys.indexOf(candKey) : -1;
   const navCount = itemNav ? navItems!.length : navKeys?.length ?? 0;
@@ -625,6 +636,8 @@ export default function CandidateDrawer({
         const t = e.target as HTMLElement | null;
         const tag = t?.tagName || "";
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+        // Nor while working down a scorecard: focus sits on its buttons.
+        if (t?.closest?.(".ck")) return;
         if (e.key === "ArrowLeft" && canPrev) goPrev();
         if (e.key === "ArrowRight" && canNext) goNext();
       }
@@ -1240,7 +1253,7 @@ export default function CandidateDrawer({
                               {p.title} <em>#{p.jobId}</em>
                               <span className="cv2d-fit-via">{p.via === "applied" ? "applied" : p.via === "sourced" ? "via sourcing run" : p.via}</span>
                             </div>
-                            <VerdictCard view={p.verdict!} feedback={feedbackFor(p.jobId)} />
+                            <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} />
                           </div>
                         ))}
                     </section>
@@ -1356,7 +1369,7 @@ export default function CandidateDrawer({
                               stageEditable={!isNet}
                               screeningPending={detail.screeningPending !== false}
                               onOpenJob={setOpenJob}
-                              feedback={feedbackFor(p.jobId)}
+                              feedback={feedbackFor(p)}
                             />
                           ))}
                         </tbody>

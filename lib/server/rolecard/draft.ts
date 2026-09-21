@@ -26,9 +26,17 @@ EACH ROW: label = a short capability, at most 9 words, no question mark, no "exp
 
 Never invent requirements the description does not support. Never write rows about soft skills, culture, location, visa or salary. Order each tier by importance. 6 to 11 rows in total.`;
 
-export async function draftScorecard(input: DraftInput): Promise<Scorecard | null> {
+/** Enough written about the role to draft from. A bare title would make the
+ *  model invent requirements, and invented Required rows would pass people. */
+export const canDraft = (input: DraftInput): boolean => {
+  const jd = input.jd || {};
+  const text = [jd.about, input.description, ...(jd.needs || []), ...(jd.doing || [])].filter(Boolean).join(" ");
+  return text.trim().length >= 80 || (input.skills || []).length >= 2;
+};
+
+export async function draftScorecard(input: DraftInput, timeoutMs = 40_000): Promise<Scorecard | null> {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return null;
+  if (!key || !canDraft(input)) return null;
   const jd = input.jd || {};
   const skills = (input.skills || [])
     .map((s) => `- ${s.skill}${s.must_have ? " (must-have)" : " (nice-to-have)"}${s.alternates?.length ? `; also accepts: ${s.alternates.join(", ")}` : ""}`)
@@ -44,7 +52,7 @@ export async function draftScorecard(input: DraftInput): Promise<Scorecard | nul
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(40_000),
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       model: process.env.SCORECARD_DRAFT_MODEL || DRAFT_MODEL,
       temperature: 0,

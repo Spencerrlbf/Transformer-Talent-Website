@@ -158,24 +158,34 @@ export default function JobForm({
   // The scorecard: null until drafted (new job) or loaded (edit). Sent with
   // the form; left null, one is drafted the first time the role is opened.
   const [card, setCard] = useState<Criterion[] | null>(null);
+  const [cardLoading, setCardLoading] = useState(!!jobId);
+  const [cardDirty, setCardDirty] = useState(false); // a person changed the rows
+  const [cardArmed, setCardArmed] = useState(false); // "Draft again" over edited rows: a two-step button
   const [drafting, setDrafting] = useState(false);
   const [cardError, setCardError] = useState("");
+  const draftSeq = useRef(0);
 
   useEffect(() => {
     if (!jobId) return;
     let live = true;
     fetch(`/api/dashboard/rolecard/${encodeURIComponent(jobId)}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => live && d?.scorecard?.criteria && setCard(d.scorecard.criteria))
-      .catch(() => {});
+      // Never over rows already on screen: a token refresh re-runs this.
+      .then((d) => live && d?.scorecard?.criteria && setCard((c) => c ?? d.scorecard.criteria))
+      .catch(() => {})
+      .finally(() => live && setCardLoading(false));
     return () => {
       live = false;
     };
   }, [jobId, token]);
 
-  async function draftCard(from: JobFormValues) {
+  async function draftCard(from: JobFormValues, force = false) {
+    // Rows someone edited are only replaced on a second, deliberate press.
+    if (cardDirty && !force) return setCardArmed(true);
+    setCardArmed(false);
     setCardError("");
     setDrafting(true);
+    const mine = ++draftSeq.current;
     try {
       const r = await fetch("/api/dashboard/rolecard/draft", {
         method: "POST",
@@ -183,6 +193,7 @@ export default function JobForm({
         body: JSON.stringify(from),
       });
       const d = await r.json().catch(() => null);
+      if (mine !== draftSeq.current) return; // a newer draft is on its way
       if (!r.ok || !d?.scorecard?.criteria) {
         setCardError(
           d?.error === "not_enough_to_draft"
@@ -192,10 +203,11 @@ export default function JobForm({
         return;
       }
       setCard(d.scorecard.criteria);
+      setCardDirty(false);
     } catch {
-      setCardError("The draft did not come back. Try again in a moment.");
+      if (mine === draftSeq.current) setCardError("The draft did not come back. Try again in a moment.");
     } finally {
-      setDrafting(false);
+      if (mine === draftSeq.current) setDrafting(false);
     }
   }
 
@@ -232,8 +244,9 @@ export default function JobForm({
     setV(next);
     setWarnings(data.warnings || []);
     setPrefilled(true);
-    // The scorecard is drafted from the same description, ready to edit.
-    void draftCard(next);
+    // The scorecard is drafted from the same description, ready to edit;
+    // never over rows a person has already changed.
+    if (!cardDirty) void draftCard(next);
   }
 
   async function runExtract(req: () => Promise<Response>) {
@@ -291,14 +304,13 @@ export default function JobForm({
       return setError(ERROR_TEXT.not_enough_requirements);
     if (v.skills.length === 0) return setError(ERROR_TEXT.at_least_one_skill);
     const rows = card?.filter((c) => c.label.trim()) ?? null;
-    if (rows && rows.length > 0 && !rows.some((c) => c.tier === "required"))
-      return setError(ERROR_TEXT.scorecard_needs_required);
+    if (rows && !rows.some((c) => c.tier === "required")) return setError(ERROR_TEXT.scorecard_needs_required);
     setSaving(true);
     try {
       const r = await fetch(jobId ? `/api/dashboard/jobs/${jobId}` : "/api/dashboard/jobs", {
         method: jobId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(rows && rows.length ? { ...v, scorecard: { criteria: rows } } : v),
+        body: JSON.stringify(rows ? { ...v, scorecard: { criteria: rows }, scorecardEdited: cardDirty } : v),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || String(r.status));
@@ -330,7 +342,7 @@ export default function JobForm({
             <button
               type="button"
               className="dash-btn dash-btn-2"
-              disabled={extracting}
+              disabled={extracting || drafting}
               onClick={() => fileRef.current?.click()}
             >
               {extracting ? "Reading…" : "Upload JD (PDF)"}
@@ -347,7 +359,7 @@ export default function JobForm({
             type="button"
             className="dash-btn dash-btn-2"
             onClick={prefillFromText}
-            disabled={extracting || jdText.trim().length < 50}
+            disabled={extracting || drafting || jdText.trim().length < 50}
           >
             {extracting ? "Reading…" : "Prefill form from pasted JD"}
           </button>
@@ -536,16 +548,28 @@ export default function JobForm({
           Contact now, Worth a message or Pass. Editing is optional.
         </p>
         {card ? (
-          <ScorecardEditor value={card} onChange={setCard} disabled={drafting} />
+          <ScorecardEditor value={card} onChange={(rows) => { setCard(rows); setCardDirty(true); setCardArmed(false); }} disabled={drafting} />
         ) : (
           <p className="dash-muted">
-            {drafting ? "Drafting the scorecard from the job description…" : "Not drafted yet. Leave it and one is drafted when the job is first opened."}
+            {cardLoading
+              ? "Loading the scorecard. The first time, it is drafted from the job description, which takes a few seconds."
+              : drafting
+                ? "Drafting the scorecard from the job description…"
+                : "Not drafted yet. Leave it and one is drafted when the job is first opened."}
           </p>
         )}
         {cardError && <p className="dash-error">{cardError}</p>}
-        <button type="button" className="dash-btn dash-btn-2" onClick={() => draftCard(v)} disabled={drafting}>
-          {drafting ? "Drafting…" : card ? "Draft again from the fields above" : "Draft the scorecard now"}
-        </button>
+        <div className="rc-actions">
+          {cardArmed && <span className="rc-armed">This replaces the rows above.</span>}
+          <button type="button" className="dash-btn dash-btn-2" onClick={() => draftCard(v, cardArmed)} disabled={drafting || cardLoading}>
+            {drafting ? "Drafting…" : cardArmed ? "Yes, draft again" : card ? "Draft again from the fields above" : "Draft the scorecard now"}
+          </button>
+          {cardArmed && (
+            <button type="button" className="dash-btn dash-btn-2" onClick={() => setCardArmed(false)}>
+              Keep mine
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="dash-error">{error}</p>}

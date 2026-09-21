@@ -455,7 +455,7 @@ async function screenOneRow(
     const { view: verdict, saved } = await judgeForRole({
       orgId: run.organization_id,
       orgRoleId: run.org_role_id,
-      candidateKey: `src_${row.sourced_candidate_id}`,
+      personKey: `src_${row.sourced_candidate_id}`,
       criteria: ctx.criteria,
       roleTargets: ctx.roleTargets,
       input: {
@@ -669,7 +669,10 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
       // Every row in the run is judged against the same scorecard: drafted
       // here, once, when the role has none yet. None to be had = the judge
       // reads the job description on its own, as before.
-      const criteria = criteriaOf(await ensureRoleCard(role).catch(() => null));
+      // Drafting is a model call of its own, so it gets a short leash: with
+      // the first wave it still fits inside one invocation.
+      const ensured = await ensureRoleCard(role, { timeoutMs: 15_000 }).catch(() => ({ card: null, drafted: false }));
+      const criteria = criteriaOf(ensured.card);
       const jd = role.jd || {};
       const jdText = [
         jd.about,

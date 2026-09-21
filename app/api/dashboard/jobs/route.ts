@@ -133,8 +133,10 @@ export async function POST(req: NextRequest) {
   // is opened or judged.
   const card = sanitizeScorecard(body.scorecard, "ai");
   if (card?.criteria.some((c) => c.tier === "required")) {
-    card.editedBy = member.email;
-    card.editedAt = new Date().toISOString();
+    if (body.scorecardEdited === true) {
+      card.editedBy = member.email;
+      card.editedAt = new Date().toISOString();
+    }
     await saveRoleCard(orgRoleId, card).catch(() => false);
   }
   return NextResponse.json({ id: externalId });

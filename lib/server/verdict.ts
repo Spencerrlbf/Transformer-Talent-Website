@@ -59,6 +59,11 @@ export interface Verdict {
   rows: CardRow[];
   /** The label the judge's own rows give, before any recruiter overrule. */
   aiLabel: VerdictLabel;
+  /** Set when the years rail held the label below what the rows alone give. */
+  railNote: string | null;
+  /** Scorecard rows the model returned no answer for. A verdict with any is
+   *  shown but never saved for reuse. */
+  unassessed: number;
   /** Technologies evidenced in the current position, and in earlier ones. */
   technologiesNow: string[];
   technologiesBefore: string[];
@@ -127,7 +132,7 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     `CANDIDATE: ${input.candidateName}\nLINKEDIN PROFILE:\n${input.profileText.slice(0, 5000)}\n\n` +
     (input.resumeText ? `RESUME EXCERPT:\n${input.resumeText.slice(0, 3000)}\n\n` : "") +
     (input.confirmedFacts?.length
-      ? `CONFIRMED BY THE RECRUITER:\n${input.confirmedFacts.slice(0, 12).map((f) => `- ${f}`).join("\n")}\n\n`
+      ? `CONFIRMED BY THE RECRUITER:\n${input.confirmedFacts.slice(-12).map((f) => `- ${f}`).join("\n")}\n\n`
       : "") +
     `FACTS (computed from dated position history; use these numbers verbatim):\n${input.factsBlock}`;
 
@@ -171,7 +176,7 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
                   type: "object",
                   additionalProperties: false,
                   properties: {
-                    id: { type: "string" },
+                    id: criteria.length ? { type: "string", enum: criteria.map((c) => c.id) } : { type: "string" },
                     status: { type: "string", enum: ["yes", "equivalent", "unknown", "no"] },
                     evidence: { type: "string" },
                   },
@@ -230,8 +235,11 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     let missing = (out.missing || []).slice(0, 4).map((m) => m.slice(0, 160));
     // Scorecard mode: one row per criterion, in the scorecard's order. A row
     // the model skipped is "unknown", never a guess.
+    const idOf = (x: string) => String(x || "").replace(/^[\s\[]+|[\s\]]+$/g, "").toLowerCase();
+    let unassessed = 0;
     const rows: CardRow[] = criteria.map((c) => {
-      const r = (out.rows || []).find((x) => x && x.id === c.id);
+      const r = (out.rows || []).find((x) => x && idOf(x.id) === c.id.toLowerCase());
+      if (!r) unassessed++;
       let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";
       let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 140);
       // Rail: the dated history is the only source for years. A row that
@@ -248,9 +256,11 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     // Rail: a verified years shortfall of more than a year blocks "contact"
     // however persuasive the narrative; the number is not negotiable. Runs
     // after the rows so it also holds when the scorecard has no years row.
+    let railNote: string | null = null;
     if (label === "contact" && input.minYears != null && input.careerYears != null && input.careerYears < input.minYears - 1) {
       label = "message";
-      missing = [`Dated history shows ${input.careerYears} years against ${input.minYears}+ required.`, ...missing].slice(0, 4);
+      railNote = `Dated history shows ${input.careerYears} years against ${input.minYears}+ required.`;
+      missing = [railNote, ...missing].slice(0, 4);
     }
     const requirements: RequirementRead[] = rows.length
       ? rows
@@ -273,6 +283,8 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       requirements,
       rows,
       aiLabel: label,
+      railNote,
+      unassessed,
       technologiesNow: cleanTech(out.technologies_now),
       technologiesBefore: cleanTech(out.technologies_before),
       model: input.model,
@@ -360,7 +372,7 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
     requirements: v.requirements,
     tech: { now, before, gaps, nowPosition: facts?.currentTitle ? [facts.currentTitle, facts.currentCompany].filter(Boolean).join(" at ") : null },
     card: v.rows.length
-      ? { rows: v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) })), aiLabel: v.aiLabel, aiGaps: gaps, wrongRole: null }
+      ? { rows: v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) })), aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null }
       : null,
     model: v.model,
     at: new Date().toISOString(),

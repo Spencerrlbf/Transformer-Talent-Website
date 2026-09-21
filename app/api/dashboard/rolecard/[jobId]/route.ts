@@ -7,7 +7,16 @@ import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { ROLE_CARD_COLS, ensureRoleCard, saveRoleCard, type RoleForCard } from "@/lib/server/rolecard/store";
-import { draftScorecard } from "@/lib/server/rolecard/draft";
+import { canDraft, draftScorecard, type DraftInput } from "@/lib/server/rolecard/draft";
+
+const roleDraftInput = (role: RoleForCard): DraftInput => ({
+  title: role.title,
+  yoe: role.yoe,
+  jd: role.jd,
+  description: role.description,
+  skills: role.skills,
+  minYears: role.matching_profile?.min_years ?? null,
+});
 
 export const maxDuration = 60;
 
@@ -26,8 +35,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const role = await loadRole(member.org.id, (await params).jobId);
   if (!role) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const scorecard = await ensureRoleCard(role).catch(() => null);
-  return NextResponse.json({ scorecard });
+  const { card } = await ensureRoleCard(role).catch(() => ({ card: null }));
+  // canDraft tells the page why there is none: nothing written to draft from.
+  return NextResponse.json({ scorecard: card, canDraft: canDraft(roleDraftInput(role)) });
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
@@ -41,8 +51,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!card) return NextResponse.json({ error: "empty_scorecard" }, { status: 400 });
   if (!card.criteria.some((c) => c.tier === "required"))
     return NextResponse.json({ error: "no_required_row" }, { status: 400 });
-  card.editedBy = member.email;
-  card.editedAt = new Date().toISOString();
+  // "Edited" means a person changed it; saving it untouched does not.
+  if (!prev || JSON.stringify(prev.criteria) !== JSON.stringify(card.criteria)) {
+    card.editedBy = member.email;
+    card.editedAt = new Date().toISOString();
+  } else {
+    card.editedBy = prev.editedBy;
+    card.editedAt = prev.editedAt;
+  }
   if (!(await saveRoleCard(role.id, card))) return NextResponse.json({ error: "save_failed" }, { status: 502 });
   return NextResponse.json({ scorecard: card });
 }
@@ -52,14 +68,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const role = await loadRole(member.org.id, (await params).jobId);
   if (!role) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const draft = await draftScorecard({
-    title: role.title,
-    yoe: role.yoe,
-    jd: role.jd,
-    description: role.description,
-    skills: role.skills,
-    minYears: role.matching_profile?.min_years ?? null,
-  });
+  if (!canDraft(roleDraftInput(role))) return NextResponse.json({ error: "nothing_to_draft_from" }, { status: 400 });
+  const draft = await draftScorecard(roleDraftInput(role));
   if (!draft) return NextResponse.json({ error: "draft_failed" }, { status: 502 });
   return NextResponse.json({ scorecard: draft });
 }

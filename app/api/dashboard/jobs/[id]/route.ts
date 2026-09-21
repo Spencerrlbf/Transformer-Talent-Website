@@ -191,11 +191,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });
   }
   // The scorecard edited in the form. The republish above never touches it.
-  const card = sanitizeScorecard(body.scorecard, "user", isScorecard(job.scorecard) ? job.scorecard : null);
+  const prevCard = isScorecard(job.scorecard) ? job.scorecard : null;
+  const card = sanitizeScorecard(body.scorecard, "user", prevCard);
   if (card?.criteria.some((c) => c.tier === "required")) {
-    card.editedBy = member.email;
-    card.editedAt = new Date().toISOString();
-    await saveRoleCard(job.id, card).catch(() => false);
+    const changed = !prevCard || JSON.stringify(prevCard.criteria) !== JSON.stringify(card.criteria);
+    card.editedBy = changed ? member.email : prevCard?.editedBy;
+    card.editedAt = changed ? new Date().toISOString() : prevCard?.editedAt;
+    if (changed) await saveRoleCard(job.id, card).catch(() => false);
   }
   return NextResponse.json({ id: job.external_id });
 }

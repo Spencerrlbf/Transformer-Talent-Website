@@ -2843,7 +2843,8 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .dash-field input, .dash-field select, .dash-field textarea,
 .cpe-cardrow input, .cpe-founder textarea, .cpe-block textarea, .cpe-wide,
 .tm-invite input, .dash-skill-alts, .dash-skill-add input,
-.dash-prefill textarea, .dash-mypage-web input {
+.dash-prefill textarea, .dash-mypage-web input,
+.rc-efields input, .rc-etier, .ck-note input {
   width: 100%; padding: 8px 12px;
   border: 1px solid var(--control-line); border-radius: var(--r-control);
   background: var(--paper); color: var(--ink);
@@ -2852,7 +2853,8 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .dash-field input:focus, .dash-field select:focus, .dash-field textarea:focus,
 .cpe-cardrow input:focus, .cpe-founder textarea:focus, .cpe-block textarea:focus, .cpe-wide:focus,
 .tm-invite input:focus, .dash-skill-alts:focus, .dash-skill-add input:focus,
-.dash-prefill textarea:focus, .dash-mypage-web input:focus {
+.dash-prefill textarea:focus, .dash-mypage-web input:focus,
+.rc-efields input:focus, .rc-etier:focus, .ck-note input:focus {
   outline: none; border-color: rgba(91,75,255,.55);
 }
 .dash-field select[multiple] { height: auto; padding: 4px; }
@@ -4463,12 +4465,14 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .rc-erow { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
 .rc-efields { flex: 1; min-width: 0; display: grid; gap: 4px; }
 .rc-efields input { width: 100%; }
-.rc-egood { font-size: 12.5px !important; color: var(--body-2); }
-.rc-etier { flex: none; width: 124px; }
+.rc-efields .rc-egood { font-size: 12.5px; padding: 6px 12px; color: var(--body-2); }
+.rc-erow .rc-etier { flex: none; width: 132px; }
+.rc-armed { font-size: 12.5px; color: var(--warn); }
+.dash-addrow:disabled { color: var(--muted); cursor: default; background: none; }
 .rc-formsec { margin-top: 28px; }
 .rc-formhelp { margin: -4px 0 12px; max-width: 72ch; }
 .rc-formsec > .dash-btn-2 { margin-top: 12px; }
-@media (max-width: 640px) { .rc-erow { flex-wrap: wrap; } .rc-etier { width: auto; flex: 1; } }
+@media (max-width: 640px) { .rc-erow { flex-wrap: wrap; } .rc-erow .rc-etier { width: auto; flex: 1; } }
 
 /* The judged checklist inside a full verdict. */
 .ck { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--control-line); }
@@ -4479,7 +4483,9 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .ck-tier + .ck-tier { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--row-line); }
 .ck-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 9px; align-items: start; padding: 6px 0; }
 .ck-ico { color: var(--rc-tone); padding-top: 2px; }
-.ck-label { font-size: 13.5px; line-height: 1.4; color: var(--ink); }
+.ck-label { font-size: 13.5px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
+.ck-saving { color: var(--muted); font-weight: 400; }
+.ck-held { margin: 0 0 6px; padding: 7px 10px; border-radius: var(--r-control); background: var(--warn-bg); color: var(--warn-ink); font-size: 12.5px; line-height: 1.45; }
 .ck-row.s-no .ck-label { color: var(--body-2); }
 .ck-ev { margin-top: 1px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .ck-row.confirmed .ck-ev { color: var(--body-2); }
@@ -4487,13 +4493,13 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .ck-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent-press); cursor: pointer; text-decoration: underline; }
 .ck-link:disabled { color: var(--muted); cursor: default; }
 .ck-note { display: flex; gap: 8px; margin-top: 6px; }
-.ck-note input { flex: 1; min-width: 0; font-size: 12.5px; }
+.ck-note input { flex: 1; min-width: 0; width: auto; font-size: 12.5px; padding: 6px 10px; }
 .ck-seg { display: inline-flex; border: 1px solid var(--control-line); border-radius: var(--r-control); overflow: hidden; background: var(--paper); }
 .ck-b { appearance: none; border: 0; border-left: 1px solid var(--control-line); background: none; width: 30px; height: 28px; font: inherit; font-size: 14px; font-weight: 700; line-height: 1; color: var(--faint); cursor: pointer; }
 .ck-b:first-child { border-left: 0; }
-.ck-b:hover:not(:disabled) { background: var(--surface); color: var(--body); }
+.ck-b:hover:not(.on) { background: var(--surface); color: var(--body); }
 .ck-b:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.ck-b:disabled { cursor: default; }
+.ck-b.done { cursor: default; }
 .ck-b.on.b-yes, .ck-mark.b-yes, .ck-key .b-yes { background: var(--pos-bg); color: var(--pos); }
 .ck-b.on.b-equivalent, .ck-mark.b-equivalent, .ck-key .b-equivalent { background: var(--accent-wash); color: var(--accent-press); }
 .ck-b.on.b-unknown, .ck-mark.b-unknown, .ck-key .b-unknown { background: rgba(0,0,0,.06); color: var(--body-2); }

@@ -2,7 +2,7 @@
 // The role's scorecard on the job page: what every candidate for this role
 // is checked against. Drafted from the job description the first time the
 // role is opened; editable on every role, synced ones included.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TIERS, TIER_LABEL, type Criterion, type Scorecard } from "@/lib/rolecard";
 import ScorecardEditor, { TierIcon } from "./ScorecardEditor";
@@ -10,17 +10,25 @@ import ScorecardEditor, { TierIcon } from "./ScorecardEditor";
 const ERR: Record<string, string> = {
   no_required_row: "Keep at least one Required row: those rows decide the label.",
   empty_scorecard: "Add at least one row before saving.",
-  draft_failed: "The draft did not come back. Try again in a moment.",
+  draft_failed: "The draft did not come back. Try again in a moment, or write the rows by hand.",
+  nothing_to_draft_from: "There is not enough written about this role to draft from. Write the rows by hand.",
   save_failed: "Saving failed. Nothing was lost; try again.",
 };
 
+type Load = "loading" | "ready" | "failed";
+
 export default function ScorecardCard({ jobId }: { jobId: string }) {
   const { token } = useDash();
-  const [card, setCard] = useState<Scorecard | null | undefined>(undefined);
+  const [load, setLoad] = useState<Load>("loading");
+  const [card, setCard] = useState<Scorecard | null>(null);
+  const [canDraft, setCanDraft] = useState(true);
   const [rows, setRows] = useState<Criterion[] | null>(null); // non-null = editing
+  const [dirty, setDirty] = useState(false);
+  const [armed, setArmed] = useState(false); // "Draft again" over edited rows: a two-step button
   const [busy, setBusy] = useState<"" | "save" | "draft">("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const seq = useRef(0);
 
   const call = useCallback(
     (method: "GET" | "PUT" | "POST", body?: unknown) =>
@@ -35,13 +43,26 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
   useEffect(() => {
     let live = true;
     call("GET")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => live && setCard(d?.scorecard ?? null))
-      .catch(() => live && setCard(null));
+      .then(async (r) => {
+        if (!live) return;
+        if (!r.ok) return setLoad("failed");
+        const d = await r.json();
+        // A reload (token refresh) never replaces rows being edited.
+        setCard((c) => c ?? d.scorecard ?? null);
+        setCanDraft(d.canDraft !== false);
+        setLoad("ready");
+      })
+      .catch(() => live && setLoad("failed"));
     return () => {
       live = false;
     };
   }, [call]);
+
+  const edit = (next: Criterion[]) => {
+    setRows(next);
+    setDirty(true);
+    setArmed(false);
+  };
 
   async function save() {
     if (!rows) return;
@@ -53,17 +74,24 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
     if (!r?.ok) return setError(ERR[d?.error] || ERR.save_failed);
     setCard(d.scorecard);
     setRows(null);
+    setDirty(false);
     setSaved(true);
   }
 
   async function draftAgain() {
+    // Rows someone edited are only replaced on a second, deliberate press.
+    if (dirty && !armed) return setArmed(true);
+    setArmed(false);
     setError("");
     setBusy("draft");
+    const mine = ++seq.current;
     const r = await call("POST").catch(() => null);
     const d = r ? await r.json().catch(() => null) : null;
+    if (mine !== seq.current) return;
     setBusy("");
-    if (!r?.ok || !d?.scorecard) return setError(ERR.draft_failed);
+    if (!r?.ok || !d?.scorecard) return setError(ERR[d?.error] || ERR.draft_failed);
     setRows(d.scorecard.criteria);
+    setDirty(true); // unsaved until they press Save
   }
 
   return (
@@ -74,19 +102,32 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
           <p className="rc-sub">Every candidate for this role is checked against these rows. The Required rows decide the label.</p>
         </div>
         {card && !rows && (
-          <button type="button" className="dash-btn dash-btn-2" onClick={() => { setRows(card.criteria); setSaved(false); }}>
+          <button type="button" className="dash-btn dash-btn-2" onClick={() => { setRows(card.criteria); setDirty(false); setSaved(false); }}>
             Edit
           </button>
         )}
       </div>
 
-      {card === undefined && <p className="dash-muted">Drafting the scorecard from the job description. This takes a few seconds the first time.</p>}
-      {card === null && !rows && (
+      {load === "loading" && (
+        <p className="dash-muted">Loading the scorecard. The first time a role is opened it is drafted from the job description, which takes a few seconds.</p>
+      )}
+      {load === "failed" && <p className="dash-error">The scorecard could not be loaded. Reload the page to try again.</p>}
+
+      {load === "ready" && !card && !rows && (
         <p className="dash-muted">
-          No scorecard yet.{" "}
-          <button type="button" className="link" onClick={draftAgain} disabled={busy === "draft"}>
-            {busy === "draft" ? "Drafting…" : "Draft one from the job description"}
+          {canDraft ? "No scorecard yet. " : "There is not enough written about this role to draft a scorecard from. "}
+          {canDraft && (
+            <>
+              <button type="button" className="link" onClick={draftAgain} disabled={busy === "draft"}>
+                {busy === "draft" ? "Drafting…" : "Draft one from the job description"}
+              </button>
+              {" or "}
+            </>
+          )}
+          <button type="button" className="link" onClick={() => { setRows([]); setDirty(false); }}>
+            write the rows by hand
           </button>
+          .
         </p>
       )}
 
@@ -113,7 +154,7 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
             );
           })}
           <p className="rc-foot">
-            {card.editedAt ? "Edited" : "Drafted from the job description"}
+            {card.editedAt ? "Edited by your team" : card.draftedBy === "ai" ? "Drafted by AI from what is written about the role" : "Written by your team"}
             {saved && " · Saved. It applies the next time people are reviewed: press Review again on a sourcing run to re-check it."}
           </p>
         </div>
@@ -121,18 +162,31 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
 
       {rows && (
         <>
-          <ScorecardEditor value={rows} onChange={setRows} disabled={busy !== ""} />
+          <ScorecardEditor value={rows} onChange={edit} disabled={busy !== ""} />
           {error && <p className="dash-error">{error}</p>}
           <div className="rc-actions">
             <button type="button" className="dash-btn" onClick={save} disabled={busy !== ""}>
               {busy === "save" ? "Saving…" : "Save scorecard"}
             </button>
-            <button type="button" className="dash-btn dash-btn-2" onClick={() => { setRows(null); setError(""); }} disabled={busy !== ""}>
+            <button type="button" className="dash-btn dash-btn-2" onClick={() => { setRows(null); setError(""); setArmed(false); setDirty(false); }} disabled={busy !== ""}>
               Cancel
             </button>
-            <button type="button" className="link rc-redraft" onClick={draftAgain} disabled={busy !== ""}>
-              {busy === "draft" ? "Drafting…" : "Draft again from the job description"}
-            </button>
+            {canDraft && (
+              <span className="rc-redraft">
+                {armed && <span className="rc-armed">This replaces the rows above. </span>}
+                <button type="button" className="link" onClick={draftAgain} disabled={busy !== ""}>
+                  {busy === "draft" ? "Drafting…" : armed ? "Yes, draft again" : "Draft again from the job description"}
+                </button>
+                {armed && (
+                  <>
+                    {" · "}
+                    <button type="button" className="link" onClick={() => setArmed(false)}>
+                      Keep mine
+                    </button>
+                  </>
+                )}
+              </span>
+            )}
           </div>
         </>
       )}

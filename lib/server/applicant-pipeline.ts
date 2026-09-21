@@ -326,12 +326,17 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
               // Same judge as sourcing: the role's scorecard (drafted the first
               // time a role without one is judged), the person's confirmed
               // facts, and a saved verdict when the inputs have not changed.
-              const criteria = criteriaOf(await ensureRoleCard(role).catch(() => null));
+              // Drafting and judging share the time the judge alone had before.
+              const t0 = Date.now();
+              const ensured = await ensureRoleCard(role, { timeoutMs: 12_000 }).catch(() => ({ card: null, drafted: false }));
+              const criteria = criteriaOf(ensured.card);
               const roleTargets = (role.target_companies || []).map((t) => t?.name || "").filter(Boolean);
               const { view } = await judgeForRole({
                 orgId: storeOrg,
                 orgRoleId: role.id,
-                candidateKey: `app_${submissionId}`,
+                // Per candidate, not per application: the same person applying
+                // twice keeps their confirmed rows and their saved verdict.
+                personKey: `cand_${candidateId}`,
                 criteria,
                 roleTargets,
                 input: {
@@ -347,7 +352,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
                   factsBlock: formatFacts(roleFacts),
                   careerYears: roleFacts.careerYears,
                   model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
-                  timeoutMs: 40_000,
+                  timeoutMs: Math.max(20_000, 40_000 - (Date.now() - t0)),
                 },
                 factsFor: (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList),
                 roleSkills: (role.skills || []).map((s) => s.skill),

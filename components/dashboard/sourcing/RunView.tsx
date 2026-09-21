@@ -313,6 +313,7 @@ export default function RunView({
                           feedback={{
                             candidateKey: r.candidateKey,
                             jobId,
+                            membershipId: r.membershipId,
                             onChanged: (view) =>
                               setRows((rs) => rs.map((x) => (x.membershipId === r.membershipId ? { ...x, verdict: view, tag: view.label } : x))),
                           }}

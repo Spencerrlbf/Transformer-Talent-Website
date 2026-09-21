@@ -57,7 +57,7 @@ export default function VerdictCard({
     <div className="vc">
       <div className="vc-head">
         <span className={`dash-tag ${VERDICT_CLASS[view.label]}`}>{VERDICT_LABEL[view.label]}</span>
-        {moved && <span className="vc-was">after your confirmation · the AI alone read {VERDICT_LABEL[view.card!.aiLabel]}</span>}
+        {moved && <span className="vc-was">with confirmed rows · the AI alone read {VERDICT_LABEL[view.card!.aiLabel]}</span>}
       </div>
       <p className="cv2d-why">{view.paragraph}</p>
       {/* With a scorecard the rows say what is missing, with evidence, and
@@ -102,13 +102,13 @@ export default function VerdictCard({
           )}
           {gaps.length > 0 && (
             <>
-              <div className="vc-lbl">Required, not shown</div>
+              <div className="vc-lbl">{hasCard ? "Required, not met" : "Required, not shown"}</div>
               <div className="vc-chips">
                 {gaps.map((g, i) => {
                   const label = shortRequirement(g);
                   const original = view.requirements.find((r) => r.status === "missing" && (r.requirement === g || shortRequirement(r.requirement) === label));
                   return (
-                    <span className="vc-chip gap" key={`g-${i}`} title={`Required by the role; no evidence on the profile or resume${original && original.requirement !== label ? `: ${original.requirement}` : ""}`}>
+                    <span className="vc-chip gap" key={`g-${i}`} title={`${hasCard ? "Required by the role: not met, or not shown on the profile or resume" : "Required by the role; no evidence on the profile or resume"}${original && original.requirement !== label ? `: ${original.requirement}` : ""}`}>
                       {label}
                     </span>
                   );
@@ -119,7 +119,7 @@ export default function VerdictCard({
           <div className="vc-legend">
             <span className="l-met">meets a requirement</span>
             <span className="l-eq">equivalent the role would accept</span>
-            <span className="l-gap">required, no evidence</span>
+            <span className="l-gap">{hasCard ? "required, not met" : "required, no evidence"}</span>
           </div>
         </div>
       )}

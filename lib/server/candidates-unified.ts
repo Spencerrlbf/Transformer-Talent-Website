@@ -258,6 +258,10 @@ export type UnifiedDetail = {
     reason: string | null;
     /** The one-paragraph verdict with its technologies strip, when judged. */
     verdict?: VerdictView | null;
+    /** Who this verdict is stored under ("src_<id>" | "app_<id>"). A person
+     *  who both applied and was sourced has entries of both kinds, so a
+     *  checked-off scorecard row must go to the entry's own key. */
+    feedbackKey?: string | null;
     addedAt: string;
     stage: string;
     /** "no_reply" when Past because we stopped chasing them. */
@@ -1299,6 +1303,7 @@ async function sourcedPipeline(
       tagLabel: labelOf(isVerdictView(m.verdict) ? m.verdict.label : m.tag),
       reason: m.reason,
       verdict: isVerdictView(m.verdict) ? m.verdict : null,
+      feedbackKey: `src_${personId}`,
       addedAt: m.created_at,
       stage: "new",
     });
@@ -1356,6 +1361,7 @@ function applicantPipeline(
       tagLabel: labelOf(tag),
       reason: v?.v2 ? v.v2.paragraph : sc ? clientReason(sc) : null,
       verdict: v?.v2 ?? null,
+      feedbackKey: `app_${a.id}`,
       addedAt: a.created_at,
       stage: "new",
     };
@@ -1378,6 +1384,7 @@ function applicantPipeline(
       tagLabel: labelOf(tag),
       reason: v?.v2 ? v.v2.paragraph : sc ? clientReason(sc) : null,
       verdict: v?.v2 ?? null,
+      feedbackKey: `app_${a.id}`,
       addedAt: row.created_at || a.created_at,
       stage: "new",
     };
