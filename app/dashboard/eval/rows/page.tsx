@@ -1,8 +1,8 @@
 "use client";
 // Owner-only: each scorecard row as GPT-4o judged it, beside a second opinion
 // from TypeSafe's Jev asked twice. Decides whether Jev should judge rows in
-// the product; nothing here changes what the product shows, and nothing is
-// stored.
+// the product; nothing here changes what the product shows. Each ask is
+// saved (row_judge_evals) so it can be analysed.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import { ROW_MARK, ROW_WORD, type RowStatus, type Tier } from "@/lib/rolecard";
@@ -118,7 +118,7 @@ export default function RowJudgeComparison() {
       <h1 className="dash-h1">Row judge comparison</h1>
       <p className="dash-sub">
         Each scorecard row as GPT-4o judged it on the role&apos;s latest sourcing run, beside TypeSafe&apos;s Jev asked twice. Open the
-        LinkedIn profile and decide who is right where they differ. Nothing here is stored or shown anywhere else.
+        LinkedIn profile and decide who is right where they differ. Each ask is saved for analysis; nothing here is shown anywhere else.
       </p>
 
       <form className="jvc-bar" onSubmit={(e) => { e.preventDefault(); void load(); }}>

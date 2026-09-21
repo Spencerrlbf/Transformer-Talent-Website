@@ -1,7 +1,8 @@
 // Owner-only: the scorecard rows as GPT-4o judged them (stored on the role's
 // latest sourcing run) beside a second opinion from TypeSafe's Jev, asked
 // twice per person to see whether it answers the same way both times.
-// Nothing is stored and nothing in the product reads this.
+// Each ask is saved to row_judge_evals so it can be analysed; nothing in the
+// product reads that table.
 //   GET  ?jobId=16                 the run, its people and their stored rows
 //   POST {jobId, membershipIds}    Jev's rows for up to 6 of those people
 import { NextRequest, NextResponse } from "next/server";
@@ -94,9 +95,9 @@ export async function POST(req: NextRequest) {
 
   const res = await sbRest(
     `sourcing_run_candidates?run_id=eq.${run.id}&organization_id=eq.${member!.org.id}&id=in.(${ids.join(",")})` +
-      `&select=id,verdict,sourced_candidates(full_name,skills,profile)`
+      `&select=id,sourced_candidate_id,verdict,sourced_candidates(full_name,skills,profile)`
   );
-  type Row = { id: string; verdict: unknown; sourced_candidates: { full_name: string | null; skills: string[] | null; profile: Record<string, unknown> | null } | null };
+  type Row = { id: string; sourced_candidate_id: string; verdict: unknown; sourced_candidates: { full_name: string | null; skills: string[] | null; profile: Record<string, unknown> | null } | null };
   const rows = res.ok ? ((await res.json()) as Row[]) : [];
   const stackTerms = splitStack(role.tech_stack).slice(0, 20);
 
@@ -123,16 +124,32 @@ export async function POST(req: NextRequest) {
       // Twice, at the same time: the same input should give the same answer.
       const [a, b] = await Promise.all([ask(), ask()]);
       if ("error" in a) return { membershipId: r.id, error: a.error, detail: a.detail };
-      return {
-        membershipId: r.id,
-        ms: a.ms,
-        inputTokens: a.inputTokens,
-        model: a.model,
-        rows: a.rows.map((x) => {
-          const again = "error" in b ? null : b.rows.find((y) => y.id === x.id) || null;
-          return { ...x, again: again ? { status: again.status, confidence: again.confidence } : null };
+      const out = a.rows.map((x) => {
+        const again = "error" in b ? null : b.rows.find((y) => y.id === x.id) || null;
+        return { ...x, again: again ? { status: again.status, confidence: again.confidence } : null };
+      });
+      // Saved for analysis (and, later, to be measured against the
+      // recruiter's check-offs). Best effort: the page works without it.
+      await sbRest("row_judge_evals", {
+        method: "POST",
+        prefer: "return=minimal",
+        body: JSON.stringify({
+          organization_id: member!.org.id,
+          org_role_id: role.id,
+          run_id: run.id,
+          membership_id: r.id,
+          candidate_key: `src_${r.sourced_candidate_id}`,
+          judge: a.model,
+          baseline: isVerdictView(r.verdict) ? r.verdict.model : null,
+          rows: out.map((x) => {
+            const base = stored.find((y) => y.id === x.id);
+            return { ...x, label: base?.label, tier: base?.tier, baseline: base?.ai, baselineEvidence: base?.evidence };
+          }),
+          ms: a.ms,
+          input_tokens: a.inputTokens,
         }),
-      };
+      }).catch(() => null);
+      return { membershipId: r.id, ms: a.ms, inputTokens: a.inputTokens, model: a.model, rows: out };
     })
   );
   return NextResponse.json({ results });
