@@ -13,7 +13,7 @@ import { careerYearsStatus, chipLabel, isCareerYearsRow, labelFromRows, yearsBar
 export { VERDICT_LABEL };
 export type { VerdictLabel };
 
-export const VERDICT_PROMPT_VERSION = "v4";
+export const VERDICT_PROMPT_VERSION = "v5";
 
 export interface VerdictSkill {
   skill: string;
@@ -95,12 +95,12 @@ ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the p
 
 SCORECARD: when the message carries a SCORECARD block, answer EVERY row in rows, by its id, with one status:
 - yes: the profile, the resume, FACTS or a CONFIRMED fact shows it.
-- equivalent: not shown directly, but an equivalent is: an alternate the row accepts, a concrete instance of a category, or clearly transferable work. Say what stands in.
+- equivalent: the thing itself is not shown, but a DIFFERENT thing that does the same job is: an alternate the row accepts, a concrete instance of a category, or clearly transferable work in another technology. Say what stands in. Never use equivalent for the right skill in a smaller amount than the row asks: that is unknown.
 - unknown: the profile is silent: nothing for it and nothing against it. The honest answer for anything a LinkedIn profile would not normally say.
 - no: contradicted: FACTS years under the bar, a different discipline, seniority far off, or a detailed history that plainly points elsewhere.
 evidence = the fact that decides it, at most 14 words; for unknown, name what is not shown. With a SCORECARD block return requirements as an empty array, and the label must follow the rows: any required row no gives pass; every required row yes or equivalent gives contact; anything else gives message. Without a SCORECARD block return rows as an empty array.
 
-SKILL YEARS ARE A FLOOR: a per-skill figure in FACTS counts only the positions where that skill is tagged or named. People under-list skills, so the true figure is usually higher. Never answer no to a skill row because its dated years look low. Answer no only when the whole history plainly points elsewhere (a different stack or discipline throughout). The skill present with few dated years is equivalent or unknown, and the evidence states the dated figure ("1.1 years dated at Perch; depth not shown"). Words like deep, strong or expert in a row mean sustained production use (about two years or more) or clear ownership of systems built with it.
+SKILL YEARS ARE A FLOOR: a per-skill figure in FACTS counts only the positions where that skill is tagged or named. People under-list skills, so the true figure is usually higher. Never answer no to a skill row because its dated years look low. Answer no only when the whole history plainly points elsewhere (a different stack or discipline throughout). The right skill present with fewer dated years than the row asks is unknown, never equivalent and never no, and the evidence states the dated figure ("1.1 years dated at Perch; not shown to 2+"). Words like deep, strong or expert in a row mean sustained production use (about two years or more) or clear ownership of systems built with it.
 
 CAREER YEARS rows are not in the SCORECARD block: the minimum-years row is decided from FACTS by rule, outside this note. Still state the career years in the paragraph, and if FACTS put them under the role's minimum, say so plainly.
 
