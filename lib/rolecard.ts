@@ -256,8 +256,10 @@ export function applyOverrides(
 /** How a probability spread becomes a mark. A "no" on a Required row makes a
  *  person a Pass, so it must be confident; "met" needs a clear majority across
  *  yes and equivalent; anything else is "not shown", which never sinks anyone.
- *  First values, to be tuned against the recruiter's own check-offs. */
-export const ROUTE = { noAtLeast: 0.7, metAtLeast: 0.6 } as const;
+ *  Tuned once on the first comparison run (job 16): at 0.7 a "no" was wrong
+ *  or too harsh in about half of seven cases, and a met lean of 0.59 was cut
+ *  by a hair. To be tuned further against the recruiter's own check-offs. */
+export const ROUTE = { noAtLeast: 0.85, metAtLeast: 0.55 } as const;
 
 export function routeStatus(p: Partial<Record<RowStatus, number>>): RowStatus {
   const yes = p.yes || 0;

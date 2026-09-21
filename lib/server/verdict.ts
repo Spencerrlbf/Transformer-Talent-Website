@@ -8,12 +8,13 @@
 
 import type { CandidateFacts } from "./facts";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
+import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import { careerYearsStatus, chipLabel, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
 
-export const VERDICT_PROMPT_VERSION = "v5";
+export const VERDICT_PROMPT_VERSION = "v6";
 
 export interface VerdictSkill {
   skill: string;
@@ -89,7 +90,7 @@ Unconfirmed is not disqualifying; only contradictions push to pass. When torn be
 
 CATEGORIES: a requirement stated as a category is met by any concrete instance of it: "vector database" by pgvector, Pinecone, Weaviate, Qdrant, Milvus, Chroma or FAISS; "cloud" by AWS, GCP or Azure; "message queue" by Kafka, SQS or RabbitMQ; "orchestration" by Temporal, Airflow or Prefect; and so on. Adjacent evidence without a named instance (embeddings or retrieval work with no vector store named) counts as an equivalent, and the paragraph says so.
 
-RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
+RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence for the paragraph and the overall read: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. They are never evidence for a scorecard row (see ROWS ARE ABOUT THE PERSON). An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
 
 ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement = for a REQUIRED SKILLS line, that skill's name verbatim (add " or similar" when an alternate satisfied it); for a hard requirement from the job description, a short label of at most four words naming the capability, e.g. "Browser automation", "Production infrastructure"; never the sentence from the job description; status met / equivalent / missing; evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).
 
@@ -99,6 +100,8 @@ SCORECARD: when the message carries a SCORECARD block, answer EVERY row in rows,
 - unknown: the profile is silent: nothing for it and nothing against it. The honest answer for anything a LinkedIn profile would not normally say.
 - no: contradicted: FACTS years under the bar, a different discipline, seniority far off, or a detailed history that plainly points elsewhere.
 evidence = the fact that decides it, at most 14 words; for unknown, name what is not shown. With a SCORECARD block return requirements as an empty array, and the label must follow the rows: any required row no gives pass; every required row yes or equivalent gives contact; anything else gives message. Without a SCORECARD block return rows as an empty array.
+
+ROWS ARE ABOUT THE PERSON, NOT THE EMPLOYER: a row is yes or equivalent only on what this person's own material shows: a title, a description, a listed or dated skill, a project, a CONFIRMED fact. Never mark a row yes or equivalent because of where they work. A company's product, stack or reputation is not this person's evidence, and a targeted company is not evidence for a row. When the employer is the only basis, the row is unknown and the evidence says so ("likely at Basis; not shown on the profile"). The evidence must point at words that are actually in the material: never name a technology, product or duty the material does not name. A thin profile gives mostly unknown rows, and that is the honest answer.
 
 SKILL YEARS ARE A FLOOR: a per-skill figure in FACTS counts only the positions where that skill is tagged or named. People under-list skills, so the true figure is usually higher. Never answer no to a skill row because its dated years look low. Answer no only when the whole history plainly points elsewhere (a different stack or discipline throughout). The right skill present with fewer dated years than the row asks is unknown, never equivalent and never no, and the evidence states the dated figure ("1.1 years dated at Perch; not shown to 2+"). Words like deep, strong or expert in a row mean sustained production use (about two years or more) or clear ownership of systems built with it.
 
@@ -253,6 +256,13 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
     // the model skipped is "unknown", never a guess.
     const idOf = (x: string) => String(x || "").replace(/^[\s\[]+|[\s\]]+$/g, "").toLowerCase();
     let unassessed = 0;
+    // Everything the judge was shown about the person. A row that names a
+    // technology cannot read "yes" unless the material names it (or another
+    // the row accepts), and evidence may not name a technology the material
+    // does not: a judge reasoning "works at an agents company, so TypeScript"
+    // is caught here, whatever it wrote.
+    const material = [input.profileText, input.resumeText || "", input.factsBlock, ...(input.confirmedFacts || [])].join("\n");
+    let guarded = 0;
     const rows: CardRow[] = allCriteria.map((c) => {
       const byRule = ruled.find((r) => r.id === c.id);
       if (byRule) return { id: c.id, label: c.label, tier: c.tier, status: byRule.status, evidence: byRule.evidence, ai: byRule.status, confirmed: null };
@@ -268,8 +278,28 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
         status = "unknown";
         evidence = `Dated history shows ${input.careerYears} years against ${bar}+.`;
       }
+      if (status === "yes" || status === "equivalent") {
+        // A technology in the LABEL is the requirement itself; ones in the
+        // "counts as evidence" note are accepted stand-ins. A category row
+        // ("workflow orchestration", note: "tools like Temporal") names none
+        // in its label, so any real instance may meet it.
+        const labelTech = technologiesNamed(c.label);
+        const rowTech = technologiesNamed(`${c.label} ${c.good || ""}`);
+        const rowNames = new Set(rowTech.flat().map((n) => n.toLowerCase()));
+        const invented = technologiesNamed(evidence).filter((g) => !g.some((n) => rowNames.has(n.toLowerCase())) && !namesAny(material, [g]));
+        if (status === "yes" && labelTech.length && !namesAny(material, rowTech)) {
+          status = "unknown";
+          evidence = `${labelTech[0][0]} is not named on the profile or resume.`;
+          guarded++;
+        } else if (invented.length) {
+          status = "unknown";
+          evidence = `${invented[0][0]} is not named on the profile or resume.`;
+          guarded++;
+        }
+      }
       return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, confirmed: null };
     });
+    if (guarded) console.warn(`verdict: ${guarded} row(s) credited a technology the material does not name; read as not shown`);
     if (rows.length) label = labelFromRows(rows, label);
     // Rail: a verified years shortfall of more than a year blocks "contact"
     // however persuasive the narrative; the number is not negotiable. Runs

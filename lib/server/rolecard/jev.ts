@@ -18,10 +18,12 @@ export const JEV_USD_PER_M_INPUT = 0.042;
 
 /** Ordered by strength of evidence for the requirement. */
 const LEVELS: { status: RowStatus; text: string }[] = [
-  { status: "no", text: "Contradicted: the candidate's whole history plainly points to a different stack, discipline or level, so they do not meet this." },
-  { status: "unknown", text: "Not shown: the candidate's profile says nothing either way about this." },
-  { status: "equivalent", text: "Equivalent: not shown directly, but closely related or transferable experience is: an accepted alternative, a concrete instance of the category, or the same work in another technology." },
-  { status: "yes", text: "Clearly shown: the candidate's profile or facts directly show this, named in a role, a project or the dated history." },
+  // First run: "contradicted" was chosen for thin profiles (one-word job
+  // descriptions), so this level now demands positive evidence against.
+  { status: "no", text: "Ruled out: the profile gives positive evidence against this, such as a whole career in a clearly different discipline (only data science, design or sales for a backend engineering requirement). A thin or silent profile is NOT this level." },
+  { status: "unknown", text: "Not shown: the profile is silent or too thin to tell. Choose this whenever there is simply no information either way, however likely or unlikely it seems." },
+  { status: "equivalent", text: "Equivalent: the candidate's own profile shows closely related or transferable experience: an accepted alternative, a concrete instance of the category, or the same work in another technology." },
+  { status: "yes", text: "Shown: the candidate's own profile or facts show this, in a title, a description, a listed or dated skill, or a project." },
 ];
 
 export interface JevRow {
@@ -66,6 +68,7 @@ export async function jevJudgeRows(input: {
       instructions:
         `Judging only from \`candidate\`: how well does this person meet this requirement of the role? Requirement: "${c.label}".` +
         (c.good ? ` What counts as evidence: ${c.good}` : "") +
+        " Judge the person, not the employer: a company's product or technology stack is not evidence about this candidate." +
         " Per-skill years in `candidate.facts` count only the positions where the skill is tagged, so they are a minimum; people under-list skills.",
       criteria: LEVELS.map((l) => l.text),
     };
