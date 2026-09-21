@@ -9,12 +9,12 @@
 import type { CandidateFacts } from "./facts";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
-import { careerYearsStatus, chipLabel, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
+import { cardStrength, careerYearsStatus, chipLabel, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
 
-export const VERDICT_PROMPT_VERSION = "v6";
+export const VERDICT_PROMPT_VERSION = "v7";
 
 export interface VerdictSkill {
   skill: string;
@@ -90,7 +90,7 @@ Unconfirmed is not disqualifying; only contradictions push to pass. When torn be
 
 CATEGORIES: a requirement stated as a category is met by any concrete instance of it: "vector database" by pgvector, Pinecone, Weaviate, Qdrant, Milvus, Chroma or FAISS; "cloud" by AWS, GCP or Azure; "message queue" by Kafka, SQS or RabbitMQ; "orchestration" by Temporal, Airflow or Prefect; and so on. Adjacent evidence without a named instance (embeddings or retrieval work with no vector store named) counts as an equivalent, and the paragraph says so.
 
-RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence for the paragraph and the overall read: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. They are never evidence for a scorecard row (see ROWS ARE ABOUT THE PERSON). An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
+RULES: Use ONLY the FACTS block for years and tenure; never compute your own. Company signals are evidence for the paragraph and the overall read: employment at a company the employer targeted, in the right kind of role, is strong fit evidence; sustained tenure at companies with high hiring bars is evidence of calibre. In a scorecard row they can make an experience row "likely" at most, never yes or equivalent (see ROWS ARE ABOUT THE PERSON and LIKELY). An alternate the employer declared fully satisfies that skill. No hedging boilerplate, no "the candidate": use the first name once, then "they". No bullet points, no headings, no quotation marks.
 
 ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the paragraph), ask (0 to 3 short questions for a first call), better_suited (for pass or message when honest: one sentence naming where they would fit; otherwise an empty string), requirements (one entry per REQUIRED SKILL line and per hard requirement in the job description: requirement = for a REQUIRED SKILLS line, that skill's name verbatim (add " or similar" when an alternate satisfied it); for a hard requirement from the job description, a short label of at most four words naming the capability, e.g. "Browser automation", "Production infrastructure"; never the sentence from the job description; status met / equivalent / missing; evidence = the technology or fact that decides it, at most 12 words), technologies_now (technologies evidenced in the CURRENT position: languages, frameworks, databases, cloud, infrastructure, tools; from that position's skills or description, or the resume's most recent role; at most 8; technology names only, never soft skills), technologies_before (technologies from earlier positions, or listed on the profile with no date; most recent first; at most 8; none that are already in technologies_now).
 
@@ -99,9 +99,11 @@ SCORECARD: when the message carries a SCORECARD block, answer EVERY row in rows,
 - equivalent: the thing itself is not shown, but a DIFFERENT thing that does the same job is: an alternate the row accepts, a concrete instance of a category, or clearly transferable work in another technology. Say what stands in. Never use equivalent for the right skill in a smaller amount than the row asks: that is unknown.
 - unknown: the profile is silent: nothing for it and nothing against it. The honest answer for anything a LinkedIn profile would not normally say.
 - no: contradicted: FACTS years under the bar, a different discipline, seniority far off, or a detailed history that plainly points elsewhere.
-evidence = the fact that decides it, at most 14 words; for unknown, name what is not shown. With a SCORECARD block return requirements as an empty array, and the label must follow the rows: any required row no gives pass; every required row yes or equivalent gives contact; anything else gives message. Without a SCORECARD block return rows as an empty array.
+evidence = the fact that decides it, at most 14 words (a likely inference may run to 24); for unknown, name what is not shown. likely = true only as described under LIKELY. With a SCORECARD block return requirements as an empty array, and the label must follow the rows: any required row no gives pass; every required row yes or equivalent gives contact; anything else gives message. Without a SCORECARD block return rows as an empty array.
 
-ROWS ARE ABOUT THE PERSON, NOT THE EMPLOYER: a row is yes or equivalent only on what this person's own material shows: a title, a description, a listed or dated skill, a project, a CONFIRMED fact. Never mark a row yes or equivalent because of where they work. A company's product, stack or reputation is not this person's evidence, and a targeted company is not evidence for a row. When the employer is the only basis, the row is unknown and the evidence says so ("likely at Basis; not shown on the profile"). The evidence must point at words that are actually in the material: never name a technology, product or duty the material does not name. A thin profile gives mostly unknown rows, and that is the honest answer.
+ROWS ARE ABOUT THE PERSON: a row is yes or equivalent only on what this person's own material shows: a title, a description, a listed or dated skill, a project, a CONFIRMED fact. Never mark a row yes or equivalent because of where they work. The evidence must point at words that are actually in the material: never name a technology, product or duty the material does not name. A thin profile gives mostly unknown rows, and that is the honest answer.
+
+LIKELY: some rows ask what kind of systems or problems the person has worked on ("Has built agent infrastructure in production", "Has worked on payments at scale"). When the material does not show it, but the person's role at an employer whose business is exactly that makes it probable (a founding or core engineer at a company whose whole product is AI agents; five years as a payments engineer at Stripe), answer unknown with likely = true and write the evidence as an inference that names its basis and says the profile does not show the work: "Likely: founding ML engineer at Basis, whose product is AI agents; the profile does not describe the work." Base it on the employer's business (from CANDIDATE'S CURRENT EMPLOYER, the profile, or a company everyone knows), the person's title and their tenure there; never on reputation alone, and never on a short or peripheral stint (an intern, a sales role). likely is false for every row that names a technology or a language (an employer's stack says nothing about one person), for a years row, and whenever the status is not unknown. With no such basis the row is plain unknown, likely = false.
 
 SKILL YEARS ARE A FLOOR: a per-skill figure in FACTS counts only the positions where that skill is tagged or named. People under-list skills, so the true figure is usually higher. Never answer no to a skill row because its dated years look low. Answer no only when the whole history plainly points elsewhere (a different stack or discipline throughout). The right skill present with fewer dated years than the row asks is unknown, never equivalent and never no, and the evidence states the dated figure ("1.1 years dated at Perch; not shown to 2+"). Words like deep, strong or expert in a row mean sustained production use (about two years or more) or clear ownership of systems built with it.
 
@@ -197,9 +199,10 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
                   properties: {
                     id: criteria.length ? { type: "string", enum: criteria.map((c) => c.id) } : { type: "string" },
                     status: { type: "string", enum: ["yes", "equivalent", "unknown", "no"] },
+                    likely: { type: "boolean" },
                     evidence: { type: "string" },
                   },
-                  required: ["id", "status", "evidence"],
+                  required: ["id", "status", "likely", "evidence"],
                 },
               },
               technologies_now: { type: "array", items: { type: "string" } },
@@ -245,7 +248,7 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       ask: string[];
       better_suited: string;
       requirements: RequirementRead[];
-      rows: { id: string; status: RowStatus; evidence: string }[];
+      rows: { id: string; status: RowStatus; likely?: boolean; evidence: string }[];
       technologies_now: string[];
       technologies_before: string[];
     };
@@ -269,7 +272,7 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       const r = (out.rows || []).find((x) => x && idOf(x.id) === c.id.toLowerCase());
       if (!r) unassessed++;
       let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";
-      let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 140);
+      let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 180);
       // Rail: the dated history is the only source for years. A row that
       // states a years bar cannot read as met when FACTS fall more than a
       // year short; it reads "not shown" (dates on profiles are often partial).
@@ -297,7 +300,13 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
           guarded++;
         }
       }
-      return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, confirmed: null };
+      // "? likely": only on an unknown row about experience. An employer's
+      // stack says nothing about one person, so a row that names a technology
+      // (or a years bar) can never be likely, whatever the model returned.
+      let likely = status === "unknown" && r?.likely === true && bar == null && technologiesNamed(c.label).length === 0;
+      if (likely && !evidence) likely = false;
+      if (likely && !/^likely\b/i.test(evidence)) evidence = `Likely: ${evidence.charAt(0).toLowerCase()}${evidence.slice(1)}`.slice(0, 160);
+      return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, likely, aiLikely: likely, confirmed: null };
     });
     if (guarded) console.warn(`verdict: ${guarded} row(s) credited a technology the material does not name; read as not shown`);
     if (rows.length) label = labelFromRows(rows, label);
@@ -420,7 +429,7 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
     requirements: v.requirements,
     tech: { now, before, gaps, nowPosition: facts?.currentTitle ? [facts.currentTitle, facts.currentCompany].filter(Boolean).join(" at ") : null },
     card: v.rows.length
-      ? { rows: v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) })), aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null }
+      ? { rows: v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) })), aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null, strength: cardStrength(v.rows) }
       : null,
     model: v.model,
     at: new Date().toISOString(),

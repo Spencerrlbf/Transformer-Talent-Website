@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         title: [r.sourced_candidates?.current_title, r.sourced_candidates?.current_company].filter(Boolean).join(" at "),
         linkedinUrl: r.sourced_candidates?.linkedin_url || null,
         label: v.label,
-        rows: v.card.rows.map((x) => ({ id: x.id, label: x.label, tier: x.tier, gpt: x.ai, evidence: x.evidence, byRule: isCareerYearsRow(x.label) })),
+        rows: v.card.rows.map((x) => ({ id: x.id, label: x.label, tier: x.tier, gpt: x.ai, likely: !!(x.aiLikely ?? x.likely), evidence: x.evidence, byRule: isCareerYearsRow(x.label) })),
       };
     });
   return NextResponse.json({
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
           baseline: isVerdictView(r.verdict) ? r.verdict.model : null,
           rows: out.map((x) => {
             const base = stored.find((y) => y.id === x.id);
-            return { ...x, label: base?.label, tier: base?.tier, baseline: base?.ai, baselineEvidence: base?.evidence };
+            return { ...x, label: base?.label, tier: base?.tier, baseline: base?.ai, baselineLikely: !!(base?.aiLikely ?? base?.likely), baselineEvidence: base?.evidence };
           }),
           ms: a.ms,
           input_tokens: a.inputTokens,

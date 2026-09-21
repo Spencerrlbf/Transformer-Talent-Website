@@ -8,7 +8,7 @@ import { useDash } from "@/components/dashboard/DashShell";
 import { ROUTE, ROW_MARK, ROW_WORD, labelClass, labelFromRows, routeStatus, type RowStatus, type Tier } from "@/lib/rolecard";
 import { VERDICT_LABEL, type VerdictLabel } from "@/lib/verdict-view";
 
-type StoredRow = { id: string; label: string; tier: Tier; gpt: RowStatus; evidence: string; byRule: boolean };
+type StoredRow = { id: string; label: string; tier: Tier; gpt: RowStatus; likely?: boolean; evidence: string; byRule: boolean };
 type Person = { membershipId: string; name: string; title: string; linkedinUrl: string | null; label: string; rows: StoredRow[] };
 type JevRow = { id: string; status: RowStatus; confidence: number; probabilities: Record<RowStatus, number>; again: { status: RowStatus; confidence: number } | null };
 type JevPerson = { membershipId: string; error?: string; detail?: string; ms?: number; inputTokens?: number; model?: string; rows?: JevRow[] };
@@ -210,7 +210,10 @@ export default function RowJudgeComparison() {
                         <span className="jvc-tier">{r.tier}</span> {r.label}
                         {r.evidence && <small>{r.evidence}</small>}
                       </td>
-                      <td><Mark s={r.gpt} /></td>
+                      <td>
+                        <Mark s={r.gpt} />
+                        {r.likely && <span className="ck-likely">likely</span>}
+                      </td>
                       {r.byRule ? (
                         <td colSpan={4} className="dash-muted">decided by rule from the dated history, for both</td>
                       ) : jr ? (

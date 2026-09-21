@@ -49,6 +49,15 @@ export interface CardRow {
   evidence: string;
   /** What the judge said, kept when a recruiter overrules it. */
   ai: RowStatus;
+  /** "? likely": the material does not show it, but the person's role at an
+   *  employer whose business is exactly this makes it probable (a founding
+   *  engineer at an AI-agents company, for an agents row). Still "not shown":
+   *  it never counts as met for the label. It ranks the person higher, gives
+   *  the recruiter a question to ask, and becomes a yes when they check it
+   *  off. Only ever true on an unconfirmed "unknown" row. */
+  likely?: boolean;
+  /** `likely` as judged, kept so taking an overrule back restores it. */
+  aiLikely?: boolean;
   confirmed?: { by: string; at: string; note?: string } | null;
   /** The row as a chip ("4+ years", "TypeScript"), set when the view is built. */
   short?: string;
@@ -62,6 +71,8 @@ export interface VerdictCardData {
   aiGaps?: string[];
   /** Why the label is held below what the rows alone would give (the years rail). */
   railNote?: string | null;
+  /** How strongly the rows are met, for ordering people inside one label. */
+  strength?: number;
   wrongRole?: { by: string; at: string } | null;
 }
 
@@ -159,10 +170,26 @@ export const sameLabel = (a: string, b: string) => {
   return n(a) === n(b);
 };
 
-export const tally = (rows: Pick<CardRow, "tier" | "status">[], tier: Tier) => {
+export const tally = (rows: Pick<CardRow, "tier" | "status" | "likely">[], tier: Tier) => {
   const of = rows.filter((r) => r.tier === tier);
-  return { met: of.filter((r) => r.status === "yes" || r.status === "equivalent").length, of: of.length };
+  return {
+    met: of.filter((r) => r.status === "yes" || r.status === "equivalent").length,
+    likely: of.filter((r) => r.status === "unknown" && r.likely).length,
+    of: of.length,
+  };
 };
+
+/** How strongly a card is met: orders people who share a label. Required
+ *  rows weigh most; a "likely" is worth half a yes; a no counts against. */
+const TIER_WEIGHT: Record<Tier, number> = { required: 3, exceptional: 2, bonus: 1 };
+export function cardStrength(rows: Pick<CardRow, "tier" | "status" | "likely">[]): number {
+  let total = 0;
+  for (const r of rows) {
+    const f = r.status === "yes" ? 1 : r.status === "equivalent" ? 0.8 : r.status === "no" ? -1 : r.likely ? 0.5 : 0;
+    total += TIER_WEIGHT[r.tier] * f;
+  }
+  return Math.round(total * 10) / 10;
+}
 
 /** A row as a chip label: the years bar when it states one, else a few words. */
 const GENERIC_YEARS = /(years|yrs)\s+(of\s+)?((professional|industry|relevant|total|overall|commercial|hands[- ]on)\s+)*((software|backend|frontend|full[- ]stack)\s+)?(engineering|development|experience|work)\b\s*(experience)?\s*$/i;
@@ -220,9 +247,12 @@ export function applyOverrides(
   const rows: CardRow[] = card.rows.map((r) => {
     const hit = byId.get(r.id);
     const o = hit && (!hit.label || sameLabel(hit.label, r.label)) ? hit : undefined;
+    // A confirmed row is what the recruiter knows, so it is no longer a
+    // "likely"; taking the overrule back restores the judge's own reading.
+    const judgedLikely = r.aiLikely ?? r.likely ?? false;
     return o
-      ? { ...r, status: o.status, confirmed: { by: o.by, at: o.at, ...(o.note ? { note: o.note } : {}) } }
-      : { ...r, status: r.ai, confirmed: null };
+      ? { ...r, status: o.status, likely: false, aiLikely: judgedLikely, confirmed: { by: o.by, at: o.at, ...(o.note ? { note: o.note } : {}) } }
+      : { ...r, status: r.ai, likely: r.ai === "unknown" && judgedLikely, aiLikely: judgedLikely, confirmed: null };
   });
   const touched = rows.some((r) => r.confirmed);
   // Untouched, the judged label stands (it carries the years rail). Touched,
@@ -247,7 +277,7 @@ export function applyOverrides(
     ...judged,
     label,
     tech: { ...judged.tech, gaps: gaps.slice(0, 6) },
-    card: { ...card, rows, aiGaps: baseGaps, wrongRole },
+    card: { ...card, rows, aiGaps: baseGaps, wrongRole, strength: cardStrength(rows) },
   };
 }
 

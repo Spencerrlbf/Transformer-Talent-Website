@@ -4485,6 +4485,12 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .ck-ico { color: var(--rc-tone); padding-top: 2px; }
 .ck-label { font-size: 13.5px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
 .ck-saving { color: var(--muted); font-weight: 400; }
+/* "? likely": still not shown, never counted as met; probable from role + employer. */
+.ck-likely { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); border: 1px dashed var(--accent); color: var(--accent-press); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; cursor: help; }
+.ck-row.likely .ck-ev { color: var(--body-2); }
+.ck-row.likely:not(.confirmed) .ck-b.on.b-unknown { background: var(--accent-tint); color: var(--accent-press); box-shadow: inset 0 0 0 1px var(--accent); }
+.ck-tlikely { margin-left: 4px; font-weight: 400; color: var(--accent-press); }
+.ck-key .ck-likely { margin: 0 4px 0 8px; cursor: default; }
 .ck-held { margin: 0 0 6px; padding: 7px 10px; border-radius: var(--r-control); background: var(--warn-bg); color: var(--warn-ink); font-size: 12.5px; line-height: 1.45; }
 .ck-row.s-no .ck-label { color: var(--body-2); }
 .ck-ev { margin-top: 1px; font-size: 12px; line-height: 1.45; color: var(--muted); }

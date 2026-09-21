@@ -35,13 +35,22 @@ export async function GET(req: NextRequest, { params }: Params) {
     filter === "shortlisted" ? "shortlisted=eq.true" : null,
   ].filter(Boolean).join("&");
 
-  const res = await sbRest(
-    `sourcing_run_candidates?${filters}` +
-      `&select=id,rank,tag,reason,verdict,screen_status,shortlisted,hidden,sourced_candidate_id,` +
-      `sourced_candidates(full_name,headline,location,current_title,current_company,linkedin_url,linkedin_username,years_experience,skills,profile)` +
-      `&order=rank.asc.nullslast,created_at.asc&limit=${PAGE}&offset=${(page - 1) * PAGE}`,
-    { headers: { Prefer: "count=exact" } }
-  );
+  const select =
+    `&select=id,rank,tag,reason,verdict,screen_status,shortlisted,hidden,sourced_candidate_id,` +
+    `sourced_candidates(full_name,headline,location,current_title,current_company,linkedin_url,linkedin_username,years_experience,skills,profile)`;
+  const paging = `&limit=${PAGE}&offset=${(page - 1) * PAGE}`;
+  // Best fit first: Contact now, Worth a message, Pass (alphabetical order of
+  // the stored labels happens to be that order), then how strongly the
+  // scorecard is met (a "likely" counts half), then the search's own rank.
+  // People not judged yet come last. If the ordering is ever refused, the
+  // table still loads in search-rank order.
+  const byFit = `&order=verdict->>label.asc.nullslast,verdict->card->strength.desc.nullslast,rank.asc.nullslast,created_at.asc`;
+  const byRank = `&order=rank.asc.nullslast,created_at.asc`;
+  let res = await sbRest(`sourcing_run_candidates?${filters}${select}${byFit}${paging}`, { headers: { Prefer: "count=exact" } });
+  if (!res.ok) {
+    console.error("run candidates: fit ordering refused", res.status, (await res.text().catch(() => "")).slice(0, 200));
+    res = await sbRest(`sourcing_run_candidates?${filters}${select}${byRank}${paging}`, { headers: { Prefer: "count=exact" } });
+  }
   if (!res.ok) return NextResponse.json({ error: "load_failed" }, { status: 502 });
   const total = parseInt((res.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
   type Row = {

@@ -136,9 +136,10 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
           {TIERS.map((t) => {
             const n = tally(card.rows, t);
             return n.of ? (
-              <span key={t} className={`ck-t rc-${t}`} title={`${TIER_LABEL[t]}: ${n.met} of ${n.of} met`}>
+              <span key={t} className={`ck-t rc-${t}`} title={`${TIER_LABEL[t]}: ${n.met} of ${n.of} met${n.likely ? `, ${n.likely} more likely` : ""}`}>
                 <TierIcon tier={t} />
                 {n.met}/{n.of}
+                {n.likely > 0 && <span className="ck-tlikely">+{n.likely} likely</span>}
               </span>
             ) : null;
           })}
@@ -158,12 +159,19 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
         return (
           <div className={`ck-tier rc-${tier}`} key={tier}>
             {rows.map((r) => (
-              <div className={`ck-row s-${r.status}${r.confirmed ? " confirmed" : ""}`} key={r.id}>
+              <div className={`ck-row s-${r.status}${r.confirmed ? " confirmed" : ""}${r.likely ? " likely" : ""}`} key={r.id}>
                 <span className="ck-ico" title={TIER_LABEL[tier]}>
                   <TierIcon tier={tier} />
                 </span>
                 <div className="ck-body">
-                  <div className="ck-label">{r.label}</div>
+                  <div className="ck-label">
+                    {r.label}
+                    {r.likely && (
+                      <span className="ck-likely" title="Not shown on the profile, but their role at an employer whose business is exactly this makes it probable. It does not count as met. Ask about it, then check it off.">
+                        likely
+                      </span>
+                    )}
+                  </div>
                   {r.confirmed ? (
                     <div className="ck-ev">
                       Confirmed by {r.confirmed.by}
@@ -225,7 +233,7 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                           type="button"
                           key={s}
                           className={`ck-b b-${s}${on ? " on" : ""}${done ? " done" : ""}`}
-                          aria-label={`${ROW_WORD[s]}${done ? ", confirmed" : on ? ", the AI's read" : ""}`}
+                          aria-label={`${ROW_WORD[s]}${done ? ", confirmed" : on ? (r.likely ? ", but likely: the AI's read" : ", the AI's read") : ""}`}
                           aria-pressed={on}
                           title={done ? `${ROW_WORD[s]}, confirmed. Use Undo to take it back.` : on ? `${ROW_WORD[s]}: the AI's read. Press to confirm it.` : `Mark as: ${ROW_WORD[s]}`}
                           onClick={() => (done ? undefined : rule(r, s))}
@@ -249,6 +257,12 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
       <div className="ck-foot">
         <span className="ck-key">
           <b className="b-yes">✓</b> yes <b className="b-equivalent">≈</b> equivalent <b className="b-unknown">?</b> not shown <b className="b-no">×</b> no
+          {card.rows.some((r) => r.likely) && (
+            <>
+              {" "}
+              <span className="ck-likely">likely</span> not shown, but probable from their role and employer: ask, then check it off
+            </>
+          )}
           {feedback && <em> · press one to say what you know. It sticks, and it is remembered about this person.</em>}
         </span>
         {feedback && (

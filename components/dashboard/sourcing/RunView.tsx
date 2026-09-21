@@ -329,7 +329,7 @@ export default function RunView({
 
           <div className="dash-src-tfoot">
             <span>
-              {total > 0 && `Showing ${(page - 1) * 25 + 1}–${Math.min(page * 25, total)} of ${total} · ranked best match first`}
+              {total > 0 && `Showing ${(page - 1) * 25 + 1}–${Math.min(page * 25, total)} of ${total} · best fit first: by label, then how strongly the scorecard is met`}
             </span>
             <span className="dash-src-pager">
               {page > 1 && <button className="dash-btn dash-btn-2" onClick={() => setPage(page - 1)}>← Prev</button>}
