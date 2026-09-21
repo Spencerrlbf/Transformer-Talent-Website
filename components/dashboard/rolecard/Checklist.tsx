@@ -194,7 +194,14 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                     (r.evidence || r.quote) && (
                       <div className="ck-ev">
                         {r.evidence}
-                        {r.quote && <span className="ck-quote" title="Copied from the profile or resume"> Profile: &ldquo;{r.quote}&rdquo;</span>}
+                        {/* Where it was found, and the words found there. Older saved
+                            reviews carry a quote but no source: those say "Profile". */}
+                        {(r.source || r.quote) && (
+                          <span className="ck-src" title="Where this was found. The words in quotes are copied from there.">
+                            {r.source || "Profile"}
+                            {r.quote && <span className="ck-quote">: &ldquo;{r.quote}&rdquo;</span>}
+                          </span>
+                        )}
                       </div>
                     )
                   )}

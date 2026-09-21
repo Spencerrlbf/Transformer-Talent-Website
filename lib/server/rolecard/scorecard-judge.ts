@@ -24,7 +24,7 @@ import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import { careerYearsStatus, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
-export const SCORECARD_JUDGE_VERSION = "v10";
+export const SCORECARD_JUDGE_VERSION = "v11";
 
 const ROWS_SYSTEM = `You are a careful technical recruiter checking one candidate against a role's scorecard. You have the candidate's LinkedIn profile (and a resume when supplied), a FACTS block computed in code from their dated positions, and the role. Answer EVERY scorecard row, by its id.
 
@@ -58,6 +58,10 @@ ALSO RETURN: missing (0 to 4 short plain statements: the Required rows that are 
 
 type RowOut = { id: string; status: RowStatus; quote: string; evidence: string };
 
+// The judge reads the whole resume. It was shown the first 3,000 characters,
+// and every one of the first eight resumes on file is longer than that
+// (typically 4,850): earlier jobs and the skills section were never seen.
+const RESUME_CHARS = 12_000;
 const NOT_QUOTED = "Not shown on the profile: nothing written there says this.";
 // A title, an employer and a date say nothing about a row: that tick was an
 // inference from where the person works, and gets no second look.
@@ -90,18 +94,78 @@ export function quoteIsGrounded(quote: string, material: string, employers: stri
  *  a place, which says nothing about any row (an inference from where someone
  *  works). "absent": it says something, but those words are not on the
  *  profile (a paraphrase, or the scorecard's own note copied back). */
-export function quoteCheck(quote: string, material: string, employers: string[], noise = ""): "ok" | "empty" | "absent" {
-  const q = quote.replace(/["“”‘’…]/g, " ").replace(/\s+/g, " ").trim();
-  if (q.length < 2) return "empty";
-  const skip = new Set([...employers.flatMap((e) => tokens(e)), ...tokens(noise)]);
-  const content = tokens(q).filter((t) => !GENERIC_WORDS.has(t) && !skip.has(t) && !/^\d+$/.test(t));
+export function quoteCheck(quote: string, material: string, employers: string[], noise = "", resume = ""): "ok" | "empty" | "absent" {
+  const content = quoteContent(quote, employers, noise);
   if (!content.length) return "empty";
-  const onOneLine = material.split("\n").some((line) => {
+  const onOneLine = [material, resume].join("\n").split("\n").some((line) => {
     const lt = new Set(tokens(line));
     return content.every((t) => lt.has(t));
   });
-  return onOneLine ? "ok" : "absent";
+  return onOneLine || (!!resume && acrossAWrap(quote, resume)) ? "ok" : "absent";
 }
+
+/** What a quote says once generic title words, seniority, the employers'
+ *  names, dates, tenure and places are taken out. */
+function quoteContent(quote: string, employers: string[], noise = ""): string[] {
+  const q = quote.replace(/["“”‘’…]/g, " ").replace(/\s+/g, " ").trim();
+  if (q.length < 2) return [];
+  const skip = new Set([...employers.flatMap((e) => tokens(e)), ...tokens(noise)]);
+  return [...new Set(tokens(q).filter((t) => !GENERIC_WORDS.has(t) && !skip.has(t) && !/^\d+$/.test(t)))];
+}
+
+/** A resume is text out of a PDF: a bullet wraps across two or three lines
+ *  wherever the page was narrow, so "on one line" alone rejects true quotes
+ *  (5 of the first 8 stored resumes wrap). A quote that is not on one line
+ *  is looked for across the wrap, strictly: ALL of its words, in the quote's
+ *  own order, back to back, with room for two stray tokens at most (a page
+ *  number, a word the judge dropped). A line wrap adds no words, so a true
+ *  quote needs no more room than that. Looser tests let a quote be stitched
+ *  from neighbouring bullets: "Led a team of 8 engineers" from "worked
+ *  alongside a team of 8 engineers ... Led migration of" (words near each
+ *  other), and "6 years building machine learning infrastructure" from "6
+ *  years at Acme; building internal tools. Evaluated machine learning
+ *  infrastructure vendors" (in order, six words of slack). */
+function acrossAWrap(quote: string, text: string): boolean {
+  const q = tokens(quote.replace(/["“”‘’…]/g, " "));
+  if (q.length < 3) return false;
+  const t = tokens(text);
+  const span = q.length + 2;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] !== q[0]) continue;
+    let k = 1;
+    for (let j = i + 1; j < Math.min(t.length, i + span) && k < q.length; j++) if (t[j] === q[k]) k++;
+    if (k === q.length) return true;
+  }
+  return false;
+}
+
+/** WHERE an answer was found, for the line under it: the job, the resume,
+ *  the skills list, the summary, education. Worked out in code from where
+ *  the quote sits, never asked of the model, so it cannot be invented. */
+export function sourceOfQuote(quote: string, a: { jobs: JobText[]; profileText: string; resumeText?: string | null; confirmed: string[]; employers: string[]; noise: string }): string | undefined {
+  const content = quoteContent(quote, a.employers, a.noise);
+  if (!content.length) return undefined;
+  const within = (text: string) => { const t = new Set(tokens(text)); return content.every((w) => t.has(w)); };
+  // One line of one job (its title, its skill tags, a line of its
+  // description) before anything looser: a job's whole text as a bag of words
+  // claimed quotes that were really on the resume, or on another job.
+  const onALine = a.jobs.find((j) => j.text.split("\n").some(within));
+  if (onALine) return jobSource(onALine);
+  if (a.resumeText && (a.resumeText.split("\n").some(within) || acrossAWrap(quote, a.resumeText))) return "Resume";
+  if (a.confirmed.some(within)) return "Confirmed earlier by your team";
+  const job = a.jobs.find((j) => within(j.text));
+  if (job) return jobSource(job);
+  const lines = a.profileText.split("\n");
+  const at = lines.findIndex(within);
+  if (at < 0) return undefined;
+  if (/^(all )?skills:/i.test(lines[at].trim())) return "Skills list";
+  const isJobLine = (line: string) => a.jobs.some((j) => j.title && line.startsWith(j.title));
+  const jobLines = lines.map((l, i) => (isJobLine(l) ? i : -1)).filter((i) => i >= 0);
+  if (jobLines.length && at < jobLines[0]) return "Profile summary";
+  if (jobLines.length && at > jobLines[jobLines.length - 1]) return "Education";
+  return "Profile";
+}
+const jobSource = (j: JobText) => `Work history · ${[j.title, j.company && `at ${j.company}`].filter(Boolean).join(" ")}`.slice(0, 120);
 
 const stripExamples = (label: string) => label.replace(/\(.*?\)/g, " ").replace(/(\be\.g\.|\bsuch as\b|\blike\b|\bor similar\b|\bincluding\b).*$/i, " ");
 /** What else the row itself accepts: only what its brackets name. The
@@ -339,6 +403,11 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   // The person's OWN material: what a quote must come from. Not the FACTS
   // block (code wrote it) and not the employer's description.
   const material = [input.profileText, input.resumeText || "", ...confirmedTrue].join("\n");
+  // A quote is looked for line by line in the profile (a LinkedIn entry is
+  // one line) and by nearness in the resume (PDF text wraps mid-sentence).
+  const lineMaterial = [input.profileText, ...confirmedTrue].join("\n");
+  const resume = input.resumeText || "";
+  const whereFrom = (quote: string) => sourceOfQuote(quote, { jobs, profileText: input.profileText, resumeText: resume, confirmed: confirmedTrue, employers, noise });
   // A years bar is about engineering years on an engineering role, and about
   // the career on any other (a data science or product role). Decided once.
   const basis: "engineering" | "career" = workKind(input.roleTitle) === "engineering" || allCriteria.some((c) => isCareerYearsRow(c.label) && /\b(engineer|developer|software)/i.test(c.label)) ? "engineering" : "career";
@@ -381,7 +450,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
         .join("\n")}\n\n` +
       (input.confirmedFacts?.length ? `CONFIRMED BY THE RECRUITER:\n${input.confirmedFacts.slice(-12).map((f) => `- ${f}`).join("\n")}\n\n` : "") +
       `CANDIDATE: ${input.candidateName}\nLINKEDIN PROFILE:\n${input.profileText.slice(0, 5000)}\n\n` +
-      (input.resumeText ? `RESUME EXCERPT:\n${input.resumeText.slice(0, 3000)}\n\n` : "") +
+      (input.resumeText ? `RESUME:\n${input.resumeText.slice(0, RESUME_CHARS)}\n\n` : "") +
       `FACTS (computed in code from dated positions):\n${input.factsBlock}`;
     rowsUser = user;
     const r = await callOpenAI(input, ROWS_SYSTEM, user, "scorecard_rows", rowsSchema(asked.map((c) => c.id), true), input.timeoutMs ?? 30_000, true);
@@ -401,7 +470,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       const ruled = careerYearsStatus(facts, yearsBar(c.label)!, basis);
       // Exceptional and Bonus rows never count against anyone, this one included.
       const st: RowStatus = ruled.status === "no" && c.tier !== "required" ? "unknown" : ruled.status;
-      return { id: c.id, label: c.label, tier: c.tier, status: st, evidence: ruled.evidence, ai: st, call, confirmed: null };
+      return { id: c.id, label: c.label, tier: c.tier, status: st, evidence: ruled.evidence, ai: st, call, confirmed: null, ...(facts?.engineeringYears != null ? { source: "Work history · dated positions" } : {}) };
     }
     let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";
     let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 180);
@@ -410,6 +479,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     const rawQuote = (r?.quote || "").trim();
     let quote = rawQuote.length <= 160 ? rawQuote : rawQuote.slice(0, 160).replace(/[,;.·]?\s*[^\s,;.·]*$/, "");
     let dropped: CardRow["dropped"];
+    let source: string | undefined;
     const drop = (why: string) => {
       // Kept on the row (never shown) so a wrongly removed tick can be found.
       dropped = { status, quote: rawQuote.slice(0, 200), evidence: evidence.slice(0, 160), why };
@@ -433,31 +503,46 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       else if (labelTech.length) {
         // A row that names a technology is decided here, on the jobs
         // themselves: stronger than any quote, so no quote is asked of it.
+        // Where it is: the most recent career job that names it, else the resume.
+        const jobWith = (tech: string[][]) => jobs.find((j) => j.career && namesAny(j.text, tech));
+        const foundAt = (tech: string[][]) => { const j = jobWith(tech); return j ? jobSource(j) : "Resume"; };
         if (onAJob(labelTech)) {
           /* the requirement itself is on a job: the judge's yes or equivalent stands */
+          source = foundAt(labelTech);
         } else if (onAJob(acceptedTech)) {
           status = "equivalent";
           const stand = acceptedTech.find((g) => onAJob([g]))!;
           if (!namesAny(evidence, [stand])) evidence = `${stand[0]} on a job stands in for ${labelTech[0][0]}.`;
+          source = foundAt([stand]);
         } else if (status === "equivalent" && !acceptedTech.length) {
           // The row names no alternatives, so the judge's stand-in is allowed
           // only if every technology it cites is itself on a job.
           const cited = technologiesNamed(`${evidence} ${quote}`).filter((g) => !labelTech.some((l) => l[0] === g[0]));
           if (!cited.length || !cited.every((g) => onAJob([g]))) drop(reasonNotOnAJob(labelTech, input.profileText, jobs));
+          else source = foundAt([cited[0]]);
         } else drop(reasonNotOnAJob([...labelTech, ...acceptedTech], input.profileText, jobs));
-      } else if (quoteCheck(quote, material, employers, noise) !== "ok") drop(quoteCheck(quote, material, employers, noise) === "absent" ? NOT_QUOTED : SAYS_NOTHING);
+      } else if (quoteCheck(quote, lineMaterial, employers, noise, resume) !== "ok") drop(quoteCheck(quote, lineMaterial, employers, noise, resume) === "absent" ? NOT_QUOTED : SAYS_NOTHING);
       else {
         // Any technology the evidence or quote names must be the person's own
         // (an employer that shares a technology's name is not a technology).
         const invented = technologiesNamed(`${evidence} ${quote}`).filter((g) => !namesAny(material, [g]) && !employers.some((e) => g.some((n) => n.toLowerCase() === e.toLowerCase())));
         if (invented.length) drop(`${invented[0][0]} is not named on the profile or resume.`);
+        else source = whereFrom(quote);
       }
     }
     // Rail: a row with a years bar and a subject ("5 years building X")
     // cannot be met when the dated history is over a year short of it.
     const bar = yearsBar(c.label);
     if (bar != null && datedYears != null && datedYears < bar - 1 && (status === "yes" || status === "equivalent")) drop(`Dated history shows ${datedYears} years against ${bar}+.`);
-    return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}), ...(dropped ? { dropped } : {}) };
+    // A technology row is decided on the jobs, not on its quote, so the quote
+    // was never checked; it is shown beside "copied from there", so it is
+    // kept only when it really is there.
+    if (quote && technologiesNamed(stripExamples(c.label)).length && (status === "yes" || status === "equivalent")) {
+      if (quoteCheck(quote, lineMaterial, employers, noise, resume) === "ok") source = whereFrom(quote) ?? source;
+      else quote = "";
+    }
+    const met = status === "yes" || status === "equivalent";
+    return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}), ...(met && source ? { source } : {}), ...(dropped ? { dropped } : {}) };
   };
   const rows: CardRow[] = allCriteria.map((c) => decide(c, answerFor(rowsOut, c)));
   const unassessed = asked.filter((c) => !answerFor(rowsOut, c)).length;

@@ -70,6 +70,10 @@ export interface CardRow {
   short?: string;
   /** The words from the person's own profile that decide a yes or equivalent. */
   quote?: string;
+  /** Where the answer was found ("Work history · Software Engineer II at
+   *  Addepar", "Resume", "Skills list"). Worked out in code from where the
+   *  quote or the technology sits; never written by the model. */
+  source?: string;
   /** Laid on from the role's scorecard: a Required row confirmed on a call. */
   call?: boolean;
   /** A tick the code removed, as the judge gave it. Never shown: kept so a

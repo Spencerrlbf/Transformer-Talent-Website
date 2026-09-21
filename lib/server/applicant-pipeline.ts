@@ -25,11 +25,10 @@ import {
   linkedinProfileText,
   harvestToExperiences,
 } from "./spine";
-import { computeFacts, formatFacts, jobTexts } from "./facts";
+import { computeFacts, formatFacts } from "./facts";
 import { roleLocationCompatible } from "./locations";
-import { renderScorecard, splitStack } from "./scorecard";
-import { judgeForRole } from "./rolecard/judge";
-import { criteriaOf, ensureRoleCard } from "./rolecard/store";
+import { renderScorecard } from "./scorecard";
+import { APPLICANT_ROLE_COLS, judgeApplicantForRole, type ApplicantRole } from "./rolecard/applicant";
 import { attachVerdictToMatch } from "./verdict-store";
 import { getOrgId } from "./spine";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
@@ -295,69 +294,21 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         const storeOrg = orgId || (await getOrgId());
         const wantIds = [...new Set([...roleIds, ...ranked.map((m) => m.job_id)])].slice(0, 3);
         if (storeOrg && candidateId && wantIds.length) {
-          type RoleRow = {
-            id: string; external_id: string; title: string; tech_stack: string | null;
-            jd: { about?: string; doing?: string[]; needs?: string[]; bonus?: string[] } | null;
-            skills: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
-            matching_profile: { must_haves?: string[]; min_years?: number | null } | null;
-            target_companies: { name?: string }[] | null;
-            yoe: string | null; description: string | null; scorecard: unknown;
-          };
           const rr = await sbRest(
             `org_roles?organization_id=eq.${storeOrg}&external_id=in.(${wantIds.map((s) => `"${s.replace(/"/g, "")}"`).join(",")})` +
-              `&select=id,external_id,title,tech_stack,yoe,description,jd,skills,matching_profile,target_companies,scorecard`
+              `&select=${APPLICANT_ROLE_COLS}`
           );
-          const roleRows = rr.ok ? ((await rr.json()) as RoleRow[]) : [];
-          const profileText = linkedinProfileText(harvest as Record<string, unknown> | null);
+          const roleRows = rr.ok ? ((await rr.json()) as ApplicantRole[]) : [];
           await Promise.all(
             roleRows.map(async (role) => {
-              const terms = [...new Set([...splitStack(role.tech_stack), ...(role.skills || []).map((s) => s.skill)])].slice(0, 20);
-              const roleFacts = computeFacts(expRows, terms, harvestSkills, eduList);
-              const jd = role.jd || {};
-              const jdText =
-                [
-                  jd.about,
-                  jd.doing?.length ? `Responsibilities:\n- ${jd.doing.join("\n- ")}` : null,
-                  jd.needs?.length ? `Requirements:\n- ${jd.needs.join("\n- ")}` : null,
-                  jd.bonus?.length ? `Nice to have:\n- ${jd.bonus.join("\n- ")}` : null,
-                ]
-                  .filter(Boolean)
-                  .join("\n\n") || (role.matching_profile?.must_haves || []).join("; ");
-              // Same judge as sourcing: the role's scorecard (drafted the first
-              // time a role without one is judged), the person's confirmed
-              // facts, and a saved verdict when the inputs have not changed.
-              // Drafting and judging share the time the judge alone had before.
-              const t0 = Date.now();
-              const ensured = await ensureRoleCard(role, { timeoutMs: 12_000 }).catch(() => ({ card: null, drafted: false }));
-              const criteria = criteriaOf(ensured.card);
-              const roleTargets = (role.target_companies || []).map((t) => t?.name || "").filter(Boolean);
-              const { view } = await judgeForRole({
+              // Same judge as sourcing and as "Review again" on an applicant.
+              const { view } = await judgeApplicantForRole({
                 orgId: storeOrg,
-                orgRoleId: role.id,
-                // Per candidate, not per application: the same person applying
-                // twice keeps their confirmed rows and their saved verdict.
-                personKey: `cand_${candidateId}`,
-                criteria,
-                roleTargets,
-                input: {
-                  roleTitle: role.title,
-                  jdText,
-                  skills: (role.skills || []).map((s) => ({ skill: s.skill, mustHave: !!s.must_have, alternates: s.alternates || [] })),
-                  minYears: role.matching_profile?.min_years ?? null,
-                  targetedCompanies: roleTargets,
-                  employerContext: null,
-                  candidateName: name || "Candidate",
-                  profileText,
-                  resumeText,
-                  factsBlock: formatFacts(roleFacts),
-                  careerYears: roleFacts.careerYears,
-                  facts: roleFacts,
-                  jobs: jobTexts(expRows, eduList),
-                  model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
-                  timeoutMs: Math.max(20_000, 40_000 - (Date.now() - t0)),
-                },
-                factsFor: (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList),
-                roleSkills: (role.skills || []).map((s) => s.skill),
+                candidateId,
+                name: name || null,
+                harvest: harvest as Record<string, unknown> | null,
+                resumeText,
+                role,
               }).catch(() => ({ view: null }));
               if (!view) return;
               await attachVerdictToMatch(storeOrg, candidateId, role.id, view).catch(() => false);

@@ -190,12 +190,53 @@ function splitReason(reason: string): { why: string; probes: string[]; route: st
   return { why: rest.trim(), probes, route };
 }
 
-function FitReview({ entry, feedback }: { entry: PipelineEntry; feedback?: VerdictFeedbackTarget }) {
-  if (entry.verdict) return <VerdictCard view={entry.verdict} feedback={feedback} />;
+const REVIEW_ERR: Record<string, string> = {
+  still_processing: "This application is still being processed. Try again in a minute.",
+  nothing_to_review: "There is no LinkedIn profile or resume on file for this application to review.",
+  not_screened: "This person was never screened for this role, so there is nowhere to keep the review.",
+  review_failed: "The review did not come back. Nothing was changed; try again in a moment.",
+  no_scorecard: "This role has no scorecard yet, and one could not be drafted just now. Open the job to see its scorecard, then try again.",
+  save_failed: "The review was made but could not be saved. Try again in a moment.",
+  load_failed: "This application could not be loaded. Try again in a moment.",
+};
+
+/** Someone who applied is reviewed once, when they apply. This reviews them
+ *  again against the role's scorecard as it stands now: their stored LinkedIn
+ *  profile and resume, the same judge. Applicants only; people from a
+ *  sourcing run are reviewed again from the run. The state lives in the
+ *  drawer, so switching tabs mid-review cannot start a second one or lose an
+ *  error. */
+type ReviewControl = { busy: boolean; error: string; run: () => void };
+
+function ReviewAgain({ review, has }: { review?: ReviewControl; has: boolean }) {
+  if (!review) return null;
+  return (
+    <p className="cv2d-rerun">
+      <button type="button" className="ck-link" onClick={review.run} disabled={review.busy}>
+        {review.busy ? "Reviewing their LinkedIn profile and resume, about 20 seconds…" : has ? "Review again" : "Review against this role's scorecard"}
+      </button>
+      {!review.busy && !review.error && (
+        <span className="cv2d-dim"> {has ? "Uses the scorecard as it stands now." : "Reads their LinkedIn profile and resume, and shows where each answer was found."}</span>
+      )}
+      {review.error && <span className="dash-error"> {review.error}</span>}
+    </p>
+  );
+}
+
+function FitReview({ entry, feedback, review }: { entry: PipelineEntry; feedback?: VerdictFeedbackTarget; review?: ReviewControl }) {
+  if (entry.verdict)
+    return (
+      <>
+        <VerdictCard view={entry.verdict} feedback={feedback} />
+        <ReviewAgain review={review} has />
+      </>
+    );
+  // Never screened for this role: there is no verdict row to keep a review on.
   if (!entry.reason) return <p className="cv2d-why cv2d-dim">Not reviewed yet.</p>;
   const { why, probes, route } = splitReason(entry.reason);
   return (
     <>
+      <ReviewAgain review={review} has={false} />
       <p className="cv2d-why">{why}</p>
       {probes.length > 0 && (
         <div className="cv2d-probe">
@@ -222,9 +263,12 @@ function PipelineRows({
   screeningPending = true,
   onOpenJob,
   feedback,
+  review,
 }: {
   /** Makes the verdict's scorecard rows a one-click check-off. */
   feedback?: VerdictFeedbackTarget;
+  /** "Review again" for someone who applied. */
+  review?: ReviewControl;
   entry: PipelineEntry;
   expanded: boolean;
   onToggle: () => void;
@@ -307,7 +351,7 @@ function PipelineRows({
         <tr className="cv2d-preview-row">
           <td colSpan={5}>
             <div className="cv2d-pipe-detail">
-              <FitReview entry={entry} feedback={feedback} />
+              <FitReview entry={entry} feedback={feedback} review={review} />
             </div>
           </td>
         </tr>
@@ -606,6 +650,33 @@ export default function CandidateDrawer({
             ),
         }
       : undefined;
+  };
+
+  // "Review again" for someone who applied. Keyed by person and role and held
+  // here, so it survives a change of tab, and a second click while one review
+  // is running does nothing.
+  const [reviews, setReviews] = useState<Record<string, { busy: boolean; error: string }>>({});
+  const reviewFor = (p: PipelineEntry): ReviewControl | undefined => {
+    const target = feedbackFor(p);
+    if (!target || !target.candidateKey.startsWith("app_")) return undefined;
+    const id = `${target.candidateKey}|${target.jobId}`;
+    const state = reviews[id] || { busy: false, error: "" };
+    return {
+      ...state,
+      run: async () => {
+        if (reviews[id]?.busy) return;
+        setReviews((r) => ({ ...r, [id]: { busy: true, error: "" } }));
+        const res = await fetch("/api/dashboard/rolecard/review", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ candidateKey: target.candidateKey, jobId: target.jobId }),
+        }).catch(() => null);
+        const d = res ? await res.json().catch(() => null) : null;
+        const ok = Boolean(res?.ok && d?.verdict);
+        setReviews((r) => ({ ...r, [id]: { busy: false, error: ok ? "" : REVIEW_ERR[d?.error] || REVIEW_ERR.review_failed } }));
+        if (ok) target.onChanged(d.verdict as VerdictView); // guarded: never lands on the next person
+      },
+    };
   };
 
   const navIndex = itemNav ? navItemIndex! : candKey && navKeys ? navKeys.indexOf(candKey) : -1;
@@ -1254,6 +1325,7 @@ export default function CandidateDrawer({
                               <span className="cv2d-fit-via">{p.via === "applied" ? "applied" : p.via === "sourced" ? "via sourcing run" : p.via}</span>
                             </div>
                             <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} />
+                            <ReviewAgain review={reviewFor(p)} has />
                           </div>
                         ))}
                     </section>
@@ -1370,6 +1442,7 @@ export default function CandidateDrawer({
                               screeningPending={detail.screeningPending !== false}
                               onOpenJob={setOpenJob}
                               feedback={feedbackFor(p)}
+                              review={reviewFor(p)}
                             />
                           ))}
                         </tbody>

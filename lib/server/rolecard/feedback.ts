@@ -42,7 +42,10 @@ async function storedViews(orgId: string, orgRoleId: string, candidateKey: strin
     for (const r of rows) if (isVerdictView(r.verdict)) out.push({ kind: "run", id: r.id, view: r.verdict });
   } else if (candidateId) {
     const res = await sbRest(
-      `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${candidateId}&org_role_id=eq.${orgRoleId}&select=id,verdict`
+      // (by person and role only: screening files its rows under the site's own
+      // organisation whichever board the person applied through, and the role
+      // id is already this organisation's)
+      `match_verdicts?candidate_id=eq.${candidateId}&org_role_id=eq.${orgRoleId}&select=id,verdict`
     );
     const rows = res.ok ? ((await res.json()) as { id: string; verdict: Record<string, unknown> | null }[]) : [];
     for (const r of rows) {
@@ -230,7 +233,7 @@ export async function relabelRole(orgId: string, orgRoleId: string, criteria: Cr
       await sbRest(`sourcing_run_candidates?id=eq.${r.id}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ verdict: next, tag: LEGACY_TAG[next.label] }) });
     });
   }
-  const mvRes = await sbRest(`match_verdicts?organization_id=eq.${orgId}&org_role_id=eq.${orgRoleId}&select=id,candidate_id,verdict&limit=${MAX}`);
+  const mvRes = await sbRest(`match_verdicts?org_role_id=eq.${orgRoleId}&select=id,candidate_id,verdict&limit=${MAX}`);
   const mvRows = mvRes.ok ? ((await mvRes.json()) as { id: string; candidate_id: string; verdict: Record<string, unknown> | null }[]) : [];
   for (const r of mvRows) {
     const v2 = r.verdict?.v2;
