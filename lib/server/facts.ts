@@ -112,13 +112,18 @@ const OTHER_DISCIPLINE =
 const SOFTWARE_TITLE =
   /\b(software|developer|programmer|swe|sde|mts|member of (the )?technical staff|sre|devops|full[- ]?stack|back[- ]?end|front[- ]?end|firmware|embedded|applied scientist|machine learning|ml|data engineer|platform engineer|infrastructure engineer|security engineer|site reliability|cto|chief technology)\b/i;
 const ENGINEER_WORD = /\b(engineer|engineering|architect|tech(nical)? lead)\b/i;
-const ENGINEERING_EVIDENCE =
-  /\b(software|backend|back-end|frontend|front-end|full[- ]?stack|api|apis|microservices?|kubernetes|docker|aws|gcp|azure|python|java|javascript|typescript|golang|rust|c\+\+|sql|postgres\w*|react|node(\.js)?|distributed systems?|infrastructure|codebase|deployed|shipped)\b/i;
+// A row under a non-engineering title is lifted out of "other" only when its
+// own text says engineering work was done: two or more distinct signs. One
+// language tag is not one (a quantitative trader tags Python; so does every
+// analyst), and would have stopped a trader's years reading as a "no".
+const ENGINEERING_SIGNS =
+  /\b(software|backend|back-end|frontend|front-end|full[- ]?stack|apis?|microservices?|kubernetes|docker|terraform|aws|gcp|azure|distributed systems?|infrastructure|codebase|deployed|shipped|ci\/cd|pipelines?|services)\b/gi;
+const saysEngineering = (text: string) => new Set((text.match(ENGINEERING_SIGNS) || []).map((m) => m.toLowerCase())).size >= 2;
 
 export type WorkKind = "engineering" | "other" | "unclassified";
 export function workKind(title: string | null | undefined, rowText = ""): WorkKind {
   const t = title || "";
-  const lift = (k: WorkKind): WorkKind => (k === "other" && ENGINEERING_EVIDENCE.test(rowText) ? "unclassified" : k);
+  const lift = (k: WorkKind): WorkKind => (k === "other" && saysEngineering(rowText) ? "unclassified" : k);
   if (MISLEADING_ENGINEER.test(t)) return lift("other");
   if (/forward[- ]deployed/i.test(t)) return "unclassified";
   // A clear non-engineering function wins over a stray "engineering" in the

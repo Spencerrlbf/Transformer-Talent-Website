@@ -24,7 +24,7 @@ import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import { careerYearsStatus, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
-export const SCORECARD_JUDGE_VERSION = "v8";
+export const SCORECARD_JUDGE_VERSION = "v9";
 
 const ROWS_SYSTEM = `You are a careful technical recruiter checking one candidate against a role's scorecard. You have the candidate's LinkedIn profile (and a resume when supplied), a FACTS block computed in code from their dated positions, and the role. Answer EVERY scorecard row, by its id.
 
@@ -355,8 +355,14 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     if (!r) unassessed++;
     let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";
     let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 180);
-    let quote = (r?.quote || "").trim().slice(0, 140);
+    // Cut a long quote at a separator: a word cut in half is a word that is
+    // "not on the profile", and a real tick was lost that way.
+    const rawQuote = (r?.quote || "").trim();
+    let quote = rawQuote.length <= 160 ? rawQuote : rawQuote.slice(0, 160).replace(/[,;.·]?\s*[^\s,;.·]*$/, "");
+    let dropped: CardRow["dropped"];
     const drop = (why: string) => {
+      // Kept on the row (never shown) so a wrongly removed tick can be found.
+      dropped = { status, quote: rawQuote.slice(0, 200), evidence: evidence.slice(0, 160), why };
       status = "unknown";
       evidence = why;
       quote = "";
@@ -402,7 +408,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     // cannot be met when the dated history is over a year short of it.
     const bar = yearsBar(c.label);
     if (bar != null && datedYears != null && datedYears < bar - 1 && (status === "yes" || status === "equivalent")) drop(`Dated history shows ${datedYears} years against ${bar}+.`);
-    return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}) };
+    return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}), ...(dropped ? { dropped } : {}) };
   });
   if (removed) console.warn(`verdict: ${removed} tick(s) removed: the profile does not say it`);
 

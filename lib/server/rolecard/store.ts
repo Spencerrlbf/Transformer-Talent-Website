@@ -63,7 +63,9 @@ export async function ensureRoleCard(
       techStack: role.tech_stack,
       minYears: role.matching_profile?.min_years ?? null,
     },
-    opts.timeoutMs
+    opts.timeoutMs,
+    // A caller on a short leash (a judging loop) gets one repair at most.
+    opts.timeoutMs ? opts.timeoutMs * 2 : undefined
   );
   if (!draft) {
     draftFailedAt.set(role.id, Date.now());

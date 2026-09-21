@@ -70,6 +70,9 @@ export interface CardRow {
   quote?: string;
   /** Laid on from the role's scorecard: a Required row confirmed on a call. */
   call?: boolean;
+  /** A tick the code removed, as the judge gave it. Never shown: kept so a
+   *  wrongly removed tick can be found and the guard tuned. */
+  dropped?: { status: string; quote: string; evidence: string; why: string };
 }
 
 export interface VerdictCardData {
