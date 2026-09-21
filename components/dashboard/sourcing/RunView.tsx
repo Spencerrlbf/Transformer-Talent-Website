@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
 import VerdictCard from "../candidates/VerdictCard";
+import { isCareerYearsRow, type Criterion } from "@/lib/rolecard";
 
 const ACTIVE = new Set(["previewed", "importing", "ranking", "screening"]);
 
@@ -31,6 +32,19 @@ export default function RunView({
   // "Review again": a two-step button, no native dialog.
   const [reviewAgainArmed, setReviewAgainArmed] = useState(false);
   const [reviewAgainBusy, setReviewAgainBusy] = useState(false);
+  // The role's scorecard, to notice a Required row that profiles cannot answer.
+  const [criteria, setCriteria] = useState<Criterion[] | null>(null);
+  const [callBusy, setCallBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/dashboard/rolecard/${encodeURIComponent(jobId)}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => live && setCriteria(d?.scorecard?.criteria ?? null))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [jobId, token]);
   // Rows opened to their full verdict (paragraph, strip, questions).
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const toggleOpen = (id: string) =>
@@ -139,6 +153,34 @@ export default function RunView({
     }
   }
 
+  // A Required row that almost no profile here answers holds everyone at
+  // "Worth a message". It is the recruiter's call to make it a question for
+  // the call instead; the label then says what is left to confirm.
+  const judgedRows = rows.filter((r) => r.verdict?.card?.rows.length);
+  const silent = (criteria || [])
+    .filter((c) => c.tier === "required" && !c.confirmOnCall && !isCareerYearsRow(c.label))
+    .map((c) => {
+      const marks = judgedRows.map((r) => r.verdict!.card!.rows.find((x) => x.id === c.id)?.status).filter(Boolean);
+      return { c, judged: marks.length, unknown: marks.filter((m) => m === "unknown").length };
+    })
+    .find((x) => x.judged >= 8 && x.unknown / x.judged >= 0.8);
+
+  async function makeCallQuestion(id: string) {
+    if (!criteria || callBusy) return;
+    setCallBusy(true);
+    const next = criteria.map((c) => (c.id === id ? { ...c, confirmOnCall: true } : c));
+    const res = await fetch(`/api/dashboard/rolecard/${encodeURIComponent(jobId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ scorecard: { criteria: next } }),
+    }).catch(() => null);
+    setCallBusy(false);
+    if (!res?.ok) return;
+    setCriteria(next);
+    // Nobody is judged again: saved verdicts are re-labelled under the new setting.
+    await reviewAgain();
+  }
+
   if (!run) return <p className="dash-muted">Loading run…</p>;
 
   const active = ACTIVE.has(run.status);
@@ -244,6 +286,17 @@ export default function RunView({
               {run.status === "ranking" ? "Ranking — results appear in a moment…" : "Nothing here yet."}
             </p>
           ) : (
+            <>
+            {silent && !active && (
+              <div className="dash-src-callhint">
+                <span>
+                  <b>{silent.c.label}</b>: {silent.unknown} of {silent.judged} profiles here do not say. LinkedIn rarely does, and it is holding people at Worth a message.
+                </span>
+                <button type="button" className="dash-btn dash-btn-2" disabled={callBusy || reviewAgainBusy} onClick={() => makeCallQuestion(silent.c.id)}>
+                  {callBusy ? "Saving…" : "Make it a question for the call"}
+                </button>
+              </div>
+            )}
             <table className="dash-src-table">
               <thead>
                 <tr><th></th><th>Candidate</th><th>Review</th><th></th><th></th></tr>
@@ -325,6 +378,7 @@ export default function RunView({
                 ))}
               </tbody>
             </table>
+            </>
           )}
 
           <div className="dash-src-tfoot">

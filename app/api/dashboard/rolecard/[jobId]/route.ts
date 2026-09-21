@@ -15,6 +15,7 @@ const roleDraftInput = (role: RoleForCard): DraftInput => ({
   jd: role.jd,
   description: role.description,
   skills: role.skills,
+  techStack: role.tech_stack,
   minYears: role.matching_profile?.min_years ?? null,
 });
 

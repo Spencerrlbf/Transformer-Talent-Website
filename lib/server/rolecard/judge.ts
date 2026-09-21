@@ -52,6 +52,8 @@ function inputHash(a: JudgeForRoleArgs, factLines: string[]): string {
         skills: a.input.skills,
         minYears: a.input.minYears,
         targets: [...a.roleTargets].map((t) => t.toLowerCase()).sort(),
+        // Not confirmOnCall: it changes the label, never how a row is read,
+        // so flipping it re-labels saved verdicts without judging anyone again.
         criteria: a.criteria.map((c) => [c.id, c.label, c.tier, c.good || ""]),
       },
       person: {
@@ -86,7 +88,7 @@ export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> 
   ).catch(() => null);
   const [cached] = hit?.ok ? ((await hit.json().catch(() => [])) as { verdict: unknown }[]) : [];
   if (cached && isVerdictView(cached.verdict)) {
-    return { view: applyOverrides(cached.verdict, ctx.overrides, ctx.wrongRole), saved: true };
+    return { view: applyOverrides(cached.verdict, ctx.overrides, ctx.wrongRole, a.criteria), saved: true };
   }
 
   const judged = await judgeVerdict({ ...a.input, criteria: a.criteria, confirmedFacts: factLines });
@@ -116,5 +118,5 @@ export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> 
   // The model call takes seconds: a row checked off meanwhile must not be
   // written over, so the recruiter's word is read again before it is laid on.
   const now = await loadPersonContext(a.orgId, a.orgRoleId, a.personKey).catch(() => ctx);
-  return { view: applyOverrides(view, now.overrides, now.wrongRole), saved: false };
+  return { view: applyOverrides(view, now.overrides, now.wrongRole, a.criteria), saved: false };
 }

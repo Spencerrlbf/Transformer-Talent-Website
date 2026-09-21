@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     title,
     jd: { about, doing: list(body?.doing, 15), needs, bonus: list(body?.bonus, 8) },
     skills,
+    techStack: skills.map((s) => [s.skill, ...s.alternates].join(" / ")).join(", ") || null,
     minYears: Number.isFinite(yoeMin) && yoeMin > 0 ? Math.round(yoeMin) : null,
   });
   if (!draft) return NextResponse.json({ error: "draft_failed" }, { status: 502 });

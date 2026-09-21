@@ -5,7 +5,7 @@
 // re-stamped so tables, boards and drawers show the new label at once.
 
 import { sbRest } from "../supabase";
-import { applyOverrides, type RowStatus } from "@/lib/rolecard";
+import { applyOverrides, isScorecard, type Criterion, type RowStatus } from "@/lib/rolecard";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { loadPersonContext, personKey, syncPersonFacts } from "./store";
 
@@ -18,12 +18,12 @@ export interface Who {
   name: string;
 }
 
-export async function roleByExternalId(orgId: string, jobId: string): Promise<{ id: string; title: string } | null> {
+export async function roleByExternalId(orgId: string, jobId: string): Promise<{ id: string; title: string; criteria: Criterion[] } | null> {
   const res = await sbRest(
-    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=id,title&limit=1`
+    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=id,title,scorecard&limit=1`
   );
-  const [row] = res.ok ? ((await res.json()) as { id: string; title: string }[]) : [];
-  return row || null;
+  const [row] = res.ok ? ((await res.json()) as { id: string; title: string; scorecard: unknown }[]) : [];
+  return row ? { id: row.id, title: row.title, criteria: isScorecard(row.scorecard) ? row.scorecard.criteria : [] } : null;
 }
 
 type Stored =
@@ -55,13 +55,13 @@ async function storedViews(orgId: string, orgRoleId: string, candidateKey: strin
 
 /** Lay the current feedback over every stored copy. Returns the copy the
  *  caller is looking at (`showing`, a run row id) or else the newest. */
-async function restamp(orgId: string, orgRoleId: string, key: string, copies: Stored[], showing?: string | null): Promise<VerdictView | null> {
+async function restamp(orgId: string, orgRoleId: string, key: string, copies: Stored[], criteria: Criterion[], showing?: string | null): Promise<VerdictView | null> {
   const ctx = await loadPersonContext(orgId, orgRoleId, key);
   let shown: VerdictView | null = null;
   let newest: VerdictView | null = null;
   for (const c of copies) {
     if (!c.view.card?.rows.length) continue;
-    const view = applyOverrides(c.view, ctx.overrides, ctx.wrongRole);
+    const view = applyOverrides(c.view, ctx.overrides, ctx.wrongRole, criteria.length ? criteria : undefined);
     const res =
       c.kind === "run"
         ? await sbRest(`sourcing_run_candidates?id=eq.${c.id}`, {
@@ -147,7 +147,7 @@ export async function setRowOverride(t: Target & { criterionId: string; status: 
       if (!up.ok) return { ok: false, error: "save_failed" };
     }
     const [view] = await Promise.all([
-      restamp(t.orgId, role.id, person.key, copies, t.membershipId),
+      restamp(t.orgId, role.id, person.key, copies, role.criteria, t.membershipId),
       syncPersonFacts(t.orgId, person.key).catch(() => undefined),
     ]);
     return view ? { ok: true, view } : { ok: false, error: "no_card" };
@@ -184,7 +184,7 @@ export async function setWrongRole(t: Target & { on: boolean }): Promise<Feedbac
           { method: "DELETE", prefer: "return=minimal" }
         );
     if (!res.ok) return { ok: false, error: "save_failed" };
-    const view = await restamp(t.orgId, role.id, person.key, copies, t.membershipId);
+    const view = await restamp(t.orgId, role.id, person.key, copies, role.criteria, t.membershipId);
     return view ? { ok: true, view } : { ok: false, error: "no_card" };
   } catch (e) {
     console.error("rolecard wrong-role failed", e);

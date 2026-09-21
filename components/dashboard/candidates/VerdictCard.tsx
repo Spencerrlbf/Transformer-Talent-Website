@@ -44,6 +44,7 @@ export default function VerdictCard({
     return (
       <div className="vc vc-compact">
         <span className={`dash-tag ${VERDICT_CLASS[view.label]}`}>{VERDICT_LABEL[view.label]}</span>
+        {!!view.card?.confirm?.length && <span className="vc-confirm" title="Profiles rarely say this, so this role confirms it on a call. Everything else Required is met.">confirm {view.card.confirm.join(", ")}</span>}
         <p className="vc-first">{firstSentences(view.paragraph, 2)}</p>
         {chips.length > 0 && (
           <div className="vc-chips">
@@ -62,8 +63,16 @@ export default function VerdictCard({
     <div className="vc">
       <div className="vc-head">
         <span className={`dash-tag ${VERDICT_CLASS[view.label]}`}>{VERDICT_LABEL[view.label]}</span>
+        {!!view.card?.confirm?.length && <span className="vc-confirm" title="Profiles rarely say this, so this role confirms it on a call. Everything else Required is met.">confirm {view.card.confirm.join(", ")}</span>}
         {moved && <span className="vc-was">with confirmed rows · the AI alone read {VERDICT_LABEL[view.card!.aiLabel]}</span>}
       </div>
+      {!!view.card?.facts?.length && (
+        <ul className="vc-facts" title="Worked out from the dated positions on the profile, not written by the AI">
+          {view.card.facts.map((f, i) => (
+            <li key={i}>{f}</li>
+          ))}
+        </ul>
+      )}
       <p className="cv2d-why">{view.paragraph}</p>
       {/* With a scorecard the rows say what is missing, with evidence, and
           they stay true after a recruiter overrules one; the judge's own

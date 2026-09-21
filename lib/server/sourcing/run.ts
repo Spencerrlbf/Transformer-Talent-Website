@@ -20,7 +20,7 @@
 import crypto from "node:crypto";
 import { sbRest, sbRpc } from "../supabase";
 import { embedTexts } from "../roles-pipeline";
-import { computeFacts, formatFacts } from "../facts";
+import { computeFacts, formatFacts, jobTexts } from "../facts";
 import { harvestToExperiences, linkedinProfileText } from "../spine";
 import { splitStack } from "../scorecard";
 import { TAG_LABEL } from "../client-reason";
@@ -466,13 +466,18 @@ async function screenOneRow(
         jdText: ctx.jdText,
         skills: ctx.judgeSkills.map((s) => ({ skill: s.skill, mustHave: s.must_have, alternates: s.alternates })),
         minYears: ctx.minYears,
-        targetedCompanies: ctx.targetedCompanies,
+        // The companies the EMPLOYER named for the role. The companies a
+        // recruiter happened to filter this search on are not the employer's
+        // targets, and a note that called them that was simply false.
+        targetedCompanies: ctx.roleTargets,
         employerContext: employerLine,
         candidateName: cand?.full_name || "Candidate",
         profileText: linkedinProfileText(profile).slice(0, 5000),
         resumeText: null,
         factsBlock: formatFacts(facts),
         careerYears: facts.careerYears,
+        facts,
+        jobs: jobTexts(expRows, education),
         model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
         timeoutMs: SCREEN_LLM_TIMEOUT_MS,
         onError: (info) => { llmErr = info; },

@@ -4,6 +4,7 @@
 // client renders and edits with them.
 
 import { shortRequirement, type VerdictLabel, type VerdictView } from "./verdict-view";
+import { technologiesNamed } from "./tech-terms";
 
 export type Tier = "exceptional" | "required" | "bonus";
 export const TIERS: Tier[] = ["exceptional", "required", "bonus"];
@@ -19,6 +20,10 @@ export interface Criterion {
   tier: Tier;
   /** What good looks like, in the hiring manager's words. Optional. */
   good?: string;
+  /** Required rows only: profiles rarely say this, so it is confirmed on a
+   *  call. While it reads "not shown" it does not hold the label back; the
+   *  label says what is still to confirm ("Contact now · confirm TypeScript"). */
+  confirmOnCall?: boolean;
 }
 
 export interface Scorecard {
@@ -61,6 +66,10 @@ export interface CardRow {
   confirmed?: { by: string; at: string; note?: string } | null;
   /** The row as a chip ("4+ years", "TypeScript"), set when the view is built. */
   short?: string;
+  /** The words from the person's own profile that decide a yes or equivalent. */
+  quote?: string;
+  /** Laid on from the role's scorecard: a Required row confirmed on a call. */
+  call?: boolean;
 }
 
 export interface VerdictCardData {
@@ -73,6 +82,10 @@ export interface VerdictCardData {
   railNote?: string | null;
   /** How strongly the rows are met, for ordering people inside one label. */
   strength?: number;
+  /** Required rows still to confirm on a call, as chips, when that is all that stands between the person and the label. */
+  confirm?: string[];
+  /** Facts about the person, written by code from dated positions (never by a model). */
+  facts?: string[];
   wrongRole?: { by: string; at: string } | null;
 }
 
@@ -132,7 +145,8 @@ export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev
       for (let n = 2; reserved.has(id); n++) id = `${base}-${n}`;
       reserved.add(id);
     }
-    criteria.push(good ? { id, label, tier, good } : { id, label, tier });
+    const confirmOnCall = tier === "required" && (c as Criterion)?.confirmOnCall === true;
+    criteria.push({ id, label, tier, ...(good ? { good } : {}), ...(confirmOnCall ? { confirmOnCall } : {}) });
   });
   if (!criteria.length) return null;
   return {
@@ -145,15 +159,24 @@ export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev
 
 /** The label by fixed rules. A required row that is "no" is a pass; every
  *  required row yes or equivalent is contact; anything else is worth a
- *  message. "Not shown" never pushes to pass. With no required rows there is
- *  nothing to rule on, so the judge's own label stands. */
-export function labelFromRows(rows: Pick<CardRow, "tier" | "status">[], fallback: VerdictLabel): VerdictLabel {
+ *  message. "Not shown" never pushes to pass. A required row the role marks
+ *  "confirm on a call" does not hold the label back while it is not shown
+ *  (profiles rarely say it), but at least one required row must actually be
+ *  met: nobody reaches contact on silence alone. With no required rows there
+ *  is nothing to rule on, so the judge's own label stands. */
+export function labelFromRows(rows: Pick<CardRow, "tier" | "status" | "call">[], fallback: VerdictLabel): VerdictLabel {
   const required = rows.filter((r) => r.tier === "required");
   if (!required.length) return fallback;
   if (required.some((r) => r.status === "no")) return "pass";
-  if (required.every((r) => r.status === "yes" || r.status === "equivalent")) return "contact";
+  const isMet = (r: Pick<CardRow, "status">) => r.status === "yes" || r.status === "equivalent";
+  const deciding = required.filter((r) => !(r.call && r.status === "unknown"));
+  if (deciding.length && deciding.every(isMet)) return "contact";
   return "message";
 }
+
+/** The required rows still to confirm on a call, for a person the rows make a contact. */
+export const toConfirm = (rows: Pick<CardRow, "tier" | "status" | "call" | "label" | "short">[]): string[] =>
+  rows.filter((r) => r.tier === "required" && r.call && r.status === "unknown").map((r) => r.short || chipLabel(r.label));
 
 /** A criterion that states a years bar ("4+ years of software engineering"). */
 export const yearsBar = (label: string): number | null => {
@@ -180,12 +203,15 @@ export const tally = (rows: Pick<CardRow, "tier" | "status" | "likely">[], tier:
 };
 
 /** How strongly a card is met: orders people who share a label. Required
- *  rows weigh most; a "likely" is worth half a yes; a no counts against. */
+ *  rows weigh most. Only a Required "no" counts against: Exceptional and
+ *  Bonus rows never count against anyone, as the scorecard promises. Where
+ *  someone works is not in here: it is a fact shown once about the person,
+ *  not a score pasted onto rows. */
 const TIER_WEIGHT: Record<Tier, number> = { required: 3, exceptional: 2, bonus: 1 };
-export function cardStrength(rows: Pick<CardRow, "tier" | "status" | "likely">[]): number {
+export function cardStrength(rows: Pick<CardRow, "tier" | "status">[]): number {
   let total = 0;
   for (const r of rows) {
-    const f = r.status === "yes" ? 1 : r.status === "equivalent" ? 0.8 : r.status === "no" ? -1 : r.likely ? 0.5 : 0;
+    const f = r.status === "yes" ? 1 : r.status === "equivalent" ? 0.8 : r.status === "no" && r.tier === "required" ? -1 : 0;
     total += TIER_WEIGHT[r.tier] * f;
   }
   return Math.round(total * 10) / 10;
@@ -198,18 +224,37 @@ const GENERIC_YEARS = /(years|yrs)\s+(of\s+)?((professional|industry|relevant|to
  *  engineering"). Code decides these from the dated history; no model does
  *  arithmetic. A years row with a subject ("5 years building distributed
  *  systems") needs reading, so the judge keeps it. */
-export const isCareerYearsRow = (label: string): boolean =>
-  yearsBar(label) != null && GENERIC_YEARS.test(label.replace(/\(.*?\)/g, "").trim());
+export const isCareerYearsRow = (label: string): boolean => {
+  if (yearsBar(label) == null) return false;
+  // What is left once the years phrase is taken out must be nothing but a
+  // generic word for the career: "4+ years software engineering", "4+ years
+  // as a software engineer", "3-5 years of backend development experience".
+  const rest = label.replace(/\(.*?\)/g, " ").replace(YEARS_PHRASE, " ").replace(/[.,;:]/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  return /^((as an?|in|of)\s+)?((professional|industry|relevant|total|overall|commercial|hands[- ]on|working)\s+)*((software|backend|back-end|frontend|front-end|full[- ]?stack)\s+)?(engineers?|engineering|developers?|development|experience|work)(\s+(experience|roles?|work))?$/.test(rest);
+};
 
-/** The career-years row by rule. At or over the bar: yes. Within a year of
- *  it: not shown (dated histories are often partial, and close is worth a
- *  conversation). More than a year short: no. */
-export function careerYearsStatus(careerYears: number | null, bar: number): { status: RowStatus; evidence: string } {
-  if (careerYears == null) return { status: "unknown", evidence: "No dated positions on the profile." };
-  const said = `${careerYears} years of dated career history against ${bar}+.`;
-  if (careerYears >= bar) return { status: "yes", evidence: said };
-  if (careerYears >= bar - 1) return { status: "unknown", evidence: `${said} Close; early roles may be missing.` };
-  return { status: "no", evidence: said };
+/** What the years row is decided from (a subset of the server's CandidateFacts). */
+export interface YearsFacts {
+  engineeringYears: number | null;
+  unclassifiedYears: number;
+  careerYears: number | null;
+}
+
+/** The career-years row by rule, on ENGINEERING years: a trader's or a
+ *  consultant's years are a career, not software engineering. At or over the
+ *  bar: yes. "No" needs even engineering + unclassified years (titles the
+ *  lists do not recognise) to fall more than a year short, so an unusual
+ *  title can never make a senior person a Pass. Anything between is "not
+ *  shown": close is worth a conversation. */
+export function careerYearsStatus(f: YearsFacts | null, bar: number): { status: RowStatus; evidence: string } {
+  if (!f || f.engineeringYears == null) return { status: "unknown", evidence: "No dated positions on the profile." };
+  const eng = f.engineeringYears;
+  const career = f.careerYears ?? eng;
+  const y = (n: number) => `${n} ${n === 1 ? "year" : "years"}`;
+  const said = career - eng >= 0.5 ? `${y(eng)} in engineering roles (${y(career)} of career in all) against ${bar}+.` : `${y(eng)} in engineering roles against ${bar}+.`;
+  if (eng >= bar) return { status: "yes", evidence: said };
+  if (eng + f.unclassifiedYears < bar - 1) return { status: "no", evidence: said };
+  return { status: "unknown", evidence: `${said} Close to the bar.` };
 }
 
 const YEARS_PHRASE = /(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?(\d{1,2}\s*(-|–|—|to)\s*)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i;
@@ -217,7 +262,12 @@ const tidyChip = (x: string) => x.replace(/…$/, "").replace(/[,;:.\s]+$/, "").
 
 export function chipLabel(label: string, roleSkills: string[] = []): string {
   const bar = yearsBar(label);
-  if (bar == null) return shortRequirement(label, roleSkills);
+  if (bar == null) {
+    // A row that names its technology reads as that technology:
+    // "Backend in TypeScript/Node.js (Go, Java accepted)" is "TypeScript/Node.js".
+    const named = technologiesNamed(label.replace(/\(.*?\)/g, " ")).map((g) => g[0]);
+    return named.length && !roleSkills.length ? named.slice(0, 2).join("/") : shortRequirement(label, roleSkills);
+  }
   // "4+ years of software engineering" is just the bar.
   if (isCareerYearsRow(label)) return `${bar}+ years`;
   const rest = label.replace(YEARS_PHRASE, " ").replace(/\s+/g, " ").trim();
@@ -239,31 +289,34 @@ const met = (s: RowStatus) => s === "yes" || s === "equivalent";
 export function applyOverrides(
   judged: VerdictView,
   overrides: RowOverride[],
-  wrongRole: { by: string; at: string } | null = null
+  wrongRole: { by: string; at: string } | null = null,
+  /** The role's scorecard as it stands now. "Confirm on a call" is a setting
+   *  of the role, not of the verdict: laid on here, a saved verdict follows
+   *  the role's current setting without being judged again. Omitted, the
+   *  flags already on the rows stand. */
+  criteria?: Pick<Criterion, "id" | "confirmOnCall">[]
 ): VerdictView {
   const card = judged.card;
   if (!card?.rows.length) return judged;
   const byId = new Map(overrides.map((o) => [o.criterionId, o]));
+  const callIds = criteria ? new Set(criteria.filter((c) => c.confirmOnCall).map((c) => c.id)) : null;
   const rows: CardRow[] = card.rows.map((r) => {
     const hit = byId.get(r.id);
     const o = hit && (!hit.label || sameLabel(hit.label, r.label)) ? hit : undefined;
-    // A confirmed row is what the recruiter knows, so it is no longer a
-    // "likely"; taking the overrule back restores the judge's own reading.
-    const judgedLikely = r.aiLikely ?? r.likely ?? false;
+    const call = r.tier === "required" && (callIds ? callIds.has(r.id) : !!r.call);
     return o
-      ? { ...r, status: o.status, likely: false, aiLikely: judgedLikely, confirmed: { by: o.by, at: o.at, ...(o.note ? { note: o.note } : {}) } }
-      : { ...r, status: r.ai, likely: r.ai === "unknown" && judgedLikely, aiLikely: judgedLikely, confirmed: null };
+      ? { ...r, call, status: o.status, likely: false, confirmed: { by: o.by, at: o.at, ...(o.note ? { note: o.note } : {}) } }
+      : { ...r, call, status: r.ai, likely: false, confirmed: null };
   });
-  const touched = rows.some((r) => r.confirmed);
-  // Untouched, the judged label stands (it carries the years rail). Touched,
-  // the rows decide; the rail still holds unless a years row was confirmed.
-  let label = card.aiLabel;
-  if (touched) {
-    label = labelFromRows(rows, card.aiLabel);
-    const railed = card.aiLabel !== labelFromRows(card.rows.map((r) => ({ tier: r.tier, status: r.ai })), card.aiLabel);
-    const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && isCareerYearsRow(r.label));
-    if (railed && label === "contact" && !yearsConfirmed) label = "message";
-  }
+  // The label always follows the rows by the fixed rules. The years rail
+  // (dated engineering history more than a year under the role's minimum)
+  // still holds a contact at message unless a years row was confirmed.
+  const railed = !!card.railNote;
+  const rail = (l: VerdictLabel, confirmedYears: boolean) => (railed && l === "contact" && !confirmedYears ? "message" : l);
+  const aiRows = rows.map((r) => ({ tier: r.tier, status: r.ai, call: r.call }));
+  const aiLabel = rail(labelFromRows(aiRows, card.aiLabel), false);
+  const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && isCareerYearsRow(r.label));
+  const label = rail(labelFromRows(rows, card.aiLabel), yearsConfirmed);
   const baseGaps = card.aiGaps ?? judged.tech.gaps;
   const chipOf = (r: CardRow) => r.short || chipLabel(r.label);
   const closed = new Set(rows.filter((r) => r.confirmed && met(r.status)).map((r) => chipOf(r).toLowerCase()));
@@ -277,26 +330,27 @@ export function applyOverrides(
     ...judged,
     label,
     tech: { ...judged.tech, gaps: gaps.slice(0, 6) },
-    card: { ...card, rows, aiGaps: baseGaps, wrongRole, strength: cardStrength(rows) },
+    card: { ...card, rows, aiLabel, aiGaps: baseGaps, wrongRole, strength: cardStrength(rows), confirm: label === "contact" ? toConfirm(rows) : [] },
   };
 }
 
 // ---------- a judge that answers in probabilities ----------
 
-/** How a probability spread becomes a mark. A "no" on a Required row makes a
- *  person a Pass, so it must be confident; "met" needs a clear majority across
- *  yes and equivalent; anything else is "not shown", which never sinks anyone.
- *  Tuned once on the first comparison run (job 16): at 0.7 a "no" was wrong
- *  or too harsh in about half of seven cases, and a met lean of 0.59 was cut
- *  by a hair. To be tuned further against the recruiter's own check-offs. */
-export const ROUTE = { noAtLeast: 0.85, metAtLeast: 0.55 } as const;
+/** How a probability spread becomes a mark, for a judge that answers in
+ *  probabilities. "Met" needs three things: a clear majority across yes and
+ *  equivalent, a met class that beats "not shown" on its own, and an answer
+ *  the model is not shrugging at. A "no" is NEVER routed: on thin profiles
+ *  such a judge leans to "ruled out" (a data scientist now at an agents
+ *  startup read 0.72 to 0.85 on five rows), and a no can make someone a
+ *  Pass. Pass is decided by code (the years rule) or by a recruiter.
+ *  Fitted on one run of 17 people; to be refitted on recruiter check-offs. */
+export const ROUTE = { metAtLeast: 0.55, confidenceAtLeast: 0.3 } as const;
 
-export function routeStatus(p: Partial<Record<RowStatus, number>>): RowStatus {
+export function routeStatus(p: Partial<Record<RowStatus, number>>, confidence = 1): RowStatus {
   const yes = p.yes || 0;
   const eq = p.equivalent || 0;
-  if ((p.no || 0) >= ROUTE.noAtLeast) return "no";
-  if (yes + eq >= ROUTE.metAtLeast) return yes >= eq ? "yes" : "equivalent";
-  return "unknown";
+  const met = yes + eq >= ROUTE.metAtLeast && Math.max(yes, eq) > (p.unknown || 0) && confidence >= ROUTE.confidenceAtLeast;
+  return met ? (yes >= eq ? "yes" : "equivalent") : "unknown";
 }
 
 /** What a mark means to the label rules: yes and equivalent are the same. */

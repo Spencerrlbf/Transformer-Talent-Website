@@ -49,6 +49,20 @@ export interface SkillCoOccurrence {
 }
 
 export interface CandidateFacts {
+  /** Post-graduation, non-internship years in ENGINEERING titles. What a
+   *  "4+ years software engineering" row is about: a trader's or a
+   *  consultant's years are a career, not engineering. */
+  engineeringYears: number | null;
+  /** Career years under titles that say neither (R&D, Founder, Forward
+   *  Deployed Engineer). Never enough on their own for a yes, but they stop a
+   *  "no": an unusual title must not make a senior person a Pass. */
+  unclassifiedYears: number;
+  /** Career years in work that is clearly not engineering, with what it was. */
+  otherYears: number;
+  otherWork: string[];
+  /** The latest-starting current career role, and how long they have held it. */
+  currentSince: string | null;
+  currentTenureYears: number | null;
   careerYears: number | null; // post-graduation, non-internship
   careerSince: string | null; // e.g. "Aug 2022"
   excludedCount: number; // internships/clinics/pre-graduation positions
@@ -61,9 +75,33 @@ export interface CandidateFacts {
   coOccurrences: SkillCoOccurrence[];
 }
 
+// Student-era and side roles: not a career position at all.
 const NON_CAREER_TITLE =
-  /\bintern(ship)?\b|co-?op\b|\bclinic\b|\bfellow(ship)?\b|research assistant|teaching assistant|\bapprentice\b/i;
+  /\bintern(ship)?\b|co-?op\b|\bclinic\b|\bfellow(ship)?\b|research assistant|teaching assistant|learning assistant|\bapprentice\b|\bundergraduate\b|\bstudent\b|\btutor\b|\bclub\b|\bsociety\b|\bvolunteer\b|co-?president|\bpresident of\b|board member|\borganizer\b|coding instructor/i;
 const NON_CAREER_TYPE = /intern|part-?time|apprentice/i;
+const INTERN_TITLE = /\bintern(ship)?\b|co-?op\b/i;
+
+// What kind of work a career title is. Three buckets, because a list of
+// engineering titles is never complete and the years row can make someone a
+// Pass: "engineering" counts toward the bar, "other" does not, and anything
+// the lists do not recognise is "unclassified" (it cannot give a yes, but it
+// blocks a no). Titles where "engineer" misleads are denied first.
+const MISLEADING_ENGINEER = /\b(sales|solutions?|support|customer|field|pre-?sales) engineer/i;
+const AMBIGUOUS_ENGINEER = /forward[- ]deployed/i;
+const ENGINEERING_TITLE =
+  /\b(engineer|engineering|developer|programmer|swe|sde|mts|member of (the )?technical staff|architect|sre|devops|tech(nical)? lead|cto|chief technology|software|full[- ]?stack|back[- ]?end|front[- ]?end|firmware|embedded|applied scientist|machine learning|ml)\b/i;
+const OTHER_WORK_TITLE =
+  /\b(sales|marketing|recruit\w*|talent|consult(ant|ing)|strateg\w*|analyst|trader|trading|portfolio|investment|banker|banking|actuar\w*|accountant|auditor|associate|product (manager|owner)|program manager|project manager|designer|teacher|instructor|professor|lecturer|editor|writer|musician|bassist|data scientist|statistic\w*|economist|physicist|chemist|researcher|research (scientist|associate)|operations|chief of staff|counsel|paralegal|nurse|physician)\b/i;
+
+export type WorkKind = "engineering" | "other" | "unclassified";
+export function workKind(title: string | null | undefined): WorkKind {
+  const t = title || "";
+  if (MISLEADING_ENGINEER.test(t)) return "other";
+  if (AMBIGUOUS_ENGINEER.test(t)) return "unclassified";
+  if (ENGINEERING_TITLE.test(t)) return "engineering";
+  if (OTHER_WORK_TITLE.test(t)) return "other";
+  return "unclassified";
+}
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -148,7 +186,19 @@ interface ClassifiedRow {
 }
 
 function classify(rows: ExperienceRow[], gradYear: number | null, nowY: number, nowM: number): ClassifiedRow[] {
-  const gradM = gradYear ? gradYear * 12 + 6 : null; // graduation assumed mid-year
+  let gradM = gradYear ? gradYear * 12 + 6 : null; // graduation assumed mid-year
+  if (gradM == null) {
+    // No graduation year on the profile: the career starts when the last
+    // internship ends, the way a recruiter counts it. Without this, student
+    // jobs ("Web Developer", 2021) read as career years and someone two years
+    // out of school shows 4+. Only when the internship sits in the first
+    // years of the history, so a mid-career placement cannot cut a career.
+    const ivs = rows.map((r) => ({ r, iv: interval(r, nowY, nowM) })).filter((x): x is { r: ExperienceRow; iv: [number, number] } => !!x.iv);
+    const first = ivs.length ? Math.min(...ivs.map((x) => x.iv[0])) : null;
+    const internEnds = ivs.filter((x) => INTERN_TITLE.test(x.r.title || "")).map((x) => x.iv[1]);
+    const lastInternEnd = internEnds.length ? Math.max(...internEnds) : null;
+    if (first != null && lastInternEnd != null && lastInternEnd - first <= 6 * 12) gradM = lastInternEnd;
+  }
   return rows.map((row) => {
     const iv = interval(row, nowY, nowM);
     const titleSaysNo = NON_CAREER_TITLE.test(row.title || "");
@@ -186,7 +236,25 @@ export function computeFacts(
     ? `${MONTH_NAMES[(firstStart % 12 || 12) - 1]} ${Math.floor((firstStart - 1) / 12)}`
     : null;
 
-  const current = careerRows.find((c) => c.row.is_current)?.row || rows.find((r) => r.is_current) || rows[0] || null;
+  // The current role is the latest-STARTING current career row: someone with
+  // two "Present" entries (an old job never closed, a new one) is in the new one.
+  const currentCareer = careerRows
+    .filter((c) => c.row.is_current && c.iv)
+    .sort((a, b) => (b.iv as [number, number])[0] - (a.iv as [number, number])[0])[0];
+  const current = currentCareer?.row || careerRows.find((c) => c.row.is_current)?.row || rows.find((r) => r.is_current) || rows[0] || null;
+  const currentIv = currentCareer?.iv || null;
+
+  // Engineering years: what kind of work each career position was.
+  const kinds = careerRows.map((c) => ({ c, kind: workKind(c.row.title) }));
+  const engIvs = kinds.filter((k) => k.kind === "engineering").map((k) => k.c.iv).filter((i): i is [number, number] => !!i);
+  const unclIvs = kinds.filter((k) => k.kind === "unclassified").map((k) => k.c.iv).filter((i): i is [number, number] => !!i);
+  const engineeringYears = careerIvs.length ? mergedYears(engIvs) : rows.length ? 0 : null;
+  const engOrUncl = mergedYears([...engIvs, ...unclIvs]);
+  const careerTotal = careerIvs.length ? mergedYears(careerIvs) : 0;
+  const otherWork = kinds
+    .filter((k) => k.kind === "other" && k.c.iv)
+    .map((k) => `${k.c.row.title}${k.c.row.company_name ? ` at ${k.c.row.company_name}` : ""} ${mergedYears([k.c.iv as [number, number]])}y`)
+    .slice(0, 3);
 
   const skills: SkillFact[] = [];
   for (const skill of [...new Set(skillTerms.map((s) => s.trim()).filter(Boolean))].slice(0, 20)) {
@@ -231,6 +299,12 @@ export function computeFacts(
   coOccurrences.sort((a, b) => Number(b.career) - Number(a.career) || b.skills.length - a.skills.length);
 
   return {
+    engineeringYears,
+    unclassifiedYears: Math.max(0, Math.round((engOrUncl - (engineeringYears || 0)) * 10) / 10),
+    otherYears: Math.max(0, Math.round((careerTotal - engOrUncl) * 10) / 10),
+    otherWork,
+    currentSince: currentIv ? `${MONTH_NAMES[(currentIv[0] % 12 || 12) - 1]} ${Math.floor((currentIv[0] - 1) / 12)}` : null,
+    currentTenureYears: currentIv ? mergedYears([currentIv]) : null,
     careerYears: careerIvs.length ? mergedYears(careerIvs) : rows.length ? 0 : null,
     careerSince,
     excludedCount: excludedRows.length,
@@ -240,6 +314,29 @@ export function computeFacts(
     skills,
     coOccurrences: coOccurrences.slice(0, 4),
   };
+}
+
+/** Each position as the text a technology can be found in (title, position
+ *  skills, description), with whether it is a career position. A scorecard
+ *  row that names a technology is met on a JOB, not on the profile's skills
+ *  list and not on an internship alone. */
+export interface JobText {
+  title: string;
+  company: string;
+  career: boolean;
+  current: boolean;
+  text: string;
+}
+export function jobTexts(experiences: ExperienceRow[], education: unknown = null): JobText[] {
+  const now = new Date();
+  const rows = [...experiences].sort((a, b) => a.sort_order - b.sort_order);
+  return classify(rows, undergradEndYear(education), now.getUTCFullYear(), now.getUTCMonth() + 1).map((c) => ({
+    title: c.row.title || "",
+    company: c.row.company_name || "",
+    career: c.career,
+    current: !!c.row.is_current,
+    text: [c.row.title, (c.row.skills || []).join(", "), c.row.description].filter(Boolean).join("\n"),
+  }));
 }
 
 export async function fetchExperiences(candidateId: string): Promise<ExperienceRow[]> {
@@ -268,8 +365,18 @@ export function formatFacts(facts: CandidateFacts): string {
       );
     }
   }
+  if (facts.engineeringYears !== null && facts.careerYears !== null && (facts.otherYears > 0 || facts.unclassifiedYears > 0)) {
+    lines.push(
+      `Engineering experience: ${facts.engineeringYears} years in engineering titles` +
+        (facts.otherYears > 0 ? `; ${facts.otherYears}y in other work${facts.otherWork.length ? ` (${facts.otherWork.join("; ")})` : ""}` : "") +
+        (facts.unclassifiedYears > 0 ? `; ${facts.unclassifiedYears}y under titles that do not say` : "")
+    );
+  }
   if (facts.currentTitle) {
-    lines.push(`Current role: ${facts.currentTitle}${facts.currentCompany ? ` at ${facts.currentCompany}` : ""}`);
+    lines.push(
+      `Current role: ${facts.currentTitle}${facts.currentCompany ? ` at ${facts.currentCompany}` : ""}` +
+        (facts.currentSince ? `, since ${facts.currentSince}${facts.currentTenureYears != null ? ` (${facts.currentTenureYears}y)` : ""}` : "")
+    );
   }
   for (const co of facts.coOccurrences) {
     lines.push(
@@ -280,7 +387,7 @@ export function formatFacts(facts: CandidateFacts): string {
     if (s.listedOnly) {
       lines.push(`${s.skill}: listed on profile, no dated position evidence`);
     } else if (s.years === 0 && s.usedInInternships) {
-      lines.push(`${s.skill}: used during internships only`);
+      lines.push(`${s.skill}: tagged on an internship only; other use not shown`);
     } else {
       lines.push(
         `${s.skill}: ${s.years}y career${s.usedInCurrentRole ? ", incl. current role" : ""} (${s.positions[0] || "prior role"})${s.usedInInternships ? "; also used in internships" : ""}`

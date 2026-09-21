@@ -166,6 +166,11 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                 <div className="ck-body">
                   <div className="ck-label">
                     {r.label}
+                    {r.call && r.status === "unknown" && (
+                      <span className="ck-call" title="Profiles rarely say this, so this role confirms it on a call. While it is not shown it does not hold the label back.">
+                        confirm on a call
+                      </span>
+                    )}
                     {r.likely && (
                       <span className="ck-likely" title="Not shown on the profile, but their role at an employer whose business is exactly this makes it probable. It does not count as met. Ask about it, then check it off.">
                         likely
@@ -192,7 +197,12 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                       )}
                     </div>
                   ) : (
-                    r.evidence && <div className="ck-ev">{r.evidence}</div>
+                    (r.evidence || r.quote) && (
+                      <div className="ck-ev">
+                        {r.evidence}
+                        {r.quote && <span className="ck-quote" title="Copied from the profile or resume"> Profile: &ldquo;{r.quote}&rdquo;</span>}
+                      </div>
+                    )
                   )}
                   {noteFor === r.id && feedback && r.confirmed && (
                     <form

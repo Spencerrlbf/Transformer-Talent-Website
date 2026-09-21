@@ -10,6 +10,10 @@ export interface DraftInput {
   jd?: { about?: string; doing?: string[]; needs?: string[]; bonus?: string[] } | null;
   description?: string | null;
   skills?: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
+  /** The role's free-text tech stack. Synced roles have no structured skills
+   *  list, and without this the drafter never learns which other languages
+   *  the employer's own stack would accept. */
+  techStack?: string | null;
   minYears?: number | null;
 }
 
@@ -26,20 +30,29 @@ const ROWS = {
   },
 } as const;
 
-const SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Each row is one thing a recruiter can verify from a LinkedIn profile, a resume, or a ten-minute call.
+// The examples below are deliberately from OTHER kinds of role (payments,
+// data platform). The first version used an agent-platform role as its
+// example; the first role it was tried on was an agent-platform role, and it
+// copied three rows from the prompt, including a "2+ years" bar no job
+// description had asked for.
+const SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Most candidates are judged from a LinkedIn profile alone, so each row must be something a profile, a resume or a ten-minute call can answer.
 
-THREE TIERS, all three filled:
-- required: the hiring manager would reject without it. 3 to 5 rows. Include the minimum years when the role states one, as its own row in exactly this form: "4+ years software engineering". Include each must-have skill.
-- exceptional: what the ideal hire has beyond the bar, the rare thing that makes the hiring manager say yes on sight. 2 to 3 rows, always. Draw them from the role's core problem and the hardest responsibility in the description (for an agent-platform role: "Has built agent or browser-automation infrastructure in production"), never from generic praise.
+THREE TIERS
+- required: the hiring manager would reject without it. 3 to 5 rows. Include the minimum years when the role states one, as its own row in exactly this form: "5+ years as a software engineer". Include the core skill and the core kind of work.
+- exceptional: what the ideal hire has beyond the bar: the rare thing that makes the hiring manager say yes on sight. 1 to 3 rows, drawn from the role's hardest responsibilities. Never generic praise.
 - bonus: nice to have. 1 to 4 rows.
 
-EVERY ROW MUST BE CHECKABLE. A recruiter must be able to answer yes or no to it from evidence.
-- Never copy a sentence from the description. Never use an adjective as the test: no deep, strong, solid, expert, proven, extensive, significant, comfortable, familiar. Replace the adjective with what it means: "Deep TypeScript backend expertise" becomes "TypeScript backend in production, 2+ years".
-- Replace abstractions with the thing done: "Production-grade infrastructure experience" becomes "Has run backend services in production (on-call, deploys, reliability)". "Comfort at the intersection of AI agents and systems engineering" becomes "Has built systems that run LLM agents or tool use".
-- When another technology would do the job, fold it into the row: "TypeScript backend in production, 2+ years (or Node.js; Go or Java with some TypeScript)". Only fold in what a hiring manager for THIS role would accept.
-- One fact per row. Never join two distinct skills with "and". "Or" alternatives may share a row.
+EVERY ROW IS CHECKABLE FROM WHAT PEOPLE ACTUALLY WRITE
+- label: at most 10 words, no question mark. Never a sentence copied from the description. Never an adjective as the test: no deep, strong, solid, expert, proven, extensive, comfortable, familiar. Say the thing done: "Production-grade infrastructure experience" becomes "Has built and run backend services in production".
+- good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: titles, team names, skill tags, the words people use in a job description. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
+- One row, one question. If a single line on a profile would tick two rows, they are one row: merge them. When the description pairs two names for one capability, keep both joined by "or" ("evaluation or observability tooling"), because people describe their work with either word.
+- A technology row says what else would do the job, in brackets, taken from the role's own tech stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". With no stated alternatives, name none. Put a years bar on a skill row ONLY when the description states one for that skill; how deep someone is, is a question for the call.
+- A category row keeps technologies out of its label and lists them in good: label "Stream processing or message queues"; good "Kafka, Kinesis, Pub/Sub, RabbitMQ or SQS named on a job; Flink or Spark Streaming also count".
 
-label = at most 10 words, no question mark. good = one plain sentence, at most 24 words, saying what counts as evidence and which equivalents pass (a category is met by any instance: "vector database" by pgvector, Pinecone, FAISS).
+EXAMPLES OF THE FORM (from other roles; do not reuse their content)
+- required: "Has built payment or ledger systems in production" :: good: "Payments, billing, ledger, reconciliation or card-processing work named in a title, a team or a job description."
+- exceptional: "Has led a zero-to-one product as the first engineers" :: good: "Founding engineer, first engineer, early engineer or technical co-founder at a company that shipped."
+- bonus: "Data warehouse modelling" :: good: "dbt, Snowflake, BigQuery or Redshift named on a job; dimensional modelling or analytics engineering in a description."
 
 Never invent requirements the description does not support. No rows about soft skills, culture, location, visa or salary. Order each tier by importance. 7 to 11 rows in total.`;
 
@@ -48,6 +61,7 @@ Never invent requirements the description does not support. No rows about soft s
 export const canDraft = (input: DraftInput): boolean => {
   const jd = input.jd || {};
   const text = [jd.about, input.description, ...(jd.needs || []), ...(jd.doing || [])].filter(Boolean).join(" ");
+  // (the tech stack alone is not enough to draft from: it says what, never why)
   return text.trim().length >= 80 || (input.skills || []).length >= 2;
 };
 
@@ -64,7 +78,8 @@ export async function draftScorecard(input: DraftInput, timeoutMs = 40_000): Pro
     (jd.doing?.length ? `RESPONSIBILITIES:\n- ${jd.doing.join("\n- ")}\n\n` : "") +
     (jd.needs?.length ? `REQUIREMENTS:\n- ${jd.needs.join("\n- ")}\n\n` : "") +
     (jd.bonus?.length ? `NICE TO HAVE:\n- ${jd.bonus.join("\n- ")}\n\n` : "") +
-    (skills ? `SKILLS THE EMPLOYER LISTED:\n${skills}\n` : "");
+    (skills ? `SKILLS THE EMPLOYER LISTED:\n${skills}\n\n` : "") +
+    (input.techStack ? `TECH STACK THE ROLE LISTS (not all must-haves; use it to name the alternatives a technology row accepts): ${input.techStack}\n` : "");
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",

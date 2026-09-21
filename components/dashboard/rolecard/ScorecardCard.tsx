@@ -145,7 +145,10 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
                 <ul>
                   {list.map((c) => (
                     <li key={c.id}>
-                      <span>{c.label}</span>
+                      <span>
+                        {c.label}
+                        {c.confirmOnCall && <em className="ck-call">confirm on a call</em>}
+                      </span>
                       {c.good && <small>{c.good}</small>}
                     </li>
                   ))}

@@ -68,6 +68,12 @@ export default function ScorecardEditor({
                     aria-label="What to check"
                     onChange={(e) => patch(c.id, { label: e.target.value })}
                   />
+                  {c.tier === "required" && (
+                    <label className="rc-ecall" title="Tick this when LinkedIn profiles rarely say it (a specific language, depth of ownership). While a profile does not show it, it will not hold the label back: the label reads, for example, Contact now · confirm TypeScript.">
+                      <input type="checkbox" checked={!!c.confirmOnCall} onChange={(e) => patch(c.id, { confirmOnCall: e.target.checked })} />
+                      Confirm on a call: profiles rarely say this
+                    </label>
+                  )}
                   <input
                     className="rc-egood"
                     value={c.good || ""}

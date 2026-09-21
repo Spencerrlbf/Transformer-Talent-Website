@@ -25,7 +25,7 @@ import {
   linkedinProfileText,
   harvestToExperiences,
 } from "./spine";
-import { computeFacts, formatFacts } from "./facts";
+import { computeFacts, formatFacts, jobTexts } from "./facts";
 import { roleLocationCompatible } from "./locations";
 import { renderScorecard, splitStack } from "./scorecard";
 import { judgeForRole } from "./rolecard/judge";
@@ -351,6 +351,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
                   resumeText,
                   factsBlock: formatFacts(roleFacts),
                   careerYears: roleFacts.careerYears,
+                  facts: roleFacts,
+                  jobs: jobTexts(expRows, eduList),
                   model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
                   timeoutMs: Math.max(20_000, 40_000 - (Date.now() - t0)),
                 },

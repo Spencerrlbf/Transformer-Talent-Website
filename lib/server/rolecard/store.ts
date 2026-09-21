@@ -20,11 +20,12 @@ export interface RoleForCard {
   jd?: { about?: string; doing?: string[]; needs?: string[]; bonus?: string[] } | null;
   skills?: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
   matching_profile?: { min_years?: number | null } | null;
+  tech_stack?: string | null;
   scorecard?: unknown;
 }
 
 /** Columns a caller must select for ensureRoleCard. */
-export const ROLE_CARD_COLS = "id,title,yoe,description,jd,skills,matching_profile,scorecard";
+export const ROLE_CARD_COLS = "id,title,yoe,description,jd,skills,matching_profile,tech_stack,scorecard";
 
 export async function saveRoleCard(orgRoleId: string, card: Scorecard, onlyIfEmpty = false): Promise<boolean> {
   const res = await sbRest(`org_roles?id=eq.${orgRoleId}${onlyIfEmpty ? "&scorecard=is.null" : ""}`, {
@@ -59,6 +60,7 @@ export async function ensureRoleCard(
       jd: role.jd,
       description: role.description,
       skills: role.skills,
+      techStack: role.tech_stack,
       minYears: role.matching_profile?.min_years ?? null,
     },
     opts.timeoutMs

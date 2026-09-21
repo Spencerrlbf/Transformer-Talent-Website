@@ -94,7 +94,7 @@ export default function RowJudgeComparison() {
       const jevLabel = labelFromRows(
         p.rows.map((r) => {
           const jr = j.rows!.find((x) => x.id === r.id);
-          return { tier: r.tier, status: jr ? routeStatus(jr.probabilities) : r.gpt };
+          return { tier: r.tier, status: jr ? routeStatus(jr.probabilities, jr.confidence) : r.gpt };
         }),
         "message"
       );
@@ -107,7 +107,7 @@ export default function RowJudgeComparison() {
         if (ok) agree++;
         // What matters to the label: met / not shown / no, with Jev's spread
         // turned into a mark by the routing rule.
-        const okMatters = labelClass(g.gpt) === labelClass(routeStatus(jr.probabilities));
+        const okMatters = labelClass(g.gpt) === labelClass(routeStatus(jr.probabilities, jr.confidence));
         if (okMatters) matters++;
         const pr = perRow.get(jr.id) || { label: g.label, n: 0, agree: 0 };
         pr.n++;
@@ -168,8 +168,8 @@ export default function RowJudgeComparison() {
       )}
       {stats && (
         <p className="dash-muted jvc-perrow">
-          Routing rule for Jev: a &ldquo;no&rdquo; needs {Math.round(ROUTE.noAtLeast * 100)}% or more, &ldquo;met&rdquo; needs {Math.round(ROUTE.metAtLeast * 100)}% or more across ✓ and ≈,
-          anything else reads &ldquo;not shown&rdquo;. ✓ and ≈ count the same for the label.
+          Routing rule for Jev: &ldquo;met&rdquo; needs {Math.round(ROUTE.metAtLeast * 100)}% or more across ✓ and ≈, a met class that beats &ldquo;not shown&rdquo; on its own, and
+          confidence of {ROUTE.confidenceAtLeast} or more. A &ldquo;no&rdquo; is never taken from Jev: Pass is decided by the years rule or by you. ✓ and ≈ count the same for the label.
         </p>
       )}
       {stats && stats.moved.length > 0 && (
@@ -201,7 +201,7 @@ export default function RowJudgeComparison() {
               <tbody>
                 {p.rows.map((r) => {
                   const jr = j?.rows?.find((x) => x.id === r.id);
-                  const routed = jr ? routeStatus(jr.probabilities) : null;
+                  const routed = jr ? routeStatus(jr.probabilities, jr.confidence) : null;
                   // Highlighted only when the difference would matter to the label.
                   const differs = routed && labelClass(routed) !== labelClass(r.gpt);
                   return (
