@@ -27,7 +27,9 @@ import { TAG_LABEL } from "../client-reason";
 import { searchLeadsPage, previewLeadCount, getFullProfile, providerMode, type Lead, type LeadSearchQuery } from "./harvest";
 import { profileToFields, sourcedEmbedText } from "./import";
 import type { JudgeSkill } from "./judge";
-import { buildVerdictView, judgeVerdict } from "../verdict";
+import { judgeForRole } from "../rolecard/judge";
+import { criteriaOf, ensureRoleCard } from "../rolecard/store";
+import type { Criterion } from "@/lib/rolecard";
 import { getCompanyContexts, companyContextLine, companySlugFromUrl } from "./company-context";
 
 export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
@@ -387,6 +389,7 @@ async function rankRun(run: SourcingRun): Promise<void> {
 // ---------- stage: screening ----------
 
 type RowOutcome = "ok" | "transient" | "junk" | "lost" | "fatal";
+type RowResult = { outcome: RowOutcome; retryAfterMs?: number; /** A saved verdict was reused: no model call, nothing to charge. */ saved?: boolean };
 type ClaimedRow = {
   id: string; screen_attempts: number; sourced_candidate_id: string;
 };
@@ -409,11 +412,13 @@ async function screenOneRow(
     jdText: string;
     judgeSkills: JudgeSkill[];
     targetedCompanies: string[];
+    roleTargets: string[];
+    criteria: Criterion[];
     minYears: number | null;
   },
   run: SourcingRun,
   leaseId: string
-): Promise<{ outcome: RowOutcome; retryAfterMs?: number }> {
+): Promise<RowResult> {
   let llmErr: { status: number; code?: string; retryAfter?: string } | null = null;
   try {
     const [cand] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null; full_name: string | null }[]>(
@@ -444,29 +449,34 @@ async function screenOneRow(
     // One judge for every entry path: the verdict paragraph, requirement
     // reads and the technologies strip (see lib/server/verdict.ts).
     const education = (profile as Record<string, unknown>).education ?? null;
-    const judged = await judgeVerdict({
-      roleTitle: ctx.role.title,
-      jdText: ctx.jdText,
-      skills: ctx.judgeSkills.map((s) => ({ skill: s.skill, mustHave: s.must_have, alternates: s.alternates })),
-      minYears: ctx.minYears,
-      targetedCompanies: ctx.targetedCompanies,
-      employerContext: employerLine,
-      candidateName: cand?.full_name || "Candidate",
-      profileText: linkedinProfileText(profile).slice(0, 5000),
-      resumeText: null,
-      factsBlock: formatFacts(facts),
-      careerYears: facts.careerYears,
-      model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
-      timeoutMs: SCREEN_LLM_TIMEOUT_MS,
-      onError: (info) => { llmErr = info; },
+    // The role's scorecard and this person's confirmed facts go in; a saved
+    // verdict for the same inputs comes straight back; the recruiter's
+    // overrules are laid over the result (see lib/server/rolecard/judge.ts).
+    const { view: verdict, saved } = await judgeForRole({
+      orgId: run.organization_id,
+      orgRoleId: run.org_role_id,
+      candidateKey: `src_${row.sourced_candidate_id}`,
+      criteria: ctx.criteria,
+      roleTargets: ctx.roleTargets,
+      input: {
+        roleTitle: ctx.role.title,
+        jdText: ctx.jdText,
+        skills: ctx.judgeSkills.map((s) => ({ skill: s.skill, mustHave: s.must_have, alternates: s.alternates })),
+        minYears: ctx.minYears,
+        targetedCompanies: ctx.targetedCompanies,
+        employerContext: employerLine,
+        candidateName: cand?.full_name || "Candidate",
+        profileText: linkedinProfileText(profile).slice(0, 5000),
+        resumeText: null,
+        factsBlock: formatFacts(facts),
+        careerYears: facts.careerYears,
+        model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
+        timeoutMs: SCREEN_LLM_TIMEOUT_MS,
+        onError: (info) => { llmErr = info; },
+      },
+      factsFor: (terms) => computeFacts(expRows, [...new Set([...stackTerms, ...terms])], skills, education),
+      roleSkills: ctx.judgeSkills.map((s) => s.skill),
     });
-    const verdict = judged
-      ? buildVerdictView(
-          judged,
-          (terms) => computeFacts(expRows, [...new Set([...stackTerms, ...terms])], skills, education),
-          ctx.judgeSkills.map((s) => s.skill)
-        )
-      : null;
 
     if (verdict) {
       // The tag column is constrained to the older vocabulary (a CHECK from
@@ -482,7 +492,7 @@ async function screenOneRow(
         screened_at: new Date().toISOString(),
         screen_claim_id: null,
       });
-      return { outcome: landed ? "ok" : "lost" };
+      return { outcome: landed ? "ok" : "lost", saved };
     }
 
     const err = llmErr as { status: number; code?: string; retryAfter?: string } | null;
@@ -651,10 +661,15 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         skills: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
         matching_profile: { must_haves?: string[]; min_years?: number | null } | null;
         target_companies: { name?: string }[] | null;
+        id: string; yoe: string | null; description: string | null; scorecard: unknown;
       }[]>(
-        `org_roles?id=eq.${run.org_role_id}&select=external_id,tech_stack,title,jd,skills,matching_profile,target_companies`
+        `org_roles?id=eq.${run.org_role_id}&select=id,external_id,tech_stack,title,yoe,description,jd,skills,matching_profile,target_companies,scorecard`
       );
       if (!role) throw new RunFailure("role vanished");
+      // Every row in the run is judged against the same scorecard: drafted
+      // here, once, when the role has none yet. None to be had = the judge
+      // reads the job description on its own, as before.
+      const criteria = criteriaOf(await ensureRoleCard(role).catch(() => null));
       const jd = role.jd || {};
       const jdText = [
         jd.about,
@@ -681,7 +696,7 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         return true;
       });
       const roleCtx = {
-        role, jdText, judgeSkills, targetedCompanies,
+        role, jdText, judgeSkills, targetedCompanies, roleTargets, criteria,
         minYears: role.matching_profile?.min_years ?? null,
       };
 
@@ -724,7 +739,9 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         );
         const ok = outcomes.filter((o) => o.outcome === "ok").length;
         const transient = outcomes.filter((o) => o.outcome === "transient").length;
-        await recordUsage(run.organization_id, run.id, "deep_screen", ok, null);
+        // A reused saved verdict called no model: only fresh judgments count.
+        const fresh = outcomes.filter((o) => o.outcome === "ok" && !o.saved).length;
+        if (fresh) await recordUsage(run.organization_id, run.id, "deep_screen", fresh, null);
 
         const screened = await countRows(
           `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.done&select=id`

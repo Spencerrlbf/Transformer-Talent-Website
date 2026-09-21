@@ -8,7 +8,7 @@
 
 import type { CandidateFacts } from "./facts";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
-import { labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
+import { chipLabel, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
@@ -342,7 +342,8 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
   const gaps: string[] = [];
   for (const r of v.requirements) {
     if (r.status !== "missing") continue;
-    const label = shortRequirement(r.requirement, roleSkills);
+    // A scorecard row that states a years bar reads "4+ years" as a chip.
+    const label = v.rows.length ? chipLabel(r.requirement, roleSkills) : shortRequirement(r.requirement, roleSkills);
     const key = label.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9+#]/g, "");
     if (!label || !key || seenGap.has(key) || lit.has(label.toLowerCase())) continue;
     seenGap.add(key);
@@ -358,6 +359,9 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
     betterSuited: v.betterSuited,
     requirements: v.requirements,
     tech: { now, before, gaps, nowPosition: facts?.currentTitle ? [facts.currentTitle, facts.currentCompany].filter(Boolean).join(" at ") : null },
+    card: v.rows.length
+      ? { rows: v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) })), aiLabel: v.aiLabel, aiGaps: gaps, wrongRole: null }
+      : null,
     model: v.model,
     at: new Date().toISOString(),
   };

@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDash } from "./DashShell";
 import {
@@ -11,6 +11,8 @@ import {
   MIN_DOING,
   MIN_NEEDS,
 } from "@/lib/role-options";
+import type { Criterion } from "@/lib/rolecard";
+import ScorecardEditor from "./rolecard/ScorecardEditor";
 
 export type SkillChip = { skill: string; must_have: boolean; alternates: string[] };
 
@@ -53,6 +55,7 @@ const ERROR_TEXT: Record<string, string> = {
   yoe_max_below_min: "Max years can't be below min years.",
   title_required: "Job title is required.",
   at_least_one_skill: "Add at least one skill, and mark your true must-haves.",
+  scorecard_needs_required: "Keep at least one Required row on the scorecard: those rows decide the label.",
   synced_role_readonly: "This role is managed by Transformer Talent — contact us to change it.",
 };
 
@@ -152,6 +155,49 @@ export default function JobForm({
   const [error, setError] = useState("");
   const [newSkill, setNewSkill] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  // The scorecard: null until drafted (new job) or loaded (edit). Sent with
+  // the form; left null, one is drafted the first time the role is opened.
+  const [card, setCard] = useState<Criterion[] | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [cardError, setCardError] = useState("");
+
+  useEffect(() => {
+    if (!jobId) return;
+    let live = true;
+    fetch(`/api/dashboard/rolecard/${encodeURIComponent(jobId)}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => live && d?.scorecard?.criteria && setCard(d.scorecard.criteria))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [jobId, token]);
+
+  async function draftCard(from: JobFormValues) {
+    setCardError("");
+    setDrafting(true);
+    try {
+      const r = await fetch("/api/dashboard/rolecard/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(from),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d?.scorecard?.criteria) {
+        setCardError(
+          d?.error === "not_enough_to_draft"
+            ? "Add a job title and the About or Requirements first, then draft."
+            : "The draft did not come back. Try again in a moment."
+        );
+        return;
+      }
+      setCard(d.scorecard.criteria);
+    } catch {
+      setCardError("The draft did not come back. Try again in a moment.");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   const set = (k: keyof JobFormValues, val: JobFormValues[keyof JobFormValues]) =>
     setV((p) => ({ ...p, [k]: val }));
@@ -168,7 +214,7 @@ export default function JobForm({
       about: string; doing: string[]; needs: string[]; bonus: string[];
       skills: SkillChip[];
     };
-    setV({
+    const next: JobFormValues = {
       title: e.title || "",
       roleType: e.role_type || "",
       salary: e.salary || "",
@@ -182,9 +228,12 @@ export default function JobForm({
       needs: e.needs || [],
       bonus: e.bonus || [],
       skills: e.skills || [],
-    });
+    };
+    setV(next);
     setWarnings(data.warnings || []);
     setPrefilled(true);
+    // The scorecard is drafted from the same description, ready to edit.
+    void draftCard(next);
   }
 
   async function runExtract(req: () => Promise<Response>) {
@@ -241,12 +290,15 @@ export default function JobForm({
     if (v.needs.filter((x) => x.trim()).length < MIN_NEEDS)
       return setError(ERROR_TEXT.not_enough_requirements);
     if (v.skills.length === 0) return setError(ERROR_TEXT.at_least_one_skill);
+    const rows = card?.filter((c) => c.label.trim()) ?? null;
+    if (rows && rows.length > 0 && !rows.some((c) => c.tier === "required"))
+      return setError(ERROR_TEXT.scorecard_needs_required);
     setSaving(true);
     try {
       const r = await fetch(jobId ? `/api/dashboard/jobs/${jobId}` : "/api/dashboard/jobs", {
         method: jobId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(v),
+        body: JSON.stringify(rows && rows.length ? { ...v, scorecard: { criteria: rows } } : v),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || String(r.status));
@@ -474,6 +526,26 @@ export default function JobForm({
           />
           <button className="dash-btn dash-btn-2">Add</button>
         </form>
+      </div>
+
+      <div className="dash-skills rc-formsec">
+        <label>Scorecard: what every candidate is checked against</label>
+        <p className="dash-muted rc-formhelp">
+          Drafted from your job description, in three tiers. Reword, move, delete or add rows, for example
+          &ldquo;Has taken a system from zero to one&rdquo;. The Required rows decide whether someone reads
+          Contact now, Worth a message or Pass. Editing is optional.
+        </p>
+        {card ? (
+          <ScorecardEditor value={card} onChange={setCard} disabled={drafting} />
+        ) : (
+          <p className="dash-muted">
+            {drafting ? "Drafting the scorecard from the job description…" : "Not drafted yet. Leave it and one is drafted when the job is first opened."}
+          </p>
+        )}
+        {cardError && <p className="dash-error">{cardError}</p>}
+        <button type="button" className="dash-btn dash-btn-2" onClick={() => draftCard(v)} disabled={drafting}>
+          {drafting ? "Drafting…" : card ? "Draft again from the fields above" : "Draft the scorecard now"}
+        </button>
       </div>
 
       {error && <p className="dash-error">{error}</p>}

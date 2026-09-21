@@ -3,7 +3,7 @@
 // and shared: the server drafts, judges and stores with these types; the
 // client renders and edits with them.
 
-import type { VerdictLabel } from "./verdict-view";
+import { shortRequirement, type VerdictLabel, type VerdictView } from "./verdict-view";
 
 export type Tier = "exceptional" | "required" | "bonus";
 export const TIERS: Tier[] = ["exceptional", "required", "bonus"];
@@ -50,13 +50,26 @@ export interface CardRow {
   /** What the judge said, kept when a recruiter overrules it. */
   ai: RowStatus;
   confirmed?: { by: string; at: string; note?: string } | null;
+  /** The row as a chip ("4+ years", "TypeScript"), set when the view is built. */
+  short?: string;
 }
 
 export interface VerdictCardData {
   rows: CardRow[];
   /** The label from the judge's own rows, before any overrule. */
   aiLabel: VerdictLabel;
+  /** The technology gaps as judged, so an overrule can be taken back. */
+  aiGaps?: string[];
   wrongRole?: { by: string; at: string } | null;
+}
+
+/** What a recruiter said about one row of one person's card. */
+export interface RowOverride {
+  criterionId: string;
+  status: RowStatus;
+  note?: string | null;
+  by: string;
+  at: string;
 }
 
 export const MAX_CRITERIA = 14;
@@ -73,23 +86,33 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev?: Scorecard | null): Scorecard | null {
   const raw = (input as { criteria?: unknown })?.criteria;
   if (!Array.isArray(raw)) return null;
-  const seen = new Set<string>();
+  const cleanId = (c: unknown) => String((c as Criterion)?.id ?? "").replace(/[^a-z0-9-]/gi, "").slice(0, 40);
+  const list = raw.slice(0, MAX_CRITERIA * 2);
+  // Ids a client sent are kept first (overrules point at them); rows without
+  // one are minted around them, never the other way round.
+  const reserved = new Set<string>();
+  const kept = list.map((c) => {
+    const id = cleanId(c);
+    if (!id || reserved.has(id)) return "";
+    reserved.add(id);
+    return id;
+  });
   const criteria: Criterion[] = [];
-  for (const c of raw.slice(0, MAX_CRITERIA * 2)) {
+  list.forEach((c, i) => {
+    if (criteria.length >= MAX_CRITERIA) return;
     const label = String((c as Criterion)?.label ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_LABEL);
-    if (!label) continue;
+    if (!label) return;
     const tier: Tier = TIERS.includes((c as Criterion)?.tier) ? (c as Criterion).tier : "required";
     const good = String((c as Criterion)?.good ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_GOOD);
-    let id = String((c as Criterion)?.id ?? "").replace(/[^a-z0-9-]/gi, "").slice(0, 40);
-    if (!id || seen.has(id)) {
+    let id = kept[i];
+    if (!id) {
       const base = slug(label) || "row";
       id = base;
-      for (let n = 2; seen.has(id); n++) id = `${base}-${n}`;
+      for (let n = 2; reserved.has(id); n++) id = `${base}-${n}`;
+      reserved.add(id);
     }
-    seen.add(id);
     criteria.push(good ? { id, label, tier, good } : { id, label, tier });
-    if (criteria.length >= MAX_CRITERIA) break;
-  }
+  });
   if (!criteria.length) return null;
   return {
     v: 1,
@@ -121,3 +144,61 @@ export const tally = (rows: Pick<CardRow, "tier" | "status">[], tier: Tier) => {
   const of = rows.filter((r) => r.tier === tier);
   return { met: of.filter((r) => r.status === "yes" || r.status === "equivalent").length, of: of.length };
 };
+
+/** A row as a chip label: the years bar when it states one, else a few words. */
+const GENERIC_YEARS = /(years|yrs)\s+(of\s+)?((professional|industry|relevant|total|overall|commercial|hands[- ]on)\s+)*((software|backend|frontend|full[- ]stack)\s+)?(engineering|development|experience|work)\b\s*(experience)?\s*$/i;
+
+export function chipLabel(label: string, roleSkills: string[] = []): string {
+  const bar = yearsBar(label);
+  if (bar == null) return shortRequirement(label, roleSkills);
+  // "4+ years of software engineering" is just the bar; "5 years building
+  // distributed systems" keeps its subject.
+  if (GENERIC_YEARS.test(label.replace(/\(.*?\)/g, "").trim())) return `${bar}+ years`;
+  const rest = label.replace(/(an?\s+)?(minimum\s+(of\s+)?|at least\s+)?\d{1,2}\s*\+?\s*(or more\s+)?(years|yrs)'?\s*((of|in|with)\s+)?/i, "").trim();
+  const subject = shortRequirement(rest, roleSkills).replace(/…$/, "").split(" ").slice(0, 3).join(" ");
+  return subject ? `${bar}+ yrs ${subject}` : `${bar}+ years`;
+}
+
+const met = (s: RowStatus) => s === "yes" || s === "equivalent";
+
+/** The judged view with the recruiter's word laid over it. Rows they
+ *  confirmed take their status; the label follows the rows by the fixed
+ *  rules; a gap chip they closed goes, one they opened appears. Pure: the
+ *  same judged view and the same overrules always give the same result, so
+ *  judging again can never flip a confirmed row. */
+export function applyOverrides(
+  judged: VerdictView,
+  overrides: RowOverride[],
+  wrongRole: { by: string; at: string } | null = null
+): VerdictView {
+  const card = judged.card;
+  if (!card?.rows.length) return judged;
+  const byId = new Map(overrides.map((o) => [o.criterionId, o]));
+  const rows: CardRow[] = card.rows.map((r) => {
+    const o = byId.get(r.id);
+    return o
+      ? { ...r, status: o.status, confirmed: { by: o.by, at: o.at, ...(o.note ? { note: o.note } : {}) } }
+      : { ...r, status: r.ai, confirmed: null };
+  });
+  const touched = rows.some((r) => r.confirmed);
+  // Untouched, the judged label stands (it carries the years rail). Touched,
+  // the rows decide; the rail still holds unless a years row was confirmed.
+  let label = card.aiLabel;
+  if (touched) {
+    label = labelFromRows(rows, card.aiLabel);
+    const railed = card.aiLabel !== labelFromRows(card.rows.map((r) => ({ tier: r.tier, status: r.ai })), card.aiLabel);
+    const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && yearsBar(r.label) != null);
+    if (railed && label === "contact" && !yearsConfirmed) label = "message";
+  }
+  const baseGaps = card.aiGaps ?? judged.tech.gaps;
+  const closed = new Set(rows.filter((r) => r.confirmed && met(r.status)).map((r) => (r.short || chipLabel(r.label)).toLowerCase()));
+  const opened = rows.filter((r) => r.confirmed && !met(r.status) && r.tier === "required").map((r) => r.short || chipLabel(r.label));
+  const gaps = [...baseGaps.filter((g) => !closed.has(g.toLowerCase()))];
+  for (const g of opened) if (g && !gaps.some((x) => x.toLowerCase() === g.toLowerCase())) gaps.push(g);
+  return {
+    ...judged,
+    label,
+    tech: { ...judged.tech, gaps: gaps.slice(0, 6) },
+    card: { ...card, rows, aiGaps: baseGaps, wrongRole },
+  };
+}

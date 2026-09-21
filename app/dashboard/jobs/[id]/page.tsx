@@ -15,6 +15,7 @@ import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/componen
 import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
 import ClientLinkCard from "@/components/dashboard/jobs/ClientLinkCard";
 import SourcingHelpCard from "@/components/dashboard/jobs/SourcingHelpCard";
+import ScorecardCard from "@/components/dashboard/rolecard/ScorecardCard";
 
 type Job = {
   id: string;
@@ -181,6 +182,7 @@ function JobWorkspace({ id }: { id: string }) {
       {tab === "overview" && (
         <div className="dash-jobgrid">
           <section>
+            <ScorecardCard jobId={job.id} />
             {job.jd?.about && (
               <>
                 <div className="dash-sec">About</div>

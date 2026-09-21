@@ -9,6 +9,8 @@ import { fmtDue } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
 import VerdictCard from "@/components/dashboard/candidates/VerdictCard";
+import type { VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
+import { VERDICT_LABEL } from "@/lib/verdict-view";
 import type { VerdictView } from "@/lib/verdict-view";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 import MultiSelect from "@/components/MultiSelect";
@@ -185,8 +187,8 @@ function splitReason(reason: string): { why: string; probes: string[]; route: st
   return { why: rest.trim(), probes, route };
 }
 
-function FitReview({ entry }: { entry: PipelineEntry }) {
-  if (entry.verdict) return <VerdictCard view={entry.verdict} />;
+function FitReview({ entry, feedback }: { entry: PipelineEntry; feedback?: VerdictFeedbackTarget }) {
+  if (entry.verdict) return <VerdictCard view={entry.verdict} feedback={feedback} />;
   if (!entry.reason) return <p className="cv2d-why cv2d-dim">Not reviewed yet.</p>;
   const { why, probes, route } = splitReason(entry.reason);
   return (
@@ -216,7 +218,10 @@ function PipelineRows({
   stageEditable = true,
   screeningPending = true,
   onOpenJob,
+  feedback,
 }: {
+  /** Makes the verdict's scorecard rows a one-click check-off. */
+  feedback?: VerdictFeedbackTarget;
   entry: PipelineEntry;
   expanded: boolean;
   onToggle: () => void;
@@ -299,7 +304,7 @@ function PipelineRows({
         <tr className="cv2d-preview-row">
           <td colSpan={5}>
             <div className="cv2d-pipe-detail">
-              <FitReview entry={entry} />
+              <FitReview entry={entry} feedback={feedback} />
             </div>
           </td>
         </tr>
@@ -571,6 +576,27 @@ export default function CandidateDrawer({
   // Prev/next within the list that opened the drawer: the Inbox's items when
   // given (one person can hold two), else the current page's row order.
   const itemNav = Boolean(navItems && onNavigateItem && navItemIndex !== undefined && navItemIndex >= 0);
+  // A checked-off scorecard row: the verdict as it now reads replaces the one
+  // shown, here and in the role's tag, without refetching the person.
+  const feedbackFor = (jobId: string): VerdictFeedbackTarget | undefined =>
+    candKey && !isNet
+      ? {
+          candidateKey: candKey,
+          jobId,
+          onChanged: (view) =>
+            setDetail((d) =>
+              d
+                ? {
+                    ...d,
+                    pipeline: d.pipeline.map((p) =>
+                      p.jobId === jobId ? { ...p, verdict: view, tag: view.label, tagLabel: VERDICT_LABEL[view.label] } : p
+                    ),
+                  }
+                : d
+            ),
+        }
+      : undefined;
+
   const navIndex = itemNav ? navItemIndex! : candKey && navKeys ? navKeys.indexOf(candKey) : -1;
   const navCount = itemNav ? navItems!.length : navKeys?.length ?? 0;
   const navPrev = !itemNav && navIndex > 0 ? navKeys![navIndex - 1] : null;
@@ -1214,7 +1240,7 @@ export default function CandidateDrawer({
                               {p.title} <em>#{p.jobId}</em>
                               <span className="cv2d-fit-via">{p.via === "applied" ? "applied" : p.via === "sourced" ? "via sourcing run" : p.via}</span>
                             </div>
-                            <VerdictCard view={p.verdict!} />
+                            <VerdictCard view={p.verdict!} feedback={feedbackFor(p.jobId)} />
                           </div>
                         ))}
                     </section>
@@ -1330,6 +1356,7 @@ export default function CandidateDrawer({
                               stageEditable={!isNet}
                               screeningPending={detail.screeningPending !== false}
                               onOpenJob={setOpenJob}
+                              feedback={feedbackFor(p.jobId)}
                             />
                           ))}
                         </tbody>

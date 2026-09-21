@@ -2,6 +2,8 @@
 // technologies strip. Shared by server (writes it) and client (renders it).
 // Stored as jsonb with v: 2 so older rows keep rendering the old way.
 
+import type { VerdictCardData } from "./rolecard";
+
 export type VerdictLabel = "contact" | "message" | "pass";
 
 export const VERDICT_LABEL: Record<VerdictLabel, string> = {
@@ -49,6 +51,9 @@ export interface VerdictView {
     gaps: string[];
     nowPosition?: string | null;
   };
+  /** The role's scorecard as judged for this person, when the role has one.
+   *  Rows a recruiter confirmed carry who and when; the label follows the rows. */
+  card?: VerdictCardData | null;
   model: string;
   at: string;
 }

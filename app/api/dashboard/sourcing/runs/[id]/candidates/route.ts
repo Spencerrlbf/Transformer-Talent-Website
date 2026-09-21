@@ -35,7 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const res = await sbRest(
     `sourcing_run_candidates?${filters}` +
-      `&select=id,rank,tag,reason,verdict,screen_status,shortlisted,hidden,` +
+      `&select=id,rank,tag,reason,verdict,screen_status,shortlisted,hidden,sourced_candidate_id,` +
       `sourced_candidates(full_name,headline,location,current_title,current_company,linkedin_url,linkedin_username,years_experience,skills,profile)` +
       `&order=rank.asc.nullslast,created_at.asc&limit=${PAGE}&offset=${(page - 1) * PAGE}`,
     { headers: { Prefer: "count=exact" } }
@@ -44,6 +44,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const total = parseInt((res.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
   type Row = {
     id: string; rank: number | null; tag: string | null; reason: string | null; verdict: unknown;
+    sourced_candidate_id: string;
     screen_status: string; shortlisted: boolean; hidden: boolean;
     sourced_candidates: {
       full_name: string | null; headline: string | null; location: string | null;
@@ -60,6 +61,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     pageSize: PAGE,
     candidates: rows.map((r) => ({
       membershipId: r.id,
+      // The person's key everywhere else in the dashboard.
+      candidateKey: `src_${r.sourced_candidate_id}`,
       rank: r.rank,
       // The tag column holds an older word for a judged row; the verdict's
       // label is the one to show. The view carries no profile or raw output.

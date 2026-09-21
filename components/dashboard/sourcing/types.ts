@@ -93,6 +93,7 @@ export type RunSummary = {
 
 export type CandidateRow = {
   membershipId: string;
+  candidateKey: string;
   rank: number | null;
   tag: "strong" | "possible" | "stretch" | "strong_yes" | "yes" | "worth_message" | "not_now" | "contact" | "message" | "pass" | null;
   reason: string | null;

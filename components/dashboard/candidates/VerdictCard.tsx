@@ -5,6 +5,7 @@
 // two sentences, five chips.
 import { useState } from "react";
 import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, shortRequirement, type TechChip, type VerdictView } from "@/lib/verdict-view";
+import Checklist, { type VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
 
 function Chip({ c }: { c: TechChip }) {
   const title =
@@ -21,7 +22,17 @@ function Chip({ c }: { c: TechChip }) {
   );
 }
 
-export default function VerdictCard({ view, compact = false }: { view: VerdictView; compact?: boolean }) {
+export default function VerdictCard({
+  view,
+  compact = false,
+  feedback,
+}: {
+  view: VerdictView;
+  compact?: boolean;
+  /** Who and which role this verdict is for: makes the scorecard rows a
+   *  one-click check-off. Without it the rows are read-only. */
+  feedback?: VerdictFeedbackTarget;
+}) {
   const [askOpen, setAskOpen] = useState(false);
   if (compact) {
     const chips = rowChips(view, 5);
@@ -40,13 +51,19 @@ export default function VerdictCard({ view, compact = false }: { view: VerdictVi
     );
   }
   const { now, before, gaps } = view.tech;
+  const hasCard = !!view.card?.rows.length;
+  const moved = hasCard && view.card!.aiLabel !== view.label;
   return (
     <div className="vc">
       <div className="vc-head">
         <span className={`dash-tag ${VERDICT_CLASS[view.label]}`}>{VERDICT_LABEL[view.label]}</span>
+        {moved && <span className="vc-was">after your confirmation · the AI alone read {VERDICT_LABEL[view.card!.aiLabel]}</span>}
       </div>
       <p className="cv2d-why">{view.paragraph}</p>
-      {view.missing.length > 0 && (
+      {/* With a scorecard the rows say what is missing, with evidence, and
+          they stay true after a recruiter overrules one; the judge's own
+          list would not. */}
+      {!hasCard && view.missing.length > 0 && (
         <ul className="vc-missing">
           {view.missing.map((m, i) => (
             <li key={i}>{m}</li>
@@ -54,6 +71,7 @@ export default function VerdictCard({ view, compact = false }: { view: VerdictVi
         </ul>
       )}
       {view.betterSuited && <div className="cv2d-route">↪ {view.betterSuited}</div>}
+      {hasCard && <Checklist view={view} feedback={feedback} />}
       {(now.length > 0 || before.length > 0 || gaps.length > 0) && (
         <div className="vc-tech">
           {now.length > 0 && (

@@ -28,7 +28,8 @@ import {
 import { computeFacts, formatFacts } from "./facts";
 import { roleLocationCompatible } from "./locations";
 import { renderScorecard, splitStack } from "./scorecard";
-import { buildVerdictView, judgeVerdict } from "./verdict";
+import { judgeForRole } from "./rolecard/judge";
+import { criteriaOf, ensureRoleCard } from "./rolecard/store";
 import { attachVerdictToMatch } from "./verdict-store";
 import { getOrgId } from "./spine";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
@@ -300,10 +301,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
             skills: { skill: string; must_have?: boolean; alternates?: string[] }[] | null;
             matching_profile: { must_haves?: string[]; min_years?: number | null } | null;
             target_companies: { name?: string }[] | null;
+            yoe: string | null; description: string | null; scorecard: unknown;
           };
           const rr = await sbRest(
             `org_roles?organization_id=eq.${storeOrg}&external_id=in.(${wantIds.map((s) => `"${s.replace(/"/g, "")}"`).join(",")})` +
-              `&select=id,external_id,title,tech_stack,jd,skills,matching_profile,target_companies`
+              `&select=id,external_id,title,tech_stack,yoe,description,jd,skills,matching_profile,target_companies,scorecard`
           );
           const roleRows = rr.ok ? ((await rr.json()) as RoleRow[]) : [];
           const profileText = linkedinProfileText(harvest as Record<string, unknown> | null);
@@ -321,27 +323,36 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
                 ]
                   .filter(Boolean)
                   .join("\n\n") || (role.matching_profile?.must_haves || []).join("; ");
-              const judged = await judgeVerdict({
-                roleTitle: role.title,
-                jdText,
-                skills: (role.skills || []).map((s) => ({ skill: s.skill, mustHave: !!s.must_have, alternates: s.alternates || [] })),
-                minYears: role.matching_profile?.min_years ?? null,
-                targetedCompanies: (role.target_companies || []).map((t) => t?.name || "").filter(Boolean),
-                employerContext: null,
-                candidateName: name || "Candidate",
-                profileText,
-                resumeText,
-                factsBlock: formatFacts(roleFacts),
-                careerYears: roleFacts.careerYears,
-                model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
-                timeoutMs: 40_000,
-              }).catch(() => null);
-              if (!judged) return;
-              const view = buildVerdictView(
-                judged,
-                (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList),
-                (role.skills || []).map((s) => s.skill)
-              );
+              // Same judge as sourcing: the role's scorecard (drafted the first
+              // time a role without one is judged), the person's confirmed
+              // facts, and a saved verdict when the inputs have not changed.
+              const criteria = criteriaOf(await ensureRoleCard(role).catch(() => null));
+              const roleTargets = (role.target_companies || []).map((t) => t?.name || "").filter(Boolean);
+              const { view } = await judgeForRole({
+                orgId: storeOrg,
+                orgRoleId: role.id,
+                candidateKey: `app_${submissionId}`,
+                criteria,
+                roleTargets,
+                input: {
+                  roleTitle: role.title,
+                  jdText,
+                  skills: (role.skills || []).map((s) => ({ skill: s.skill, mustHave: !!s.must_have, alternates: s.alternates || [] })),
+                  minYears: role.matching_profile?.min_years ?? null,
+                  targetedCompanies: roleTargets,
+                  employerContext: null,
+                  candidateName: name || "Candidate",
+                  profileText,
+                  resumeText,
+                  factsBlock: formatFacts(roleFacts),
+                  careerYears: roleFacts.careerYears,
+                  model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
+                  timeoutMs: 40_000,
+                },
+                factsFor: (more) => computeFacts(expRows, [...new Set([...terms, ...more])], harvestSkills, eduList),
+                roleSkills: (role.skills || []).map((s) => s.skill),
+              }).catch(() => ({ view: null }));
+              if (!view) return;
               await attachVerdictToMatch(storeOrg, candidateId, role.id, view).catch(() => false);
             })
           );

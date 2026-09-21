@@ -117,6 +117,7 @@ export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobT
       {view.kind === "run" && (
         <RunView
           runId={view.runId}
+          jobId={jobId}
           onBack={() => { setView({ kind: "list" }); loadRuns(); }}
           onDuplicate={(p) => setView({ kind: "builder", initial: draftFromParams(p) })}
         />

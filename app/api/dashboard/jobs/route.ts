@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { publishOrgRole, nextExternalId, sanitizeSkills } from "@/lib/server/publish-role";
+import { sanitizeScorecard } from "@/lib/rolecard";
+import { saveRoleCard } from "@/lib/server/rolecard/store";
 import { roleInputFromBody } from "@/lib/server/job-body";
 
 export const maxDuration = 60;
@@ -119,11 +121,21 @@ export async function POST(req: NextRequest) {
 
   const externalId = await nextExternalId(member.org.id);
   const role = { ...parsed.role, jobId: externalId };
+  let orgRoleId: string;
   try {
-    await publishOrgRole(member.org.id, role, skills, "dashboard", member.userId);
+    orgRoleId = (await publishOrgRole(member.org.id, role, skills, "dashboard", member.userId)).orgRoleId;
   } catch (e) {
     console.error("publish role failed", e);
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });
+  }
+  // The scorecard the form drafted (and the recruiter may have edited) is
+  // stored with the role. Left alone, one is drafted the first time the role
+  // is opened or judged.
+  const card = sanitizeScorecard(body.scorecard, "ai");
+  if (card?.criteria.some((c) => c.tier === "required")) {
+    card.editedBy = member.email;
+    card.editedAt = new Date().toISOString();
+    await saveRoleCard(orgRoleId, card).catch(() => false);
   }
   return NextResponse.json({ id: externalId });
 }

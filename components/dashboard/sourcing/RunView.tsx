@@ -12,9 +12,12 @@ import VerdictCard from "../candidates/VerdictCard";
 const ACTIVE = new Set(["previewed", "importing", "ranking", "screening"]);
 
 export default function RunView({
-  runId, onBack, onDuplicate,
+  runId, jobId, onBack, onDuplicate,
 }: {
   runId: string;
+  /** The role this run sourced for: a checked-off scorecard row is kept
+   *  against the person and this role. */
+  jobId: string;
   onBack: () => void;
   onDuplicate: (params: Record<string, unknown>) => void;
 }) {
@@ -305,7 +308,15 @@ export default function RunView({
                     <tr className={`dash-src-full${r.hidden ? " is-hidden" : ""}`}>
                       <td></td>
                       <td colSpan={4}>
-                        <VerdictCard view={r.verdict} />
+                        <VerdictCard
+                          view={r.verdict}
+                          feedback={{
+                            candidateKey: r.candidateKey,
+                            jobId,
+                            onChanged: (view) =>
+                              setRows((rs) => rs.map((x) => (x.membershipId === r.membershipId ? { ...x, verdict: view, tag: view.label } : x))),
+                          }}
+                        />
                       </td>
                     </tr>
                   )}

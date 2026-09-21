@@ -4,6 +4,8 @@ import { sbRest } from "@/lib/server/supabase";
 import { publishOrgRole, sanitizeSkills } from "@/lib/server/publish-role";
 import { roleInputFromBody } from "@/lib/server/job-body";
 import { sendEmail } from "@/lib/server/email";
+import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
+import { saveRoleCard } from "@/lib/server/rolecard/store";
 
 export const maxDuration = 60;
 
@@ -12,7 +14,7 @@ type Params = { params: Promise<{ id: string }> };
 async function loadJob(orgId: string, externalId: string) {
   const res = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(externalId)}` +
-      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role,sourcing_requested&limit=1`
+      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role,sourcing_requested,scorecard&limit=1`
   );
   if (!res.ok) return null;
   const [row] = await res.json();
@@ -187,6 +189,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   } catch (e) {
     console.error("republish role failed", e);
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });
+  }
+  // The scorecard edited in the form. The republish above never touches it.
+  const card = sanitizeScorecard(body.scorecard, "user", isScorecard(job.scorecard) ? job.scorecard : null);
+  if (card?.criteria.some((c) => c.tier === "required")) {
+    card.editedBy = member.email;
+    card.editedAt = new Date().toISOString();
+    await saveRoleCard(job.id, card).catch(() => false);
   }
   return NextResponse.json({ id: job.external_id });
 }
