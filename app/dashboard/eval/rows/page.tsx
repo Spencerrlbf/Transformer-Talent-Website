@@ -5,7 +5,8 @@
 // saved (row_judge_evals) so it can be analysed.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
-import { ROW_MARK, ROW_WORD, type RowStatus, type Tier } from "@/lib/rolecard";
+import { ROUTE, ROW_MARK, ROW_WORD, labelClass, labelFromRows, routeStatus, type RowStatus, type Tier } from "@/lib/rolecard";
+import { VERDICT_LABEL, type VerdictLabel } from "@/lib/verdict-view";
 
 type StoredRow = { id: string; label: string; tier: Tier; gpt: RowStatus; evidence: string; byRule: boolean };
 type Person = { membershipId: string; name: string; title: string; linkedinUrl: string | null; label: string; rows: StoredRow[] };
@@ -78,23 +79,39 @@ export default function RowJudgeComparison() {
 
   const stats = useMemo(() => {
     if (!data) return null;
-    let rows = 0, agree = 0, asked = 0, same = 0, people = 0, ms = 0, tokens = 0, soft = 0, softRight = 0;
+    let rows = 0, agree = 0, asked = 0, same = 0, people = 0, ms = 0, tokens = 0, soft = 0, softRight = 0, matters = 0;
     const perRow = new Map<string, { label: string; n: number; agree: number }>();
+    const moved: { name: string; from: VerdictLabel; to: VerdictLabel }[] = [];
     for (const p of data.people) {
       const j = jev[p.membershipId];
       if (!j?.rows) continue;
       people++;
       ms += j.ms || 0;
       tokens += j.inputTokens || 0;
+      // The label each judge's rows give, by the same fixed rules. Rows decided
+      // by rule (career years) are the same for both.
+      const gptLabel = labelFromRows(p.rows.map((r) => ({ tier: r.tier, status: r.gpt })), "message");
+      const jevLabel = labelFromRows(
+        p.rows.map((r) => {
+          const jr = j.rows!.find((x) => x.id === r.id);
+          return { tier: r.tier, status: jr ? routeStatus(jr.probabilities) : r.gpt };
+        }),
+        "message"
+      );
+      if (gptLabel !== jevLabel) moved.push({ name: p.name, from: gptLabel, to: jevLabel });
       for (const jr of j.rows) {
         const g = p.rows.find((x) => x.id === jr.id);
         if (!g) continue;
         rows++;
         const ok = g.gpt === jr.status;
         if (ok) agree++;
+        // What matters to the label: met / not shown / no, with Jev's spread
+        // turned into a mark by the routing rule.
+        const okMatters = labelClass(g.gpt) === labelClass(routeStatus(jr.probabilities));
+        if (okMatters) matters++;
         const pr = perRow.get(jr.id) || { label: g.label, n: 0, agree: 0 };
         pr.n++;
-        if (ok) pr.agree++;
+        if (okMatters) pr.agree++;
         perRow.set(jr.id, pr);
         if (jr.again) {
           asked++;
@@ -108,7 +125,7 @@ export default function RowJudgeComparison() {
     }
     if (!people) return null;
     const usdPerPerson = ((tokens / people) * (data.usdPerMillionInput || 0.042)) / 1_000_000;
-    return { people, rows, agree, asked, same, ms: Math.round(ms / people), tokens: Math.round(tokens / people), usdPerPerson, soft, softRight, perRow: [...perRow.values()] };
+    return { people, rows, agree, matters, moved, asked, same, ms: Math.round(ms / people), tokens: Math.round(tokens / people), usdPerPerson, soft, softRight, perRow: [...perRow.values()] };
   }, [data, jev]);
 
   const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "–");
@@ -140,16 +157,30 @@ export default function RowJudgeComparison() {
 
       {stats && (
         <div className="jvc-stats">
-          <div><b>{pct(stats.agree, stats.rows)}</b>rows where Jev agrees with GPT-4o<small>{stats.agree} of {stats.rows} rows, {stats.people} people</small></div>
+          <div><b>{pct(stats.matters, stats.rows)}</b>agreement that matters to the label<small>{stats.matters} of {stats.rows} rows: met / not shown / no, Jev routed</small></div>
+          <div><b>{stats.moved.length} of {stats.people}</b>people whose label would change<small>if Jev judged the rows</small></div>
+          <div><b>{pct(stats.agree, stats.rows)}</b>identical marks, raw<small>{stats.agree} of {stats.rows} rows; counts ✓ vs ≈ as a miss</small></div>
           <div><b>{pct(stats.same, stats.asked)}</b>Jev gives the same answer twice<small>{stats.same} of {stats.asked} rows</small></div>
           <div><b>{(stats.ms / 1000).toFixed(1)}s</b>per person, all rows<small>{stats.tokens.toLocaleString()} tokens in</small></div>
           <div><b>${(stats.usdPerPerson * 1000).toFixed(2)}</b>per 1,000 people<small>GPT-4o: about ${(GPT_USD_PER_PERSON * 1000).toFixed(0)}</small></div>
           <div><b>{stats.soft}</b>rows Jev is unsure of (&lt; 0.5)<small>{stats.softRight} of them are disagreements</small></div>
         </div>
       )}
+      {stats && (
+        <p className="dash-muted jvc-perrow">
+          Routing rule for Jev: a &ldquo;no&rdquo; needs {Math.round(ROUTE.noAtLeast * 100)}% or more, &ldquo;met&rdquo; needs {Math.round(ROUTE.metAtLeast * 100)}% or more across ✓ and ≈,
+          anything else reads &ldquo;not shown&rdquo;. ✓ and ≈ count the same for the label.
+        </p>
+      )}
+      {stats && stats.moved.length > 0 && (
+        <p className="jvc-perrow">
+          <b>Labels that would change:</b>{" "}
+          {stats.moved.map((m) => `${m.name}: ${VERDICT_LABEL[m.from]} → ${VERDICT_LABEL[m.to]}`).join(" · ")}
+        </p>
+      )}
       {stats && stats.perRow.length > 0 && (
         <p className="dash-muted jvc-perrow">
-          Agreement by row: {stats.perRow.map((r) => `${r.label} ${pct(r.agree, r.n)}`).join(" · ")}
+          Agreement that matters, by row: {stats.perRow.map((r) => `${r.label} ${pct(r.agree, r.n)}`).join(" · ")}
         </p>
       )}
 
@@ -165,12 +196,14 @@ export default function RowJudgeComparison() {
             </div>
             <table className="jvc-table">
               <thead>
-                <tr><th>Row</th><th>GPT-4o</th><th>Jev</th><th>Jev again</th><th>Jev&apos;s spread</th></tr>
+                <tr><th>Row</th><th>GPT-4o</th><th>Jev, routed</th><th>Jev, raw</th><th>Jev again</th><th>Jev&apos;s spread</th></tr>
               </thead>
               <tbody>
                 {p.rows.map((r) => {
                   const jr = j?.rows?.find((x) => x.id === r.id);
-                  const differs = jr && jr.status !== r.gpt;
+                  const routed = jr ? routeStatus(jr.probabilities) : null;
+                  // Highlighted only when the difference would matter to the label.
+                  const differs = routed && labelClass(routed) !== labelClass(r.gpt);
                   return (
                     <tr key={r.id} className={differs ? "differs" : ""}>
                       <td>
@@ -179,10 +212,11 @@ export default function RowJudgeComparison() {
                       </td>
                       <td><Mark s={r.gpt} /></td>
                       {r.byRule ? (
-                        <td colSpan={3} className="dash-muted">decided by rule from the dated history, for both</td>
+                        <td colSpan={4} className="dash-muted">decided by rule from the dated history, for both</td>
                       ) : jr ? (
                         <>
-                          <td><Mark s={jr.status} /> <span className="jvc-conf">{jr.confidence.toFixed(2)}</span></td>
+                          <td><Mark s={routed!} /></td>
+                          <td><Mark s={jr.status} dim /> <span className="jvc-conf">{jr.confidence.toFixed(2)}</span></td>
                           <td>{jr.again ? <Mark s={jr.again.status} dim={jr.again.status === jr.status} /> : "–"}</td>
                           <td className="jvc-spread">
                             {(["yes", "equivalent", "unknown", "no"] as RowStatus[]).map((s) => (
@@ -191,7 +225,7 @@ export default function RowJudgeComparison() {
                           </td>
                         </>
                       ) : (
-                        <td colSpan={3} className="dash-muted">{busy ? "…" : "not asked yet"}</td>
+                        <td colSpan={4} className="dash-muted">{busy ? "…" : "not asked yet"}</td>
                       )}
                     </tr>
                   );

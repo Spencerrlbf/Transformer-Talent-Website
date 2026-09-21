@@ -250,3 +250,23 @@ export function applyOverrides(
     card: { ...card, rows, aiGaps: baseGaps, wrongRole },
   };
 }
+
+// ---------- a judge that answers in probabilities ----------
+
+/** How a probability spread becomes a mark. A "no" on a Required row makes a
+ *  person a Pass, so it must be confident; "met" needs a clear majority across
+ *  yes and equivalent; anything else is "not shown", which never sinks anyone.
+ *  First values, to be tuned against the recruiter's own check-offs. */
+export const ROUTE = { noAtLeast: 0.7, metAtLeast: 0.6 } as const;
+
+export function routeStatus(p: Partial<Record<RowStatus, number>>): RowStatus {
+  const yes = p.yes || 0;
+  const eq = p.equivalent || 0;
+  if ((p.no || 0) >= ROUTE.noAtLeast) return "no";
+  if (yes + eq >= ROUTE.metAtLeast) return yes >= eq ? "yes" : "equivalent";
+  return "unknown";
+}
+
+/** What a mark means to the label rules: yes and equivalent are the same. */
+export const labelClass = (s: RowStatus): "met" | "unknown" | "no" =>
+  s === "yes" || s === "equivalent" ? "met" : s === "no" ? "no" : "unknown";
