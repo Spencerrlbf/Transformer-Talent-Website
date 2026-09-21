@@ -39,7 +39,9 @@ const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY
 // fifteen trips a typical OpenAI per-minute limit; rate-limited rows then
 // wait out their retry-after rather than counting as failures.
 const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "5", 10) || 5);
-// Short LLM cap so a wave (2 sequential calls/row) provably fits the window.
+// Short LLM cap so a wave provably fits the window: the rows call, then the
+// note (15s at most). A second look at a rejected quote only ever uses time
+// the rows call left over, so it adds nothing to the worst case.
 // 25s: the judge answers every scorecard row with evidence, about twice the
 // output it wrote before. At 15s a slow answer timed out, and a timeout is
 // retried without end (it is never the row's fault), which reads as "stuck".

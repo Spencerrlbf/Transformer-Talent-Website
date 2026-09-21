@@ -28,6 +28,11 @@ const TECH: string[][] = [
   ["Playwright"], ["Puppeteer"], ["Selenium"], ["Cypress"], ["iOS"], ["Android"], ["Flutter"],
 ];
 
+// Programming languages, by display name: what can stand in for one another
+// on a "Backend in X" row. SQL is not one of them.
+const LANGUAGES = new Set(["TypeScript", "JavaScript", "Python", "Go", "Java", "Kotlin", "Swift", "Rust", "C++", "C#", "Ruby", "PHP", "Scala", "Elixir", "Clojure", "Haskell", "OCaml", "Objective-C"]);
+export const isLanguage = (group: string[]): boolean => LANGUAGES.has(group[0]);
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Names that are also ordinary English words must match their own

@@ -33,6 +33,8 @@ export interface Scorecard {
   draftedAt: string;
   editedBy?: string;
   editedAt?: string;
+  /** What the drafter did (first draft's problems, each repair round). Never shown. */
+  draftNotes?: string[];
 }
 
 export type RowStatus = "yes" | "equivalent" | "unknown" | "no";
@@ -157,6 +159,7 @@ export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev
     criteria,
     draftedBy: prev?.draftedBy ?? draftedBy,
     draftedAt: prev?.draftedAt ?? new Date().toISOString(),
+    ...(prev?.draftNotes ? { draftNotes: prev.draftNotes } : {}),
   };
 }
 

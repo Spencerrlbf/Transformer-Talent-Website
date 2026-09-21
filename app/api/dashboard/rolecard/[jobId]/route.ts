@@ -1,8 +1,9 @@
 // A role's scorecard. GET drafts one the first time a role without it is
 // opened; PUT saves the recruiter's edit; POST returns a fresh draft from the
-// job description without saving it, so nothing is lost until they say so.
+// job description without saving it, so nothing is lost until they say so
+// (it only records, on the stored card, what the drafter did).
 // Works on synced roles too: the scorecard is dashboard-owned.
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
@@ -78,5 +79,18 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!canDraft(roleDraftInput(role))) return NextResponse.json({ error: "nothing_to_draft_from" }, { status: 400 });
   const draft = await draftScorecard(roleDraftInput(role));
   if (!draft) return NextResponse.json({ error: "draft_failed" }, { status: 502 });
+  // The redraft itself is saved only when the person presses Save. What the
+  // drafter did is recorded on the stored card (never shown) so a draft that
+  // went wrong can be read from the database: after the response, and onto
+  // the card as it is stored THEN, not the copy read before a slow draft (a
+  // save made meanwhile, such as the call flag, must not be undone).
+  if (draft.draftNotes) {
+    const notes = [`redraft ${new Date().toISOString()}`, ...draft.draftNotes].slice(0, 7);
+    const jobId = (await params).jobId;
+    after(async () => {
+      const fresh = await loadRole(member.org.id, jobId).catch(() => null);
+      if (fresh && isScorecard(fresh.scorecard)) await saveRoleCard(fresh.id, { ...fresh.scorecard, draftNotes: notes }).catch(() => false);
+    });
+  }
   return NextResponse.json({ scorecard: draft });
 }

@@ -3,7 +3,7 @@
 // reword, move, delete or add rows. Nothing here writes to the database.
 
 import { isCareerYearsRow, sanitizeScorecard, type Scorecard } from "@/lib/rolecard";
-import { technologiesNamed } from "@/lib/tech-terms";
+import { isLanguage, technologiesNamed } from "@/lib/tech-terms";
 
 export interface DraftInput {
   title: string;
@@ -32,10 +32,13 @@ const ROWS = {
 } as const;
 
 // The examples below are deliberately from OTHER kinds of role (payments,
-// data platform). The first version used an agent-platform role as its
-// example; the first role it was tried on was an agent-platform role, and it
-// copied three rows from the prompt, including a "2+ years" bar no job
-// description had asked for.
+// data platform, mobile). The first version used an agent-platform role as
+// its example; the first role it was tried on was an agent-platform role, and
+// it copied three rows from the prompt, including a "2+ years" bar no job
+// description had asked for. The second version still carried two phrases
+// from that role ("backend services in production", "evaluation or
+// observability"), and both came back word for word. Nothing here may be
+// taken from a role the drafter is being tested on.
 const SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Most candidates are judged from a LinkedIn profile alone, so each row must be something a profile, a resume or a ten-minute call can answer.
 
 THREE TIERS
@@ -44,10 +47,10 @@ THREE TIERS
 - bonus: nice to have. 1 to 4 rows.
 
 EVERY ROW IS CHECKABLE FROM WHAT PEOPLE ACTUALLY WRITE
-- label: at most 10 words, no question mark. Never a sentence copied from the description. Never an adjective as the test: no deep, strong, solid, expert, proven, extensive, comfortable, familiar. Say the thing done: "Production-grade infrastructure experience" becomes "Has built and run backend services in production".
+- label: at most 10 words, no question mark. Never a sentence copied from the description. Never an adjective as the test: no deep, strong, solid, expert, proven, extensive, comfortable, familiar. Say the thing done: "Hands-on mobile experience" becomes "Has shipped an iOS or Android app to the store".
 - good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: titles, team names, skill tags, the words people use in a job description. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
-- One row, one question. If a single line on a profile would tick two rows, they are one row: merge them. When the description pairs two names for one capability, keep both joined by "or" ("evaluation or observability tooling"), because people describe their work with either word.
-- A technology row says what else would do the job, in brackets, taken from the role's own tech stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". With no stated alternatives, name none. Put a years bar on a skill row ONLY when the description states one for that skill; how deep someone is, is a question for the call.
+- One row, one question. If a single line on a profile would tick two rows, they are one row: merge them. When the description pairs two names for one capability, keep both joined by "or" ("billing or invoicing systems"), because people describe their work with either word.
+- A technology row says what else would do the job, in brackets, taken from the role's own tech stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". When the stack lists several languages, every one that would do the row's job goes in the brackets, not only the closest. With no stated alternatives, name none. Put a years bar on a skill row ONLY when the description states one for that skill; how deep someone is, is a question for the call.
 - A category row keeps technologies out of its label and lists them in good: label "Stream processing or message queues"; good "Kafka, Kinesis, Pub/Sub, RabbitMQ or SQS named on a job; Flink or Spark Streaming also count".
 
 HOW DESCRIPTION LANGUAGE BECOMES A ROW (patterns from other roles)
@@ -61,7 +64,7 @@ EXAMPLES OF THE FORM (from other roles; do not reuse their content)
 - exceptional: "Has led a zero-to-one product as the first engineers" :: good: "Founding engineer, first engineer, early engineer or technical co-founder at a company that shipped."
 - bonus: "Data warehouse modelling" :: good: "dbt, Snowflake, BigQuery or Redshift named on a job; dimensional modelling or analytics engineering in a description."
 
-Never invent requirements the description does not support. No rows about soft skills, culture, location, visa or salary. Order each tier by importance. 7 to 11 rows in total.`;
+Every requirement and every hard responsibility in the description is covered by some row: reword what cannot be checked, never leave it out. Never invent requirements the description does not support. No rows about soft skills, culture, location, visa or salary. Order each tier by importance. 7 to 11 rows in total.`;
 
 /** Enough written about the role to draft from. A bare title would make the
  *  model invent requirements, and invented Required rows would pass people. */
@@ -83,12 +86,32 @@ const ADJECTIVE = /\b(deep|deeply|strong|strongly|solid|expert|proven|extensive|
 const VAGUE_ENDING = /\b(experience|expertise|knowledge|skills?|background|understanding|intersection|ability|abilities|mindset)\s*$/i;
 const LOOSE_NOTE = /\bin any capacity\b|\bexposure to\b|\bfamiliarity\b|\bon-call\b|\bcode reviews?\b|\bstakeholder/i;
 const STOP = new Set(["the", "and", "for", "with", "from", "of", "in", "to", "a", "an", "or", "at", "on", "has", "have", "as", "is", "are", "that", "this", "their", "years", "year"]);
-const words = (t: string) => (t.toLowerCase().match(/[a-z0-9+#.]+/g) || []).filter((w) => w.length > 2 && !STOP.has(w));
+const words = (t: string) => (t.toLowerCase().match(/[a-z0-9+#.]+/g) || []).map((w) => w.replace(/\.+$/, "")).filter((w) => w.length > 2 && !STOP.has(w));
+// "Experience with X" is a row anything can satisfy, whatever X is.
+// ("Knowledge graphs" and "Background job processing" are real subjects: the
+// preposition is what makes it the empty form.)
+const WEAK_OPENER = /^\s*(?:(?:has|have)\s+(?:an?\s+|some\s+)?)?(?:(?:experience|knowledge|understanding|exposure|background|expertise|familiarity|proficiency)\s+(?:with|of|in|to|on|across)|(?:experienced|skilled|proficient|versed)\s+(?:with|in|at)|ability\s+to)\b/i;
+// Words that say nothing about WHICH requirement a sentence is: used to tell
+// whether a row covers a requirement, and whether two rows cover one thing.
+const GENERIC = new Set([
+  "experience", "expertise", "knowledge", "skill", "skills", "background", "understanding", "ability", "comfort", "comfortable", "intersection",
+  "software", "engineering", "engineer", "engineers", "developer", "system", "systems", "production", "grade", "environment", "environments",
+  "fast", "moving", "paced", "deep", "strong", "solid", "proven", "extensive", "hands", "team", "teams", "work", "working", "built", "build",
+  "building", "platform", "senior", "staff", "principal", "lead", "junior", "head", "manager", "remote", "hybrid", "onsite", "full", "stack", "time", "run", "running", "owned", "own", "led", "shipped", "used", "using", "professional", "plus", "etc", "e.g", "similar", "related", "tools", "tool",
+]);
+const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+const topic = (t: string) => new Set(words(t).filter((w) => !GENERIC.has(w) && !ADJECTIVE.test(w)).map(stem));
+const DUPLICATE = /second row about|covers the same ground/;
 
 export interface DraftProblem {
   label: string;
   problem: string;
+  /** A judgement call the code cannot settle (would Python do this row's
+   *  job? is "data" the work or the job family?). Sent along when a repair
+   *  is happening anyway; never the reason for one, never counted. */
+  advisory?: boolean;
 }
+const hard = (ps: DraftProblem[]) => ps.filter((p) => !p.advisory);
 
 /** What is wrong with a draft, row by row, in words the model can act on. */
 export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[] {
@@ -103,13 +126,27 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
     const adj = core.match(ADJECTIVE);
     if (adj) out.push({ label: c.label, problem: `uses "${adj[0]}" as the test. Say the thing done instead (for example "Python services in production", "Has built distributed systems").` });
     else if (VAGUE_ENDING.test(core.trim())) out.push({ label: c.label, problem: `ends in "${core.trim().split(/\s+/).pop()}", which nobody can check. Name what the person has built, run or used.` });
+    else if (WEAK_OPENER.test(core)) out.push({ label: c.label, problem: `opens with "${core.match(WEAK_OPENER)![0].trim()}", which anything can satisfy. Say what the person has built, run or shipped ("Has built ...").` });
     const w = words(core);
     const copied = w.length >= 3 && sentences.find((sn) => { const sw = new Set(words(sn)); return w.filter((x) => sw.has(x)).length / w.length >= 0.8; });
-    if (copied && !adj && !VAGUE_ENDING.test(core.trim())) out.push({ label: c.label, problem: `is the description's own sentence shortened ("${copied.slice(0, 80)}"). Rewrite it as what a profile would show.` });
+    // A requirement that was already checkable may be kept nearly as written,
+    // once it says something done ("Has built forecasting models in production").
+    if (copied && !adj && !VAGUE_ENDING.test(core.trim()) && !/^\s*(has|have)\s/i.test(core)) out.push({ label: c.label, problem: `is the description's own sentence shortened ("${copied.slice(0, 80)}"). Rewrite it as what a profile would show.` });
     const named = technologiesNamed(core);
     if (named.length) {
       const others = stack.filter((g) => !named.some((n) => n[0] === g[0]));
-      if (!/\(/.test(c.label) && others.length) out.push({ label: c.label, problem: `names ${named[0][0]} but not what else would do the job. Add, in brackets, what the employer would accept in its place: the same kind of thing only, a language for a language (the role's tech stack lists: ${others.map((g) => g[0]).slice(0, 8).join(", ")}).` });
+      // Only a stand-in of the same kind is asked for: a language for a
+      // language. Java is no stand-in for Kafka, whatever the stack lists.
+      const otherLanguages = others.filter(isLanguage);
+      if (!/\(/.test(c.label) && named.some(isLanguage) && otherLanguages.length)
+        out.push({ label: c.label, problem: `names ${named.find(isLanguage)![0]} but not what else would do the job. Add, in brackets, each language the employer would accept in its place (the role's own stack also lists: ${otherLanguages.map((g) => g[0]).join(", ")}).` });
+      // Brackets that name a stand-in but no LANGUAGE, when the role's own
+      // stack lists other languages: a Java engineer then reads "not shown"
+      // on a TypeScript row that says "(Node.js accepted)". Whether Java does
+      // that row's job is the drafter's call, so this is advice.
+      const inBrackets = technologiesNamed((c.label.match(/\(([^)]*)\)/g) || []).join(" "));
+      if (/\(/.test(c.label) && named.some(isLanguage) && otherLanguages.length && !inBrackets.some(isLanguage))
+        out.push({ advisory: true, label: c.label, problem: `its brackets name no other language, and the role's own stack also lists ${otherLanguages.map((g) => g[0]).join(", ")}. Add each one that would do this row's job; leave out any that would not.` });
       for (const g of named) {
         const first = seenTech.get(g[0]);
         if (first && first !== c.label) out.push({ label: c.label, problem: `is a second row about ${g[0]} (the other is "${first}"). One profile line would tick both: merge them into one row.` });
@@ -117,6 +154,33 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
       }
     }
     if (c.good && LOOSE_NOTE.test(c.good)) out.push({ label: c.label, problem: `its note ("${c.good.slice(0, 70)}") names something nobody writes on a profile, or lets anything count. Name titles, team names, skill tags or the words people use in a job description.` });
+  }
+  // Two rows on one thing ("Has owned durable workflow orchestration" and
+  // "Workflow orchestration"): one profile line would tick both. The longer
+  // row may add one word at most: "Has published ML research" and "... at
+  // NeurIPS, ICML or ICLR" are a bar and what is beyond it, not a duplicate.
+  const ACTION = new Set(["built", "build", "run", "ran", "owned", "own", "led", "lead", "shipped", "used", "using", "worked", "designed", "written", "wrote", "managed", "experience"]);
+  const subject = (t: string) => new Set(words(t).filter((w) => !ACTION.has(w)).map(stem));
+  const rows = card.criteria.filter((c) => !isCareerYearsRow(c.label)).map((c) => ({ c, t: subject(c.label.replace(/\(.*?\)/g, " ")) }));
+  rows.forEach((b, i) => {
+    const twin = rows.slice(0, i).find((a) => {
+      const [small, big] = a.t.size <= b.t.size ? [a.t, b.t] : [b.t, a.t];
+      return small.size >= 2 && big.size - small.size <= 1 && [...small].every((w) => big.has(w));
+    });
+    if (twin && !out.some((p) => p.label === b.c.label && DUPLICATE.test(p.problem))) out.push({ label: b.c.label, problem: `covers the same ground as "${twin.c.label}". One profile line would tick both: keep one row, in the tier it belongs to.` });
+  });
+  // The core of the role has a row. A word of the role's TITLE that the
+  // description itself uses three times or more, and that no row and no note
+  // mentions, may be a requirement left out: an agent-platform card came back
+  // with nothing about agents. Advice only: the word can just as well be the
+  // job family ("data", "full stack") or how the job is worked ("remote").
+  const onCard = topic(card.criteria.map((c) => `${c.label} ${c.good || ""}`).join(" "));
+  const said = new Map<string, number>();
+  for (const w of words([jd.about || input.description || "", ...(jd.doing || []), ...(jd.needs || []), ...(jd.bonus || [])].join(" ")).map(stem)) said.set(w, (said.get(w) || 0) + 1);
+  for (const w of words(input.title)) {
+    const n = said.get(stem(w)) || 0;
+    if (n >= 3 && w.length > 3 && !GENERIC.has(w) && !GENERIC.has(stem(w)) && !ADJECTIVE.test(w) && !technologiesNamed(w).length && !onCard.has(stem(w)))
+      out.push({ advisory: true, label: "(missing row)", problem: `no row mentions "${w}", which is in the role's title and which the description names ${n} times. If it is work the person must have done, add a row that says what they have built or done with it; if it is only the job family or the employer's market, change nothing.` });
   }
   const count = (t: string) => card.criteria.filter((c) => c.tier === t).length;
   if (count("exceptional") < 1) out.push({ label: "(exceptional tier)", problem: "is empty. Add 1 to 3 rows from the role's hardest responsibilities." });
@@ -186,30 +250,74 @@ export async function draftScorecard(input: DraftInput, timeoutMs = 25_000, budg
     { role: "system", content: SYSTEM },
     { role: "user", content: user.slice(0, 9000) },
   ];
-  let best = await askDrafter(base, timeoutMs);
-  if (!best) return null;
-  let problems = draftProblems(best, input);
-  for (let round = 0; round < 2 && problems.length && Date.now() - started + timeoutMs < budgetMs; round++) {
+  const first = await askDrafter(base, timeoutMs);
+  if (!first) return null;
+  // A row with a problem is reworded, never deleted. "Deleted" is strict: the
+  // row's label is gone, the card is shorter for it, and no new row took up
+  // its subject. (A row left as it was is not deleted, and neither is one
+  // reworded in other words: both looked deleted to a looser test, and good
+  // repairs were thrown away for it.) What was deleted stays owed until a
+  // new row brings its subject back, however many rounds that takes.
+  type Owed = { label: string; subject: Set<string> };
+  const newlyDeleted = (before: Scorecard, beforeProblems: DraftProblem[], after: Scorecard): Owed[] => {
+    const has = (card: Scorecard, label: string) => card.criteria.some((x) => x.label === label);
+    const gone = before.criteria.filter((c) => !has(after, c.label));
+    const flaggedGone = gone.filter((c) => hard(beforeProblems).some((p) => p.label === c.label && !DUPLICATE.test(p.problem)));
+    const fresh = after.criteria.filter((x) => !has(before, x.label));
+    // every new row is somebody's rewording: only the shortfall was deleted
+    const shortfall = gone.length - fresh.length;
+    if (shortfall <= 0) return [];
+    return flaggedGone
+      .map((c) => ({ label: c.label, subject: topic(c.label.replace(/\(.*?\)/g, " ")) }))
+      .filter((o) => o.subject.size > 0 && !fresh.some((x) => [...topic(`${x.label} ${x.good || ""}`)].some((w) => o.subject.has(w))))
+      .slice(0, shortfall);
+  };
+  const stillOwed = (owed: Owed[], card: Scorecard): Owed[] =>
+    owed.filter((o) => !card.criteria.some((x) => !first.criteria.some((y) => y.label === x.label) && [...topic(`${x.label} ${x.good || ""}`)].some((w) => o.subject.has(w))));
+  const asProblems = (owed: Owed[]): DraftProblem[] => owed.map((o) => ({ label: "(deleted row)", problem: `"${o.label}" was removed instead of reworded. Bring back what it asked for, as something a person has built or done.` }));
+  const brief = (ps: DraftProblem[]) => ps.map((p) => `${p.advisory ? "(advice) " : ""}${p.label}: ${p.problem.slice(0, 70)}`).join(" | ").slice(0, 600);
+
+  let best = first;
+  let problems = draftProblems(first, input);
+  const notes = [`first draft: ${first.criteria.length} rows, ${hard(problems).length} problem(s)${problems.length ? `: ${brief(problems)}` : ""}`];
+  let latest = first;
+  let latestProblems = problems;
+  let owed: Owed[] = [];
+  // Advice alone never starts a repair: it rides along with one.
+  for (let round = 0; round < 2 && hard(latestProblems).length && Date.now() - started + timeoutMs < budgetMs; round++) {
     const asJson = (c: Scorecard) => JSON.stringify(Object.fromEntries((["required", "exceptional", "bonus"] as const).map((t) => [t, c.criteria.filter((x) => x.tier === t).map((x) => ({ label: x.label, good: x.good || "" }))])));
     const next = await askDrafter(
       [
         ...base,
-        { role: "assistant", content: asJson(best) },
-        { role: "user", content: `That draft breaks the rules in ${problems.length} place${problems.length > 1 ? "s" : ""}. Return the whole scorecard again with every one of these fixed, and leave rows that have no problem as they are:\n${problems.map((p) => `- "${p.label}" ${p.problem}`).join("\n")}` },
+        { role: "assistant", content: asJson(latest) },
+        { role: "user", content: `That draft breaks the rules in ${latestProblems.length} place${latestProblems.length > 1 ? "s" : ""}. Return the whole scorecard again with every one of these fixed. Reword a row that has a problem, never delete it, and leave rows that have no problem as they are:\n${latestProblems.map((p) => `- "${p.label}" ${p.problem}`).join("\n")}` },
       ],
       timeoutMs
     );
-    if (!next) break;
-    const left = draftProblems(next, input);
-    if (left.length < problems.length) {
+    if (!next) {
+      notes.push(`repair ${round + 1}: no reply`);
+      break;
+    }
+    owed = stillOwed([...owed, ...newlyDeleted(latest, latestProblems, next)], next);
+    const left = [...draftProblems(next, input), ...asProblems(owed)];
+    notes.push(`repair ${round + 1}: ${next.criteria.length} rows, ${hard(left).length} problem(s)${left.length ? `: ${brief(left)}` : ""}`);
+    if (hard(left).length < hard(problems).length) {
       best = next;
       problems = left;
-    } else break;
+    }
+    // The next round works on the latest reply either way: it carries the
+    // model's own last attempt, and what is still wrong with it.
+    latest = next;
+    latestProblems = left;
   }
-  if (problems.length) {
-    console.warn(`scorecard draft: ${problems.length} problem(s) left after repair:`, problems.map((p) => `${p.label}: ${p.problem.slice(0, 60)}`).join(" | "));
+  if (hard(problems).length) {
+    console.warn(`scorecard draft: ${hard(problems).length} problem(s) left after repair:`, brief(hard(problems)));
     const tidied = sanitizeScorecard({ criteria: best.criteria.map((c) => (isCareerYearsRow(c.label) ? c : { ...c, id: undefined, label: tidyLabel(c.label) })) }, "ai");
     if (tidied) best = tidied;
+    notes.push(`kept with ${hard(problems).length} problem(s) after tidying`);
   }
+  // What the drafter did, kept on the card (never shown): the only way to see
+  // from the database how a draft on an unfamiliar role went.
+  best = { ...best, draftNotes: notes.map((n) => n.slice(0, 700)).slice(0, 6) };
   return best;
 }

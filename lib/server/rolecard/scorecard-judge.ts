@@ -24,7 +24,7 @@ import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import { careerYearsStatus, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
-export const SCORECARD_JUDGE_VERSION = "v9";
+export const SCORECARD_JUDGE_VERSION = "v10";
 
 const ROWS_SYSTEM = `You are a careful technical recruiter checking one candidate against a role's scorecard. You have the candidate's LinkedIn profile (and a resume when supplied), a FACTS block computed in code from their dated positions, and the role. Answer EVERY scorecard row, by its id.
 
@@ -35,8 +35,8 @@ STATUS
 - no: the material gives positive evidence AGAINST it: a career plainly in another discipline. Never from silence, never from low dated years.
 
 EVIDENCE IS THE PERSON'S OWN WORDS
-- Read for meaning, not for keywords. "Agent Evaluation Lead" or "eval platform" shows evaluation tooling for agents. "Platform and Infra" shows infrastructure work. Skill tags on a job such as Kubernetes, Docker, AWS Lambda, Terraform or PostgreSQL show backend services in production. The note after each row gives EXAMPLES of evidence: any one of them, or anything that says the same in other words.
-- A title that itself names the work counts ("Backend Engineer", "Agent Platform lead", "Founding Engineer" for an early-engineer row). A generic title ("Software Engineer", "Member of Technical Staff") with an employer and a tenure shows nothing about a row: unknown.
+- Read for meaning, not for keywords. A title, a team name or a line of a description that names the work shows it: "Fraud Detection Lead" or "risk models" shows fraud-detection work; "Search Infra" shows infrastructure work. Skill tags on a job are that job's work: Kafka and Flink tagged on a job show stream processing. The note after each row gives EXAMPLES of evidence: any one of them, or anything that says the same in other words.
+- A title that itself names the work counts ("Payments Engineer", "Search Platform lead", "Founding Engineer" for an early-engineer row). A generic title ("Software Engineer", "Member of Technical Staff") with an employer and a tenure shows nothing about a row: unknown.
 - Where someone works is never evidence for a row: not the employer's product, its technology stack, its reputation, or that the role targets it.
 - quote: for every yes or equivalent, copy the words from the PROFILE or RESUME that decide it, exactly as written there, at most 12 words: a skill tag, a line of a description, a title that names the work. If you cannot quote it, the status is unknown. For unknown and no, quote is "".
 - evidence: one plain statement of at most 14 words: the fact that decides it, or for unknown, what is not shown. Never write suggests, implies, indicates, probably or likely.
@@ -50,14 +50,18 @@ const NOTE_SYSTEM = `You write the short note a recruiter reads in ten seconds b
 Write 2 to 4 sentences, at most 70 words:
 1. Who they are, from FACTS: current title and company, how long they have been there, and their years as FACTS words them (in engineering roles, or of career). When FACTS says they worked at a company this role targets, say so as a fact.
 2. What the profile shows for this role: only rows marked yes or equivalent, each with its evidence. For an equivalent, say what stands in for what.
-3. What is not shown, or is against: the Required rows marked unknown or no, plainly ("TypeScript is not shown on the profile"). When most rows are unknown, say the profile is thin in a few words ("The profile is titles only").
+3. What is not shown, or is against: the Required rows marked unknown or no, plainly ("TypeScript is not shown on the profile"). A years row is never "not shown": say its numbers ("3 years against the 4+ asked"). When the label is Pass, say which Required row is against and its numbers. When most rows are unknown, say the profile is thin in a few words ("The profile is titles only").
 
-Never state or imply experience for a row marked unknown. Never name a technology, product, duty or employer that is not in FACTS or ROWS. Never write suggests, implies, likely, probably, potential or ramp. Give no advice and no call to action: the label is shown beside the note. Use the first name once, then "they" and "their", never he or she. No bullets, no headings, no quotation marks.
+Never state or imply experience for a row marked unknown. Never name a technology, product, duty or employer that is not in FACTS or ROWS. Never write suggests, implies, likely, probably, potential or ramp. Give no advice and no call to action: the label is shown beside the note. Use the candidate's name once, exactly as given, then "they" and "their", never he or she. No bullets, no headings, no quotation marks.
 
 ALSO RETURN: missing (0 to 4 short plain statements: the Required rows that are unknown or no first, then Exceptional ones), ask (0 to 3 short questions for a first call, one per unknown Required row first), better_suited (only when the label is pass or message AND FACTS points somewhere specific, such as years in another discipline: one sentence naming where they would fit; otherwise an empty string).`;
 
 type RowOut = { id: string; status: RowStatus; quote: string; evidence: string };
 
+const NOT_QUOTED = "Not shown on the profile: nothing written there says this.";
+// A title, an employer and a date say nothing about a row: that tick was an
+// inference from where the person works, and gets no second look.
+const SAYS_NOTHING = "Not shown on the profile: a title and an employer do not say this.";
 const HEDGE = /\b(suggests?|impl(y|ies|ied)|indicat(es?|ing)|presumably|probably|likely|potential)\b/i;
 // Words that say nothing about the work: generic title words, seniority,
 // and what a copied profile line drags along with it (dates, tenure, place).
@@ -79,15 +83,24 @@ const tokens = (s: string) => (s.toLowerCase().match(/[a-z0-9+#]+(?:\.[a-z0-9]+)
  *  copied line and proves nothing; a quote stitched from a skill here and a
  *  city there proves nothing; one invented word in a real line proves nothing. */
 export function quoteIsGrounded(quote: string, material: string, employers: string[], noise = ""): boolean {
+  return quoteCheck(quote, material, employers, noise) === "ok";
+}
+
+/** Why a quote fails. "empty": it is a generic title, an employer, a date or
+ *  a place, which says nothing about any row (an inference from where someone
+ *  works). "absent": it says something, but those words are not on the
+ *  profile (a paraphrase, or the scorecard's own note copied back). */
+export function quoteCheck(quote: string, material: string, employers: string[], noise = ""): "ok" | "empty" | "absent" {
   const q = quote.replace(/["“”‘’…]/g, " ").replace(/\s+/g, " ").trim();
-  if (q.length < 2) return false;
+  if (q.length < 2) return "empty";
   const skip = new Set([...employers.flatMap((e) => tokens(e)), ...tokens(noise)]);
   const content = tokens(q).filter((t) => !GENERIC_WORDS.has(t) && !skip.has(t) && !/^\d+$/.test(t));
-  if (!content.length) return false;
-  return material.split("\n").some((line) => {
+  if (!content.length) return "empty";
+  const onOneLine = material.split("\n").some((line) => {
     const lt = new Set(tokens(line));
     return content.every((t) => lt.has(t));
   });
+  return onOneLine ? "ok" : "absent";
 }
 
 const stripExamples = (label: string) => label.replace(/\(.*?\)/g, " ").replace(/(\be\.g\.|\bsuch as\b|\blike\b|\bor similar\b|\bincluding\b).*$/i, " ");
@@ -95,6 +108,16 @@ const stripExamples = (label: string) => label.replace(/\(.*?\)/g, " ").replace(
  *  "examples of evidence" note is NOT a list of substitutes (it may well name
  *  Kubernetes as evidence of backend work on a TypeScript row). */
 const bracketed = (label: string) => (label.match(/\(([^)]*)\)/g) || []).join(" ");
+
+/** Is a quote about this row at all? It shares a word (by its first five
+ *  letters: "infra" and "infrastructure", "eval" and "evaluation") with the
+ *  row's label or note, or it names a technology. Used only on a second look. */
+function aboutTheRow(quote: string, c: Criterion): boolean {
+  if (technologiesNamed(quote).length) return true;
+  const key = (t: string) => t.slice(0, 5);
+  const rowWords = new Set(tokens(`${c.label} ${c.good || ""}`).filter((t) => t.length >= 4 && !GENERIC_WORDS.has(t)).map(key));
+  return tokens(quote).some((t) => t.length >= 4 && !GENERIC_WORDS.has(t) && (rowWords.has(key(t)) || [...rowWords].some((w) => w.startsWith(t) || t.startsWith(w))));
+}
 
 function reasonNotOnAJob(tech: string[][], profileText: string, jobs: JobText[]): string {
   const name = tech[0]?.[0] || "It";
@@ -256,6 +279,39 @@ export function guardNote(paragraph: string, rows: CardRow[], allowedText: strin
   return text;
 }
 
+/** The name a note uses: the person's name as they write it, without what is
+ *  not a name (a title, an initial, a credential, an emoji). Guessing the
+ *  given name goes wrong both ways ("Young" for Young Jean Han, "Maria del"
+ *  for Maria del Carmen Lopez); the whole name is always right. No full stop
+ *  survives, so a name never ends a sentence early. */
+export function noteName(full: string | null | undefined): string {
+  const NOT_A_NAME = /^(dr|mr|mrs|ms|miss|mx|prof|sir|jr|sr|ii|iii|iv|phd|md|mba|msc|bsc|cpa|cfa|pmp|esq)$/i;
+  const parts = (full || "")
+    .split(/[,|·•]/)[0]
+    .split(/\s+/)
+    .map((t) => t.replace(/\./g, ""))
+    .filter((t) => /\p{L}/u.test(t) && t.replace(/[^\p{L}]/gu, "").length > 1 && !NOT_A_NAME.test(t));
+  return parts.slice(0, 5).join(" ") || "The candidate";
+}
+
+/** A Pass says why. The reason is a Required row that reads "no"; when the
+ *  note does not carry that row's numbers, the row's own evidence (written by
+ *  code for a years row) is added as the last sentence. The sentence never
+ *  names the label: the note outlives a recruiter's overrule, the label does not. */
+export function withPassReason(paragraph: string, label: VerdictLabel, rows: CardRow[]): string {
+  if (label !== "pass") return paragraph;
+  const against = rows.filter((r) => r.tier === "required" && r.status === "no");
+  const missing = against.filter((r) => {
+    const bar = yearsBar(r.label);
+    if (bar != null) return !new RegExp(`(?<![\\d.])${bar}\\s*\\+`).test(paragraph);
+    const key = r.label.toLowerCase().match(/[a-z0-9+#.]{4,}/g) || [];
+    return !sentences(paragraph).some((st) => NEGATION.test(st) && key.filter((w) => st.toLowerCase().includes(w)).length >= Math.min(2, key.length));
+  });
+  if (!missing.length) return paragraph;
+  const why = missing.slice(0, 2).map((r) => (yearsBar(r.label) != null ? `On years: ${r.evidence}` : `Against: ${r.label}. ${r.evidence}`)).join(" ");
+  return `${paragraph} ${why}`.trim();
+}
+
 function fallbackNote(first: string, facts: string[], rows: CardRow[]): string {
   const met = rows.filter((r) => r.status === "yes" || r.status === "equivalent").map((r) => r.label);
   const open = rows.filter((r) => r.tier === "required" && r.status === "unknown").map((r) => r.label);
@@ -293,6 +349,29 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   let techNow: string[] = [];
   let techBefore: string[] = [];
   let usage = { input: 0, output: 0 };
+  let rowsUser = "";
+  const rowsSchema = (ids: string[], withTech: boolean) => ({
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      rows: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: { type: "string", enum: ids },
+            status: { type: "string", enum: ["yes", "equivalent", "unknown", "no"] },
+            quote: { type: "string" },
+            evidence: { type: "string" },
+          },
+          required: ["id", "status", "quote", "evidence"],
+        },
+      },
+      ...(withTech ? { technologies_now: { type: "array", items: { type: "string" } }, technologies_before: { type: "array", items: { type: "string" } } } : {}),
+    },
+    required: withTech ? ["rows", "technologies_now", "technologies_before"] : ["rows"],
+  });
   if (asked.length) {
     const user =
       `ROLE: ${input.roleTitle}${input.minYears ? ` (${input.minYears}+ years)` : ""}\n\n` +
@@ -304,34 +383,8 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       `CANDIDATE: ${input.candidateName}\nLINKEDIN PROFILE:\n${input.profileText.slice(0, 5000)}\n\n` +
       (input.resumeText ? `RESUME EXCERPT:\n${input.resumeText.slice(0, 3000)}\n\n` : "") +
       `FACTS (computed in code from dated positions):\n${input.factsBlock}`;
-    const r = await callOpenAI(
-      input, ROWS_SYSTEM, user, "scorecard_rows",
-      {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          rows: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                id: { type: "string", enum: asked.map((c) => c.id) },
-                status: { type: "string", enum: ["yes", "equivalent", "unknown", "no"] },
-                quote: { type: "string" },
-                evidence: { type: "string" },
-              },
-              required: ["id", "status", "quote", "evidence"],
-            },
-          },
-          technologies_now: { type: "array", items: { type: "string" } },
-          technologies_before: { type: "array", items: { type: "string" } },
-        },
-        required: ["rows", "technologies_now", "technologies_before"],
-      },
-      input.timeoutMs ?? 30_000,
-      true
-    );
+    rowsUser = user;
+    const r = await callOpenAI(input, ROWS_SYSTEM, user, "scorecard_rows", rowsSchema(asked.map((c) => c.id), true), input.timeoutMs ?? 30_000, true);
     if (!r) return null;
     rowsOut = Array.isArray(r.out.rows) ? (r.out.rows as RowOut[]) : [];
     techNow = cleanTech(r.out.technologies_now, material);
@@ -341,9 +394,8 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
 
   // ---- 2. code ----
   const idOf = (x: string) => String(x || "").replace(/^[\s\[]+|[\s\]]+$/g, "").toLowerCase();
-  let unassessed = 0;
-  let removed = 0;
-  const rows: CardRow[] = allCriteria.map((c) => {
+  const answerFor = (list: RowOut[], c: Criterion) => list.find((x) => x && idOf(x.id) === c.id.toLowerCase());
+  const decide = (c: Criterion, r: RowOut | undefined): CardRow => {
     const call = c.tier === "required" && !!c.confirmOnCall;
     if (isCareerYearsRow(c.label)) {
       const ruled = careerYearsStatus(facts, yearsBar(c.label)!, basis);
@@ -351,8 +403,6 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       const st: RowStatus = ruled.status === "no" && c.tier !== "required" ? "unknown" : ruled.status;
       return { id: c.id, label: c.label, tier: c.tier, status: st, evidence: ruled.evidence, ai: st, call, confirmed: null };
     }
-    const r = rowsOut.find((x) => x && idOf(x.id) === c.id.toLowerCase());
-    if (!r) unassessed++;
     let status: RowStatus = r && ["yes", "equivalent", "unknown", "no"].includes(r.status) ? r.status : "unknown";
     let evidence = (r?.evidence || (r ? "" : "Not assessed")).trim().slice(0, 180);
     // Cut a long quote at a separator: a word cut in half is a word that is
@@ -366,7 +416,6 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       status = "unknown";
       evidence = why;
       quote = "";
-      removed++;
     };
     // Exceptional and Bonus rows never count against anyone.
     if (status === "no" && c.tier !== "required") status = "unknown";
@@ -396,7 +445,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
           const cited = technologiesNamed(`${evidence} ${quote}`).filter((g) => !labelTech.some((l) => l[0] === g[0]));
           if (!cited.length || !cited.every((g) => onAJob([g]))) drop(reasonNotOnAJob(labelTech, input.profileText, jobs));
         } else drop(reasonNotOnAJob([...labelTech, ...acceptedTech], input.profileText, jobs));
-      } else if (!quoteIsGrounded(quote, material, employers, noise)) drop("Not shown on the profile: nothing written there says this.");
+      } else if (quoteCheck(quote, material, employers, noise) !== "ok") drop(quoteCheck(quote, material, employers, noise) === "absent" ? NOT_QUOTED : SAYS_NOTHING);
       else {
         // Any technology the evidence or quote names must be the person's own
         // (an employer that shares a technology's name is not a technology).
@@ -409,7 +458,47 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     const bar = yearsBar(c.label);
     if (bar != null && datedYears != null && datedYears < bar - 1 && (status === "yes" || status === "equivalent")) drop(`Dated history shows ${datedYears} years against ${bar}+.`);
     return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}), ...(dropped ? { dropped } : {}) };
-  });
+  };
+  const rows: CardRow[] = allCriteria.map((c) => decide(c, answerFor(rowsOut, c)));
+  const unassessed = asked.filter((c) => !answerFor(rowsOut, c)).length;
+
+  // A quote that is not on the profile is a mistake in QUOTING (the judge
+  // copied the scorecard's own note, or paraphrased), and the person may well
+  // have the evidence: the judge gets one more look at those rows, under the
+  // same guards. A tick it called an inference itself (suggests, implies) is
+  // not looked at again: rewording an inference does not make it evidence.
+  const again = rows.filter((r) => r.dropped?.why === NOT_QUOTED);
+  // Only in the time the rows call left unused, so the longest a person can
+  // take is what it was before there was a second look.
+  const spare = (input.timeoutMs ?? 30_000) - (Date.now() - started);
+  let secondLookFailed = false;
+  if (again.length && rowsUser && spare >= 4_000) {
+    const r2 = await callOpenAI(
+      input, ROWS_SYSTEM,
+      `${rowsUser}\n\nSECOND LOOK. Answer ONLY these rows again. Your quote for each was rejected because those words are not written on the candidate's profile or resume (words from the scorecard or the job description are not the candidate's words):\n${again
+        .map((r) => `- [${r.id}] rejected quote: "${r.dropped!.quote.slice(0, 120)}"`)
+        .join("\n")}\nFor each row: if the profile has words that decide it (a skill tag on a job, a line of a description, a title that names the work), copy them exactly. If it does not, answer unknown with quote "": that is the expected answer for most rows, and a quote about something else is worse than none.`,
+      "scorecard_rows_again", rowsSchema(again.map((r) => r.id), false), Math.min(10_000, spare), false
+    );
+    if (!r2) secondLookFailed = true;
+    else {
+      usage = { input: usage.input + r2.usage.input, output: usage.output + r2.usage.output };
+      const out2 = Array.isArray(r2.out.rows) ? (r2.out.rows as RowOut[]) : [];
+      for (const old of again) {
+        const c = allCriteria.find((x) => x.id === old.id)!;
+        const second = answerFor(out2, c);
+        const next = second ? decide(c, second) : null;
+        // Kept only when it now stands AND the new quote is about this row:
+        // asked twice, a judge will quote something, and a real line about
+        // something else must not tick the row. It shares a word with the
+        // row or its note, or it names a technology. The first attempt stays
+        // on the row for diagnosis.
+        if (next && (next.status === "yes" || next.status === "equivalent") && aboutTheRow(next.quote || "", c))
+          rows[rows.indexOf(old)] = { ...next, dropped: { ...old.dropped!, why: `${NOT_QUOTED} (a second look found a quote)` } };
+      }
+    }
+  }
+  const removed = rows.filter((r) => r.dropped && r.status === "unknown").length;
   if (removed) console.warn(`verdict: ${removed} tick(s) removed: the profile does not say it`);
 
   let label: VerdictLabel = labelFromRows(rows, "message");
@@ -421,10 +510,10 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   const factItems = factLine(input, facts, jobs, basis);
 
   // ---- 3. the note, from the rows and facts only ----
-  const first = (input.candidateName || "The candidate").split(/\s+/)[0];
+  const first = noteName(input.candidateName);
   const mark = (s: RowStatus) => (s === "yes" ? "YES" : s === "equivalent" ? "EQUIVALENT" : s === "no" ? "NO" : "UNKNOWN (not shown)");
   const noteUser =
-    `ROLE: ${input.roleTitle}\nCANDIDATE FIRST NAME: ${first}\nLABEL SHOWN BESIDE THE NOTE: ${label === "contact" ? "Contact now" : label === "message" ? "Worth a message" : "Pass"}\n\n` +
+    `ROLE: ${input.roleTitle}\nCANDIDATE'S NAME, AS TO WRITE IT: ${first}\nLABEL SHOWN BESIDE THE NOTE: ${label === "contact" ? "Contact now" : label === "message" ? "Worth a message" : "Pass"}\n\n` +
     `FACTS:\n${factItems.map((f) => `- ${f}`).join("\n") || "- (none)"}\n\n` +
     `ROWS:\n${rows.map((r) => `- (${r.tier}) ${r.label}: ${mark(r.status)}. ${r.evidence}${r.quote ? ` [profile says: ${r.quote}]` : ""}`).join("\n")}`;
   const n = await callOpenAI(
@@ -444,7 +533,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     false // a missing note never fails the person: code writes one
   );
   const allowedText = `${factItems.join("\n")}\n${rows.map((r) => `${r.label} ${r.evidence} ${r.quote || ""}`).join("\n")}`;
-  const names = [first, ...employers];
+  const names = [...first.split(/\s+/), ...employers];
   const clean = (list: unknown, max: number, len: number, questions = false) =>
     (Array.isArray(list) ? list : [])
       .map((x) => guardNote(String(x || ""), rows, allowedText, material, questions, names).slice(0, len))
@@ -452,6 +541,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       .slice(0, max);
   let paragraph = n ? guardNote(String(n.out.paragraph || ""), rows, allowedText, material, false, names) : "";
   if (sentences(paragraph).length < 2) paragraph = fallbackNote(first, factItems, rows);
+  paragraph = withPassReason(paragraph, label, rows);
   if (n) usage = { input: usage.input + n.usage.input, output: usage.output + n.usage.output };
   const openRequired = rows.filter((r) => r.tier === "required" && r.status !== "yes" && r.status !== "equivalent");
   const missing = n ? clean(n.out.missing, 4, 160) : openRequired.map((r) => `${r.label}: ${r.status === "no" ? "against" : "not shown on the profile"}.`).slice(0, 4);
@@ -477,7 +567,9 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     // A note the model could not write (rate limit, timeout) is replaced by
     // the code-written one and shown, but the verdict is not saved for reuse:
     // the next review gets a proper note.
-    unassessed: unassessed + (n ? 0 : 1),
+    // (a second look that failed is the same: the tick it might have
+    // restored is not settled, so the next review asks again)
+    unassessed: unassessed + (n ? 0 : 1) + (secondLookFailed ? 1 : 0),
     facts: factItems,
     technologiesNow: techNow,
     technologiesBefore: techBefore,
