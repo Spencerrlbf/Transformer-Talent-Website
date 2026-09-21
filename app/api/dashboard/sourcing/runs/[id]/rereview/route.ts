@@ -1,6 +1,9 @@
-// Re-review candidates that permanently failed (3 attempts / poison rows):
-// reset their retry budget and reopen screening. The advance loop does the
-// rest — review-all semantics mean they simply rejoin the queue.
+// Re-review candidates. Default: only those that permanently failed (3
+// attempts / poison rows) get their retry budget reset. {all: true}: every
+// visible person in the run is judged again with the current verdict, so a
+// run made under an older judge can be brought up to date without a new
+// import. Either way the advance loop does the rest — review-all semantics
+// mean the rows simply rejoin the queue.
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
@@ -16,9 +19,20 @@ export async function POST(req: NextRequest, { params }: Params) {
   );
   const [run] = owned.ok ? await owned.json() : [];
   if (!run) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  let all = false;
+  try {
+    const body = (await req.json()) as { all?: unknown };
+    all = body?.all === true;
+  } catch {
+    /* no body: the failed-only form */
+  }
+  if (all && !["done", "failed"].includes(run.status)) {
+    return NextResponse.json({ error: "run_active" }, { status: 409 });
+  }
 
   const reset = await sbRest(
-    `sourcing_run_candidates?run_id=eq.${run.id}&screen_status=eq.failed&screen_attempts=gte.3`,
+    `sourcing_run_candidates?run_id=eq.${run.id}&` +
+      (all ? `hidden=eq.false&screen_status=neq.pending` : `screen_status=eq.failed&screen_attempts=gte.3`),
     {
       method: "PATCH",
       body: JSON.stringify({
@@ -27,15 +41,18 @@ export async function POST(req: NextRequest, { params }: Params) {
         orphan_heals: 0,
         screen_next_attempt_at: null,
         screen_claim_id: null,
+        // A full re-review clears the old reading so the table shows
+        // "Reviewing…" until the new verdict lands, never a stale tag.
+        ...(all ? { tag: null, reason: null, verdict: null, screened_at: null } : {}),
       }),
       prefer: "return=representation",
     }
   );
   const rows = reset.ok ? ((await reset.json()) as unknown[]) : [];
-  if (rows.length && run.status === "done") {
+  if (rows.length && (run.status === "done" || run.status === "failed")) {
     await sbRest(`sourcing_runs?id=eq.${run.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: "screening", finished_at: null, allfail_streak: 0, next_attempt_at: null }),
+      body: JSON.stringify({ status: "screening", finished_at: null, allfail_streak: 0, next_attempt_at: null, error: null }),
       prefer: "return=minimal",
     });
   }

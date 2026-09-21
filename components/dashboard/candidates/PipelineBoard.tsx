@@ -9,6 +9,9 @@ import StageEditor, { type StageDef } from "@/components/dashboard/jobs/StageEdi
 import type { Cv2Row } from "@/components/dashboard/candidates/CandidatesTable";
 
 const TAG_CLASS: Record<string, string> = {
+  contact: "t-contact",
+  message: "t-message",
+  pass: "t-pass",
   strong_yes: "t-strong",
   strong: "t-strong",
   yes: "t-yes",

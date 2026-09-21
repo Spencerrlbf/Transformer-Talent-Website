@@ -54,6 +54,7 @@ const CRUMBS: [string, string][] = [
   ["/dashboard/settings", "Settings"],
   ["/dashboard/jobs/new", "New job"],
   ["/dashboard/jobs", "Jobs"],
+  ["/dashboard/eval/verdicts", "Verdict comparison"],
   ["/dashboard", "Home"],
 ];
 

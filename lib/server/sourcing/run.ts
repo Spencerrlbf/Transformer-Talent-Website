@@ -26,13 +26,17 @@ import { splitStack } from "../scorecard";
 import { TAG_LABEL } from "../client-reason";
 import { searchLeadsPage, previewLeadCount, getFullProfile, providerMode, type Lead, type LeadSearchQuery } from "./harvest";
 import { profileToFields, sourcedEmbedText } from "./import";
-import { judgeSourcedCandidate, judgeReason, type JudgeSkill } from "./judge";
+import type { JudgeSkill } from "./judge";
+import { buildVerdictView, judgeVerdict } from "../verdict";
 import { getCompanyContexts, companyContextLine, companySlugFromUrl } from "./company-context";
 
 export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
 const PAGE_SIZE = 25;
 const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY || "4", 10) || 4);
-const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "15", 10) || 15);
+// Five at a time: the verdict prompt is ~5k tokens a call, and a burst of
+// fifteen trips a typical OpenAI per-minute limit; rate-limited rows then
+// wait out their retry-after rather than counting as failures.
+const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "5", 10) || 5);
 // Short LLM cap so a wave (2 sequential calls/row) provably fits the window.
 const SCREEN_LLM_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.SOURCING_LLM_TIMEOUT_MS || "15000", 10) || 15_000);
 const WAVE_NEED_MS = 2 * SCREEN_LLM_TIMEOUT_MS + 5_000;
@@ -412,8 +416,8 @@ async function screenOneRow(
 ): Promise<{ outcome: RowOutcome; retryAfterMs?: number }> {
   let llmErr: { status: number; code?: string; retryAfter?: string } | null = null;
   try {
-    const [cand] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null }[]>(
-      `sourced_candidates?id=eq.${row.sourced_candidate_id}&select=profile,skills`
+    const [cand] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null; full_name: string | null }[]>(
+      `sourced_candidates?id=eq.${row.sourced_candidate_id}&select=profile,skills,full_name`
     );
     const profile = cand?.profile;
     if (!profile) {
@@ -437,26 +441,44 @@ async function screenOneRow(
     const ctxMap = employerSlug ? await getCompanyContexts([employerSlug]).catch(() => new Map()) : new Map();
     const employerLine = employerSlug ? companyContextLine(ctxMap.get(employerSlug)) : null;
 
-    const verdict = await judgeSourcedCandidate({
+    // One judge for every entry path: the verdict paragraph, requirement
+    // reads and the technologies strip (see lib/server/verdict.ts).
+    const education = (profile as Record<string, unknown>).education ?? null;
+    const judged = await judgeVerdict({
       roleTitle: ctx.role.title,
       jdText: ctx.jdText,
-      skills: ctx.judgeSkills,
+      skills: ctx.judgeSkills.map((s) => ({ skill: s.skill, mustHave: s.must_have, alternates: s.alternates })),
       minYears: ctx.minYears,
+      targetedCompanies: ctx.targetedCompanies,
+      employerContext: employerLine,
+      candidateName: cand?.full_name || "Candidate",
       profileText: linkedinProfileText(profile).slice(0, 5000),
+      resumeText: null,
       factsBlock: formatFacts(facts),
       careerYears: facts.careerYears,
-      targetedCompanies: ctx.targetedCompanies,
-      currentEmployerContext: employerLine,
+      model: process.env.SOURCING_JUDGE_MODEL || "gpt-4o",
       timeoutMs: SCREEN_LLM_TIMEOUT_MS,
       onError: (info) => { llmErr = info; },
     });
+    const verdict = judged
+      ? buildVerdictView(
+          judged,
+          (terms) => computeFacts(expRows, [...new Set([...stackTerms, ...terms])], skills, education),
+          ctx.judgeSkills.map((s) => s.skill)
+        )
+      : null;
 
     if (verdict) {
+      // The tag column is constrained to the older vocabulary (a CHECK from
+      // migration 020), so the verdict's label is stored there in its
+      // nearest old word; the verdict itself carries the real label and
+      // every reader prefers it.
+      const LEGACY_TAG = { contact: "strong_yes", message: "worth_message", pass: "not_now" } as const;
       const landed = await fencedRowPatch(row.id, leaseId, {
         screen_status: "done",
         verdict,
-        tag: verdict.tag,
-        reason: judgeReason(verdict),
+        tag: LEGACY_TAG[verdict.label],
+        reason: verdict.paragraph,
         screened_at: new Date().toISOString(),
         screen_claim_id: null,
       });
@@ -468,7 +490,7 @@ async function screenOneRow(
     if (err && (err.status === 401 || err.status === 403 || err.code === "insufficient_quota")) {
       throw new RunFailure(`LLM key rejected (${err.status}${err.code ? ` ${err.code}` : ""})`);
     }
-    if (err && (err.status === 429 || err.status >= 500)) {
+    if (err && (err.status === 0 || err.status === 429 || err.status >= 500)) {
       // Rate limit / upstream blip: NOT the row's fault — no attempt charged.
       const retryMs = err.retryAfter ? Math.min(parseInt(err.retryAfter, 10) * 1000 || 30_000, 120_000) : jitter(30_000);
       await fencedRowPatch(row.id, leaseId, {
@@ -489,6 +511,8 @@ async function screenOneRow(
   } catch (err) {
     if (err instanceof RunFailure) throw err;
     // Timeouts / aborts / transport errors: transient, no attempt charged.
+    // Say what it was: a silent retry loop hid a rejected write for hours.
+    console.error("screen row transient", row.id, err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300));
     await fencedRowPatch(row.id, leaseId, {
       screen_status: "failed",
       screen_next_attempt_at: new Date(Date.now() + jitter(20_000)).toISOString(),
@@ -554,8 +578,12 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
     return resultFrom(run);
   }
   // Mode fence: a mock-created run (preview/CLI test) must never be driven
-  // by a live-mode process — that would turn a demo into real spend.
-  if ((run.provider_mode ?? "live") !== providerMode()) {
+  // by a live-mode process — that would turn a demo into real spend. The
+  // fence guards the stages that call the lead provider; ranking and
+  // screening only read stored profiles and call the model, so a run may be
+  // judged again from either mode.
+  const importing = run.status === "previewed" || run.status === "importing";
+  if (importing && (run.provider_mode ?? "live") !== providerMode()) {
     await release();
     return resultFrom(run, { busy: true, error: `provider mode mismatch (run: ${run.provider_mode}, driver: ${providerMode()})` });
   }
@@ -703,8 +731,11 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
         );
         run.screened_count = screened;
 
-        // Persisted circuit breaker: survives invocation boundaries.
-        const streak = ok === 0 && rows.length > 0 ? run.allfail_streak + 1 : 0;
+        // Persisted circuit breaker: survives invocation boundaries. A wave
+        // that only hit rate limits or timeouts is not a failure of the
+        // rows; those pause and retry below. Only junk output counts.
+        const junk = outcomes.filter((o) => o.outcome === "junk").length;
+        const streak = ok === 0 && junk > 0 ? run.allfail_streak + 1 : ok > 0 ? 0 : run.allfail_streak;
         if (!(await leasePatch(run.id, leaseId, { screened_count: screened, allfail_streak: streak }))) {
           leaseLost = true; break;
         }

@@ -4,9 +4,10 @@
 // reviewed. Drives the run via /advance in a sequential loop — the engine's
 // lease makes concurrent drivers harmless, and the run resumes from any
 // device (or the scheduled resumer) if this tab closes.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
+import VerdictCard from "../candidates/VerdictCard";
 
 const ACTIVE = new Set(["previewed", "importing", "ranking", "screening"]);
 
@@ -24,6 +25,18 @@ export default function RunView({
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<"all" | "strong" | "yes" | "message" | "shortlisted">("all");
   const [rereviewing, setRereviewing] = useState(false);
+  // "Review again": a two-step button, no native dialog.
+  const [reviewAgainArmed, setReviewAgainArmed] = useState(false);
+  const [reviewAgainBusy, setReviewAgainBusy] = useState(false);
+  // Rows opened to their full verdict (paragraph, strip, questions).
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggleOpen = (id: string) =>
+    setOpenIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true; // StrictMode remounts reuse the ref — re-arm it
@@ -105,6 +118,24 @@ export default function RunView({
     if (res?.ok) setRereviewing((x) => !x); // re-arms the advance loop
   }
 
+  // Judge every visible person again with the current verdict; no new import.
+  async function reviewAgain() {
+    if (reviewAgainBusy) return;
+    setReviewAgainBusy(true);
+    const res = await fetch(`/api/dashboard/sourcing/runs/${runId}/rereview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ all: true }),
+    }).catch(() => null);
+    setReviewAgainBusy(false);
+    setReviewAgainArmed(false);
+    if (res?.ok) {
+      setRows([]);
+      setPage(1);
+      setRereviewing((x) => !x); // re-arms the advance loop
+    }
+  }
+
   if (!run) return <p className="dash-muted">Loading run…</p>;
 
   const active = ACTIVE.has(run.status);
@@ -155,6 +186,28 @@ export default function RunView({
         </div>
       )}
 
+      {run.status === "done" && (
+        <div className="dash-src-again">
+          {reviewAgainArmed ? (
+            <>
+              <span>
+                Judge all {(total || importedSoFar).toLocaleString()} people again with the current verdict. No new import; a few cents of AI per person.
+              </span>
+              <button className="dash-btn" onClick={reviewAgain} disabled={reviewAgainBusy}>
+                {reviewAgainBusy ? "Starting…" : "Yes, review again"}
+              </button>
+              <button className="dash-btn dash-btn-2" onClick={() => setReviewAgainArmed(false)} disabled={reviewAgainBusy}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button className="dash-btn dash-btn-2" onClick={() => setReviewAgainArmed(true)} title="Judge everyone in this run again with the current verdict">
+              Review again
+            </button>
+          )}
+        </div>
+      )}
+
       {run.status === "done" && unreviewable > 0 && (
         <div className="dash-src-preview broad">
           <b>{unreviewable} candidate{unreviewable === 1 ? "" : "s"} couldn&apos;t be reviewed</b>
@@ -175,7 +228,7 @@ export default function RunView({
                 onClick={() => { setFilter(f); setPage(1); }}
               >
                 {f === "all" ? `All ${total || importedSoFar}`
-                  : f === "strong" ? "Strong yes"
+                  : f === "strong" ? "Contact now"
                   : f === "yes" ? "Yes"
                   : f === "message" ? "Worth a message"
                   : "Shortlisted ★"}
@@ -194,17 +247,19 @@ export default function RunView({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.membershipId} className={r.hidden ? "is-hidden" : ""}>
+                  <Fragment key={r.membershipId}>
+                  <tr className={r.hidden ? "is-hidden" : ""}>
                     <td className="rk">{r.rank ?? "–"}</td>
                     <td>
                       <span className="nm">{r.name}</span>
                       <div className="sub">{[r.title, r.company, r.location].filter(Boolean).join(" · ")}</div>
-                      {(r.years != null || r.priorCompanies.length > 0 || r.topSkills.length > 0) && (
+                      {(r.years != null || r.priorCompanies.length > 0 || (!r.verdict && r.topSkills.length > 0)) && (
                         <div className="dash-src-snapshot">
                           {[
                             r.years != null ? `${r.years} yrs` : null,
                             r.priorCompanies.length ? `prev: ${r.priorCompanies.join(", ")}` : null,
-                            r.topSkills.length
+                            // The verdict's chips replace LinkedIn's self-declared skill list.
+                            !r.verdict && r.topSkills.length
                               ? r.topSkills.join(", ") + (r.skillCount > r.topSkills.length ? ` +${r.skillCount - r.topSkills.length}` : "")
                               : null,
                           ].filter(Boolean).join(" · ")}
@@ -212,9 +267,16 @@ export default function RunView({
                       )}
                     </td>
                     <td>
-                      {r.tag ? (
+                      {r.verdict ? (
                         <>
-                          <span className={`dash-tag ${TAG_UI[r.tag].cls}`}>{TAG_UI[r.tag].label}</span>
+                          <VerdictCard view={r.verdict} compact />
+                          <button type="button" className="dash-src-fullbtn" onClick={() => toggleOpen(r.membershipId)}>
+                            {openIds.has(r.membershipId) ? "Hide full verdict ▴" : "Full verdict ▾"}
+                          </button>
+                        </>
+                      ) : r.tag ? (
+                        <>
+                          <span className={`dash-tag ${TAG_UI[r.tag]?.cls || "t-pending"}`}>{TAG_UI[r.tag]?.label || r.tag}</span>
                           {r.reason && <div className="dash-src-reason">{r.reason}</div>}
                         </>
                       ) : r.screenStatus === "failed" && !active ? (
@@ -239,6 +301,15 @@ export default function RunView({
                       <button title="Hide" onClick={() => rowAction(r, { hidden: true })}>✕</button>
                     </td>
                   </tr>
+                  {r.verdict && openIds.has(r.membershipId) && (
+                    <tr className={`dash-src-full${r.hidden ? " is-hidden" : ""}`}>
+                      <td></td>
+                      <td colSpan={4}>
+                        <VerdictCard view={r.verdict} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
