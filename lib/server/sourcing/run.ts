@@ -40,7 +40,10 @@ const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY
 // wait out their retry-after rather than counting as failures.
 const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "5", 10) || 5);
 // Short LLM cap so a wave (2 sequential calls/row) provably fits the window.
-const SCREEN_LLM_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.SOURCING_LLM_TIMEOUT_MS || "15000", 10) || 15_000);
+// 25s: the judge answers every scorecard row with evidence, about twice the
+// output it wrote before. At 15s a slow answer timed out, and a timeout is
+// retried without end (it is never the row's fault), which reads as "stuck".
+const SCREEN_LLM_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.SOURCING_LLM_TIMEOUT_MS || "25000", 10) || 25_000);
 const WAVE_NEED_MS = 2 * SCREEN_LLM_TIMEOUT_MS + 5_000;
 const IMPORT_SLICE_NEED_MS = 12_000;
 const LEASE_TTL_SECS = Math.max(30, parseInt(process.env.SOURCING_LEASE_TTL || "90", 10) || 90);
