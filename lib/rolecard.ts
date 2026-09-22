@@ -288,7 +288,7 @@ export function metAtOf(c: RowSpec): number {
  *  not shrugging at. A "no" is NEVER routed: on thin profiles such a judge
  *  leans to "ruled out", and a no can make someone a Pass. Pass is decided
  *  by code (the years rule) or by a recruiter. */
-export const ROUTE = { metAtLeast: 0.5, confidenceAtLeast: 0.2 } as const;
+export const ROUTE = { metAtLeast: 0.5, confidenceAtLeast: 0 } as const;
 
 /** p[k] is the probability of rung k+1. The rung reached is the highest L
  *  whose rungs L and above hold at least ROUTE.metAtLeast between them;
