@@ -17,6 +17,7 @@ import {
   TIERS,
   TIER_LABEL,
   applyOverrides,
+  certaintyAt,
   labelFromRows,
   tally,
   isCareerYearsRow,
@@ -51,6 +52,32 @@ const nameFromEmail = (email: string) => {
 
 const overridesOf = (rows: CardRow[]): RowOverride[] =>
   rows.filter((r) => r.confirmed).map((r) => ({ criterionId: r.id, status: r.status, note: r.confirmed!.note, by: r.confirmed!.by, at: r.confirmed!.at }));
+
+/** Who decided the row and how far up its ladder it got. Code decides years
+ *  and technology rows; a judgment row carries the judge's rung and how sure
+ *  it was of it. Older saved reviews carry none of this and show nothing. */
+function receipt(r: CardRow): string | null {
+  if (!r.judgedBy) return null;
+  const rung = r.level != null && r.levels != null ? `rung ${r.level} of ${r.levels}` : "";
+  if (r.judgedBy === "code") return rung ? `by code · ${rung}` : "by code";
+  const sure = r.p?.length && r.level != null ? ` · ${Math.round(certaintyAt(r.p, r.level) * 100)}%` : "";
+  return `Jev${rung ? ` · ${rung}` : ""}${sure}`;
+}
+
+/** A met judgment row with nothing to quote: the whole material read that
+ *  way, no one line says it. Only what the judge read; a confirmed row says
+ *  who confirmed it instead. */
+const noLine = (r: CardRow) => r.kind === "judgment" && (r.status === "yes" || r.status === "equivalent") && !r.quote && !r.confirmed;
+
+/** A years row within a year of its bar: the numbers, in place of a mark. */
+function ShortPill({ r }: { r: CardRow }) {
+  if (r.status !== "short") return null;
+  return (
+    <span className="ck-mark s-short" title={`Short: ${r.evidence || "within a year of the bar"}`}>
+      {r.numbers ? `${r.numbers.have} / ${r.numbers.bar}+` : ROW_MARK.short}
+    </span>
+  );
+}
 
 const FAIL: Record<string, string> = {
   no_card: "This verdict was written before the role had a scorecard. Review the person again, then check rows off.",
@@ -191,17 +218,22 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                       )}
                     </div>
                   ) : (
-                    (r.evidence || r.quote) && (
+                    (r.evidence || r.quote || receipt(r)) && (
                       <div className="ck-ev">
+                        {receipt(r) && <span className="ck-receipt">{receipt(r)}</span>}
                         {r.evidence}
                         {/* Where it was found, and the words found there. Older saved
                             reviews carry a quote but no source: those say "Profile". */}
-                        {(r.source || r.quote) && (
+                        {(r.source || r.quote) ? (
                           <span className="ck-src" title="Where this was found. The words in quotes are copied from there.">
                             {r.source || "Profile"}
                             {r.quote && <span className="ck-quote">: &ldquo;{r.quote}&rdquo;</span>}
                           </span>
-                        )}
+                        ) : noLine(r) ? (
+                          <span className="ck-src" title="The whole profile and resume read this way; no one line says it in as many words.">
+                            Whole profile · no single line to quote
+                          </span>
+                        ) : null}
                       </div>
                     )
                   )}
@@ -235,6 +267,8 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                   )}
                 </div>
                 {feedback ? (
+                  <span className="ck-act">
+                  <ShortPill r={r} />
                   <span className="ck-seg" role="group" aria-label={`Your call on: ${r.label}`}>
                     {ROW_STATUSES.map((s) => {
                       const on = r.status === s;
@@ -254,6 +288,9 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                       );
                     })}
                   </span>
+                  </span>
+                ) : r.status === "short" ? (
+                  <ShortPill r={r} />
                 ) : (
                   <span className={`ck-mark b-${r.status}`} title={ROW_WORD[r.status]}>
                     {ROW_MARK[r.status]}
@@ -268,6 +305,7 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
       <div className="ck-foot">
         <span className="ck-key">
           <b className="b-yes">✓</b> yes <b className="b-equivalent">≈</b> equivalent <b className="b-unknown">?</b> not shown <b className="b-no">×</b> no
+          {card.rows.some((r) => r.status === "short") && <> <b className="s-short">△</b> short: within a year of the bar</>}
           {feedback && <em> · press one to say what you know. It sticks, and it is remembered about this person.</em>}
         </span>
         {feedback && (

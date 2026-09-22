@@ -215,7 +215,9 @@ export async function relabelRole(orgId: string, orgRoleId: string, criteria: Cr
     byPerson.set(f.candidate_key, p);
   }
   const changedFrom = (a: VerdictView, b: VerdictView) =>
-    a.label !== b.label || JSON.stringify(a.card?.confirm || []) !== JSON.stringify(b.card?.confirm || []) || JSON.stringify((a.card?.rows || []).map((r) => !!r.call)) !== JSON.stringify((b.card?.rows || []).map((r) => !!r.call));
+    a.label !== b.label ||
+    JSON.stringify(a.card?.confirm || []) !== JSON.stringify(b.card?.confirm || []) ||
+    JSON.stringify((a.card?.rows || []).map((r) => [!!r.call, r.status, r.ai])) !== JSON.stringify((b.card?.rows || []).map((r) => [!!r.call, r.status, r.ai]));
   let changed = 0;
   const todo: (() => Promise<void>)[] = [];
 

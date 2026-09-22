@@ -4466,7 +4466,6 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .rc-erow { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
 .rc-efields { flex: 1; min-width: 0; display: grid; gap: 4px; }
 .rc-efields input { width: 100%; }
-.rc-efields .rc-egood { font-size: 12.5px; padding: 6px 12px; color: var(--body-2); }
 .rc-erow .rc-etier { flex: none; width: 132px; }
 .rc-armed { font-size: 12.5px; color: var(--warn); }
 .dash-addrow:disabled { color: var(--muted); cursor: default; background: none; }
@@ -4486,12 +4485,6 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .ck-ico { color: var(--rc-tone); padding-top: 2px; }
 .ck-label { font-size: 13.5px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
 .ck-saving { color: var(--muted); font-weight: 400; }
-/* "? likely": still not shown, never counted as met; probable from role + employer. */
-.ck-likely { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); border: 1px dashed var(--accent); color: var(--accent-press); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; cursor: help; }
-.ck-row.likely .ck-ev { color: var(--body-2); }
-.ck-row.likely:not(.confirmed) .ck-b.on.b-unknown { background: var(--accent-tint); color: var(--accent-press); box-shadow: inset 0 0 0 1px var(--accent); }
-.ck-tlikely { margin-left: 4px; font-weight: 400; color: var(--accent-press); }
-.ck-key .ck-likely { margin: 0 4px 0 8px; cursor: default; }
 .ck-held { margin: 0 0 6px; padding: 7px 10px; border-radius: var(--r-control); background: var(--warn-bg); color: var(--warn-ink); font-size: 12.5px; line-height: 1.45; }
 .ck-row.s-no .ck-label { color: var(--body-2); }
 .ck-ev { margin-top: 1px; font-size: 12px; line-height: 1.45; color: var(--muted); }
@@ -4529,27 +4522,6 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-when { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
 @media (max-width: 640px) { .ck-row { grid-template-columns: 16px minmax(0, 1fr); } .ck-seg, .ck-mark { grid-column: 2; margin-top: 6px; justify-self: start; } }
 
-/* ---- Owner-only row judge comparison (GPT-4o vs Jev) ---- */
-.jvc-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 16px; }
-.jvc-bar label { display: grid; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--body); }
-.jvc-bar input { width: 90px; padding: 8px 12px; border: 1px solid var(--control-line); border-radius: var(--r-control); background: var(--paper); font: inherit; font-size: 13.5px; }
-.jvc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 0 0 10px; }
-.jvc-stats > div { padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--r-card); background: var(--paper); font-size: 12.5px; color: var(--body-2); }
-.jvc-stats b { display: block; font-size: 22px; line-height: 1.2; color: var(--ink); font-variant-numeric: tabular-nums; }
-.jvc-stats small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
-.jvc-perrow { margin: 0 0 18px; font-size: 12.5px; }
-.jvc-person { margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--hair); border-radius: var(--r-panel); background: var(--paper); overflow-x: auto; }
-.jvc-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: 13.5px; }
-.jvc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.jvc-table th { text-align: left; padding: 4px 10px 6px 0; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.jvc-table td { padding: 6px 10px 6px 0; border-top: 1px solid var(--row-line); vertical-align: top; }
-.jvc-table td small { display: block; font-size: 12px; color: var(--muted); }
-.jvc-table tr.differs td { background: var(--warn-bg); }
-.jvc-tier { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
-.jvc-conf { font-size: 12px; color: var(--body-2); font-variant-numeric: tabular-nums; }
-.jvc-spread { white-space: nowrap; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.jvc-spread span { margin-right: 8px; }
-
 /* ---- Facts written by code, the quote behind a tick, and call questions ---- */
 .vc-facts { list-style: none; margin: 0 0 10px; padding: 8px 12px; border-radius: var(--r-control); background: var(--surface); border: 1px solid var(--hair); display: grid; gap: 3px; font-size: 12.5px; line-height: 1.45; color: var(--body); }
 .vc-confirm { font-size: 12px; font-weight: 600; color: var(--accent-press); }
@@ -4564,3 +4536,78 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .rc-efields .rc-ecall input { width: auto; margin: 0; padding: 0; border: 0; accent-color: var(--accent); }
 .dash-src-callhint { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; padding: 10px 14px; border-radius: var(--r-card); background: var(--accent-tint); border: 1px solid var(--accent-wash); font-size: 13px; color: var(--body); }
 .dash-src-callhint b { color: var(--ink); }
+
+/* ---- Scorecard v14: how each row is decided (editor and job page) ---- */
+.rc-kind { display: block; margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.rc-read li .rc-kind { margin-top: 2px; }
+.rc-kindlink { background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent-press); text-decoration: underline; cursor: pointer; }
+.rc-kindlink:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.rc-ladderline { color: var(--body-2); }
+.rc-how { display: grid; gap: 6px; margin-top: 2px; }
+.rc-ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.45; color: var(--body-2); }
+.rc-ladder li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rc-ladder li.met { color: var(--ink); }
+.rc-ladder li em { flex: none; font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--pos); padding: 1px 7px; border-radius: var(--r-pill); background: var(--pos-bg); }
+.rc-rung { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--control-line); font-size: 10.5px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rc-ladder li.met .rc-rung { border-color: var(--pos); color: var(--pos); background: var(--pos-bg); }
+.rc-ladder-line { margin-top: 3px; }
+.rc-ladder-edit li { align-items: center; }
+.rc-ladder-edit .rc-erung { flex: 1; min-width: 0; font-size: 12.5px; padding: 6px 10px; }
+.rc-ladder-edit .rc-erung:disabled { color: var(--muted); background: var(--surface); }
+.rc-howfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.rc-metfrom { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--body-2); }
+.rc-metfrom select { width: auto; padding: 5px 28px 5px 10px; border: 1px solid var(--control-line); border-radius: var(--r-control); background: var(--paper); color: var(--ink); font: inherit; font-size: 12.5px; }
+.rc-addrung { height: 28px; padding: 0 12px; font-size: 12px; }
+.rc-edit .dash-addrow small { margin-left: 5px; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.rc-saved { font-weight: 600; color: var(--pos); }
+
+/* The judged checklist: a short years row, and who decided each row. */
+.ck-act { display: inline-flex; align-items: center; gap: 8px; }
+.ck-mark.s-short, .ck-key .s-short { width: auto; min-width: 26px; padding: 0 8px; background: var(--warn-bg); color: var(--warn); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ck-row.s-short .ck-label { color: var(--ink); }
+.ck-receipt { display: block; margin-bottom: 1px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ck-receipt::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 2px; background: var(--faint); vertical-align: middle; }
+
+/* The report card: facts strip, companies, then the rows beside the review. */
+.vc-facts-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 10px; padding: 0; }
+.vc-facts-grid > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--hair); border-radius: var(--r-card); background: var(--surface); }
+.vc-facts-grid dt { margin: 0 0 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vc-facts-grid dd { margin: 0; min-width: 0; }
+.vc-facts-grid dd b { display: block; font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.vc-facts-grid dd small { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.vc-tag { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; }
+.vc-tag.startup { background: var(--accent-wash); color: var(--accent-press); }
+.vc-tag.large { background: rgba(0,0,0,.06); color: var(--body-2); }
+.vc-companies { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 2px; font-size: 12.5px; }
+.vc-companies li { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) auto; gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--row-line); }
+.vc-companies li:last-child { border-bottom: 0; }
+.vc-companies li b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.vc-companies li span { color: var(--body); overflow-wrap: anywhere; }
+.vc-companies li small { font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vc-companies li.aside b, .vc-companies li.aside span { color: var(--muted); font-weight: 500; }
+.vc-report .vc-tech { margin-top: 0; padding-top: 0; border-top: 0; margin-bottom: 12px; }
+.vc-cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; padding-top: 10px; border-top: 1px dashed var(--control-line); }
+.vc-col { min-width: 0; }
+.vc-col-rows .ck { margin-top: 0; padding-top: 0; border-top: 0; }
+.vc-col-review > .vc-lbl { padding-top: 0; margin-bottom: 6px; }
+.vc-reqline { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: var(--body); font-variant-numeric: tabular-nums; }
+.vc-summary { margin: 0 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55; color: var(--body-2); overflow-wrap: anywhere; }
+.vc-compact .vc-summary { margin: 4px 0 0; max-width: 60ch; }
+.vc-ask { margin: 0 0 8px; }
+.vc-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.vc-decide { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.vc-decide .dash-btn { min-height: 44px; padding: 0 18px; }
+.vc-decide .vc-yes.on { background: var(--pos); border-color: var(--pos); color: #fff; }
+.vc-decide .vc-no.on { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
+.vc-review-again { margin: 10px 0 0; font-size: 12.5px; color: var(--body-2); }
+@media (max-width: 900px) { .vc-facts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vc-cols { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .vc-companies li { grid-template-columns: 1fr; gap: 1px; } .vc-companies li small { white-space: normal; } .ck-act { grid-column: 2; margin-top: 6px; } }
+
+/* The run table: Yes and No on every row. */
+.dash-src-rowact { width: auto; }
+.dash-src-decide { display: inline-flex; border: 1px solid var(--control-line); border-radius: var(--r-control); overflow: hidden; background: var(--paper); }
+.dash-src-rowact .dash-src-decide button { appearance: none; border: 0; border-left: 1px solid var(--control-line); background: none; min-width: 44px; height: 32px; padding: 0 10px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--body-2); cursor: pointer; }
+.dash-src-rowact .dash-src-decide button:first-child { border-left: 0; }
+.dash-src-rowact .dash-src-decide button:hover { background: var(--surface); color: var(--ink); }
+.dash-src-rowact .dash-src-decide button.yes.on { background: var(--pos); color: #fff; }
+.dash-src-rowact .dash-src-decide button.no.on { background: var(--bad-bg); color: var(--bad); }

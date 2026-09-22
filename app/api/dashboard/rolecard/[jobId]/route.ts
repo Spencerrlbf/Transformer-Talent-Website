@@ -6,7 +6,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
-import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
+import { cardChanges, isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { ROLE_CARD_COLS, ensureRoleCard, saveRoleCard, type RoleForCard } from "@/lib/server/rolecard/store";
 import { canDraft, draftScorecard, type DraftInput } from "@/lib/server/rolecard/draft";
 import { relabelRole } from "@/lib/server/rolecard/feedback";
@@ -63,12 +63,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
     card.editedAt = prev.editedAt;
   }
   if (!(await saveRoleCard(role.id, card))) return NextResponse.json({ error: "save_failed" }, { status: 502 });
-  // The role's call questions changed: every stored verdict for the role is
-  // re-labelled from its own rows, with no model call.
-  const calls = (c: { criteria: { id: string; confirmOnCall?: boolean }[] } | null) => JSON.stringify((c?.criteria || []).filter((x) => x.confirmOnCall).map((x) => x.id).sort());
+  // A call question came or went, or a row now counts from another rung:
+  // every stored verdict for the role is re-labelled from its own rows, with
+  // no model call. A reworded ladder is another matter: those rows have to
+  // be read again, so Review again does it, only for those rows.
+  const changes = cardChanges(prev, card);
   let relabelled = 0;
-  if (calls(prev) !== calls(card)) relabelled = await relabelRole(member.org.id, role.id, card.criteria).catch((e) => (console.error("relabel failed", e), -1));
-  return NextResponse.json({ scorecard: card, relabelled });
+  if ((changes.calls || changes.metAts) && changes.reask === 0)
+    relabelled = await relabelRole(member.org.id, role.id, card.criteria).catch((e) => (console.error("relabel failed", e), -1));
+  return NextResponse.json({ scorecard: card, relabelled, reask: changes.reask });
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
