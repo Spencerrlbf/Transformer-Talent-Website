@@ -2,7 +2,7 @@
 // testable rows. One call per role; the hiring manager or recruiter can then
 // reword, move, delete or add rows. Nothing here writes to the database.
 
-import { isCareerYearsRow, sanitizeScorecard, type Scorecard } from "@/lib/rolecard";
+import { isCareerYearsRow, sanitizeScorecard, type Criterion, type Scorecard } from "@/lib/rolecard";
 import { isLanguage, technologiesNamed } from "@/lib/tech-terms";
 
 export interface DraftInput {
@@ -48,7 +48,8 @@ THREE TIERS
 
 EVERY ROW IS CHECKABLE FROM WHAT PEOPLE ACTUALLY WRITE
 - label: at most 10 words, no question mark. Never a sentence copied from the description. Never an adjective as the test: no deep, strong, solid, expert, proven, extensive, comfortable, familiar. Say the thing done: "Hands-on mobile experience" becomes "Has shipped an iOS or Android app to the store".
-- good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: titles, team names, skill tags, the words people use in a job description. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
+- good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: titles, team names, skill tags, the words people use in a job description. Never the row's own words followed by "named in job titles or descriptions": that tells the judge nothing. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
+- The work the role is named after ("Agent Platform Engineer": agents) is Required or Exceptional, never Bonus. Bonus never counts for or against anyone.
 - One row, one question. If a single line on a profile would tick two rows, they are one row: merge them. When the description pairs two names for one capability, keep both joined by "or" ("billing or invoicing systems"), because people describe their work with either word.
 - A technology row says what else would do the job, in brackets, taken from the role's own tech stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". When the stack lists several languages, every one that would do the row's job goes in the brackets, not only the closest. With no stated alternatives, name none. Put a years bar on a skill row ONLY when the description states one for that skill; how deep someone is, is a question for the call.
 - A category row keeps technologies out of its label and lists them in good: label "Stream processing or message queues"; good "Kafka, Kinesis, Pub/Sub, RabbitMQ or SQS named on a job; Flink or Spark Streaming also count".
@@ -169,6 +170,34 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
     });
     if (twin && !out.some((p) => p.label === b.c.label && DUPLICATE.test(p.problem))) out.push({ label: b.c.label, problem: `covers the same ground as "${twin.c.label}". One profile line would tick both: keep one row, in the tier it belongs to.` });
   });
+  // A note is what the judge follows, to the letter: "Infrastructure work
+  // named in job titles or descriptions" under "Has built infrastructure"
+  // adds nothing, and three people lost a true tick to it. A note must name
+  // evidence beyond the row's own words: a title, a team name, a technology,
+  // the words people use.
+  const FILLER = new Set(["named", "shown", "listed", "mentioned", "described", "stated", "job", "jobs", "title", "titles", "description", "descriptions", "profile", "profiles", "role", "roles", "team", "teams", "similar", "related", "context", "such", "like", "any", "one", "more", "also", "count", "counts", "e.g", "eg", "including", "such as", "work", "working", "system", "systems", "tools", "tool", "environment", "environments", "production", "experience", "skill", "skills", "tag", "tags", "list", "lists"]);
+  for (const c of card.criteria) {
+    if (!c.good || isCareerYearsRow(c.label)) continue;
+    if (technologiesNamed(c.good).length) continue; // a technology is evidence
+    const own = new Set([...topic(c.label.replace(/\(.*?\)/g, " "))].map(stem));
+    const adds = [...topic(c.good)].map(stem).filter((w) => !own.has(w) && !FILLER.has(w) && !GENERIC.has(w));
+    if (!adds.length) out.push({ label: c.label, problem: `its note ("${c.good.slice(0, 60)}") only repeats the row. Name what a profile shows when this is true: the titles, team names, skill tags or technologies that count, and the words people use in a description.` });
+  }
+  // The role's subject decides something. A word of the title that appears
+  // on the card only in Bonus rows ("Agent Platform Engineer" with agents in
+  // Bonus) was drafted into the wrong tier: Bonus never counts for or against.
+  // A row is ABOUT a word when the word is its subject ("Has built AI agent
+  // systems"), not a qualifier ("...observability systems for agent
+  // performance" is about observability).
+  const VERBS = new Set(["has", "have", "built", "build", "designed", "owned", "own", "led", "lead", "shipped", "ran", "run", "used", "worked", "delivered", "created", "developed", "maintained", "operated", "implemented", "managed", "scaled"]);
+  const subjectOf = (label: string) => words(label.replace(/\(.*?\)/g, " ")).map(stem).filter((x) => !GENERIC.has(x) && !VERBS.has(x) && !ADJECTIVE.test(x));
+  const isAbout = (c: Criterion, w: string) => { const ws = subjectOf(c.label); return ws[0] === w || (ws.length <= 2 && ws.includes(w)); };
+  for (const w of [...topic(input.title)]) {
+    if (w.length <= 3 || GENERIC.has(w) || technologiesNamed(w).length) continue;
+    const about = card.criteria.filter((c) => isAbout(c, w));
+    if (about.length && about.every((c) => c.tier === "bonus"))
+      out.push({ label: about[0].label, problem: `is in Bonus, but "${w}" is in the role's title: it is the work itself. Put this row in Exceptional (the ideal hire) or Required (without it, no).` });
+  }
   // The core of the role has a row. A word of the role's TITLE that the
   // description itself uses three times or more, and that no row and no note
   // mentions, may be a requirement left out: an agent-platform card came back

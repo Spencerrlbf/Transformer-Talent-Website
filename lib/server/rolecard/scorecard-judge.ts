@@ -24,7 +24,7 @@ import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import { careerYearsStatus, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
-export const SCORECARD_JUDGE_VERSION = "v12";
+export const SCORECARD_JUDGE_VERSION = "v13";
 
 const ROWS_SYSTEM = `You are a careful technical recruiter checking one candidate against a role's scorecard. You have the candidate's LinkedIn profile (and a resume when supplied), a FACTS block computed in code from their dated positions, and the role. Answer EVERY scorecard row, by its id.
 
@@ -65,6 +65,8 @@ const RESUME_CHARS = 12_000;
 const NOT_QUOTED = "Not shown on the profile: nothing written there says this.";
 // The judge's own words gave its tick away as an inference (suggests, implies).
 const HEDGED = "Not shown on the profile.";
+// The judge missed a technology that is on a job (prefix; the rest names it).
+const MISSED_TECH = "Not shown, said the judge, but ";
 // A title, an employer and a date say nothing about a row: that tick was an
 // inference from where the person works, and gets no second look.
 const SAYS_NOTHING = "Not shown on the profile: a title and an employer do not say this.";
@@ -536,6 +538,24 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
         else source = whereFrom(quote);
       }
     }
+    // The judge said "not shown" on a technology row, but the technology,
+    // or a stand-in the row accepts, is tagged on a career job (Java on both
+    // Addepar jobs, on a row that accepts Java). Code does not tick it: the
+    // row asks for that language in THIS kind of work ("Backend in ..."),
+    // which the tags alone do not say. The judge gets the pointer and a
+    // second look, and must quote the job's line or stay at unknown.
+    if (status === "unknown" && r && !dropped) {
+      const labelTech = technologiesNamed(stripExamples(c.label));
+      if (labelTech.length) {
+        const declared = input.skills.filter((sk) => namesAny(sk.skill, labelTech)).flatMap((sk) => sk.alternates);
+        const acceptedTech = technologiesNamed(`${bracketed(c.label)} ${declared.join(", ")}`).filter((g) => !labelTech.some((l) => l[0] === g[0]));
+        const on = [...labelTech, ...acceptedTech].find((g) => jobs.some((j) => j.career && namesAny(j.text, [g])));
+        if (on) {
+          const job = jobs.find((j) => j.career && namesAny(j.text, [on]))!;
+          dropped = { status: "unknown", quote: "", evidence: evidence.slice(0, 160), why: `${MISSED_TECH}${on[0]} is tagged on ${job.title} at ${job.company}.` };
+        }
+      }
+    }
     // Rail: a row with a years bar and a subject ("5 years building X")
     // cannot be met when the dated history is over a year short of it.
     const bar = yearsBar(c.label);
@@ -567,7 +587,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   // resting on a title and an employer ("says nothing") gets no second look.
   // What the second look answered is kept on the row, so a tick it did not
   // restore can be understood afterwards.
-  const again = rows.filter((r) => r.dropped?.why === NOT_QUOTED || r.dropped?.why === HEDGED);
+  const again = rows.filter((r) => r.dropped?.why === NOT_QUOTED || r.dropped?.why === HEDGED || r.dropped?.why.startsWith(MISSED_TECH));
   const record = (old: CardRow, again: string) => { rows[rows.indexOf(old)] = { ...old, dropped: { ...old.dropped!, again } }; };
   // Only in the time the rows call left unused, so the longest a person can
   // take is what it was before there was a second look.
@@ -576,8 +596,10 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   if (again.length && rowsUser && spare >= 4_000) {
     const reason = (r: CardRow) =>
       r.dropped!.why === HEDGED
-        ? `- [${r.id}] your evidence was an inference ("${r.dropped!.evidence.slice(0, 100)}"). An inference is not evidence.`
-        : `- [${r.id}] rejected quote: "${r.dropped!.quote.slice(0, 120)}" (those words are not written on the candidate's profile or resume; words from the scorecard or the job description are not the candidate's words).`;
+        ? `- [${r.id}] your evidence was worded as an inference ("${r.dropped!.evidence.slice(0, 100)}"). If the words you quoted ("${r.dropped!.quote.slice(0, 80)}") themselves name this work (a title, a team name, a line of a description), answer yes and state it plainly. If you were inferring it from where they work or what the company does, answer unknown.`
+        : r.dropped!.why.startsWith(MISSED_TECH)
+          ? `- [${r.id}] you answered unknown, but ${r.dropped!.why.slice(MISSED_TECH.length)} If that job's work is the kind this row asks for, answer yes (or equivalent for a stand-in the row accepts) and quote that job's line; if the tag alone is all there is, stay at unknown.`
+          : `- [${r.id}] rejected quote: "${r.dropped!.quote.slice(0, 120)}" (those words are not written on the candidate's profile or resume; words from the scorecard or the job description are not the candidate's words).`;
     const r2 = await callOpenAI(
       input, ROWS_SYSTEM,
       `${rowsUser}\n\nSECOND LOOK. Answer ONLY these rows again:\n${again.map(reason).join("\n")}\nFor each row: if the profile has words that decide it (a skill tag on a job, a line of a description, a title or team name that names the work), copy them exactly and state the fact plainly. If it does not, answer unknown with quote "": that is the expected answer for most rows, and a quote about something else is worse than none.`,
@@ -601,13 +623,14 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
         // row or its note, or it names a technology. The first attempt stays
         // on the row for diagnosis.
         if (met && aboutTheRow(next.quote || "", c)) rows[rows.indexOf(old)] = { ...next, dropped: { ...old.dropped!, why: `${old.dropped!.why} (a second look found a quote)` } };
+        else if (old.dropped!.why.startsWith(MISSED_TECH)) rows[rows.indexOf(old)] = { ...old, dropped: { ...old.dropped!, again: met ? `quote not about the row: "${(next.quote || "").slice(0, 100)}"` : `${next.status}: ${next.evidence.slice(0, 100)}` } };
         else if (met) record(old, `quote not about the row: "${(next.quote || "").slice(0, 100)}"`);
         else if (next.dropped) record(old, `${next.status === "unknown" ? "rejected again" : next.status}: ${next.dropped.why} "${next.dropped.quote.slice(0, 100)}"`);
         else record(old, `${next.status}: ${next.evidence.slice(0, 100)}`);
       }
     }
   } else if (again.length) for (const old of again) record(old, rowsUser ? "no time" : "no rows call");
-  const removed = rows.filter((r) => r.dropped && r.status === "unknown").length;
+  const removed = rows.filter((r) => r.dropped && r.status === "unknown" && !r.dropped.why.startsWith(MISSED_TECH)).length;
   if (removed) console.warn(`verdict: ${removed} tick(s) removed: the profile does not say it`);
 
   let label: VerdictLabel = labelFromRows(rows, "message");

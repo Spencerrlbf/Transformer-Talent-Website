@@ -60,28 +60,34 @@ export default function ScorecardEditor({
             {rows.map((c) => (
               <div className="rc-erow" key={c.id}>
                 <div className="rc-efields">
-                  <input
-                    className="rc-elabel"
-                    value={c.label}
-                    maxLength={MAX_LABEL}
-                    placeholder="One thing to check, e.g. Has taken a system from zero to one"
-                    aria-label="What to check"
-                    onChange={(e) => patch(c.id, { label: e.target.value })}
-                  />
+                  {/* Both boxes are named on screen: with placeholders only, a
+                      note was pasted into the row box and cut at its limit. */}
+                  <label className="rc-ename">
+                    <span>Row</span>
+                    <input
+                      className="rc-elabel"
+                      value={c.label}
+                      maxLength={MAX_LABEL}
+                      placeholder="One thing to check, e.g. Has taken a system from zero to one"
+                      onChange={(e) => patch(c.id, { label: e.target.value })}
+                    />
+                  </label>
                   {c.tier === "required" && (
                     <label className="rc-ecall" title="Tick this when LinkedIn profiles rarely say it (a specific language, depth of ownership). While a profile does not show it, it will not hold the label back: the label reads, for example, Contact now · confirm TypeScript.">
                       <input type="checkbox" checked={!!c.confirmOnCall} onChange={(e) => patch(c.id, { confirmOnCall: e.target.checked })} />
                       Confirm on a call: profiles rarely say this
                     </label>
                   )}
-                  <input
-                    className="rc-egood"
-                    value={c.good || ""}
-                    maxLength={MAX_GOOD}
-                    placeholder="What counts as evidence (optional)"
-                    aria-label="What counts as evidence"
-                    onChange={(e) => patch(c.id, { good: e.target.value })}
-                  />
+                  <label className="rc-ename">
+                    <span>What counts as evidence</span>
+                    <input
+                      className="rc-egood"
+                      value={c.good || ""}
+                      maxLength={MAX_GOOD}
+                      placeholder="Titles, team names, skill tags or technologies that show it (optional)"
+                      onChange={(e) => patch(c.id, { good: e.target.value })}
+                    />
+                  </label>
                 </div>
                 <select
                   className="rc-etier"
