@@ -22,7 +22,14 @@ import { workKind, type CandidateFacts, type JobText } from "../facts";
 import type { RequirementRead, VerdictLabel } from "@/lib/verdict-view";
 import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
-import { careerYearsStatus, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
+import { bracketed, careerYearsStatus, isCareerYearsRow, labelFromRows, stripExamples, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
+
+/** A row as this judge builds it: a CardRow plus a tick the code removed, as
+ *  the judge gave it. Never shown or stored on the card: kept while judging
+ *  so a wrongly removed tick can be found and the guard tuned. */
+type JudgedRow = CardRow & {
+  dropped?: { status: string; quote: string; evidence: string; why: string; /** what a second look answered, when there was one */ again?: string };
+};
 
 export const SCORECARD_JUDGE_VERSION = "v13";
 
@@ -174,12 +181,6 @@ export function sourceOfQuote(quote: string, a: { jobs: JobText[]; profileText: 
   return "Profile";
 }
 const jobSource = (j: JobText) => `Work history · ${[j.title, j.company && `at ${j.company}`].filter(Boolean).join(" ")}`.slice(0, 120);
-
-const stripExamples = (label: string) => label.replace(/\(.*?\)/g, " ").replace(/(\be\.g\.|\bsuch as\b|\blike\b|\bor similar\b|\bincluding\b).*$/i, " ");
-/** What else the row itself accepts: only what its brackets name. The
- *  "examples of evidence" note is NOT a list of substitutes (it may well name
- *  Kubernetes as evidence of backend work on a TypeScript row). */
-const bracketed = (label: string) => (label.match(/\(([^)]*)\)/g) || []).join(" ");
 
 /** Is a quote about this row at all? It shares a word (by its first five
  *  letters: "infra" and "infrastructure", "eval" and "evaluation") with the
@@ -472,7 +473,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   // ---- 2. code ----
   const idOf = (x: string) => String(x || "").replace(/^[\s\[]+|[\s\]]+$/g, "").toLowerCase();
   const answerFor = (list: RowOut[], c: Criterion) => list.find((x) => x && idOf(x.id) === c.id.toLowerCase());
-  const decide = (c: Criterion, r: RowOut | undefined): CardRow => {
+  const decide = (c: Criterion, r: RowOut | undefined): JudgedRow => {
     const call = c.tier === "required" && !!c.confirmOnCall;
     if (isCareerYearsRow(c.label)) {
       const ruled = careerYearsStatus(facts, yearsBar(c.label)!, basis);
@@ -486,7 +487,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     // "not on the profile", and a real tick was lost that way.
     const rawQuote = (r?.quote || "").trim();
     let quote = rawQuote.length <= 160 ? rawQuote : rawQuote.slice(0, 160).replace(/[,;.·]?\s*[^\s,;.·]*$/, "");
-    let dropped: CardRow["dropped"];
+    let dropped: JudgedRow["dropped"];
     let source: string | undefined;
     const drop = (why: string) => {
       // Kept on the row (never shown) so a wrongly removed tick can be found.
@@ -572,7 +573,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     const met = status === "yes" || status === "equivalent";
     return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}), ...(met && source ? { source } : {}), ...(dropped ? { dropped } : {}) };
   };
-  const rows: CardRow[] = allCriteria.map((c) => decide(c, answerFor(rowsOut, c)));
+  const rows: JudgedRow[] = allCriteria.map((c) => decide(c, answerFor(rowsOut, c)));
   const unassessed = asked.filter((c) => !answerFor(rowsOut, c)).length;
 
   // Two kinds of dropped tick get one more look, under the same guards and
@@ -588,13 +589,13 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   // What the second look answered is kept on the row, so a tick it did not
   // restore can be understood afterwards.
   const again = rows.filter((r) => r.dropped?.why === NOT_QUOTED || r.dropped?.why === HEDGED || r.dropped?.why.startsWith(MISSED_TECH));
-  const record = (old: CardRow, again: string) => { rows[rows.indexOf(old)] = { ...old, dropped: { ...old.dropped!, again } }; };
+  const record = (old: JudgedRow, again: string) => { rows[rows.indexOf(old)] = { ...old, dropped: { ...old.dropped!, again } }; };
   // Only in the time the rows call left unused, so the longest a person can
   // take is what it was before there was a second look.
   const spare = (input.timeoutMs ?? 30_000) - (Date.now() - started);
   let secondLookFailed = false;
   if (again.length && rowsUser && spare >= 4_000) {
-    const reason = (r: CardRow) =>
+    const reason = (r: JudgedRow) =>
       r.dropped!.why === HEDGED
         ? `- [${r.id}] your evidence was worded as an inference ("${r.dropped!.evidence.slice(0, 100)}"). If the words you quoted ("${r.dropped!.quote.slice(0, 80)}") themselves name this work (a title, a team name, a line of a description), answer yes and state it plainly. If you were inferring it from where they work or what the company does, answer unknown.`
         : r.dropped!.why.startsWith(MISSED_TECH)
