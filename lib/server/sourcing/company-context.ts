@@ -64,11 +64,23 @@ async function fetchFromHarvest(slug: string): Promise<Omit<CompanyContext, "lin
   }
 }
 
+/** The head count a company page states, as one integer: "~183 employees"
+ *  is 183, and a range ("1,001-5,000 employees") reads as its upper bound.
+ *  Null when the page says nothing. */
+export function employeeCount(range: string | null | undefined): number | null {
+  const nums = (String(range || "").replace(/,/g, "").match(/\d+/g) || []).map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n));
+  if (!nums.length) return null;
+  return nums.length === 1 ? nums[0] : Math.max(...nums);
+}
+
 /**
  * Cache-first batch lookup. Unknown slugs are fetched (bounded concurrency)
- * and stored — including failures, so a bad slug never costs twice.
+ * and stored — including failures, so a bad slug never costs twice. With
+ * `cacheOnly` nothing is fetched: what the cache knows is returned, and an
+ * unknown company is simply absent (the applicant path, which has no import
+ * step to prefetch employers and no time budget for one).
  */
-export async function getCompanyContexts(slugs: string[]): Promise<Map<string, CompanyContext>> {
+export async function getCompanyContexts(slugs: string[], opts: { cacheOnly?: boolean } = {}): Promise<Map<string, CompanyContext>> {
   const unique = [...new Set(slugs.filter(Boolean))].slice(0, 100);
   const out = new Map<string, CompanyContext>();
   if (!unique.length) return out;
@@ -80,7 +92,7 @@ export async function getCompanyContexts(slugs: string[]): Promise<Map<string, C
   for (const c of cached) out.set(c.linkedin_slug, c);
 
   const missing = unique.filter((s) => !out.has(s));
-  if (!missing.length) return out;
+  if (!missing.length || opts.cacheOnly) return out;
 
   // Bounded concurrency; failures are cached negatively.
   const CONC = 3;
@@ -103,6 +115,15 @@ export async function getCompanyContexts(slugs: string[]): Promise<Map<string, C
     })
   );
   return out;
+}
+
+/** The current employer as the report card states it: its name, head count
+ *  and founding year from its company page, or null when the page is not
+ *  known. Facts about the employer are shown once, as facts; they never tick
+ *  a row. */
+export function employerOf(ctx: CompanyContext | undefined): { name: string; employees: number | null; founded: number | null } | null {
+  if (!ctx || ctx.fetch_failed || !ctx.name) return null;
+  return { name: ctx.name, employees: employeeCount(ctx.employee_range), founded: ctx.founded ?? null };
 }
 
 /** One judge-ready line, or null when we know nothing useful. */

@@ -16,6 +16,7 @@
 //  5. This is the single source of years — gates and facts can't disagree.
 
 import { sbRest } from "./supabase";
+import type { ProfileFacts } from "@/lib/rolecard";
 
 export interface ExperienceRow {
   title: string | null;
@@ -193,6 +194,9 @@ function mergedYears(intervals: [number, number][]): number {
   return Math.round((months / 12) * 10) / 10;
 }
 
+// A bachelor's degree, as people write it.
+const BACHELOR = /\bbachelor|\bb\.?\s?s\b|\bb\.?\s?a\b|\bb\.?\s?eng\b|\bb\.?\s?sc\b|\bb\.?\s?tech\b|\bb\.e\.|^\s*be\b|\bba\.?sc\b|\ba\.b\.|\bbcs\b|\bbba\b|\bb\.?\s?com\b|undergrad/i;
+
 // Final undergrad graduation year from a Harvest education list. Bachelor
 // degrees only — masters/PhD must not push the career anchor later.
 export function undergradEndYear(education: unknown): number | null {
@@ -200,7 +204,7 @@ export function undergradEndYear(education: unknown): number | null {
   let latest: number | null = null;
   for (const ed of education as Record<string, any>[]) {
     const degree = String(ed?.degree || "");
-    if (!/\bbachelor|\bb\.?\s?s\b|\bb\.?\s?a\b|\bb\.?\s?eng\b|\bb\.?\s?sc\b|\bb\.?\s?tech\b|\bb\.e\.|^\s*be\b|\bba\.?sc\b|\ba\.b\.|\bbcs\b|\bbba\b|\bb\.?\s?com\b|undergrad/i.test(degree)) continue;
+    if (!BACHELOR.test(degree)) continue;
     let year: number | null = ed?.endDate?.year ?? null;
     if (!year && typeof ed?.period === "string") {
       const m = ed.period.match(/(\d{4})\s*$/);
@@ -388,18 +392,116 @@ export interface JobText {
   /** Location and duration as the profile prints them beside the title: not
    *  evidence of anything, so not allowed to ground a quote. */
   noise: string;
+  /** The position's skill tags as written, so a technology found on a job
+   *  can be quoted as the tag itself. */
+  tags: string[];
+  /** The dates as the profile gives them ("Aug 2022", "2020", "Present") and
+   *  the position's own length in years, for the report card. Null when the
+   *  position is undated. */
+  from: string | null;
+  to: string | null;
+  years: number | null;
 }
+const monthYear = (month: number | null, year: number | null): string | null =>
+  year ? `${month ? `${MONTH_NAMES[month - 1]} ` : ""}${year}` : null;
 export function jobTexts(experiences: ExperienceRow[], education: unknown = null): JobText[] {
   const now = new Date();
+  const nowY = now.getUTCFullYear();
+  const nowM = now.getUTCMonth() + 1;
   const rows = [...experiences].sort((a, b) => a.sort_order - b.sort_order);
-  return classify(rows, undergradEndYear(education), now.getUTCFullYear(), now.getUTCMonth() + 1).map((c) => ({
-    title: c.row.title || "",
-    company: c.row.company_name || "",
-    career: c.career,
-    current: !!c.row.is_current,
-    text: [c.row.title, (c.row.skills || []).join(", "), c.row.description].filter(Boolean).join("\n"),
-    noise: [c.row.location, c.row.duration_text].filter(Boolean).join(" "),
-  }));
+  return classify(rows, undergradEndYear(education), nowY, nowM).map((c) => {
+    // The position's own span, as written: the report card shows the dates
+    // beside it, so its years must agree with them (the career years clamp a
+    // job that spans graduation; this does not).
+    const own = interval(c.row, nowY, nowM);
+    return {
+      title: c.row.title || "",
+      company: c.row.company_name || "",
+      career: c.career,
+      current: !!c.row.is_current,
+      text: [c.row.title, (c.row.skills || []).join(", "), c.row.description].filter(Boolean).join("\n"),
+      noise: [c.row.location, c.row.duration_text].filter(Boolean).join(" "),
+      tags: (c.row.skills || []).filter(Boolean),
+      from: monthYear(c.row.start_month, c.row.start_year),
+      to: c.row.is_current ? "Present" : monthYear(c.row.end_month, c.row.end_year),
+      years: own ? mergedYears([own]) : null,
+    };
+  });
+}
+
+const companyKey = (name: string) =>
+  name.toLowerCase().replace(/[.,]/g, " ").replace(/\b(inc|llc|lp|ltd|plc|corp|corporation|co|company|investments?|technologies|labs?|ai|the)\b/g, " ").replace(/\s+/g, " ").trim();
+/** "Two Sigma" is "Two Sigma Investments, LP"; "Meta" is not "Metaphor". */
+export const sameCompany = (a: string, b: string) => {
+  const x = companyKey(a), y = companyKey(b);
+  return !!x && !!y && (x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `));
+};
+
+/** The school shown on the report card: the latest bachelor's when there is
+ *  one, else the latest education entry. */
+export function schoolOf(education: unknown): ProfileFacts["school"] {
+  if (!Array.isArray(education)) return null;
+  const entries = (education as Record<string, any>[])
+    .map((ed) => {
+      const name = String(ed?.schoolName || ed?.school || "").trim();
+      let year: number | null = typeof ed?.endDate?.year === "number" ? ed.endDate.year : null;
+      if (!year && typeof ed?.period === "string") {
+        const m = ed.period.match(/(\d{4})\s*$/);
+        if (m) year = parseInt(m[1], 10);
+      }
+      const degree = String(ed?.degree || "").trim() || null;
+      const field = String(ed?.fieldOfStudy || "").trim() || null;
+      return name ? { name, degree, field, year } : null;
+    })
+    .filter((e): e is NonNullable<typeof e> => !!e);
+  if (!entries.length) return null;
+  const latest = (list: typeof entries) => [...list].sort((a, b) => (b.year ?? -1) - (a.year ?? -1))[0];
+  const bachelors = entries.filter((e) => e.degree && BACHELOR.test(e.degree));
+  return latest(bachelors.length ? bachelors : entries);
+}
+
+/** Facts about the person for the report card, computed by CODE: years,
+ *  tenure, the companies with their dates, the school, and the current
+ *  employer's size when its company page is known. Never a model. */
+export function profileFacts(args: {
+  facts: CandidateFacts | null;
+  jobs: JobText[];
+  education?: unknown;
+  employer?: { name: string; employees: number | null; founded: number | null } | null;
+}): ProfileFacts {
+  const { facts, jobs } = args;
+  const dated = jobs.filter((j) => j.career && j.years != null);
+  const avg = dated.length ? Math.round((dated.reduce((a, j) => a + (j.years as number), 0) / dated.length) * 10) / 10 : null;
+  // The current job as the facts chose it (an engineering role among those
+  // still "Present"), first; the rest in profile order.
+  const currentJob = facts?.currentTitle ? jobs.find((j) => j.current && j.title === facts.currentTitle && j.company === facts.currentCompany) : undefined;
+  const ordered = currentJob ? [currentJob, ...jobs.filter((j) => j !== currentJob)] : jobs;
+  const companies = ordered
+    .filter((j) => j.from)
+    .slice(0, 8)
+    .map((j) => ({ name: j.company, title: j.title, from: j.from, to: j.to, years: j.years, career: j.career }));
+  const employer = args.employer && facts?.currentCompany && sameCompany(args.employer.name, facts.currentCompany) ? args.employer : null;
+  const employees = employer?.employees ?? null;
+  const current: ProfileFacts["current"] = facts?.currentTitle || facts?.currentCompany
+    ? {
+        title: facts?.currentTitle ?? null,
+        company: facts?.currentCompany ?? null,
+        months: facts?.currentTenureYears != null ? Math.max(1, Math.round(facts.currentTenureYears * 12)) : null,
+        employees,
+        founded: employer?.founded ?? null,
+        tag: employees != null && employees < 200 ? "startup" : employees != null && employees > 2000 ? "large" : null,
+      }
+    : null;
+  return {
+    engineeringYears: facts?.engineeringYears ?? null,
+    careerYears: facts?.careerYears ?? null,
+    careerSince: facts?.careerSince ?? null,
+    avgTenureYears: avg,
+    careerJobs: dated.length,
+    current,
+    companies,
+    school: schoolOf(args.education ?? null),
+  };
 }
 
 export async function fetchExperiences(candidateId: string): Promise<ExperienceRow[]> {

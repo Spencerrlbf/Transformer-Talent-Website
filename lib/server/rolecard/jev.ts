@@ -1,122 +1,122 @@
-// A second opinion on scorecard rows, from TypeSafe's Jev (a "System One"
-// model: typed questions in, answers with probabilities out; it writes no
-// text). Used ONLY by the owner's comparison page: nothing in the product
-// reads it. Each row that needs reading becomes one Score question on four
-// levels; every row of a person goes in one request and is answered on its
-// own. Career-years rows are decided by rule, for both judges alike.
+// The judge of judgment rows: TypeSafe's Jev, a "System One" model that
+// takes typed questions and answers with probabilities; it writes no text.
+// Each judgment row of a person becomes one Score question over the row's
+// own ladder (lib/rolecard.ts ladderOf), rung 1 first; every unremembered
+// row of a person goes in ONE request and is answered on its own.
 //
-// Docs: https://docs.typesafe.ai (POST /v1/systemone). The model is weak at
-// arithmetic and dates by its makers' own account, which is why years stay
-// in code and the FACTS block is handed over already computed.
+// What Jev sees is the person and nothing else: the whole profile, the whole
+// resume, one code-written line of years, and what a recruiter confirmed as
+// true. No role title, no job description, no tier and no per-skill facts:
+// measured, the model reads a company's product or reputation as evidence
+// about the person when it is given the chance, and it says "no" from
+// silence when a rung lets it. Years stay in code because the model is weak
+// at arithmetic and dates by its makers' own account.
+//
+// Docs: https://docs.typesafe.ai (POST /v1/systemone).
 
-import { isCareerYearsRow, type Criterion, type RowStatus } from "@/lib/rolecard";
+import { ladderOf, type Criterion } from "@/lib/rolecard";
 
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-export const JEV_MODEL = "jev-latest";
+/** Pinned: a remembered row is keyed on the model that read it. */
+export const JEV_MODEL = "jev-1.13.0";
 /** Published price, input tokens only; output is free. */
 export const JEV_USD_PER_M_INPUT = 0.042;
 
-/** Ordered by strength of evidence for the requirement. */
-const LEVELS: { status: RowStatus; text: string }[] = [
-  // First run: "contradicted" was chosen for thin profiles (one-word job
-  // descriptions), so this level now demands positive evidence against.
-  { status: "no", text: "Ruled out: the profile gives positive evidence against this, such as a whole career in a clearly different discipline (only data science, design or sales for a backend engineering requirement). A thin or silent profile is NOT this level." },
-  { status: "unknown", text: "Not shown: the profile is silent or too thin to tell. Choose this whenever there is simply no information either way, however likely or unlikely it seems." },
-  { status: "equivalent", text: "Equivalent: the candidate's own profile shows closely related or transferable experience: an accepted alternative, a concrete instance of the category, or the same work in another technology." },
-  { status: "yes", text: "Shown: the candidate's own profile or facts show this, in a title, a description, a listed or dated skill, or a project." },
-];
+export const jevConfigured = () => !!process.env.TYPESAFE_API_KEY;
 
-export interface JevRow {
-  id: string;
-  status: RowStatus;
+/** The person, as the only thing in the request's state. */
+export interface JevCandidate {
+  name: string;
+  profile: string;
+  /** Omitted when there is none. */
+  resume?: string;
+  /** One line written by code, in whole years. */
+  years: string;
+  /** What a recruiter checked off as true, on any role. Never a confirmed "no". */
+  confirmed?: string[];
+}
+
+/** One row's answer: p[k] is the probability of rung k+1 (2 dp), with the
+ *  model's confidence in the answer (2 dp). */
+export interface JevAnswer {
+  p: number[];
   confidence: number;
-  /** Probability per status. */
-  probabilities: Record<RowStatus, number>;
 }
 
 export interface JevResult {
-  rows: JevRow[];
+  /** In the order the criteria were given; null where the model returned nothing for a row. */
+  answers: (JevAnswer | null)[];
   ms: number;
   inputTokens: number;
   model: string;
 }
 
-export type JevError = "no_key" | "key_rejected" | "rate_limited" | "failed";
+export interface JevError {
+  error: "no_key" | "key_rejected" | "rate_limited" | "failed";
+  /** As a caller paces retries on it: 401 for a key problem, 429 for a rate
+   *  limit, 0 for anything transient (network, timeout, an upstream error). */
+  status: 401 | 429 | 0;
+  code?: string;
+  retryAfter?: string;
+  detail?: string;
+}
 
-export const jevConfigured = () => !!process.env.TYPESAFE_API_KEY;
+export const isJevError = (r: JevResult | JevError): r is JevError => "error" in r;
 
-export async function jevJudgeRows(input: {
-  roleTitle: string;
-  jd: { about?: string; doing?: string[]; needs?: string[] } | null;
-  criteria: Criterion[];
-  candidateName: string;
-  profileText: string;
-  factsBlock: string;
-  timeoutMs?: number;
-}): Promise<JevResult | { error: JevError; detail?: string }> {
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The question one judgment row becomes. Exported so a test or the
+ *  measurement harness can see exactly what is asked. */
+export function jevQuestion(c: Criterion): { type: "score"; instructions: string; criteria: string[] } {
+  return {
+    type: "score",
+    instructions:
+      `The row on the role's scorecard: "${c.label}". Judging only from candidate (their profile, resume, the years line and any confirmed statements), which one of these situations best describes this person? They are ordered from weakest to strongest. Choose the first whenever the material is silent or too thin to tell, however likely the rest may seem. Judge the person, not their employer: a company's product, technology stack or reputation is not evidence about them. Statements under confirmed were checked by a recruiter and are true.`,
+    criteria: ladderOf(c),
+  };
+}
+
+export async function jevJudgeLadders(input: { candidate: JevCandidate; criteria: Criterion[]; timeoutMs?: number }): Promise<JevResult | JevError> {
   const key = process.env.TYPESAFE_API_KEY;
-  if (!key) return { error: "no_key" };
-  const asked = input.criteria.filter((c) => !isCareerYearsRow(c.label));
-  if (!asked.length) return { rows: [], ms: 0, inputTokens: 0, model: JEV_MODEL };
+  if (!key) return { error: "no_key", status: 401, code: "typesafe_key" };
+  if (!input.criteria.length) return { answers: [], ms: 0, inputTokens: 0, model: JEV_MODEL };
 
-  // Question keys are q0..qn: a scorecard id is free text, a JSON key here
-  // should not be.
+  // Question keys are q0..qn in card order: a scorecard id is free text, a
+  // JSON key here should not be.
   const questions: Record<string, unknown> = {};
-  asked.forEach((c, i) => {
-    questions[`q${i}`] = {
-      type: "score",
-      instructions:
-        `Judging only from \`candidate\`: how well does this person meet this requirement of the role? Requirement: "${c.label}".` +
-        (c.good ? ` What counts as evidence: ${c.good}` : "") +
-        " Judge the person, not the employer: a company's product or technology stack is not evidence about this candidate." +
-        " Per-skill years in `candidate.facts` count only the positions where the skill is tagged, so they are a minimum; people under-list skills.",
-      criteria: LEVELS.map((l) => l.text),
-    };
+  input.criteria.forEach((c, i) => {
+    questions[`q${i}`] = jevQuestion(c);
   });
+  const { name, profile, resume, years, confirmed } = input.candidate;
+  const candidate: Record<string, unknown> = { name, profile, ...(resume ? { resume } : {}), years, ...(confirmed?.length ? { confirmed } : {}) };
 
   const started = Date.now();
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(input.timeoutMs ?? 20_000),
-    body: JSON.stringify({
-      model: JEV_MODEL,
-      state: {
-        role: {
-          title: input.roleTitle,
-          about: input.jd?.about || "",
-          responsibilities: input.jd?.doing || [],
-          requirements: input.jd?.needs || [],
-        },
-        candidate: { name: input.candidateName, profile: input.profileText.slice(0, 6000), facts: input.factsBlock },
-      },
-      questions,
-    }),
-  }).catch(() => null);
-  if (!res) return { error: "failed", detail: "no response" };
-  if (res.status === 401 || res.status === 403) return { error: "key_rejected" };
-  if (res.status === 429 || res.status === 529) return { error: "rate_limited" };
-  if (!res.ok) return { error: "failed", detail: `${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}` };
+    body: JSON.stringify({ model: JEV_MODEL, state: { candidate }, questions }),
+  }).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))));
+  if (res instanceof Error) return { error: "failed", status: 0, code: res.name || "fetch_failed", detail: res.message.slice(0, 200) };
+  if (res.status === 401 || res.status === 403) return { error: "key_rejected", status: 401, code: "typesafe_key", detail: String(res.status) };
+  if (res.status === 429 || res.status === 529) return { error: "rate_limited", status: 429, code: `typesafe_${res.status}`, retryAfter: res.headers.get("retry-after") ?? undefined };
+  if (!res.ok) return { error: "failed", status: 0, code: `typesafe_${res.status}`, detail: (await res.text().catch(() => "")).slice(0, 200) };
 
   try {
     const data = (await res.json()) as {
       model?: string;
-      answers: Record<string, { probabilities?: Record<string, number>; confidence?: number }>;
+      answers?: Record<string, { probabilities?: Record<string, number>; confidence?: number }>;
       usage?: { input_tokens?: number };
     };
-    const rows: JevRow[] = asked.map((c, i) => {
+    const answers = input.criteria.map((c, i) => {
       const a = data.answers?.[`q${i}`];
-      const p = LEVELS.map((_, k) => Number(a?.probabilities?.[String(k)] ?? 0));
-      const top = p.indexOf(Math.max(...p));
-      return {
-        id: c.id,
-        status: LEVELS[Math.max(0, top)].status,
-        confidence: Math.round(Number(a?.confidence ?? 0) * 100) / 100,
-        probabilities: Object.fromEntries(LEVELS.map((l, k) => [l.status, Math.round(p[k] * 100) / 100])) as Record<RowStatus, number>,
-      };
+      if (!a || typeof a !== "object") return null;
+      const rungs = ladderOf(c).length;
+      const p = Array.from({ length: rungs }, (_, k) => round2(Number(a.probabilities?.[String(k)] ?? 0) || 0));
+      return { p, confidence: round2(Number(a.confidence ?? 0) || 0) };
     });
-    return { rows, ms: Date.now() - started, inputTokens: data.usage?.input_tokens ?? 0, model: data.model || JEV_MODEL };
+    return { answers, ms: Date.now() - started, inputTokens: data.usage?.input_tokens ?? 0, model: data.model || JEV_MODEL };
   } catch {
-    return { error: "failed", detail: "unreadable response" };
+    return { error: "failed", status: 0, code: "unreadable" };
   }
 }

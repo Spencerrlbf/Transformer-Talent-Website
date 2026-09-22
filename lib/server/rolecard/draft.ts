@@ -18,7 +18,10 @@ export interface DraftInput {
   minYears?: number | null;
 }
 
-export const DRAFT_MODEL = "gpt-4o";
+/** Pinned: the same job description must draft the same card from one day
+ *  to the next, so the model and a seed are fixed. */
+export const DRAFT_MODEL = "gpt-4o-2024-08-06";
+const DRAFT_SEED = 7;
 
 // One array per tier, so a tier cannot be skipped the way a single list let it be.
 const ROWS = {
@@ -240,6 +243,7 @@ async function askDrafter(messages: { role: string; content: string }[], timeout
     body: JSON.stringify({
       model: process.env.SCORECARD_DRAFT_MODEL || DRAFT_MODEL,
       temperature: 0,
+      seed: DRAFT_SEED,
       response_format: { type: "json_schema", json_schema: { name: "scorecard", strict: true, schema: DRAFT_SCHEMA } },
       messages,
     }),

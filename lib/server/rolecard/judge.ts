@@ -1,21 +1,34 @@
 // One way to judge a person for a role, on every path (sourcing, applicants):
 // the role's scorecard and what recruiters confirmed about the person on
-// other roles go to the judge, the answer is saved so the same inputs always
-// give the same verdict, and the recruiter's overrules on this role are laid
-// back over it so judging again never flips a row they confirmed.
+// other roles go to the judge, what the judge learned is remembered ROW BY
+// ROW so the same person on the same row is never asked twice, and the
+// recruiter's overrules on this role are laid back over it so judging again
+// never flips a row they confirmed.
+//
+// Memory lives in verdict_cache (unique on org_role_id, candidate_key,
+// input_hash): one record per remembered judgment row (judge_version
+// "v14-row", keyed on the row's wording, its ladder, the judge and the
+// person's material) and one per remembered note ("v14-note", keyed on the
+// rows and facts it was written from). Nothing is keyed on the id, the tier,
+// the call flag or the rung the row counts from: the row shown is rebuilt
+// from the current criterion and the record on every read, so none of that
+// can go stale, and a changed "met from" re-labels without a re-judge. The
+// v13 whole-verdict records stay in the table as unread history.
 
-import crypto from "node:crypto";
 import { sbRest } from "../supabase";
-import { buildVerdictView, judgeVerdict, VERDICT_PROMPT_VERSION, type VerdictInput } from "../verdict";
+import { buildVerdictView, judgeVerdict, type VerdictInput } from "../verdict";
 import type { CandidateFacts } from "../facts";
-import { applyOverrides, type Criterion } from "@/lib/rolecard";
-import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
+import { applyOverrides, rowKind, type Criterion } from "@/lib/rolecard";
+import type { VerdictView } from "@/lib/verdict-view";
+import { isMemory, materialOf, rowHash, NOTE_MODEL, type Memory, type MemoryWrite } from "./scorecard-judge";
+import { JEV_MODEL } from "./jev";
 import { factLine, loadPersonContext, type PersonContext } from "./store";
 
-const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 const CACHE_TIMEOUT_MS = 5_000;
 /** The judge reads the newest few; the hash covers exactly what it reads. */
 const MAX_FACTS = 12;
+const ROW_VERSION = "v14-row";
+const NOTE_VERSION = "v14-note";
 
 export interface JudgeForRoleArgs {
   orgId: string;
@@ -23,7 +36,7 @@ export interface JudgeForRoleArgs {
   /** "src_<sourced id>" | "cand_<candidates.id>" (see store.personKey). */
   personKey: string;
   criteria: Criterion[];
-  input: Omit<VerdictInput, "criteria" | "confirmedFacts">;
+  input: Omit<VerdictInput, "criteria" | "confirmedFacts" | "memory">;
   /** Role-level target companies: part of what makes a verdict reusable.
    *  Companies one search happened to target are not, or the same person
    *  would read differently from one search to the next. */
@@ -34,38 +47,48 @@ export interface JudgeForRoleArgs {
 
 export interface JudgedForRole {
   view: VerdictView | null;
-  /** True when a saved verdict was reused and no model was called. */
+  /** True when everything came from memory and no model was called. */
   saved: boolean;
 }
 
-/** What decides a verdict, and nothing that drifts: career years move with
- *  the calendar and employer context with a cache, so the hash is over the
- *  stored profile and the role as written. */
-function inputHash(a: JudgeForRoleArgs, factLines: string[]): string {
-  return sha(
-    JSON.stringify({
-      judge: VERDICT_PROMPT_VERSION,
-      model: a.input.model,
-      role: {
-        title: a.input.roleTitle,
-        jd: a.input.jdText,
-        skills: a.input.skills,
-        minYears: a.input.minYears,
-        targets: [...a.roleTargets].map((t) => t.toLowerCase()).sort(),
-        // Not confirmOnCall: it changes the label, never how a row is read,
-        // so flipping it re-labels saved verdicts without judging anyone again.
-        criteria: a.criteria.map((c) => [c.id, c.label, c.tier, c.good || ""]),
-      },
-      person: {
-        profile: a.input.profileText,
-        resume: a.input.resumeText || "",
-        facts: factLines,
-        // Career years move with the calendar. Whole years are part of what
-        // decides a verdict (a "4+ years" row flips on one); the months are not.
-        wholeYears: [a.input.facts?.engineeringYears, a.input.careerYears].map((y) => (y == null ? null : Math.floor(y))),
-      },
-    })
-  );
+/** What is already known about this person on this card: the judgment rows
+ *  by their hash, and every note written for them on this role (the note's
+ *  hash is only known once the rows are). One read. */
+async function readMemory(a: JudgeForRoleArgs, input: VerdictInput): Promise<Map<string, Memory>> {
+  const memory = new Map<string, Memory>();
+  if (!a.criteria.length) return memory;
+  const material = materialOf(input, a.criteria);
+  const hashes = a.criteria.filter((c) => rowKind(c) === "judgment").map((c) => rowHash(c, material.materialHash));
+  const where = hashes.length ? `&or=(input_hash.in.(${hashes.join(",")}),judge_version.eq.${NOTE_VERSION})` : `&judge_version=eq.${NOTE_VERSION}`;
+  const res = await sbRest(
+    `verdict_cache?org_role_id=eq.${a.orgRoleId}&candidate_key=eq.${encodeURIComponent(a.personKey)}&judge_version=in.(${ROW_VERSION},${NOTE_VERSION})${where}&select=input_hash,verdict&limit=200`,
+    { signal: AbortSignal.timeout(CACHE_TIMEOUT_MS) }
+  ).catch(() => null);
+  const rows = res?.ok ? ((await res.json().catch(() => [])) as { input_hash: string; verdict: unknown }[]) : [];
+  for (const r of rows) if (r?.input_hash && isMemory(r.verdict)) memory.set(r.input_hash, r.verdict);
+  return memory;
+}
+
+/** One bulk write of what this pass learned. A record already there (a
+ *  parallel review of the same person) is left as it is. */
+async function writeMemory(a: JudgeForRoleArgs, writes: MemoryWrite[]): Promise<void> {
+  if (!writes.length) return;
+  await sbRest("verdict_cache?on_conflict=org_role_id,candidate_key,input_hash", {
+    method: "POST",
+    prefer: "resolution=ignore-duplicates,return=minimal",
+    signal: AbortSignal.timeout(CACHE_TIMEOUT_MS),
+    body: JSON.stringify(
+      writes.map((w) => ({
+        organization_id: a.orgId,
+        org_role_id: a.orgRoleId,
+        candidate_key: a.personKey,
+        input_hash: w.hash,
+        judge_version: w.record.kind === "row" ? ROW_VERSION : NOTE_VERSION,
+        model: w.record.kind === "row" ? JEV_MODEL : NOTE_MODEL,
+        verdict: w.record,
+      }))
+    ),
+  }).catch(() => null);
 }
 
 export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> {
@@ -80,43 +103,17 @@ export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> 
     return { view: null, saved: false };
   }
   const factLines = ctx.facts.slice(-MAX_FACTS).map(factLine);
-  const hash = inputHash(a, factLines);
+  const input: VerdictInput = { ...a.input, criteria: a.criteria, confirmedFacts: factLines };
+  const memory = await readMemory(a, input);
 
-  const hit = await sbRest(
-    `verdict_cache?org_role_id=eq.${a.orgRoleId}&candidate_key=eq.${encodeURIComponent(a.personKey)}&input_hash=eq.${hash}&select=verdict&limit=1`,
-    { signal: AbortSignal.timeout(CACHE_TIMEOUT_MS) }
-  ).catch(() => null);
-  const [cached] = hit?.ok ? ((await hit.json().catch(() => [])) as { verdict: unknown }[]) : [];
-  if (cached && isVerdictView(cached.verdict)) {
-    return { view: applyOverrides(cached.verdict, ctx.overrides, ctx.wrongRole, a.criteria), saved: true };
-  }
-
-  const judged = await judgeVerdict({ ...a.input, criteria: a.criteria, confirmedFacts: factLines });
+  const judged = await judgeVerdict({ ...input, memory });
   if (!judged) return { view: null, saved: false };
   const view = buildVerdictView(judged, a.factsFor, a.roleSkills);
+  await writeMemory(a, judged.memoryWrites);
+  const saved = judged.calls === 0;
 
-  // Saved as judged, before any overrule: overrules are laid over at read
-  // time, so taking one back restores exactly what the judge said. A verdict
-  // with a row the model skipped is shown but not kept.
-  if (!judged.unassessed) {
-    await sbRest("verdict_cache?on_conflict=org_role_id,candidate_key,input_hash", {
-      method: "POST",
-      prefer: "resolution=ignore-duplicates,return=minimal",
-      signal: AbortSignal.timeout(CACHE_TIMEOUT_MS),
-      body: JSON.stringify({
-        organization_id: a.orgId,
-        org_role_id: a.orgRoleId,
-        candidate_key: a.personKey,
-        input_hash: hash,
-        judge_version: VERDICT_PROMPT_VERSION,
-        model: a.input.model,
-        verdict: view,
-      }),
-    }).catch(() => null);
-  }
-
-  // The model call takes seconds: a row checked off meanwhile must not be
+  // A model call takes seconds: a row checked off meanwhile must not be
   // written over, so the recruiter's word is read again before it is laid on.
-  const now = await loadPersonContext(a.orgId, a.orgRoleId, a.personKey).catch(() => ctx);
-  return { view: applyOverrides(view, now.overrides, now.wrongRole, a.criteria), saved: false };
+  const now = saved ? ctx : await loadPersonContext(a.orgId, a.orgRoleId, a.personKey).catch(() => ctx);
+  return { view: applyOverrides(view, now.overrides, now.wrongRole, a.criteria), saved };
 }
