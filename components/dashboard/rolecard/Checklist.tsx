@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import {
+  NO_LINE_SOURCE,
   ROW_MARK,
   ROW_STATUSES,
   ROW_WORD,
@@ -64,10 +65,16 @@ function receipt(r: CardRow): string | null {
   return `Jev${rung ? ` · ${rung}` : ""}${sure}`;
 }
 
-/** A met judgment row with nothing to quote: the whole material read that
- *  way, no one line says it. Only what the judge read; a confirmed row says
- *  who confirmed it instead. */
-const noLine = (r: CardRow) => r.kind === "judgment" && (r.status === "yes" || r.status === "equivalent") && !r.quote && !r.confirmed;
+/** The line under a row: where the words were found, with the words; or, on
+ *  a met judgment row with nothing to quote, that the whole material read
+ *  that way. "No single line" is said of a met row only: once the row counts
+ *  from a higher rung it is not met, and the line goes with the tick. A pass
+ *  on which no line was looked for (the reference call failed) shows nothing. */
+const sourceLine = (r: CardRow): string | null => {
+  if (r.quote) return r.source || "Profile";
+  if (!r.source) return null;
+  return r.source === NO_LINE_SOURCE && r.status !== "yes" && r.status !== "equivalent" ? null : r.source;
+};
 
 /** A years row within a year of its bar: the numbers, in place of a mark. */
 function ShortPill({ r }: { r: CardRow }) {
@@ -224,16 +231,19 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
                         {r.evidence}
                         {/* Where it was found, and the words found there. Older saved
                             reviews carry a quote but no source: those say "Profile". */}
-                        {(r.source || r.quote) ? (
-                          <span className="ck-src" title="Where this was found. The words in quotes are copied from there.">
-                            {r.source || "Profile"}
+                        {sourceLine(r) && (
+                          <span
+                            className="ck-src"
+                            title={
+                              sourceLine(r) === NO_LINE_SOURCE
+                                ? "The whole profile and resume read this way; no one line says it in as many words."
+                                : "Where this was found. The words in quotes are copied from there."
+                            }
+                          >
+                            {sourceLine(r)}
                             {r.quote && <span className="ck-quote">: &ldquo;{r.quote}&rdquo;</span>}
                           </span>
-                        ) : noLine(r) ? (
-                          <span className="ck-src" title="The whole profile and resume read this way; no one line says it in as many words.">
-                            Whole profile · no single line to quote
-                          </span>
-                        ) : null}
+                        )}
                       </div>
                     )
                   )}

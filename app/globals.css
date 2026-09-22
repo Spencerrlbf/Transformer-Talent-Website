@@ -4436,6 +4436,8 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .dash-src-fullbtn { display: block; margin-top: 6px; background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .dash-src-full td { padding-top: 0; background: var(--paper); }
 .dash-src-full .vc { max-width: 78ch; padding: 4px 0 12px; }
+/* The report card lays its facts strip and two columns out on the whole row. */
+.dash-src-full .vc-report { max-width: none; }
 
 /* ---- Role scorecard: the editor, the job-page card, the judged checklist ---- */
 .rc-ico { width: 14px; height: 14px; flex: none; vertical-align: -2px; }
@@ -4611,3 +4613,5 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .dash-src-rowact .dash-src-decide button:hover { background: var(--surface); color: var(--ink); }
 .dash-src-rowact .dash-src-decide button.yes.on { background: var(--pos); color: #fff; }
 .dash-src-rowact .dash-src-decide button.no.on { background: var(--bad-bg); color: var(--bad); }
+/* On a phone the row's Yes and No are its primary action: a 44px target. */
+@media (max-width: 640px) { .dash-src-rowact .dash-src-decide button { height: auto; min-height: 44px; } }

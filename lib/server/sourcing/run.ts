@@ -513,7 +513,9 @@ async function screenOneRow(
     const err = llmErr as { status: number; code?: string; retryAfter?: string } | null;
     // Quota-dead / auth-dead: grinding 2500 rows x 3 attempts helps no one.
     if (err && (err.status === 401 || err.status === 403 || err.code === "insufficient_quota")) {
-      throw new RunFailure(`LLM key rejected (${err.status}${err.code ? ` ${err.code}` : ""})`);
+      // The judge of scorecard rows has a key of its own (TYPESAFE_API_KEY):
+      // the run's banner says which key was refused.
+      throw new RunFailure(err.code === "typesafe_key" ? `TypeSafe key rejected (${err.status})` : `LLM key rejected (${err.status}${err.code ? ` ${err.code}` : ""})`);
     }
     if (err && (err.status === 0 || err.status === 429 || err.status >= 500)) {
       // Rate limit / upstream blip: NOT the row's fault — no attempt charged.

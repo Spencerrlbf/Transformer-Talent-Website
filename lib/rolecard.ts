@@ -31,9 +31,10 @@ export interface Criterion {
   /** What good looks like, in the hiring manager's words. Optional; it seeds
    *  a judgment row's default ladder when no ladder is stored. */
   good?: string;
-  /** Required rows only: profiles rarely say this, so it is confirmed on a
-   *  call. While it reads "not shown" it does not hold the label back; the
-   *  label says what is still to confirm ("Contact now · confirm TypeScript"). */
+  /** Required rows only, never a years row: profiles rarely say this, so it
+   *  is confirmed on a call. While it reads "not shown" it does not hold the
+   *  label back; the label says what is still to confirm ("Contact now ·
+   *  confirm TypeScript"). Years are decided by arithmetic, not confirmed. */
   confirmOnCall?: boolean;
   /** Stored ONLY as an override: "judgment" on a row whose label names a
    *  technology, to have it read on a ladder instead of decided from job
@@ -124,10 +125,18 @@ export interface CardRow {
   techReach?: TechReach;
 }
 
+/** The source line on a met judgment row with no quotable line: the whole
+ *  material read that way, no one line says it. Shown only while the row is
+ *  met; shared so the checklist can tell it from a real source. */
+export const NO_LINE_SOURCE = "Whole profile · no single line to quote";
+
 /** Facts about the person, computed by CODE on the server for the report card. */
 export interface ProfileFacts {
   engineeringYears: number | null;
   careerYears: number | null;
+  /** What the role's years bar is about: engineering years on an engineering
+   *  role, the career on any other. The report card leads with that number. */
+  basis?: "engineering" | "career";
   careerSince: string | null;
   avgTenureYears: number | null;
   careerJobs: number;
@@ -347,7 +356,9 @@ export function sanitizeScorecard(input: unknown, draftedBy: "ai" | "user", prev
       for (let n = 2; reserved.has(id); n++) id = `${base}-${n}`;
       reserved.add(id);
     }
-    const confirmOnCall = tier === "required" && sent.confirmOnCall === true;
+    // A years row is decided by arithmetic on dated positions: there is
+    // nothing about it to confirm on a call, so the flag is never kept on one.
+    const confirmOnCall = tier === "required" && sent.confirmOnCall === true && !isCareerYearsRow(label);
     // The one stored override: a technology row read on a ladder. Anywhere
     // else it would change nothing, so it is not kept.
     const kind: RowKind | undefined = sent.kind === "judgment" && !isCareerYearsRow(label) && technologiesNamed(stripExamples(label)).length ? "judgment" : undefined;
@@ -409,14 +420,16 @@ export function cardChanges(prev: Scorecard | null, next: Scorecard): { calls: b
  *  message. "Not shown" and "short" never push to pass. A required row the
  *  role marks "confirm on a call" does not hold the label back while it is
  *  not shown (profiles rarely say it), but at least one required row must
- *  actually be met: nobody reaches contact on silence alone. With no
+ *  actually be met: nobody reaches contact on silence alone. A years row a
+ *  year short of the bar always holds the label at message, call flag or
+ *  not: the numbers are known, there is nothing to confirm. With no
  *  required rows there is nothing to rule on, so the judge's own label stands. */
 export function labelFromRows(rows: (Pick<CardRow, "tier" | "status" | "call"> & { label?: string })[], fallback: VerdictLabel): VerdictLabel {
   const required = rows.filter((r) => r.tier === "required");
   if (!required.length) return fallback;
   if (required.some((r) => r.status === "no")) return "pass";
   const isMet = (r: Pick<CardRow, "status">) => met(r.status);
-  const deciding = required.filter((r) => !(r.call && notShown(r.status)));
+  const deciding = required.filter((r) => !(r.call && r.status === "unknown"));
   if (!deciding.length || !deciding.every(isMet)) return "message";
   // Years alone are not a reason to contact someone: when the card has
   // Required rows about the work itself, at least one of them must be met.
@@ -598,6 +611,10 @@ export function applyOverrides(
     if (!c || r.level == null) return r.ai;
     const kind = r.kind ?? rowKind(c);
     if (rowKind(c) !== kind) return r.ai;
+    // A rung reached on another ladder (reworded since, or judged with
+    // stand-ins the card no longer names) means nothing on this one: the row
+    // keeps the status it was given until Review again reads it on this ladder.
+    if (r.levels != null && r.levels !== ladderOf(c).length) return r.ai;
     if (kind === "judgment") return statusFromLevel(r.level, metAtOf(c));
     if (kind === "tech" && r.techReach) return techStatus(r.techReach, metAtOf(c), r.levels != null ? r.levels >= 5 : techSpec(c).accepted.length > 0);
     return r.ai;

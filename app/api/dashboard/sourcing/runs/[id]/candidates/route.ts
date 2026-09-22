@@ -41,9 +41,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   const paging = `&limit=${PAGE}&offset=${(page - 1) * PAGE}`;
   // Best fit first: Contact now, Worth a message, Pass (alphabetical order of
   // the stored labels happens to be that order), then how strongly the
-  // scorecard is met (a "likely" counts half), then the search's own rank.
-  // People not judged yet come last. If the ordering is ever refused, the
-  // table still loads in search-rank order.
+  // scorecard is met (cardStrength: each row by its status and tier, plus a
+  // little for rungs read above met-from on an unconfirmed row), then the
+  // search's own rank. People not judged yet come last. If the ordering is
+  // ever refused, the table still loads in search-rank order.
   const byFit = `&order=verdict->>label.asc.nullslast,verdict->card->strength.desc.nullslast,rank.asc.nullslast,created_at.asc`;
   const byRank = `&order=rank.asc.nullslast,created_at.asc`;
   let res = await sbRest(`sourcing_run_candidates?${filters}${select}${byFit}${paging}`, { headers: { Prefer: "count=exact" } });

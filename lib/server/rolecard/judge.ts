@@ -27,6 +27,9 @@ import { factLine, loadPersonContext, type PersonContext } from "./store";
 const CACHE_TIMEOUT_MS = 5_000;
 /** The judge reads the newest few; the hash covers exactly what it reads. */
 const MAX_FACTS = 12;
+/** Notes pile up (one per distinct rows-and-facts state, and tenure moves
+ *  monthly): only the newest few are read back. */
+const MAX_NOTES = 20;
 const ROW_VERSION = "v14-row";
 const NOTE_VERSION = "v14-note";
 
@@ -52,20 +55,26 @@ export interface JudgedForRole {
 }
 
 /** What is already known about this person on this card: the judgment rows
- *  by their hash, and every note written for them on this role (the note's
- *  hash is only known once the rows are). One read. */
+ *  by their exact hashes (at most ten), and the newest notes written for them
+ *  on this role (the note's hash is only known once the rows are). Two reads
+ *  at once, so the notes, which pile up, can never crowd a row out and have
+ *  the person asked again. */
 async function readMemory(a: JudgeForRoleArgs, input: VerdictInput): Promise<Map<string, Memory>> {
   const memory = new Map<string, Memory>();
   if (!a.criteria.length) return memory;
   const material = materialOf(input, a.criteria);
   const hashes = a.criteria.filter((c) => rowKind(c) === "judgment").map((c) => rowHash(c, material.materialHash));
-  const where = hashes.length ? `&or=(input_hash.in.(${hashes.join(",")}),judge_version.eq.${NOTE_VERSION})` : `&judge_version=eq.${NOTE_VERSION}`;
-  const res = await sbRest(
-    `verdict_cache?org_role_id=eq.${a.orgRoleId}&candidate_key=eq.${encodeURIComponent(a.personKey)}&judge_version=in.(${ROW_VERSION},${NOTE_VERSION})${where}&select=input_hash,verdict&limit=200`,
-    { signal: AbortSignal.timeout(CACHE_TIMEOUT_MS) }
-  ).catch(() => null);
-  const rows = res?.ok ? ((await res.json().catch(() => [])) as { input_hash: string; verdict: unknown }[]) : [];
-  for (const r of rows) if (r?.input_hash && isMemory(r.verdict)) memory.set(r.input_hash, r.verdict);
+  type Rec = { input_hash: string; verdict: unknown };
+  const base = `verdict_cache?org_role_id=eq.${a.orgRoleId}&candidate_key=eq.${encodeURIComponent(a.personKey)}&select=input_hash,verdict`;
+  const read = async (query: string): Promise<Rec[]> => {
+    const res = await sbRest(`${base}&${query}`, { signal: AbortSignal.timeout(CACHE_TIMEOUT_MS) }).catch(() => null);
+    return res?.ok ? ((await res.json().catch(() => [])) as Rec[]) : [];
+  };
+  const [rows, notes] = await Promise.all([
+    hashes.length ? read(`judge_version=eq.${ROW_VERSION}&input_hash=in.(${hashes.join(",")})&limit=${hashes.length}`) : Promise.resolve([] as Rec[]),
+    read(`judge_version=eq.${NOTE_VERSION}&order=created_at.desc&limit=${MAX_NOTES}`),
+  ]);
+  for (const r of [...rows, ...notes]) if (r?.input_hash && isMemory(r.verdict)) memory.set(r.input_hash, r.verdict);
   return memory;
 }
 
@@ -102,7 +111,13 @@ export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> 
     a.input.onError?.({ status: 0, code: "feedback_read_failed" });
     return { view: null, saved: false };
   }
-  const factLines = ctx.facts.slice(-MAX_FACTS).map(factLine);
+  // What the scorecard judge may read as true: the facts confirmed yes or
+  // equivalent, picked by their status, never by their wording (a confirmed
+  // "no" names the requirement too). The newest few; the material hash
+  // covers exactly these. The single-call judge of a role with no scorecard
+  // still sees every fact, a "no" included, as it always did.
+  const facts = a.criteria.length ? ctx.facts.filter((f) => f.status === "yes" || f.status === "equivalent") : ctx.facts;
+  const factLines = facts.slice(-MAX_FACTS).map(factLine);
   const input: VerdictInput = { ...a.input, criteria: a.criteria, confirmedFacts: factLines };
   const memory = await readMemory(a, input);
 

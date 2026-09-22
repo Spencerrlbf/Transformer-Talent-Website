@@ -71,7 +71,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   let relabelled = 0;
   if ((changes.calls || changes.metAts) && changes.reask === 0)
     relabelled = await relabelRole(member.org.id, role.id, card.criteria).catch((e) => (console.error("relabel failed", e), -1));
-  return NextResponse.json({ scorecard: card, relabelled, reask: changes.reask });
+  return NextResponse.json({ scorecard: card, relabelled, reask: changes.reask, calls: changes.calls, metAts: changes.metAts });
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

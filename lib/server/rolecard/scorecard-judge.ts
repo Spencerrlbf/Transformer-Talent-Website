@@ -40,11 +40,11 @@ import type { RequirementRead, VerdictLabel } from "@/lib/verdict-view";
 import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import {
-  careerYearsStatus, isCareerYearsRow, labelFromRows, ladderOf, metAtOf, rowKind, routeLevel, statusFromLevel, stripExamples,
+  NO_LINE_SOURCE, careerYearsStatus, isCareerYearsRow, labelFromRows, ladderOf, metAtOf, rowKind, routeLevel, statusFromLevel, stripExamples,
   techLadder, techLevel, techSpec, techStatus, yearsBar, type CardRow, type Criterion, type RowStatus, type TechReach,
 } from "@/lib/rolecard";
 import { isJevError, jevJudgeLadders, JEV_MODEL } from "./jev";
-import { askOpenAI, findReferences, jobSource, NO_LINE_SOURCE, quoteCheck, REF_MODEL } from "./references";
+import { askOpenAI, findReferences, jobSource, quoteCheck, REF_MODEL } from "./references";
 
 export const SCORECARD_JUDGE_VERSION = "v14";
 /** Pinned, like the reference model: the note is remembered under it. */
@@ -292,9 +292,12 @@ export function withShortReason(paragraph: string, label: VerdictLabel, rows: Ca
   const short = rows.find((r) => r.tier === "required" && r.status === "short" && r.numbers);
   if (!short?.numbers) return paragraph;
   const { have, bar } = short.numbers;
-  const carriesBar = new RegExp(`(?<![\\d.])${bar}\\s*\\+`).test(paragraph);
-  const carriesHave = new RegExp(`(?<![\\d.])${String(have).replace(".", "\\.")}(?![\\d])`).test(paragraph);
-  if (carriesBar && carriesHave) return paragraph;
+  // The numbers count only when one sentence states them together, and as
+  // years: "3 months on it" here and "asks 4+ years" there say nothing about
+  // the shortfall. A whole number of years may be written to a decimal.
+  const haveRe = new RegExp(`(?<![\\d.])${String(have).replace(".", "\\.")}${Number.isInteger(have) ? "(\\.\\d+)?" : ""}\\s*(years?|yrs)\\b`, "i");
+  const barRe = new RegExp(`(?<![\\d.])${bar}\\s*\\+`);
+  if (sentences(paragraph).some((s) => haveRe.test(s) && barRe.test(s))) return paragraph;
   const others = rows.filter((r) => r.tier === "required" && r.id !== short.id);
   const allOthersMet = others.length > 0 && others.every((r) => r.status === "yes" || r.status === "equivalent");
   const sentence = allOthersMet ? `Meets every other Required row. ${years(have)} against the ${bar}+ bar, a year short. Worth a call.` : `A year short on the ${bar}+ bar.`;
@@ -350,6 +353,14 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   // the companies the role targets, and the current employer's page name.
   const employers = [...new Set([...jobs.map((j) => j.company), ...input.targetedCompanies, (input.employerContext || "").split(/[(—:-]/)[0]].map((x) => (x || "").trim()).filter(Boolean))];
   const noise = jobs.map((j) => j.noise).join(" ");
+  // The profile with "at <employer>" taken off its lines: a company called
+  // Temporal or Prefect is where someone worked, not a technology they used,
+  // so the profile rung of a tech row is read without those words.
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const profileSansEmployers = jobs.reduce(
+    (text, j) => (j.company ? text.replace(new RegExp(`\\bat ${escapeRe(j.company)}(?![A-Za-z0-9])`, "g"), "at") : text),
+    m.profileText
+  );
   // The person's OWN material: what a quote must come from. Not the FACTS
   // block (code wrote it) and not the employer's description. A quote is
   // looked for line by line in the profile (a LinkedIn entry is one line)
@@ -376,10 +387,12 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   };
 
   const techRow = (c: Criterion, call: boolean): CardRow => {
-    // What else does the job: what the row's own brackets name, and the
-    // alternatives the employer declared for that skill on the role.
-    const declared = input.skills.filter((sk) => namesAny(sk.skill, technologiesNamed(stripExamples(c.label)))).flatMap((sk) => sk.alternates);
-    const { names, accepted } = techSpec(c, declared);
+    // What else does the job: what the row's own brackets name, and nothing
+    // else. The ladder read here must be the one the editor, the job page and
+    // the relabel show, and those read the card alone: an alternate the
+    // employer declared on the role form stands in only once the card's
+    // brackets name it (the drafter writes the role's stack there).
+    const { names, accepted } = techSpec(c);
     const hasAccepted = accepted.length > 0;
     const ladder = techLadder(names.map((g) => g[0]), accepted.map((g) => g[0]));
     const name = names[0]?.[0] || "The technology";
@@ -424,7 +437,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       // skills list, the summary, an internship), or nowhere.
       const skillsLine = m.profileText.split("\n").find((l) => /^(all )?skills:/i.test(l.trim())) || "";
       const internship = (tech: string[][]) => jobs.find((j) => !j.career && namesAny(j.text, tech));
-      const onProfile = (tech: string[][]) => namesAny(m.profileText, tech) || !!internship(tech);
+      const onProfile = (tech: string[][]) => namesAny(profileSansEmployers, tech) || !!internship(tech);
       const found2 = onProfile(names) ? names : accepted.find((g) => onProfile([g])) ? [accepted.find((g) => onProfile([g]))!] : null;
       if (found2) {
         reach = "profile";
@@ -434,7 +447,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
         const intern = internship(found2);
         if (tag) { quote = tag; source = "Skills list"; }
         else if (intern) { const w = where(intern, found2); quote = w.quote; source = w.source; }
-        else { quote = wordsAround(m.profileText, found2); source = "Profile"; }
+        else { quote = wordsAround(profileSansEmployers, found2); source = "Profile"; }
       } else {
         reach = "none"; evidence = `${name} is not named on the profile or resume.`;
       }
@@ -454,10 +467,14 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     const ladder = ladderOf(c);
     const level = Math.min(Math.max(1, Math.round(read.level)), ladder.length);
     const status = statusFromLevel(level, metAtOf(c));
+    // "No single line to quote" is said of a met row only: remembered from a
+    // pass where the row was met, it means nothing once the row counts from
+    // a higher rung and is not.
+    const source = read.source === NO_LINE_SOURCE && status !== "yes" && status !== "equivalent" ? undefined : read.source;
     return {
       id: c.id, label: c.label, tier: c.tier, status, ai: status, evidence: ladder[level - 1], call, confirmed: null, kind: "judgment", judgedBy: "jev",
       level, levels: ladder.length, p: read.p, confidence: read.confidence,
-      ...(read.quote ? { quote: read.quote } : {}), ...(read.source ? { source: read.source } : {}),
+      ...(read.quote ? { quote: read.quote } : {}), ...(source ? { source } : {}),
     };
   };
 
@@ -532,7 +549,8 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
         const row = rows[x.index]!;
         const ref = found.refs.get(x.c.id);
         if (ref) { row.quote = ref.quote; row.source = ref.source; }
-        else row.source = NO_LINE_SOURCE;
+        // A met row with no line says so; an unmet row simply has none.
+        else if (row.status === "yes" || row.status === "equivalent") row.source = NO_LINE_SOURCE;
       }
     }
   }
@@ -557,7 +575,8 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   const railNote = input.minYears != null && datedYears != null && datedYears < input.minYears - 1 ? `Dated history shows ${datedYears} years against ${input.minYears}+ required.` : null;
   if (label === "contact" && railNote) label = "message";
   const factItems = factLine(input, facts, jobs, m.basis);
-  const profile = profileFacts({ facts, jobs, education: input.education ?? null, employer: input.employer ?? null });
+  // The report card leads with the years the role's bar is about.
+  const profile = { ...profileFacts({ facts, jobs, education: input.education ?? null, employer: input.employer ?? null }), basis: m.basis };
   const openRequired = finalRows.filter((r) => r.tier === "required" && r.status !== "yes" && r.status !== "equivalent");
   const missing = openRequired
     .map((r) => (r.status === "no" ? `${r.label}: against.` : r.status === "short" && r.numbers ? `${r.label}: ${years(r.numbers.have)} against ${r.numbers.bar}+, a year short.` : `${r.label}: not shown on the profile.`))

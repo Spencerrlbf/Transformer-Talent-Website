@@ -33,7 +33,8 @@ const reviewedOn = (iso: string) => {
 };
 
 const yearsWord = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "year" : "years"}`;
-const monthsWord = (m: number) => (m >= 24 ? `${(m / 12).toFixed(m % 12 === 0 ? 0 : 1)} years` : m >= 12 ? (m === 12 ? "1 year" : `1 year ${m - 12} mo`) : `${m} mo`);
+const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
+const monthsWord = (m: number) => (m >= 24 ? `${(m / 12).toFixed(m % 12 === 0 ? 0 : 1)} years` : m >= 12 ? (m === 12 ? "1 year" : `1 year ${plural(m - 12, "month")}`) : plural(m, "month"));
 const people = (n: number) => (n >= 1000 ? `~${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "")}k people` : `~${n} people`);
 
 function Chip({ c }: { c: TechChip }) {
@@ -55,16 +56,22 @@ function Chip({ c }: { c: TechChip }) {
  *  the dated positions and the employer's own page, never by a model. */
 function FactsStrip({ p }: { p: ProfileFacts }) {
   const cur = p.current;
+  // The years the role's bar is about lead: engineering years on an
+  // engineering role, the career on any other (a data science or product
+  // role), so the strip says what the years row says.
+  const career = p.basis === "career" || (p.engineeringYears == null && p.careerYears != null);
+  const lead = career ? p.careerYears : p.engineeringYears;
   return (
     <dl className="vc-facts-grid" title="Facts, not the AI's reading: worked out in code from the dated positions on the profile, plus the employer's own company page">
       <div>
         <dt>Experience</dt>
         <dd>
-          {p.engineeringYears != null ? <b>{yearsWord(p.engineeringYears)}</b> : <b>Not dated</b>}
+          {lead != null ? <b>{yearsWord(lead)}</b> : <b>Not dated</b>}
           <small>
-            in engineering roles
+            {career ? "of career" : "in engineering roles"}
             {p.careerSince && ` · since ${p.careerSince}`}
-            {p.careerYears != null && p.engineeringYears != null && p.careerYears - p.engineeringYears >= 0.5 && ` · ${yearsWord(p.careerYears)} of career in all`}
+            {!career && p.careerYears != null && p.engineeringYears != null && p.careerYears - p.engineeringYears >= 0.5 && ` · ${yearsWord(p.careerYears)} of career in all`}
+            {career && p.engineeringYears != null && p.engineeringYears >= 0.5 && ` · ${yearsWord(p.engineeringYears)} in engineering roles`}
           </small>
         </dd>
       </div>
@@ -72,7 +79,7 @@ function FactsStrip({ p }: { p: ProfileFacts }) {
         <dt>Average tenure</dt>
         <dd>
           {p.avgTenureYears != null ? <b>{yearsWord(p.avgTenureYears)}</b> : <b>Not dated</b>}
-          <small>across {p.careerJobs} career {p.careerJobs === 1 ? "job" : "jobs"}</small>
+          <small>{p.careerJobs === 0 ? "no dated career positions" : `across ${p.careerJobs} career ${p.careerJobs === 1 ? "job" : "jobs"}`}</small>
         </dd>
       </div>
       <div>
@@ -354,7 +361,7 @@ export default function VerdictCard({
               </ul>
             </div>
           )}
-          <p className="vc-note">Written from the rows and the facts above. It changes only when a row changes.</p>
+          <p className="vc-note">Written from the rows and the facts above. It changes only when a row or a fact above changes.</p>
           {when}
           {decision && <DecideButtons d={decision} />}
           {reviewLink}

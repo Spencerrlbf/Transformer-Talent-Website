@@ -15,8 +15,13 @@ import type { JobText } from "../facts";
  *  it is part of the row's key. */
 export const REF_MODEL = "gpt-4o-mini-2024-07-18";
 export const OPENAI_SEED = 7;
-/** The source line on a met row with no quotable line. */
-export const NO_LINE_SOURCE = "Whole profile · no single line to quote";
+/** The source line on a met row with no quotable line (lib/rolecard.ts, so
+ *  the checklist can tell it from a real source). */
+export { NO_LINE_SOURCE } from "@/lib/rolecard";
+/** At most two passages of at most twelve words each, per row: what the
+ *  model is asked for, and what is taken whatever it sends. */
+const MAX_QUOTES = 2;
+const MAX_QUOTE_WORDS = 12;
 const MAX_QUOTE = 160;
 
 // Words that say nothing about the work: generic title words, seniority,
@@ -242,11 +247,14 @@ export async function findReferences(rows: { id: string; rung: string }[], m: Re
   for (const a of answers) {
     const id = String(a?.id ?? "");
     if (!ids.includes(id) || out.refs.has(id)) continue;
-    const quotes = (Array.isArray(a.quotes) ? a.quotes : []).map((q) => String(q ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4);
+    const quotes = (Array.isArray(a.quotes) ? a.quotes : []).map((q) => String(q ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, MAX_QUOTES);
     for (const raw of quotes) {
-      // Cut a long quote at a separator: a word cut in half is a word that is
-      // "not on the profile".
-      const quote = raw.length <= MAX_QUOTE ? raw : raw.slice(0, MAX_QUOTE).replace(/[,;.·]?\s*[^\s,;.·]*$/, "");
+      // A long quote is cut to its twelve-word allowance (a prefix of a real
+      // line is still on that line), then at a separator: a word cut in half
+      // is a word that is "not on the profile".
+      const words = raw.split(" ");
+      const trimmed = words.length <= MAX_QUOTE_WORDS ? raw : words.slice(0, MAX_QUOTE_WORDS).join(" ");
+      const quote = trimmed.length <= MAX_QUOTE ? trimmed : trimmed.slice(0, MAX_QUOTE).replace(/[,;.·]?\s*[^\s,;.·]*$/, "");
       if (quoteCheck(quote, lineMaterial, m.employers, m.noise, m.resumeText) !== "ok") continue;
       const source = sourceOfQuote(quote, { jobs: m.jobs, profileText: m.profileText, resumeText: m.resumeText, confirmed: m.confirmed, employers: m.employers, noise: m.noise }) || "Profile";
       out.refs.set(id, { quote, source });

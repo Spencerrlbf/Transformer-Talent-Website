@@ -20,9 +20,13 @@ export function HowDecided({ c }: { c: Criterion }) {
     const { names, accepted } = techSpec(c);
     const name = names[0]?.[0] || "The technology";
     const alts = accepted.map((g) => g[0]);
+    // A stand-in sits on rung 3: it counts only while the row counts from there.
     return (
       <div className="rc-kind">
-        {KIND_HINT.tech} <span className="rc-ladderline">{name} on a job ✓{alts.length > 0 && <> · {orList(alts)} ≈</>} (met from rung {metAt})</span>
+        {KIND_HINT.tech}{" "}
+        <span className="rc-ladderline">
+          {name} on a job ✓{alts.length > 0 && (metAt <= 3 ? <> · {orList(alts)} ≈</> : <> · {orList(alts)} do not count</>)} (met from rung {metAt})
+        </span>
       </div>
     );
   }
@@ -63,7 +67,7 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
   const [busy, setBusy] = useState<"" | "save" | "draft">("");
   const [error, setError] = useState("");
   // What the last save changed for the people already judged, from the PUT response.
-  const [saved, setSaved] = useState<{ relabelled: number; reask: number } | null>(null);
+  const [saved, setSaved] = useState<{ relabelled: number; reask: number; other: boolean } | null>(null);
   const seq = useRef(0);
 
   const call = useCallback(
@@ -111,7 +115,9 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
     setCard(d.scorecard);
     setRows(null);
     setDirty(false);
-    setSaved({ relabelled: Number(d.relabelled) || 0, reask: Number(d.reask) || 0 });
+    // A call flag or a met-from that changed in the same save waits for
+    // Review again too when rows have to be re-asked: the footer says so.
+    setSaved({ relabelled: Number(d.relabelled) || 0, reask: Number(d.reask) || 0, other: d.calls === true || d.metAts === true });
   }
 
   async function draftAgain() {
@@ -198,7 +204,7 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
             {saved && (
               <b className="rc-saved">
                 {saved.reask > 0
-                  ? `Saved. ${saved.reask} ${saved.reask === 1 ? "row" : "rows"} changed: Review again re-asks only ${saved.reask === 1 ? "that row" : "those rows"} for each person.`
+                  ? `Saved. ${saved.reask} ${saved.reask === 1 ? "row" : "rows"} changed: Review again re-asks only ${saved.reask === 1 ? "that row" : "those rows"} for each person.${saved.other ? " Other changes to the card apply then too." : ""}`
                   : saved.relabelled > 0
                     ? `Saved. ${saved.relabelled} ${saved.relabelled === 1 ? "person was" : "people were"} re-labelled from their stored rows; nobody was reviewed again.`
                     : "Saved. It applies the next time people are reviewed."}

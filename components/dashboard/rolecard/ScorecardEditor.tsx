@@ -59,8 +59,10 @@ let minted = 0;
 const newId = () => `row-${Date.now().toString(36)}-${(minted++).toString(36)}`;
 
 /** The rungs a judgment row shows for editing: what is stored, else the one
- *  rung its note (or label) seeds. Rung 1 is FLOOR and is never stored. */
-const editableRungs = (c: Criterion): string[] => (c.ladder?.length ? c.ladder : ladderOf(c).slice(1));
+ *  rung its note (or label) seeds, else, on a row with no label yet, one
+ *  empty rung so the placeholder can guide them. Rung 1 is FLOOR and is
+ *  never stored. */
+const editableRungs = (c: Criterion): string[] => (c.ladder?.length ? c.ladder : c.label.trim() || c.good ? ladderOf(c).slice(1) : [""]);
 
 export default function ScorecardEditor({
   value,
@@ -138,7 +140,9 @@ export default function ScorecardEditor({
       );
     }
     const rungs = editableRungs(c);
-    const values = rungs.map((_, i) => i + 2);
+    // The bar can only sit on a rung that will be stored: an empty rung
+    // still being typed is not one yet.
+    const values = ladderOf({ ...c, ladder: rungs }).slice(1).map((_, i) => i + 2);
     const metAt = metAtOf({ ...c, ladder: rungs });
     const setRungs = (next: string[]) => patch(c.id, { ladder: next });
     // A technology row read on a ladder can go back to being decided from tags.
@@ -173,6 +177,7 @@ export default function ScorecardEditor({
                 type="button"
                 className="dash-skill-x"
                 title={rungs.length <= 1 ? "A ladder keeps at least one rung above the floor" : "Remove this rung"}
+                aria-label={`Remove rung ${i + 2}`}
                 disabled={rungs.length <= 1}
                 onClick={() => setRungs(rungs.filter((_, k) => k !== i))}
               >
@@ -182,12 +187,14 @@ export default function ScorecardEditor({
           ))}
         </ol>
         <div className="rc-howfoot">
+          {/* A new rung is a stronger sign, not a higher bar: the rung the
+              row counts from is written down as it stands. */}
           <button
             type="button"
             className="dash-addrow rc-addrung"
             disabled={rungs.length >= MAX_RUNGS - 1}
             title={rungs.length >= MAX_RUNGS - 1 ? `A ladder holds up to ${MAX_RUNGS} rungs` : undefined}
-            onClick={() => setRungs([...rungs, ""])}
+            onClick={() => patch(c.id, { ladder: [...rungs, ""], metAt })}
           >
             + add a rung (up to {MAX_RUNGS})
           </button>
@@ -224,7 +231,6 @@ export default function ScorecardEditor({
                     />
                   </label>
                   {kindBlock(c)}
-                  {rowKind(c) === "years" && callBox(c)}
                 </div>
                 <select
                   className="rc-etier"
@@ -238,7 +244,7 @@ export default function ScorecardEditor({
                     </option>
                   ))}
                 </select>
-                <button type="button" className="dash-skill-x" title="Remove this row" onClick={() => onChange(value.filter((x) => x.id !== c.id))}>
+                <button type="button" className="dash-skill-x" title="Remove this row" aria-label="Remove this row" onClick={() => onChange(value.filter((x) => x.id !== c.id))}>
                   ×
                 </button>
               </div>

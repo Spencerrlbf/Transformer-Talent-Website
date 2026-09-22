@@ -280,7 +280,7 @@ export default function RunView({
                   : f === "strong" ? "Contact now"
                   : f === "yes" ? "Yes"
                   : f === "message" ? "Worth a message"
-                  : "Shortlisted ★"}
+                  : "Shortlisted"}
               </button>
             ))}
           </div>
