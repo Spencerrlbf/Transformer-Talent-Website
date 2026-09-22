@@ -24,7 +24,7 @@ import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import { careerYearsStatus, isCareerYearsRow, labelFromRows, yearsBar, type CardRow, type Criterion, type RowStatus } from "@/lib/rolecard";
 
-export const SCORECARD_JUDGE_VERSION = "v11";
+export const SCORECARD_JUDGE_VERSION = "v12";
 
 const ROWS_SYSTEM = `You are a careful technical recruiter checking one candidate against a role's scorecard. You have the candidate's LinkedIn profile (and a resume when supplied), a FACTS block computed in code from their dated positions, and the role. Answer EVERY scorecard row, by its id.
 
@@ -63,6 +63,8 @@ type RowOut = { id: string; status: RowStatus; quote: string; evidence: string }
 // (typically 4,850): earlier jobs and the skills section were never seen.
 const RESUME_CHARS = 12_000;
 const NOT_QUOTED = "Not shown on the profile: nothing written there says this.";
+// The judge's own words gave its tick away as an inference (suggests, implies).
+const HEDGED = "Not shown on the profile.";
 // A title, an employer and a date say nothing about a row: that tick was an
 // inference from where the person works, and gets no second look.
 const SAYS_NOTHING = "Not shown on the profile: a title and an employer do not say this.";
@@ -159,6 +161,10 @@ export function sourceOfQuote(quote: string, a: { jobs: JobText[]; profileText: 
   const at = lines.findIndex(within);
   if (at < 0) return undefined;
   if (/^(all )?skills:/i.test(lines[at].trim())) return "Skills list";
+  // The profile prints a job as one line ("Founding Engineer. at Perch. Jan
+  // 2025 - Feb 2026. Skills: TypeScript, …"): a quote found on it is that job's.
+  const ofJob = a.jobs.find((j) => j.title && lines[at].startsWith(j.title));
+  if (ofJob) return jobSource(ofJob);
   const isJobLine = (line: string) => a.jobs.some((j) => j.title && line.startsWith(j.title));
   const jobLines = lines.map((l, i) => (isJobLine(l) ? i : -1)).filter((i) => i >= 0);
   if (jobLines.length && at < jobLines[0]) return "Profile summary";
@@ -499,7 +505,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       // resume. Not the profile's skills list, not an internship alone, and
       // not a confirmed fact (its wording names the requirement, whatever the answer).
       const onAJob = (tech: string[][]) => tech.length > 0 && (jobs.some((j) => j.career && namesAny(j.text, tech)) || (!!input.resumeText && namesAny(input.resumeText, tech)));
-      if (HEDGE.test(evidence)) drop("Not shown on the profile.");
+      if (HEDGE.test(evidence)) drop(HEDGED);
       else if (labelTech.length) {
         // A row that names a technology is decided here, on the jobs
         // themselves: stronger than any quote, so no quote is asked of it.
@@ -538,8 +544,10 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     // was never checked; it is shown beside "copied from there", so it is
     // kept only when it really is there.
     if (quote && technologiesNamed(stripExamples(c.label)).length && (status === "yes" || status === "equivalent")) {
-      if (quoteCheck(quote, lineMaterial, employers, noise, resume) === "ok") source = whereFrom(quote) ?? source;
-      else quote = "";
+      if (quoteCheck(quote, lineMaterial, employers, noise, resume) === "ok") {
+        const w = whereFrom(quote);
+        if (w && w !== "Profile") source = w;
+      } else quote = "";
     }
     const met = status === "yes" || status === "equivalent";
     return { id: c.id, label: c.label, tier: c.tier, status, evidence, ai: status, call, confirmed: null, ...(quote ? { quote } : {}), ...(met && source ? { source } : {}), ...(dropped ? { dropped } : {}) };
@@ -547,42 +555,58 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   const rows: CardRow[] = allCriteria.map((c) => decide(c, answerFor(rowsOut, c)));
   const unassessed = asked.filter((c) => !answerFor(rowsOut, c)).length;
 
-  // A quote that is not on the profile is a mistake in QUOTING (the judge
-  // copied the scorecard's own note, or paraphrased), and the person may well
-  // have the evidence: the judge gets one more look at those rows, under the
-  // same guards. A tick it called an inference itself (suggests, implies) is
-  // not looked at again: rewording an inference does not make it evidence.
-  const again = rows.filter((r) => r.dropped?.why === NOT_QUOTED);
+  // Two kinds of dropped tick get one more look, under the same guards and
+  // one more: the new quote must be ABOUT the row. (1) A quote that is not on
+  // the profile is a mistake in QUOTING (the scorecard's own note copied, a
+  // paraphrase), and the person may well have the evidence. (2) A tick whose
+  // evidence hedged (suggests, implies): the same grounded team name was kept
+  // in one run ("Platform and Infra shows infrastructure work") and dropped
+  // in the next ("Platform and Infra work implies…") on the model's choice of
+  // verb; what decides is whether the profile's words are there and about the
+  // row, so the judge is asked to state the fact plainly or withdraw. A tick
+  // resting on a title and an employer ("says nothing") gets no second look.
+  // What the second look answered is kept on the row, so a tick it did not
+  // restore can be understood afterwards.
+  const again = rows.filter((r) => r.dropped?.why === NOT_QUOTED || r.dropped?.why === HEDGED);
+  const record = (old: CardRow, again: string) => { rows[rows.indexOf(old)] = { ...old, dropped: { ...old.dropped!, again } }; };
   // Only in the time the rows call left unused, so the longest a person can
   // take is what it was before there was a second look.
   const spare = (input.timeoutMs ?? 30_000) - (Date.now() - started);
   let secondLookFailed = false;
   if (again.length && rowsUser && spare >= 4_000) {
+    const reason = (r: CardRow) =>
+      r.dropped!.why === HEDGED
+        ? `- [${r.id}] your evidence was an inference ("${r.dropped!.evidence.slice(0, 100)}"). An inference is not evidence.`
+        : `- [${r.id}] rejected quote: "${r.dropped!.quote.slice(0, 120)}" (those words are not written on the candidate's profile or resume; words from the scorecard or the job description are not the candidate's words).`;
     const r2 = await callOpenAI(
       input, ROWS_SYSTEM,
-      `${rowsUser}\n\nSECOND LOOK. Answer ONLY these rows again. Your quote for each was rejected because those words are not written on the candidate's profile or resume (words from the scorecard or the job description are not the candidate's words):\n${again
-        .map((r) => `- [${r.id}] rejected quote: "${r.dropped!.quote.slice(0, 120)}"`)
-        .join("\n")}\nFor each row: if the profile has words that decide it (a skill tag on a job, a line of a description, a title that names the work), copy them exactly. If it does not, answer unknown with quote "": that is the expected answer for most rows, and a quote about something else is worse than none.`,
+      `${rowsUser}\n\nSECOND LOOK. Answer ONLY these rows again:\n${again.map(reason).join("\n")}\nFor each row: if the profile has words that decide it (a skill tag on a job, a line of a description, a title or team name that names the work), copy them exactly and state the fact plainly. If it does not, answer unknown with quote "": that is the expected answer for most rows, and a quote about something else is worse than none.`,
       "scorecard_rows_again", rowsSchema(again.map((r) => r.id), false), Math.min(10_000, spare), false
     );
-    if (!r2) secondLookFailed = true;
-    else {
+    if (!r2) {
+      secondLookFailed = true;
+      for (const old of again) record(old, "no reply");
+    } else {
       usage = { input: usage.input + r2.usage.input, output: usage.output + r2.usage.output };
       const out2 = Array.isArray(r2.out.rows) ? (r2.out.rows as RowOut[]) : [];
       for (const old of again) {
         const c = allCriteria.find((x) => x.id === old.id)!;
         const second = answerFor(out2, c);
-        const next = second ? decide(c, second) : null;
+        if (!second) { record(old, "not answered"); continue; }
+        const next = decide(c, second);
+        const met = next.status === "yes" || next.status === "equivalent";
         // Kept only when it now stands AND the new quote is about this row:
         // asked twice, a judge will quote something, and a real line about
         // something else must not tick the row. It shares a word with the
         // row or its note, or it names a technology. The first attempt stays
         // on the row for diagnosis.
-        if (next && (next.status === "yes" || next.status === "equivalent") && aboutTheRow(next.quote || "", c))
-          rows[rows.indexOf(old)] = { ...next, dropped: { ...old.dropped!, why: `${NOT_QUOTED} (a second look found a quote)` } };
+        if (met && aboutTheRow(next.quote || "", c)) rows[rows.indexOf(old)] = { ...next, dropped: { ...old.dropped!, why: `${old.dropped!.why} (a second look found a quote)` } };
+        else if (met) record(old, `quote not about the row: "${(next.quote || "").slice(0, 100)}"`);
+        else if (next.dropped) record(old, `${next.status === "unknown" ? "rejected again" : next.status}: ${next.dropped.why} "${next.dropped.quote.slice(0, 100)}"`);
+        else record(old, `${next.status}: ${next.evidence.slice(0, 100)}`);
       }
     }
-  }
+  } else if (again.length) for (const old of again) record(old, rowsUser ? "no time" : "no rows call");
   const removed = rows.filter((r) => r.dropped && r.status === "unknown").length;
   if (removed) console.warn(`verdict: ${removed} tick(s) removed: the profile does not say it`);
 

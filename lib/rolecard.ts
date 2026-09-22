@@ -78,7 +78,7 @@ export interface CardRow {
   call?: boolean;
   /** A tick the code removed, as the judge gave it. Never shown: kept so a
    *  wrongly removed tick can be found and the guard tuned. */
-  dropped?: { status: string; quote: string; evidence: string; why: string };
+  dropped?: { status: string; quote: string; evidence: string; why: string; /** what a second look answered, when there was one */ again?: string };
 }
 
 export interface VerdictCardData {
