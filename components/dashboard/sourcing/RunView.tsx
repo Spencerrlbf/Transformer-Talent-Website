@@ -131,8 +131,13 @@ export default function RunView({
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({ membershipId: row.membershipId, ...patch }),
     }).catch(() => {});
-    if (patch.hidden) loadRows(page, filter);
+    // A hidden row stays on screen, dimmed with No filled, until the next
+    // load, so a slip can be taken back with one more press.
   }
+  // Yes shortlists (and un-hides); No hides (and un-shortlists). Pressing
+  // the one already filled takes it back.
+  const sayYes = (row: CandidateRow) => rowAction(row, row.shortlisted ? { shortlisted: false } : { shortlisted: true, hidden: false });
+  const sayNo = (row: CandidateRow) => rowAction(row, row.hidden ? { hidden: false } : { hidden: true, shortlisted: false });
 
   async function rereviewFailed() {
     const res = await fetch(`/api/dashboard/sourcing/runs/${runId}/rereview`, { method: "POST", headers: auth }).catch(() => null);
@@ -350,12 +355,26 @@ export default function RunView({
                       )}
                     </td>
                     <td className="dash-src-rowact">
-                      <button
-                        title={r.shortlisted ? "Remove from shortlist" : "Shortlist"}
-                        className={r.shortlisted ? "on" : ""}
-                        onClick={() => rowAction(r, { shortlisted: !r.shortlisted })}
-                      >★</button>
-                      <button title="Hide" onClick={() => rowAction(r, { hidden: true })}>✕</button>
+                      <span className="dash-src-decide" role="group" aria-label={`Your decision on ${r.name}`}>
+                        <button
+                          type="button"
+                          className={`yes${r.shortlisted ? " on" : ""}`}
+                          aria-pressed={r.shortlisted}
+                          title={r.shortlisted ? "Shortlisted. Press to take it back." : "Yes: shortlist and reach out"}
+                          onClick={() => sayYes(r)}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          className={`no${r.hidden ? " on" : ""}`}
+                          aria-pressed={r.hidden}
+                          title={r.hidden ? "Hidden from this run. Press to bring them back." : "No: hide from this run"}
+                          onClick={() => sayNo(r)}
+                        >
+                          No
+                        </button>
+                      </span>
                     </td>
                   </tr>
                   {r.verdict && openIds.has(r.membershipId) && (
@@ -364,6 +383,7 @@ export default function RunView({
                       <td colSpan={4}>
                         <VerdictCard
                           view={r.verdict}
+                          decision={{ shortlisted: r.shortlisted, hidden: r.hidden, onYes: () => sayYes(r), onNo: () => sayNo(r) }}
                           feedback={{
                             candidateKey: r.candidateKey,
                             jobId,

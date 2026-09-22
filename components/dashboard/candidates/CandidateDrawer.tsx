@@ -224,13 +224,9 @@ function ReviewAgain({ review, has }: { review?: ReviewControl; has: boolean }) 
 }
 
 function FitReview({ entry, feedback, review }: { entry: PipelineEntry; feedback?: VerdictFeedbackTarget; review?: ReviewControl }) {
-  if (entry.verdict)
-    return (
-      <>
-        <VerdictCard view={entry.verdict} feedback={feedback} />
-        <ReviewAgain review={review} has />
-      </>
-    );
+  // The report card carries its own "Review again" link. No Yes or No here:
+  // someone who applied has no sourcing-run row to hold a decision.
+  if (entry.verdict) return <VerdictCard view={entry.verdict} feedback={feedback} review={review} />;
   // Never screened for this role: there is no verdict row to keep a review on.
   if (!entry.reason) return <p className="cv2d-why cv2d-dim">Not reviewed yet.</p>;
   const { why, probes, route } = splitReason(entry.reason);
@@ -1324,8 +1320,7 @@ export default function CandidateDrawer({
                               {p.title} <em>#{p.jobId}</em>
                               <span className="cv2d-fit-via">{p.via === "applied" ? "applied" : p.via === "sourced" ? "via sourcing run" : p.via}</span>
                             </div>
-                            <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} />
-                            <ReviewAgain review={reviewFor(p)} has />
+                            <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} />
                           </div>
                         ))}
                     </section>

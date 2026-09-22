@@ -4,7 +4,7 @@ import { sbRest } from "@/lib/server/supabase";
 import { publishOrgRole, sanitizeSkills } from "@/lib/server/publish-role";
 import { roleInputFromBody } from "@/lib/server/job-body";
 import { sendEmail } from "@/lib/server/email";
-import { isScorecard, sanitizeScorecard } from "@/lib/rolecard";
+import { cardChanges, isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { saveRoleCard } from "@/lib/server/rolecard/store";
 import { relabelRole } from "@/lib/server/rolecard/feedback";
 
@@ -192,18 +192,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });
   }
   // The scorecard edited in the form. The republish above never touches it.
+  // Same rules as the scorecard's own save route (PUT /api/dashboard/rolecard/[jobId]).
   const prevCard = isScorecard(job.scorecard) ? job.scorecard : null;
   const card = sanitizeScorecard(body.scorecard, "user", prevCard);
+  let relabelled = 0;
+  let reask = 0;
   if (card?.criteria.some((c) => c.tier === "required")) {
     const changed = !prevCard || JSON.stringify(prevCard.criteria) !== JSON.stringify(card.criteria);
     card.editedBy = changed ? member.email : prevCard?.editedBy;
     card.editedAt = changed ? new Date().toISOString() : prevCard?.editedAt;
     if (changed) {
       await saveRoleCard(job.id, card).catch(() => false);
-      // Call questions changed: stored verdicts for the role are re-labelled, nobody is judged again.
-      const calls = (c: { criteria: { id: string; confirmOnCall?: boolean }[] } | null) => JSON.stringify((c?.criteria || []).filter((x) => x.confirmOnCall).map((x) => x.id).sort());
-      if (calls(prevCard) !== calls(card)) await relabelRole(member.org.id, job.id, card.criteria).catch((e) => console.error("relabel failed", e));
+      // A call question came or went, or a row counts from another rung:
+      // stored verdicts for the role are re-labelled, nobody is judged again.
+      // Reworded ladders wait for Review again, which re-asks only those rows.
+      const changes = cardChanges(prevCard, card);
+      reask = changes.reask;
+      if ((changes.calls || changes.metAts) && changes.reask === 0)
+        relabelled = await relabelRole(member.org.id, job.id, card.criteria).catch((e) => (console.error("relabel failed", e), -1));
     }
   }
-  return NextResponse.json({ id: job.external_id });
+  return NextResponse.json({ id: job.external_id, relabelled, reask });
 }

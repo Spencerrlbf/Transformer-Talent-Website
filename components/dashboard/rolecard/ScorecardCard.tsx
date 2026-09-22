@@ -4,8 +4,43 @@
 // role is opened; editable on every role, synced ones included.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
-import { TIERS, TIER_LABEL, type Criterion, type Scorecard } from "@/lib/rolecard";
-import ScorecardEditor, { TierIcon } from "./ScorecardEditor";
+import { TIERS, TIER_LABEL, ladderOf, metAtOf, rowKind, techSpec, type Criterion, type Scorecard } from "@/lib/rolecard";
+import ScorecardEditor, { KIND_HINT, TierIcon } from "./ScorecardEditor";
+
+const orList = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`);
+
+/** How one row is decided, under its label: the kind in a few words and,
+ *  where there is one, the ladder with the rung it counts from marked. A
+ *  technology row's fixed ladder collapses to one line. */
+export function HowDecided({ c }: { c: Criterion }) {
+  const kind = rowKind(c);
+  if (kind === "years") return <div className="rc-kind">{KIND_HINT.years}</div>;
+  const metAt = metAtOf(c);
+  if (kind === "tech") {
+    const { names, accepted } = techSpec(c);
+    const name = names[0]?.[0] || "The technology";
+    const alts = accepted.map((g) => g[0]);
+    return (
+      <div className="rc-kind">
+        {KIND_HINT.tech} <span className="rc-ladderline">{name} on a job ✓{alts.length > 0 && <> · {orList(alts)} ≈</>} (met from rung {metAt})</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rc-kind">
+      {KIND_HINT.judgment}
+      <ol className="rc-ladder rc-ladder-line">
+        {ladderOf(c).map((rung, i) => (
+          <li key={i} className={i + 1 >= metAt ? "met" : ""}>
+            <span className="rc-rung">{i + 1}</span>
+            {rung}
+            {i + 1 === metAt && <em>met from here</em>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 const ERR: Record<string, string> = {
   no_required_row: "Keep at least one Required row: those rows decide the label.",
@@ -27,7 +62,8 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
   const [armed, setArmed] = useState(false); // "Draft again" over edited rows: a two-step button
   const [busy, setBusy] = useState<"" | "save" | "draft">("");
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
+  // What the last save changed for the people already judged, from the PUT response.
+  const [saved, setSaved] = useState<{ relabelled: number; reask: number } | null>(null);
   const seq = useRef(0);
 
   const call = useCallback(
@@ -75,7 +111,7 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
     setCard(d.scorecard);
     setRows(null);
     setDirty(false);
-    setSaved(true);
+    setSaved({ relabelled: Number(d.relabelled) || 0, reask: Number(d.reask) || 0 });
   }
 
   async function draftAgain() {
@@ -102,7 +138,7 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
           <p className="rc-sub">Every candidate for this role is checked against these rows. The Required rows decide the label.</p>
         </div>
         {card && !rows && (
-          <button type="button" className="dash-btn dash-btn-2" onClick={() => { setRows(card.criteria); setDirty(false); setSaved(false); }}>
+          <button type="button" className="dash-btn dash-btn-2" onClick={() => { setRows(card.criteria); setDirty(false); setSaved(null); }}>
             Edit
           </button>
         )}
@@ -149,7 +185,7 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
                         {c.label}
                         {c.confirmOnCall && <em className="ck-call">confirm on a call</em>}
                       </span>
-                      {c.good && <small>{c.good}</small>}
+                      <HowDecided c={c} />
                     </li>
                   ))}
                 </ul>
@@ -158,7 +194,16 @@ export default function ScorecardCard({ jobId }: { jobId: string }) {
           })}
           <p className="rc-foot">
             {card.editedAt ? "Edited by your team" : card.draftedBy === "ai" ? "Drafted by AI from what is written about the role" : "Written by your team"}
-            {saved && " · Saved. It applies the next time people are reviewed: press Review again on a sourcing run to re-check it."}
+            {saved && " · "}
+            {saved && (
+              <b className="rc-saved">
+                {saved.reask > 0
+                  ? `Saved. ${saved.reask} ${saved.reask === 1 ? "row" : "rows"} changed: Review again re-asks only ${saved.reask === 1 ? "that row" : "those rows"} for each person.`
+                  : saved.relabelled > 0
+                    ? `Saved. ${saved.relabelled} ${saved.relabelled === 1 ? "person was" : "people were"} re-labelled from their stored rows; nobody was reviewed again.`
+                    : "Saved. It applies the next time people are reviewed."}
+              </b>
+            )}
           </p>
         </div>
       )}
