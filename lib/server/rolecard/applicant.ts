@@ -9,6 +9,7 @@ import type { VerdictView } from "@/lib/verdict-view";
 import { computeFacts, formatFacts, jobTexts } from "../facts";
 import { harvestToExperiences, linkedinProfileText } from "../spine";
 import { splitStack } from "../scorecard";
+import { companySlugFromUrl, employerOf, getCompanyContexts } from "../sourcing/company-context";
 import { judgeForRole } from "./judge";
 import { criteriaOf, ensureRoleCard } from "./store";
 
@@ -68,6 +69,13 @@ export async function judgeApplicantForRole(a: JudgeApplicantArgs): Promise<{ vi
   const criteria = criteriaOf(ensured.card);
   if (a.requireScorecard && !criteria.length) return { view: null, saved: false, noScorecard: true };
   const roleTargets = (role.target_companies || []).map((t) => t?.name || "").filter(Boolean);
+  // The current employer's company page, when the cache already has it (a
+  // sourcing import fetches pages; an application does not, and must not
+  // wait on one): head count and founding year for the report card's facts.
+  const exp = Array.isArray(harvest?.experience) ? (harvest!.experience as Record<string, unknown>[]) : [];
+  const current = exp.find((e) => /present/i.test(String((e.endDate as Record<string, unknown>)?.text ?? ""))) || exp[0];
+  const employerSlug = companySlugFromUrl((current?.companyLinkedinUrl as string) || (current?.companyLink as string) || null);
+  const employer = employerSlug ? employerOf((await getCompanyContexts([employerSlug], { cacheOnly: true }).catch(() => new Map())).get(employerSlug)) : null;
   return judgeForRole({
     orgId: a.orgId,
     orgRoleId: role.id,
@@ -83,8 +91,12 @@ export async function judgeApplicantForRole(a: JudgeApplicantArgs): Promise<{ vi
       minYears: role.matching_profile?.min_years ?? null,
       targetedCompanies: roleTargets,
       employerContext: null,
+      employer,
+      education: eduList,
       candidateName: a.name || "Candidate",
-      profileText: linkedinProfileText(harvest),
+      // The whole profile and the whole resume (scorecard-judge.ts guards
+      // the total once, at 100,000 characters).
+      profileText: linkedinProfileText(harvest, { whole: true }),
       resumeText: a.resumeText,
       factsBlock: formatFacts(roleFacts),
       careerYears: roleFacts.careerYears,

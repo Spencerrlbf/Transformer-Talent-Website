@@ -7,9 +7,9 @@
 // rails after the call (a verified years shortfall caps the label).
 
 import type { CandidateFacts, JobText } from "./facts";
-import { SCORECARD_JUDGE_VERSION, judgeWithScorecard } from "./rolecard/scorecard-judge";
+import { SCORECARD_JUDGE_VERSION, judgeWithScorecard, type Memory, type MemoryWrite } from "./rolecard/scorecard-judge";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
-import { cardStrength, chipLabel, toConfirm, type CardRow, type Criterion } from "@/lib/rolecard";
+import { cardStrength, chipLabel, toConfirm, type CardRow, type Criterion, type ProfileFacts } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
@@ -46,6 +46,14 @@ export interface VerdictInput {
   criteria?: Criterion[];
   /** Facts a recruiter confirmed about this person, on any role. */
   confirmedFacts?: string[];
+  /** What is already known about this person on this card, by hash (see
+   *  scorecard-judge.ts rowHash / noteHash): a known judgment row is not
+   *  asked again, a known note is not written again. */
+  memory?: Map<string, Memory>;
+  /** The current employer's company page, for the report card's facts. */
+  employer?: { name: string; employees: number | null; founded: number | null } | null;
+  /** The harvested education list, for the report card's school. */
+  education?: unknown;
   model: string;
   timeoutMs?: number;
   /** Failure visibility for callers that pace retries (rate limit vs dead key). */
@@ -74,6 +82,8 @@ export interface Verdict {
   unassessed: number;
   /** Facts about the person, written by code from dated positions. */
   facts: string[];
+  /** Facts for the report card, computed by code; null without a scorecard. */
+  profile: ProfileFacts | null;
   /** Technologies evidenced in the current position, and in earlier ones. */
   technologiesNow: string[];
   technologiesBefore: string[];
@@ -81,6 +91,10 @@ export interface Verdict {
   promptVersion: string;
   usage: { input: number; output: number };
   ms: number;
+  /** What this pass learned and may be kept (judge.ts stores it). */
+  memoryWrites: MemoryWrite[];
+  /** Model calls made this pass. Zero means everything came from memory. */
+  calls: number;
 }
 
 const SYSTEM = `You are a senior technical recruiter writing the note a hiring manager reads in ten seconds to decide whether to contact a candidate for one role. You have the candidate's LinkedIn profile (and a resume when supplied), a FACTS block computed from their dated positions, and the role.
@@ -106,13 +120,14 @@ ALSO RETURN: missing (0 to 4 short plain statements, the same points as in the p
 CONFIRMED: statements under CONFIRMED BY THE RECRUITER were checked by a person (a call, an interview, a closer read). They are true and outrank the profile.`;
 
 export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null> {
+  // A role with a scorecard is judged row by row: code, then Jev on the
+  // card's ladders, with the paragraph written afterwards from the finished
+  // rows (lib/server/rolecard/scorecard-judge.ts). What follows is the
+  // single-call judge, kept for a role that has no scorecard (nothing
+  // written about it to draft one from).
+  if (input.criteria?.length) return judgeWithScorecard(input, input.criteria.slice(0, 16));
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
-  // A role with a scorecard is judged row by row, with the paragraph written
-  // afterwards from the finished rows (lib/server/rolecard/scorecard-judge.ts).
-  // What follows is the single-call judge, kept for a role that has no
-  // scorecard (nothing written about it to draft one from).
-  if (input.criteria?.length) return judgeWithScorecard(input, input.criteria.slice(0, 16));
   const started = Date.now();
   const skillsBlock = input.skills.length
     ? input.skills
@@ -245,12 +260,15 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       railNote,
       unassessed: 0,
       facts: [],
+      profile: null,
       technologiesNow: cleanTech(out.technologies_now),
       technologiesBefore: cleanTech(out.technologies_before),
       model: input.model,
       promptVersion: VERDICT_PROMPT_VERSION,
       usage: { input: data.usage?.prompt_tokens ?? 0, output: data.usage?.completion_tokens ?? 0 },
       ms: Date.now() - started,
+      memoryWrites: [],
+      calls: 1,
     };
   } catch {
     return null;
@@ -334,7 +352,7 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
     card: v.rows.length
       ? (() => {
           const rows: CardRow[] = v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) }));
-          return { rows, aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null, strength: cardStrength(rows), confirm: v.label === "contact" ? toConfirm(rows) : [], facts: v.facts };
+          return { rows, aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null, strength: cardStrength(rows), confirm: v.label === "contact" ? toConfirm(rows) : [], facts: v.facts, ...(v.profile ? { profile: v.profile } : {}) };
         })()
       : null,
     model: v.model,

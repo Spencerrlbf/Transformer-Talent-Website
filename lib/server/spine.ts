@@ -152,15 +152,20 @@ export async function syncExperiences(
 export type EmbeddingSource = "linkedin_profile" | "resume" | "summary";
 
 // Flatten a Harvest profile into embeddable text — positions, skills,
-// education — without logos/URNs noise.
-export function linkedinProfileText(harvest: Record<string, unknown> | null): string {
+// education — without logos/URNs noise. `whole` lifts the caps on the About
+// text, each description and the number of positions: the judge reads the
+// whole profile (a 16th position or the tail of a description is where the
+// evidence sat, more than once); embeddings and other callers keep the caps.
+export function linkedinProfileText(harvest: Record<string, unknown> | null, opts: { whole?: boolean } = {}): string {
   if (!harvest) return "";
+  const whole = !!opts.whole;
   const parts: string[] = [];
   const h = harvest as Record<string, any>;
   if (h.headline) parts.push(String(h.headline));
-  if (h.about) parts.push(String(h.about).slice(0, 3000));
+  if (h.about) parts.push(whole ? String(h.about) : String(h.about).slice(0, 3000));
   const exp = (h.experience || []) as HarvestExperience[];
-  for (const e of (Array.isArray(exp) ? exp : []).slice(0, 15)) {
+  const positions = Array.isArray(exp) ? exp : [];
+  for (const e of whole ? positions : positions.slice(0, 15)) {
     const skills = Array.isArray(e.skills)
       ? e.skills.map((s: any) => (typeof s === "string" ? s : s?.name)).filter(Boolean).join(", ")
       : "";
@@ -170,7 +175,7 @@ export function linkedinProfileText(harvest: Record<string, unknown> | null): st
         e.companyName || e.company ? `at ${e.companyName || e.company}` : "",
         e.duration,
         e.location,
-        (e.description || "").slice(0, 600),
+        whole ? e.description || "" : (e.description || "").slice(0, 600),
         skills && `Skills: ${skills}`,
       ]
         .filter(Boolean)

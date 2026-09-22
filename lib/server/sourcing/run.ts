@@ -30,7 +30,7 @@ import type { JudgeSkill } from "./judge";
 import { judgeForRole } from "../rolecard/judge";
 import { criteriaOf, ensureRoleCard } from "../rolecard/store";
 import type { Criterion } from "@/lib/rolecard";
-import { getCompanyContexts, companyContextLine, companySlugFromUrl } from "./company-context";
+import { getCompanyContexts, companyContextLine, companySlugFromUrl, employerOf } from "./company-context";
 
 export const MAX_IMPORT = 2500; // Harvest's own per-query ceiling; above this: refuse and ask to narrow
 const PAGE_SIZE = 25;
@@ -39,11 +39,9 @@ const HARVEST_CONCURRENCY = Math.max(1, parseInt(process.env.HARVEST_CONCURRENCY
 // fifteen trips a typical OpenAI per-minute limit; rate-limited rows then
 // wait out their retry-after rather than counting as failures.
 const SCREEN_CONCURRENCY = Math.max(1, parseInt(process.env.SOURCING_SCREEN_CONCURRENCY || "5", 10) || 5);
-// Short LLM cap so a wave provably fits the window: the rows call, then the
-// note (15s at most). A second look at a rejected quote only ever uses time
-// the rows call left over, so it adds nothing to the worst case.
-// 25s: the judge answers every scorecard row with evidence, about twice the
-// output it wrote before. At 15s a slow answer timed out, and a timeout is
+// Short LLM cap so a wave provably fits the window: Jev (20s at most), then
+// the references and the note, which only ever use time Jev left over plus
+// the note's own 15s. 25s: at 15s a slow answer timed out, and a timeout is
 // retried without end (it is never the row's fault), which reads as "stuck".
 const SCREEN_LLM_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.SOURCING_LLM_TIMEOUT_MS || "25000", 10) || 25_000);
 const WAVE_NEED_MS = 2 * SCREEN_LLM_TIMEOUT_MS + 5_000;
@@ -449,7 +447,8 @@ async function screenOneRow(
       (current?.companyLinkedinUrl as string) || (current?.companyLink as string) || null
     );
     const ctxMap = employerSlug ? await getCompanyContexts([employerSlug]).catch(() => new Map()) : new Map();
-    const employerLine = employerSlug ? companyContextLine(ctxMap.get(employerSlug)) : null;
+    const employerCtx = employerSlug ? ctxMap.get(employerSlug) : undefined;
+    const employerLine = companyContextLine(employerCtx);
 
     // One judge for every entry path: the verdict paragraph, requirement
     // reads and the technologies strip (see lib/server/verdict.ts).
@@ -473,8 +472,14 @@ async function screenOneRow(
         // targets, and a note that called them that was simply false.
         targetedCompanies: ctx.roleTargets,
         employerContext: employerLine,
+        // The company page's head count and founding year, for the report
+        // card's facts (never for a row).
+        employer: employerOf(employerCtx),
+        education,
         candidateName: cand?.full_name || "Candidate",
-        profileText: linkedinProfileText(profile).slice(0, 5000),
+        // The whole profile: the judge reads all of it (scorecard-judge.ts
+        // guards the total once, at 100,000 characters).
+        profileText: linkedinProfileText(profile, { whole: true }),
         resumeText: null,
         factsBlock: formatFacts(facts),
         careerYears: facts.careerYears,
