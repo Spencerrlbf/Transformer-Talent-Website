@@ -302,7 +302,7 @@ export default function VerdictCard({
             </section>
           )}
           {view.betterSuited && <div className="cv2d-route">↪ {view.betterSuited}</div>}
-          <p className="vc-note">{bullets ? "Written from the rows below. It changes only when a row changes." : "Written from the rows below and the facts. It changes only when a row or a fact changes."}</p>
+          <p className="vc-note">{bullets ? "Written from the rows and the facts; it changes when they do." : "Written from the rows below and the facts. It changes only when a row or a fact changes."}</p>
           <hr className="vc-divider" />
           <section className="vc-rsec vc-card">
             <h4 className="vc-sec">Against the card</h4>

@@ -671,11 +671,14 @@ export function applyOverrides(
   const opened = rows.filter((r) => r.confirmed && !met(r.status) && r.tier === "required").map(chipOf);
   const gaps = [...baseGaps.filter((g) => !closed.has(g.toLowerCase()) || stillOpen.has(g.toLowerCase()))];
   for (const g of opened) if (g && !gaps.some((x) => x.toLowerCase() === g.toLowerCase())) gaps.push(g);
+  // The review keeps honest under the recruiter's word: a fit rests only on
+  // rows still met, a gap only on rows still open (reviewOnRows).
+  const review = card.review ? reviewOnRows(card.review, rows) : undefined;
   return {
     ...judged,
     label,
     tech: { ...judged.tech, gaps: gaps.slice(0, 6) },
-    card: { ...card, rows, aiLabel, aiGaps: baseGaps, wrongRole, strength: cardStrength(rows, whole), confirm: label === "contact" ? toConfirm(rows) : [] },
+    card: { ...card, rows, aiLabel, aiGaps: baseGaps, wrongRole, strength: cardStrength(rows, whole), confirm: label === "contact" ? toConfirm(rows) : [], ...(review ? { review } : {}) },
   };
 }
 
@@ -689,16 +692,12 @@ const capWords = (t: string, n: number) => { const w = words(t); return w.length
 export const reviewMark = (status: RowStatus): "✓" | "≈" | "△" | "?" | "×" =>
   status === "yes" ? "✓" : status === "equivalent" ? "≈" : status === "short" ? "△" : status === "no" ? "×" : "?";
 
-/** Keep only bullets that rest on the rows. A fit bullet must cite at least
- *  one met row; a gap bullet may cite only rows that are not met, or none;
- *  ids that are not on the card are dropped; a bullet that names a
- *  technology found neither in the rows nor in the person's material is
- *  dropped; counts and lengths are capped. Pure, so the same rows and the
- *  same draft always give the same review. */
 /** Trailing filler a review bullet must not carry ("…, which aligns with the
- *  role's needs"). Cosmetic and deterministic: the clause goes, the claim stays. */
-const FILLER_CLAUSE = /,\s*(which|that)?\s*(aligning|aligns?|indicating|indicates?|showing|shows?|demonstrating|demonstrates?|relevant|essential|core to|fulfilling|fulfils?|matching|meeting|exceeding|crucial|important|key to|in line with)\b[^.]*$/i;
-const stripFiller = (t: string) => { const cut = t.replace(FILLER_CLAUSE, ""); return words(cut).length >= 4 ? cut.replace(/[\s,;:]+$/, "") + (/[.!?]$/.test(cut) ? "" : ".") : t; };
+ *  role's needs", "…, essential for the stack."). Cosmetic and deterministic:
+ *  the clause goes, with or without its full stop, and the claim stays. */
+const FILLER_CLAUSE = /,\s*(which|that)?\s*(aligning|aligns?|indicating|indicates?|showing|shows?|demonstrating|demonstrates?|relevant|essential|core to|fulfilling|fulfils?|matching|meeting|exceeding|crucial|important|key to|in line with|beneficial|necessary|critical|vital|valuable|useful|ideal|supporting|enabling|allowing|ensuring|as shown in|as required|meeting the|which is)\b[^.]*\.?$/i;
+/** The clause is cut when at least four words remain; what is kept ends with a full stop. */
+const stripFiller = (t: string) => { const cut = t.replace(FILLER_CLAUSE, "").replace(/[\s,;:]+$/, ""); return words(cut).length >= 4 ? cut + (/[.!?]$/.test(cut) ? "" : ".") : t; };
 /** Every number in a bullet must be one the rows, facts or material state:
  *  a year exactly, another number exactly or by its whole part (6 for 6.3). */
 const NUMBER = /\b\d+(?:\.\d+)?\b/g;
@@ -706,18 +705,34 @@ const numbersOf = (t: string) => (t.match(NUMBER) || []).map(Number);
 const numbersAllowed = (text: string, allowed: number[]): boolean =>
   numbersOf(text).every((n) => allowed.some((a) => a === n || (n < 1000 && Math.floor(a) === Math.floor(n))));
 
-export function guardReview(draft: Partial<Review> | null | undefined, rows: CardRow[], material = "", allowedText = ""): Review {
+/** Keep only bullets that rest on the rows. A fit bullet must cite at least
+ *  one met row; a gap bullet must cite at least one row, and only rows that
+ *  are not met; ids that are not on the card are dropped. A fit bullet may
+ *  name only a technology its cited rows name (label, evidence, copied
+ *  lines), and the bottom line only one some row on the card names: what
+ *  the material shows elsewhere (a skills list) is not what the bullet rests
+ *  on. A gap or a question may name anything the material or the rows show.
+ *  `names` are people and employers, whatever else the word may be (a person
+ *  called Ray, an employer called Temporal). Every number must be one the
+ *  rows, facts or material state. Counts and lengths are capped. Pure, so
+ *  the same rows and the same draft always give the same review. */
+export function guardReview(draft: Partial<Review> | null | undefined, rows: CardRow[], material = "", allowedText = "", names: string[] = []): Review {
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const allowed = [material, allowedText, ...rows.map((r) => `${r.label} ${r.evidence} ${(r.quotes || []).map((q) => q.text).join(" ")} ${r.quote || ""}`)].join("\n");
-  const allowedNums = numbersOf(allowed);
+  const rowText = (r: CardRow) => `${r.label} ${r.evidence} ${(r.quotes || []).map((q) => q.text).join(" ")} ${r.quote || ""}`;
+  const everything = [material, allowedText, ...rows.map(rowText)].join("\n");
+  const allowedNums = numbersOf(everything);
+  const isName = (group: string[]) => group.some((n) => names.some((x) => x.toLowerCase() === n.toLowerCase()));
+  const techOk = (text: string, allowed: string) => technologiesNamed(text).every((group) => isName(group) || namesAny(allowed, [group]));
   const clean = (b: Partial<ReviewBullet> | null | undefined, fit: boolean): ReviewBullet | null => {
     const text = capWords(stripFiller(String(b?.text || "").replace(/\s+/g, " ").trim()), REVIEW_LIMITS.bulletWords);
     if (!text) return null;
     const ids = [...new Set((Array.isArray(b?.rowIds) ? b!.rowIds : []).map((x) => String(x)).filter((id) => byId.has(id)))];
     const cited = ids.map((id) => byId.get(id)!);
     if (fit && !cited.some((r) => isMet(r.status))) return null;
-    if (!fit && cited.some((r) => isMet(r.status))) return null;
-    for (const group of technologiesNamed(text)) if (!namesAny(allowed, [group])) return null;
+    // A gap is about the rows it cites: one about no row on the card is the
+    // job description talking, not the card.
+    if (!fit && (!cited.length || cited.some((r) => isMet(r.status)))) return null;
+    if (!techOk(text, fit ? cited.map(rowText).join("\n") : everything)) return null;
     // A date or a number the material does not state is an invention, whatever the row says.
     if (!numbersAllowed(text, allowedNums)) return null;
     return { text, rowIds: ids };
@@ -732,8 +747,25 @@ export function guardReview(draft: Partial<Review> | null | undefined, rows: Car
   const gaps = (draft?.gaps || []).map((b) => clean(b, false)).filter((b): b is ReviewBullet => !!b).slice(0, REVIEW_LIMITS.gaps);
   const ask = (draft?.ask || []).map((q) => capWords(String(q || "").replace(/\s+/g, " "), REVIEW_LIMITS.bulletWords)).filter(Boolean).slice(0, REVIEW_LIMITS.ask);
   const bottomRaw = capWords(String(draft?.bottomLine || "").replace(/\s+/g, " ").trim(), REVIEW_LIMITS.bottomLineWords);
-  const bottomLine = numbersAllowed(bottomRaw, allowedNums) ? bottomRaw : "";
+  const bottomLine = numbersAllowed(bottomRaw, allowedNums) && techOk(bottomRaw, rows.map(rowText).join("\n")) ? bottomRaw : "";
   return { v: 1, bottomLine, fits, gaps, ask };
+}
+
+/** The review laid over the rows as they stand now: a recruiter's word may
+ *  have moved a row since it was written. A fit bullet keeps only the rows
+ *  still met and goes when none are left; a gap bullet keeps only the rows
+ *  still open and goes when every row it cited is now met (one that cited
+ *  no row stays). The text is never rewritten. Pure. */
+export function reviewOnRows(review: Review, rows: CardRow[]): Review {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const metNow = (id: string) => { const r = byId.get(id); return !!r && met(r.status); };
+  const fits = review.fits.map((b) => ({ ...b, rowIds: b.rowIds.filter(metNow) })).filter((b) => b.rowIds.length > 0);
+  const gaps = review.gaps.flatMap((b) => {
+    if (!b.rowIds.length) return [b];
+    const open = b.rowIds.filter((id) => byId.has(id) && !metNow(id));
+    return open.length ? [{ ...b, rowIds: open }] : [];
+  });
+  return { ...review, fits, gaps };
 }
 
 /** A review written by code from the rows alone, for when the model call

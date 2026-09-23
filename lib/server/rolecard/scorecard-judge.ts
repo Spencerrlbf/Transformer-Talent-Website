@@ -57,7 +57,7 @@ export const SCORECARD_JUDGE_VERSION = "v14";
 /** The review is versioned on its own: a change to how it is written goes
  *  into the note hash, so every remembered note is written once more, and
  *  no row is touched (rows, Jev and the row hashes stay v14). */
-export const REVIEW_VERSION = "v14.1";
+export const REVIEW_VERSION = "v14.2";
 /** Pinned, like the reference model: the review is remembered under it. */
 export const NOTE_MODEL = "gpt-4o-mini-2024-07-18";
 export { REF_MODEL };
@@ -197,7 +197,7 @@ Return:
 - fits: why this person fits THIS role. ONE bullet per row, at most 6, each resting on the rows it cites (row_ids: rows marked YES or EQUIVALENT only, at least one per bullet; a row with several copied lines is still one bullet). Required rows first, then Exceptional, then Bonus. Each bullet names the concrete thing behind the row in this shape: [the work done] as [title] at [company], [the dates or years as COMPANIES and FACTS give them], then a few words on what it is for in this role, in the role's own terms. Say it the way a recruiter says it to a hiring manager. Never restate the row's label and never write "which aligns with", "essential for", "demonstrating", "indicating", "relevant for", "fulfilling", "core to": say the thing and its use. Never copy a line word for word: the lines are shown beside the bullet. For an EQUIVALENT, say what stands in for what. When no row is YES or EQUIVALENT, return no fits.
 - A technology row is said in the words of what was found (tagged on a job, on the current job, in the resume's languages line) and a listing is never inflated into experience or expertise.
 - Dates, years and every other number come ONLY from FACTS and COMPANIES as written there. A bullet with a date or number that is not written there is removed by code, so leave the number out rather than guess.
-- gaps: at most 4 bullets, Required rows first. A SHORT or NO years row gets its own bullet with its numbers. A Required row that is UNKNOWN gets its own bullet: what the profile does not show and the question to ask, in at most 20 words. Every other UNKNOWN row is folded into ONE bullet that lists them, starting "Not shown:". No padding about why it matters. When the label is Pass, the first bullet says which Required row is against and its numbers.
+- gaps: at most 4 bullets, Required rows first. Every gap bullet cites the rows it is about (row_ids); a gap about nothing on the card is removed by code, so never write one from the role's words. A SHORT or NO years row gets its own bullet with its numbers. A Required row that is UNKNOWN gets its own bullet: what the profile does not show and the question to ask, in at most 20 words. Every other UNKNOWN row is folded into ONE bullet that lists them, starting "Not shown:", citing each row it lists. No padding about why it matters. When the label is Pass, the first bullet says which Required row is against and its numbers.
 - bottom_line: ONE sentence of at most 16 words about THIS person: what makes the case, in the role's terms, then the one thing to confirm. Never a template and never "strong candidate" or "good fit" on its own.
 - ask: 0 to 3 short questions for a first call, one per open Required row first.
 
@@ -260,12 +260,14 @@ const NOT_A_CLAIM = /\b(not|no|never|without|isn't|aren't|unconfirmed|missing|ab
  *  and one between two numbers ("2020–2024") reads "to". */
 export const noDashes = (text: string) =>
   text.replace(/(\d)\s*\u2013\s*(?=\d)/g, "$1 to ").replace(/\s*[\u2014\u2013]+\s*/g, ", ").replace(/\s*--+\s*/g, ", ").replace(/,\s*,/g, ",").replace(/^,\s*|,\s*$/g, "");
+/** The pronoun fix, verb by verb: only where the verb is known does "they"
+ *  read right. A bare swap made "They builds", so a pronoun before any
+ *  other verb is left as written (the prompt asks for "they" in the first place). */
 const PRONOUNS: [RegExp, string][] = [
   [/\b(He|She) is\b/g, "They are"], [/\b(he|she) is\b/g, "they are"],
   [/\b(He|She) was\b/g, "They were"], [/\b(he|she) was\b/g, "they were"],
   [/\b(He|She) has\b/g, "They have"], [/\b(he|she) has\b/g, "they have"],
   [/\bHis /g, "Their "], [/\bhis /g, "their "],
-  [/\b(He|She)\b/g, "They"], [/\b(he|she)\b/g, "they"],
 ];
 
 /** Keep only sentences that name nothing outside what the rows and facts
@@ -317,23 +319,40 @@ export function noteName(full: string | null | undefined): string {
   return parts.slice(0, 5).join(" ") || "The candidate";
 }
 
+/** Whether a text names a Required row that reads "no": a years row by its
+ *  bar ("4+"), any other row by a sentence that negates it and carries at
+ *  least two of the row's own words. */
+export const namesAgainst = (text: string, r: Pick<CardRow, "label">): boolean => {
+  const bar = yearsBar(r.label);
+  if (bar != null) return new RegExp(`(?<![\\d.])${bar}\\s*\\+`).test(text);
+  const key = r.label.toLowerCase().match(/[a-z0-9+#.]{4,}/g) || [];
+  return sentences(text).some((st) => NEGATION.test(st) && key.filter((w) => st.toLowerCase().includes(w)).length >= Math.min(2, key.length));
+};
+
 /** A Pass says why. The reason is a Required row that reads "no"; when the
  *  note does not carry that row's numbers, the row's own evidence (written by
  *  code for a years row) is added as the last sentence. The sentence never
- *  names the label: the note outlives a recruiter's overrule, the label does not. */
-export function withPassReason(paragraph: string, label: VerdictLabel, rows: CardRow[]): string {
-  if (label !== "pass") return paragraph;
+ *  names the label: the note outlives a recruiter's overrule, the label does
+ *  not. Returns the rows the added sentence is about, so a bullet written
+ *  from it cites those and no other. */
+export function withPassReason(paragraph: string, label: VerdictLabel, rows: CardRow[]): { paragraph: string; rowIds: string[] } {
+  if (label !== "pass") return { paragraph, rowIds: [] };
   const against = rows.filter((r) => r.tier === "required" && r.status === "no");
-  const missing = against.filter((r) => {
-    const bar = yearsBar(r.label);
-    if (bar != null) return !new RegExp(`(?<![\\d.])${bar}\\s*\\+`).test(paragraph);
-    const key = r.label.toLowerCase().match(/[a-z0-9+#.]{4,}/g) || [];
-    return !sentences(paragraph).some((st) => NEGATION.test(st) && key.filter((w) => st.toLowerCase().includes(w)).length >= Math.min(2, key.length));
-  });
-  if (!missing.length) return paragraph;
-  const why = missing.slice(0, 2).map((r) => (yearsBar(r.label) != null ? `On years: ${r.evidence}` : `Against: ${r.label}. ${r.evidence}`)).join(" ");
-  return `${paragraph} ${why}`.trim();
+  const named = against.filter((r) => !namesAgainst(paragraph, r)).slice(0, 2);
+  if (!named.length) return { paragraph, rowIds: [] };
+  const why = named.map((r) => (yearsBar(r.label) != null ? `On years: ${r.evidence}` : `Against: ${r.label}. ${r.evidence}`)).join(" ");
+  return { paragraph: `${paragraph} ${why}`.trim(), rowIds: named.map((r) => r.id) };
 }
+
+/** Whether one sentence of the text states the years found and the bar
+ *  together, as years: "3 months on it" here and "asks 4+ years" there say
+ *  nothing about the shortfall. A whole number of years may be written to a
+ *  decimal. */
+const statesNumbers = (text: string, have: number, bar: number): boolean => {
+  const haveRe = new RegExp(`(?<![\\d.])${String(have).replace(".", "\\.")}${Number.isInteger(have) ? "(\\.\\d+)?" : ""}\\s*(years?|yrs)\\b`, "i");
+  const barRe = new RegExp(`(?<![\\d.])${bar}\\s*\\+`);
+  return sentences(text).some((s) => haveRe.test(s) && barRe.test(s));
+};
 
 /** A person held at "worth a message" by a years row a year short of the
  *  bar is told so, with the numbers, when the note does not carry them. When
@@ -344,31 +363,68 @@ export function withShortReason(paragraph: string, label: VerdictLabel, rows: Ca
   const short = rows.find((r) => r.tier === "required" && r.status === "short" && r.numbers);
   if (!short?.numbers) return paragraph;
   const { have, bar } = short.numbers;
-  // The numbers count only when one sentence states them together, and as
-  // years: "3 months on it" here and "asks 4+ years" there say nothing about
-  // the shortfall. A whole number of years may be written to a decimal.
-  const haveRe = new RegExp(`(?<![\\d.])${String(have).replace(".", "\\.")}${Number.isInteger(have) ? "(\\.\\d+)?" : ""}\\s*(years?|yrs)\\b`, "i");
-  const barRe = new RegExp(`(?<![\\d.])${bar}\\s*\\+`);
-  if (sentences(paragraph).some((s) => haveRe.test(s) && barRe.test(s))) return paragraph;
+  if (statesNumbers(paragraph, have, bar)) return paragraph;
   const others = rows.filter((r) => r.tier === "required" && r.id !== short.id);
   const allOthersMet = others.length > 0 && others.every((r) => r.status === "yes" || r.status === "equivalent");
   const sentence = allOthersMet ? `Meets every other Required row. ${years(have)} against the ${bar}+ bar, a year short. Worth a call.` : `A year short on the ${bar}+ bar.`;
   return `${paragraph} ${sentence}`.trim();
 }
 
-/** The numbers that decide a label are always in the review, whatever the
- *  model wrote: a Required years row a year short (the label held at
- *  message) and a Required row that reads no (a Pass) each get a gap bullet
- *  written by code when no gap bullet cites the row or states its numbers.
- *  Code-written, so it goes in after the guard, at the front. A fit bullet
- *  keeps only the met rows it cites (guardReview asks for at least one; an
- *  unmet row beside it would show as a "not shown" tag on a fit). */
-export function withReviewReasons(review: Review, label: VerdictLabel, rows: CardRow[]): Review {
+/** What a fit bullet that rests on tech rows alone says: the rows' own
+ *  evidence, which already states exactly what was found and where
+ *  ("TypeScript tagged on Founding Engineer at Perch; on the current job",
+ *  "TypeScript is on the profile (skills list, summary or an internship)"),
+ *  with ", the role's own stack" when the technology found is named in the
+ *  role's stack. A listing is never written up as experience, and a stand-in
+ *  says what it stands in for and no more. */
+export function techFitText(cited: CardRow[], techStack?: string | null): string {
+  return cited
+    .map((r) => {
+      const found = r.evidence.replace(/\s+/g, " ").trim();
+      const inStack = r.status === "yes" && !!techStack && namesAny(techStack, techSpec(r).names);
+      if (!inStack) return found;
+      const [head, ...rest] = sentences(found);
+      return [`${(head || found).replace(/[.!?]$/, "")}, the role's own stack.`, ...rest].join(" ");
+    })
+    .join(" ");
+}
+
+/** Words that put a bottom line at odds with a label that is not Pass. */
+const OFF_LABEL = /\b(pass|not a fit|reject|decline|do(?:es)? not meet|unsuitable)\b/i;
+
+/** What code settles in the review after the guard, whatever the model wrote.
+ *  A fit bullet keeps only the met rows it cites (guardReview asks for at
+ *  least one; an unmet row beside it would show as a "not shown" tag on a
+ *  fit), and one resting on tech rows alone is written from those rows'
+ *  evidence (techFitText). The numbers that decide a label are in the gaps:
+ *  a Required years row a year short (the label held at message) and a
+ *  Required row that reads no (a Pass) each get a bullet when none cites the
+ *  row or states its numbers. A message says what is open: when the model's
+ *  gaps cite no open Required row, the unknown ones are listed in one
+ *  bullet; when the years rail holds a contact at message, the rail's
+ *  numbers are a gap that cites the years row where there is an open one.
+ *  The bottom line agrees with the label: on a Pass it names a row that is
+ *  against, or its numbers; off a Pass it never says pass; else the
+ *  code-written bottom line stands in. Code-written bullets go in at the front. */
+export function withReviewReasons(review: Review, label: VerdictLabel, rows: CardRow[], opts: { railNote?: string | null; techStack?: string | null } = {}): Review {
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const metIds = new Set(rows.filter((r) => r.status === "yes" || r.status === "equivalent").map((r) => r.id));
-  const fits = review.fits.map((b) => ({ ...b, rowIds: b.rowIds.filter((id) => metIds.has(id)) }));
+  const fits = review.fits.map((b) => {
+    const rowIds = b.rowIds.filter((id) => metIds.has(id));
+    const cited = rowIds.map((id) => byId.get(id)!);
+    const techOnly = cited.length > 0 && cited.every((r) => (r.kind ?? rowKind(r)) === "tech");
+    return { ...b, rowIds, ...(techOnly ? { text: techFitText(cited, opts.techStack) } : {}) };
+  });
   const cited = new Set(review.gaps.flatMap((g) => g.rowIds));
   const stated = review.gaps.map((g) => g.text).join(" ");
   const added: ReviewBullet[] = [];
+  // The years rail: the rows alone say contact, the dated history is over a year short.
+  const rail = label === "message" && opts.railNote ? opts.railNote.match(/(\d+(?:\.\d+)?) years against (\d+)\+/) : null;
+  if (rail && labelFromRows(rows, label) === "contact") {
+    const have = Number(rail[1]), bar = Number(rail[2]);
+    const yearsRow = rows.find((r) => isCareerYearsRow(r.label) && !metIds.has(r.id));
+    if (!statesNumbers(stated, have, bar)) added.push({ text: `Dated history shows ${years(have)} against the ${bar}+ the role asks for.`, rowIds: yearsRow ? [yearsRow.id] : [] });
+  }
   const short = rows.find((r) => r.tier === "required" && r.status === "short" && r.numbers);
   if (short && !cited.has(short.id)) {
     const withShort = withShortReason(stated, label, rows);
@@ -377,9 +433,21 @@ export function withReviewReasons(review: Review, label: VerdictLabel, rows: Car
   const against = rows.filter((r) => r.tier === "required" && r.status === "no" && !cited.has(r.id));
   if (against.length) {
     const withPass = withPassReason(stated, label, rows.filter((r) => !cited.has(r.id)));
-    if (withPass !== stated) added.push({ text: withPass.slice(stated.length).trim(), rowIds: against.slice(0, 2).map((r) => r.id) });
+    if (withPass.paragraph !== stated) added.push({ text: withPass.paragraph.slice(stated.length).trim(), rowIds: withPass.rowIds });
   }
-  return { ...review, fits, gaps: [...added, ...review.gaps].slice(0, REVIEW_LIMITS.gaps) };
+  // A message says what is open: when the model's gaps cite no open Required
+  // row, the unknown ones are listed (the short years row has its bullet above).
+  const openRequired = rows.filter((r) => r.tier === "required" && !metIds.has(r.id));
+  if (label === "message" && openRequired.length && !openRequired.some((r) => cited.has(r.id))) {
+    const unknown = openRequired.filter((r) => r.status === "unknown");
+    if (unknown.length) added.push({ text: `Not shown: ${unknown.map((r) => r.label).join("; ")}.`, rowIds: unknown.map((r) => r.id) });
+  }
+  // The bottom line against the label.
+  let bottomLine = review.bottomLine;
+  const noRows = rows.filter((r) => r.tier === "required" && r.status === "no");
+  const offLabel = label === "pass" ? noRows.length > 0 && !noRows.some((r) => namesAgainst(bottomLine, r)) : OFF_LABEL.test(bottomLine);
+  if (offLabel) bottomLine = fallbackReview(rows, label).bottomLine;
+  return { ...review, bottomLine, fits, gaps: [...added, ...review.gaps].slice(0, REVIEW_LIMITS.gaps) };
 }
 
 // ---------- rows decided by code ----------
@@ -717,15 +785,17 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
           { bottomLine: held(n.out.bottom_line, false), fits: bulletsOf(n.out.fits, false), gaps: bulletsOf(n.out.gaps, true), ask: (Array.isArray(n.out.ask) ? n.out.ask : []).map((q) => held(q, true)) },
           finalRows,
           material,
-          allowedText
+          allowedText,
+          names
         )
       : null;
     // The model's review stands when it has a bottom line and, for a person
     // the rows make a contact or a message with something met, at least one
-    // fit bullet survived the guard; else code writes the review.
+    // fit bullet survived the guard; else code writes the review. Either way
+    // code settles what the label needs said (withReviewReasons).
     const anyMet = finalRows.some((r) => r.status === "yes" || r.status === "equivalent");
     const fromModel = !!draft && !!draft.bottomLine && !((label === "contact" || label === "message") && anyMet && !draft.fits.length);
-    review = withReviewReasons(fromModel ? draft! : fallbackReview(finalRows, label), label, finalRows);
+    review = withReviewReasons(fromModel ? draft! : fallbackReview(finalRows, label), label, finalRows, { railNote, techStack: words.techStack });
     // The paragraph, for older readers: the bottom line and the first fit.
     paragraph = `${review.bottomLine} ${review.fits[0]?.text ?? ""}`.trim().slice(0, 700);
     ask = review.ask;

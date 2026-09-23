@@ -405,6 +405,10 @@ export interface JobText {
    *  years of a skill tagged on several jobs can be merged without counting
    *  an overlap twice. Null when the position is undated. */
   span?: [number, number] | null;
+  /** The span as the career counts it: a career position that spans
+   *  graduation starts at graduation here, so a skill's years agree with the
+   *  facts. Null on a position that is not a career one, or is undated. */
+  careerSpan?: [number, number] | null;
 }
 const monthYear = (month: number | null, year: number | null): string | null =>
   year ? `${month ? `${MONTH_NAMES[month - 1]} ` : ""}${year}` : null;
@@ -430,6 +434,7 @@ export function jobTexts(experiences: ExperienceRow[], education: unknown = null
       to: c.row.is_current ? "Present" : monthYear(c.row.end_month, c.row.end_year),
       years: own ? mergedYears([own]) : null,
       span: own,
+      careerSpan: c.career ? c.iv : null,
     };
   });
 }
@@ -465,20 +470,23 @@ export function schoolOf(education: unknown): ProfileFacts["school"] {
   return latest(bachelors.length ? bachelors : entries);
 }
 
-/** The level the current title states, and nothing else. A Staff, Principal,
- *  Distinguished or Architect title reads staff; Lead, Head of, Manager,
- *  Director, VP or CTO reads lead; Senior reads senior; Junior or an
- *  internship reads junior; anything else is mid, "no senior title yet".
- *  "Member of Technical Staff" is a rank at a lab, not a staff title. */
+/** The level the current title states, and nothing else. An internship or
+ *  a Junior title reads junior whatever else the title says ("Senior
+ *  Software Engineer Intern" is an intern); a Staff, Principal,
+ *  Distinguished or Architect title reads staff; Lead, Team Leader, Head of,
+ *  Manager, Director, a VP, SVP or EVP, a founder or a C-level title reads
+ *  lead; Senior reads senior; anything else is mid, "no senior title yet".
+ *  "Member of Technical Staff" is a rank at a lab, not a staff title, a
+ *  chief of staff is not staff level, and lead generation is not leading. */
 export function seniorityOf(title: string | null | undefined): NonNullable<ProfileFacts["seniority"]> {
   const given = (title || "").trim();
   if (!given) return { level: null, note: "no current title" };
-  const t = given.replace(/member of (the )?technical staff|technical staff/gi, " ");
+  const t = given.replace(/member of (the )?technical staff|technical staff|chief of staff|lead generation/gi, " ");
   const from = "from the current title";
-  if (/\b(staff|principal|distinguished|architect)\b/i.test(t)) return { level: "staff", note: from };
-  if (/\b(lead|head of|manager|director|vp|vice president|cto|chief technology officer)\b/i.test(t)) return { level: "lead", note: from };
-  if (/\b(senior|sr)\b/i.test(t)) return { level: "senior", note: from };
   if (/\b(junior|jr|intern|internship)\b/i.test(t)) return { level: "junior", note: from };
+  if (/\b(staff|principal|distinguished|architect)\b/i.test(t)) return { level: "staff", note: from };
+  if (/\b(lead|team leader|head of|manager|director|vp|svp|evp|vice president|ceo|cto|coo|chief technology officer|co-?founder|founder)\b/i.test(t)) return { level: "lead", note: from };
+  if (/\b(senior|sr)\b/i.test(t)) return { level: "senior", note: from };
   return { level: "mid", note: "no senior title yet" };
 }
 
@@ -529,7 +537,10 @@ export function profileFacts(args: {
         a = { name: skillName(tag), ivs: [], where: [], current: false };
         acc.set(key, a);
       }
-      if (j.career && j.span) a.ivs.push(j.span);
+      // The span as the career counts it (clamped to graduation), so the
+      // skill's years are the years the facts show for it.
+      const span = j.careerSpan ?? j.span;
+      if (j.career && span) a.ivs.push(span);
       const at = j.company || j.title;
       if (at && !a.where.includes(at)) a.where.push(at);
       if (isCurrent(j)) a.current = true;
