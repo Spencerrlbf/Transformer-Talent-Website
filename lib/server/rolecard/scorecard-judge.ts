@@ -16,16 +16,22 @@
 //                  the spread into the rung reached; the status follows from
 //                  the rung the role counts from. The evidence shown is the
 //                  rung's own words.
-//   references     ONE small call finds the line behind each rung reached
-//                  (references.ts). It can never change a status; a met row
-//                  with no quotable line keeps its tick and says so.
-//   note           ONE small call writes the paragraph from FACTS and ROWS
-//                  only, guarded in code, with a code-written fallback.
+//   references     ONE small call finds the lines (up to three) behind each
+//                  rung reached (references.ts). It can never change a
+//                  status; a met row with no quotable line keeps its tick
+//                  and says so.
+//   review         ONE small call writes the review beside the rows: a bottom
+//                  line, why-they-fit bullets that cite met rows, gap bullets
+//                  that cite unmet rows, and questions for a call. It reads
+//                  FACTS, ROWS (with their verified lines) and, for phrasing
+//                  only, the role's own words; guarded in code
+//                  (lib/rolecard.ts guardReview), with a code-written
+//                  fallback (fallbackReview). Never the judge's input.
 //
 // Memory: a judgment row is remembered by a hash of its wording, its ladder,
 // the judge and the person's material, so a person is read again only for
-// the rows that changed (judge.ts stores it). The note is remembered by the
-// rows and facts it was written from.
+// the rows that changed (judge.ts stores it). The review is remembered by
+// the rows, facts and role words it was written from, under REVIEW_VERSION.
 //
 // Measured before this (same person, same card, five runs): the rows that
 // moved were caused by a regex and a retry reacting to the model's choice of
@@ -40,14 +46,19 @@ import type { RequirementRead, VerdictLabel } from "@/lib/verdict-view";
 import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import {
-  NO_LINE_SOURCE, careerYearsStatus, isCareerYearsRow, labelFromRows, ladderOf, metAtOf, rowKind, routeLevel, statusFromLevel, stripExamples,
-  techLadder, techLevel, techSpec, techStatus, yearsBar, type CardRow, type Criterion, type RowStatus, type TechReach,
+  NO_LINE_SOURCE, REVIEW_LIMITS, careerYearsStatus, fallbackReview, guardReview, isCareerYearsRow, labelFromRows, ladderOf, metAtOf, rowKind, routeLevel,
+  statusFromLevel, stripExamples, techLadder, techLevel, techSpec, techStatus, yearsBar,
+  type CardRow, type Criterion, type Review, type ReviewBullet, type RowStatus, type TechReach,
 } from "@/lib/rolecard";
 import { isJevError, jevJudgeLadders, JEV_MODEL } from "./jev";
 import { askOpenAI, findReferences, jobSource, quoteCheck, REF_MODEL } from "./references";
 
 export const SCORECARD_JUDGE_VERSION = "v14";
-/** Pinned, like the reference model: the note is remembered under it. */
+/** The review is versioned on its own: a change to how it is written goes
+ *  into the note hash, so every remembered note is written once more, and
+ *  no row is touched (rows, Jev and the row hashes stay v14). */
+export const REVIEW_VERSION = "v14.1";
+/** Pinned, like the reference model: the review is remembered under it. */
 export const NOTE_MODEL = "gpt-4o-mini-2024-07-18";
 export { REF_MODEL };
 /** Profile and resume together are read whole up to this; past it the resume's tail is cut. */
@@ -66,16 +77,23 @@ export interface RowMemory {
   levels: number;
   p: number[];
   confidence: number;
+  /** The first verified line and where it was found (older records carry only these). */
   quote?: string;
   source?: string;
+  /** Every verified line, at most three. */
+  quotes?: { text: string; source: string }[];
   at: string;
 }
+/** The review as remembered. `paragraph` is the bottom line and the first
+ *  fit, for older readers; `review` is what the card shows. A v14 record
+ *  has no review and is never read back: REVIEW_VERSION is in its hash. */
 export interface NoteMemory {
   kind: "note";
   paragraph: string;
   missing: string[];
   ask: string[];
   betterSuited: string;
+  review?: Review;
   at: string;
 }
 export type Memory = RowMemory | NoteMemory;
@@ -83,11 +101,17 @@ export interface MemoryWrite {
   hash: string;
   record: Memory;
 }
+export const isReview = (x: unknown): x is Review => {
+  if (!x || typeof x !== "object") return false;
+  const r = x as Record<string, unknown>;
+  const bullets = (list: unknown) => Array.isArray(list) && list.every((b) => !!b && typeof b === "object" && typeof (b as ReviewBullet).text === "string" && Array.isArray((b as ReviewBullet).rowIds));
+  return r.v === 1 && typeof r.bottomLine === "string" && bullets(r.fits) && bullets(r.gaps) && Array.isArray(r.ask);
+};
 export const isMemory = (x: unknown): x is Memory => {
   if (!x || typeof x !== "object") return false;
   const r = x as Record<string, unknown>;
   if (r.kind === "row") return typeof r.criterionId === "string" && typeof r.level === "number" && typeof r.levels === "number" && Array.isArray(r.p) && typeof r.confidence === "number";
-  if (r.kind === "note") return typeof r.paragraph === "string" && Array.isArray(r.ask) && Array.isArray(r.missing) && typeof r.betterSuited === "string";
+  if (r.kind === "note") return typeof r.paragraph === "string" && Array.isArray(r.ask) && Array.isArray(r.missing) && typeof r.betterSuited === "string" && (r.review === undefined || isReview(r.review));
   return false;
 };
 
@@ -145,34 +169,49 @@ export function materialOf(input: VerdictInput, criteria: Criterion[]): JudgeMat
 export const rowHash = (c: Pick<Criterion, "label"> & Partial<Pick<Criterion, "kind" | "ladder" | "good" | "metAt">>, materialHash: string): string =>
   sha(JSON.stringify(["v14", JEV_MODEL, REF_MODEL, c.label, ladderOf(c), materialHash]));
 
-/** The note is written from the rows and the facts: the same rows and facts
- *  get the same note back without a call. */
-export const noteHash = (rows: CardRow[], label: VerdictLabel, factItems: string[]): string =>
-  sha(JSON.stringify(["v14-note", NOTE_MODEL, rows.map((r) => [r.id, r.status, r.level ?? null, r.evidence, r.quote ?? ""]), label, factItems]));
+/** The role's own words, as the review call reads them: its summary, what it
+ *  needs, what the person will do, and its stack. Bounded, so a long job
+ *  description cannot crowd the rows out. */
+export type RoleWords = NonNullable<VerdictInput["roleWords"]>;
+const MAX_ROLE_ABOUT = 1_500;
+const MAX_ROLE_LINES = 12;
+const MAX_ROLE_LINE = 240;
+export function roleWordsOf(words: RoleWords | null | undefined): { about: string; needs: string[]; doing: string[]; techStack: string } {
+  const line = (x: unknown) => String(x ?? "").replace(/\s+/g, " ").trim();
+  const lines = (xs: unknown) => (Array.isArray(xs) ? xs : []).map((x) => line(x).slice(0, MAX_ROLE_LINE)).filter(Boolean).slice(0, MAX_ROLE_LINES);
+  return { about: line(words?.about).slice(0, MAX_ROLE_ABOUT), needs: lines(words?.needs), doing: lines(words?.doing), techStack: line(words?.techStack).slice(0, 300) };
+}
 
-// ---------- the note ----------
+/** The review is written from the rows (with their verified lines), the
+ *  facts and the role's own words: the same of each gets the same review
+ *  back without a call. REVIEW_VERSION is part of it, so a change to how the
+ *  review is written rewrites every remembered note once. */
+export const noteHash = (rows: CardRow[], label: VerdictLabel, factItems: string[], roleWords?: RoleWords | null): string =>
+  sha(JSON.stringify(["v14-note", REVIEW_VERSION, NOTE_MODEL, rows.map((r) => [r.id, r.status, r.level ?? null, r.evidence, r.quote ?? "", (r.quotes || []).map((q) => q.text)]), label, factItems, roleWordsOf(roleWords)]));
 
-const NOTE_SYSTEM = `You write the short note a recruiter reads in ten seconds beside a candidate's scorecard. Everything you may say is in the message: FACTS, computed in code from dated positions, and ROWS, already decided, each with the words from the profile that decided it. You have not seen the profile. Add nothing to what is there.
+// ---------- the review ----------
 
-Write 2 to 4 sentences, at most 70 words:
-1. Who they are, from FACTS: current title and company, how long they have been there, and their years as FACTS words them (in engineering roles, or of career). When FACTS says they worked at a company this role targets, say so as a fact.
-2. What the profile shows for this role: only rows marked yes or equivalent, each with its evidence. For an equivalent, say what stands in for what.
-3. What is not shown, or is against: the Required rows marked unknown or no, plainly ("TypeScript is not shown on the profile"). A years row is never "not shown": say its numbers ("3 years against the 4+ asked"). When the label is Pass, say which Required row is against and its numbers. When most rows are unknown, say the profile is thin in a few words ("The profile is titles only").
+const REVIEW_SYSTEM = `You write the review a recruiter reads in ten seconds beside a candidate's scorecard: short bullets and one bottom line. Everything you may say about the person is in the message: FACTS, computed in code from dated positions, and ROWS, already decided, each with the lines copied from the profile or resume that decided it. You have not seen the profile. Add nothing to what is there. THE ROLE'S OWN WORDS are there only so that each fit is said in the role's terms; they are not evidence about the person.
 
-Never state or imply experience for a row marked unknown. Never name a technology, product, duty or employer that is not in FACTS or ROWS. Give no advice and no call to action: the label is shown beside the note. Use the candidate's name once, exactly as given, then "they" and "their", never he or she. No bullets, no headings, no quotation marks.
+Return:
+- fits: why this person fits THIS role. One bullet per reason, at most 6, each resting on the rows it cites (row_ids: rows marked YES or EQUIVALENT only, at least one per bullet). Required rows first, then Exceptional, then Bonus. Say what the rows found and what it means for this role, in the role's own terms. Never restate a copied line: the recruiter sees the lines beside the bullet. For an EQUIVALENT, say what stands in for what. When no row is YES or EQUIVALENT, return no fits.
+- gaps: what is short or not shown, at most 4 bullets, Required rows first: what the profile does not show, and the question to ask on a first call. row_ids: rows marked SHORT, UNKNOWN or NO only, or none. A years row is never "not shown": say its numbers. When the label is Pass, say which Required row is against and its numbers.
+- bottom_line: ONE sentence of at most 20 words: the verdict, and the one thing to confirm.
+- ask: 0 to 3 short questions for a first call, one per open Required row first.
 
-ALSO RETURN: missing (0 to 4 short plain statements: the Required rows that are unknown or no first, then Exceptional ones), ask (0 to 3 short questions for a first call, one per unknown Required row first), better_suited (only when the label is pass or message AND FACTS points somewhere specific, such as years in another discipline: one sentence naming where they would fit; otherwise an empty string).`;
+Each bullet is one or two sentences and at most 36 words. Plain English: no headings, no quotation marks, no dashes as punctuation. Never state or imply experience for a row marked UNKNOWN or SHORT. Never name a technology, product, duty or employer that is not in FACTS or ROWS. Never write suggests, implies or likely: the rows are decided, say what they show. Use the candidate's name once at most, exactly as given, then "they" and "their", never he or she.`;
 
-const NOTE_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    paragraph: { type: "string" },
-    missing: { type: "array", items: { type: "string" } },
-    ask: { type: "array", items: { type: "string" } },
-    better_suited: { type: "string" },
-  },
-  required: ["paragraph", "missing", "ask", "better_suited"],
+/** The strict shape of the review, with the card's own ids as the only
+ *  rows a bullet can cite. */
+const reviewSchema = (ids: string[]) => {
+  const rowId = ids.length ? { type: "string", enum: ids } : { type: "string" };
+  const bullet = { type: "object", additionalProperties: false, properties: { text: { type: "string" }, row_ids: { type: "array", items: rowId } }, required: ["text", "row_ids"] };
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: { bottom_line: { type: "string" }, fits: { type: "array", items: bullet }, gaps: { type: "array", items: bullet }, ask: { type: "array", items: { type: "string" } } },
+    required: ["bottom_line", "fits", "gaps", "ask"],
+  };
 };
 
 /** Facts about the person, written by code from dated positions. Where they
@@ -212,11 +251,19 @@ export function factLine(input: VerdictInput, facts: CandidateFacts | null, jobs
 }
 
 const NEGATION = /\b(not|no|never|without|isn't|aren't|unconfirmed|missing|absent|lacks?|silent)\b/i;
+/** Words that make a clause something other than a claim: a negation, or a
+ *  thing still to confirm ("Confirm TypeScript depth on a call"). */
+const NOT_A_CLAIM = /\b(not|no|never|without|isn't|aren't|unconfirmed|missing|absent|lacks?|silent|confirm|confirms|confirmed|ask|check|verify|whether)\b/i;
+/** No dash in anything a recruiter reads: an em or en dash becomes a comma,
+ *  and one between two numbers ("2020–2024") reads "to". */
+export const noDashes = (text: string) =>
+  text.replace(/(\d)\s*\u2013\s*(?=\d)/g, "$1 to ").replace(/\s*[\u2014\u2013]+\s*/g, ", ").replace(/\s*--+\s*/g, ", ").replace(/,\s*,/g, ",").replace(/^,\s*|,\s*$/g, "");
 const PRONOUNS: [RegExp, string][] = [
   [/\b(He|She) is\b/g, "They are"], [/\b(he|she) is\b/g, "they are"],
   [/\b(He|She) was\b/g, "They were"], [/\b(he|she) was\b/g, "they were"],
   [/\b(He|She) has\b/g, "They have"], [/\b(he|she) has\b/g, "they have"],
   [/\bHis /g, "Their "], [/\bhis /g, "their "],
+  [/\b(He|She)\b/g, "They"], [/\b(he|she)\b/g, "they"],
 ];
 
 /** Keep only sentences that name nothing outside what the rows and facts
@@ -224,7 +271,8 @@ const PRONOUNS: [RegExp, string][] = [
  *  are words that are people or companies here, whatever else they may be
  *  elsewhere (a candidate called Ray, an employer called Temporal). The
  *  model's choice of verb is not judged here: what it may say is decided by
- *  the rows, and a hedge is not a claim. */
+ *  the rows, and a hedge is not a claim. Run on every bullet of the review
+ *  before guardReview checks what each bullet rests on. */
 export function guardNote(paragraph: string, rows: CardRow[], allowedText: string, material: string, questions = false, names: string[] = []): string {
   const isName = (group: string[]) => group.some((n) => names.some((x) => x.toLowerCase() === n.toLowerCase()));
   const unmetTech = rows.filter((r) => r.status === "unknown" || r.status === "no").flatMap((r) => technologiesNamed(stripExamples(r.label)));
@@ -235,18 +283,20 @@ export function guardNote(paragraph: string, rows: CardRow[], allowedText: strin
       if (!inAllowed) return false;
       if (questions) continue; // a question may name what is not shown; it claims nothing
       const unmet = unmetTech.some((g) => g[0] === group[0]);
-      const metElsewhere = rows.some((r) => (r.status === "yes" || r.status === "equivalent") && namesAny(`${r.label} ${r.evidence} ${r.quote || ""}`, [group]));
+      const metElsewhere = rows.some((r) => (r.status === "yes" || r.status === "equivalent") && namesAny(`${r.label} ${r.evidence} ${r.quote || ""} ${(r.quotes || []).map((q) => q.text).join(" ")}`, [group]));
       if (unmet && !metElsewhere) {
-        // The negation must sit with the claim, in the same clause: "has
-        // TypeScript experience, though not at scale" still claims it.
+        // The negation (or the thing to confirm) must sit with the claim, in
+        // the same clause: "has TypeScript experience, though not at scale"
+        // still claims it; "confirm TypeScript depth on a call" does not.
         const clause = s.split(/[,;:]| but | though | although /i).find((part) => namesAny(part, [group])) || s;
-        if (!NEGATION.test(clause)) return false;
+        if (!NOT_A_CLAIM.test(clause)) return false;
       }
     }
     return true;
   });
   let text = kept.join(" ").trim();
-  for (const [re, to] of PRONOUNS) text = text.replace(re, to);
+  // A person whose name is He or She keeps it: the pronoun fix is skipped for them.
+  if (!names.some((n) => /^(he|she)$/i.test(n))) for (const [re, to] of PRONOUNS) text = text.replace(re, to);
   return text;
 }
 
@@ -304,18 +354,30 @@ export function withShortReason(paragraph: string, label: VerdictLabel, rows: Ca
   return `${paragraph} ${sentence}`.trim();
 }
 
-/** The note code writes when the model's is missing or was cut to nothing.
- *  A short years row is not "not shown": withShortReason says it, with the numbers. */
-function fallbackNote(first: string, facts: string[], rows: CardRow[]): string {
-  const met = rows.filter((r) => r.status === "yes" || r.status === "equivalent").map((r) => r.label);
-  const open = rows.filter((r) => r.tier === "required" && r.status === "unknown").map((r) => r.label);
-  const against = rows.filter((r) => r.tier === "required" && r.status === "no");
-  return [
-    facts[0] ? `${first}: ${facts[0]}${facts[1] ? `; ${facts[1].split(";")[0]}` : ""}.` : "",
-    met.length ? `The profile shows: ${met.slice(0, 4).join("; ")}.` : "The profile shows little for this role.",
-    against.length ? `Against: ${against.map((r) => r.evidence).slice(0, 2).join(" ")}` : "",
-    open.length ? `Not shown: ${open.slice(0, 3).join("; ")}.` : "",
-  ].filter(Boolean).join(" ");
+/** The numbers that decide a label are always in the review, whatever the
+ *  model wrote: a Required years row a year short (the label held at
+ *  message) and a Required row that reads no (a Pass) each get a gap bullet
+ *  written by code when no gap bullet cites the row or states its numbers.
+ *  Code-written, so it goes in after the guard, at the front. A fit bullet
+ *  keeps only the met rows it cites (guardReview asks for at least one; an
+ *  unmet row beside it would show as a "not shown" tag on a fit). */
+export function withReviewReasons(review: Review, label: VerdictLabel, rows: CardRow[]): Review {
+  const metIds = new Set(rows.filter((r) => r.status === "yes" || r.status === "equivalent").map((r) => r.id));
+  const fits = review.fits.map((b) => ({ ...b, rowIds: b.rowIds.filter((id) => metIds.has(id)) }));
+  const cited = new Set(review.gaps.flatMap((g) => g.rowIds));
+  const stated = review.gaps.map((g) => g.text).join(" ");
+  const added: ReviewBullet[] = [];
+  const short = rows.find((r) => r.tier === "required" && r.status === "short" && r.numbers);
+  if (short && !cited.has(short.id)) {
+    const withShort = withShortReason(stated, label, rows);
+    if (withShort !== stated) added.push({ text: withShort.slice(stated.length).trim(), rowIds: [short.id] });
+  }
+  const against = rows.filter((r) => r.tier === "required" && r.status === "no" && !cited.has(r.id));
+  if (against.length) {
+    const withPass = withPassReason(stated, label, rows.filter((r) => !cited.has(r.id)));
+    if (withPass !== stated) added.push({ text: withPass.slice(stated.length).trim(), rowIds: against.slice(0, 2).map((r) => r.id) });
+  }
+  return { ...review, fits, gaps: [...added, ...review.gaps].slice(0, REVIEW_LIMITS.gaps) };
 }
 
 // ---------- rows decided by code ----------
@@ -459,11 +521,11 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     return {
       id: c.id, label: c.label, tier: c.tier, status, ai: status, evidence, call, confirmed: null, kind: "tech", judgedBy: "code",
       level: techLevel(reach, hasAccepted), levels: ladder.length, techReach: reach,
-      ...(quote ? { quote } : {}), ...(source ? { source } : {}),
+      ...(quote ? { quote, quotes: [{ text: quote, source: source || "Profile" }] } : {}), ...(source ? { source } : {}),
     };
   };
 
-  const judgmentRow = (c: Criterion, call: boolean, read: { level: number; p: number[]; confidence: number; quote?: string; source?: string }): CardRow => {
+  const judgmentRow = (c: Criterion, call: boolean, read: { level: number; p: number[]; confidence: number; quote?: string; source?: string; quotes?: { text: string; source: string }[] }): CardRow => {
     const ladder = ladderOf(c);
     const level = Math.min(Math.max(1, Math.round(read.level)), ladder.length);
     const status = statusFromLevel(level, metAtOf(c));
@@ -471,10 +533,12 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     // pass where the row was met, it means nothing once the row counts from
     // a higher rung and is not.
     const source = read.source === NO_LINE_SOURCE && status !== "yes" && status !== "equivalent" ? undefined : read.source;
+    // A record from before the lines were kept in threes carries one line.
+    const quotes = read.quotes?.length ? read.quotes : read.quote ? [{ text: read.quote, source: read.source || "Profile" }] : [];
     return {
       id: c.id, label: c.label, tier: c.tier, status, ai: status, evidence: ladder[level - 1], call, confirmed: null, kind: "judgment", judgedBy: "jev",
       level, levels: ladder.length, p: read.p, confidence: read.confidence,
-      ...(read.quote ? { quote: read.quote } : {}), ...(source ? { source } : {}),
+      ...(quotes.length ? { quote: quotes[0].text, quotes } : {}), ...(source ? { source } : {}),
     };
   };
 
@@ -548,7 +612,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       for (const x of needRefs) {
         const row = rows[x.index]!;
         const ref = found.refs.get(x.c.id);
-        if (ref) { row.quote = ref.quote; row.source = ref.source; }
+        if (ref) { row.quote = ref.quote; row.source = ref.source; row.quotes = ref.quotes; }
         // A met row with no line says so; an unmet row simply has none.
         else if (row.status === "yes" || row.status === "equivalent") row.source = NO_LINE_SOURCE;
       }
@@ -562,7 +626,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     if ((row.level ?? 1) >= 2 && refsFailed) continue;
     memoryWrites.push({
       hash: x.hash,
-      record: { kind: "row", criterionId: x.c.id, level: row.level!, levels: row.levels!, p: row.p!, confidence: row.confidence!, ...(row.quote ? { quote: row.quote } : {}), ...(row.source ? { source: row.source } : {}), at: now },
+      record: { kind: "row", criterionId: x.c.id, level: row.level!, levels: row.levels!, p: row.p!, confidence: row.confidence!, ...(row.quote ? { quote: row.quote } : {}), ...(row.source ? { source: row.source } : {}), ...(row.quotes?.length ? { quotes: row.quotes } : {}), at: now },
     });
   }
   const finalRows = rows.map((r) => r!);
@@ -576,50 +640,89 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   if (label === "contact" && railNote) label = "message";
   const factItems = factLine(input, facts, jobs, m.basis);
   // The report card leads with the years the role's bar is about.
-  const profile = { ...profileFacts({ facts, jobs, education: input.education ?? null, employer: input.employer ?? null }), basis: m.basis };
+  // The profile's own skills list, as the profile text prints it, for the
+  // skills never tagged on a dated job.
+  const profileSkills = (m.profileText.split("\n").find((l) => /^(all )?skills:/i.test(l.trim())) || "").replace(/^\s*(all )?skills:/i, "").split(/,\s*/).map((t) => t.trim()).filter(Boolean);
+  const profile = { ...profileFacts({ facts, jobs, education: input.education ?? null, employer: input.employer ?? null, profileSkills }), basis: m.basis };
   const openRequired = finalRows.filter((r) => r.tier === "required" && r.status !== "yes" && r.status !== "equivalent");
   const missing = openRequired
     .map((r) => (r.status === "no" ? `${r.label}: against.` : r.status === "short" && r.numbers ? `${r.label}: ${years(r.numbers.have)} against ${r.numbers.bar}+, a year short.` : `${r.label}: not shown on the profile.`))
     .slice(0, 4);
 
-  // ---- 5. the note, from the rows and facts only ----
+  // ---- 5. the review, from the rows, the facts and the role's own words ----
   const first = noteName(input.candidateName);
   const mark = (s: RowStatus) => (s === "yes" ? "YES" : s === "equivalent" ? "EQUIVALENT" : s === "no" ? "NO" : s === "short" ? "SHORT (within a year of the bar)" : "UNKNOWN (not shown)");
-  const nHash = noteHash(finalRows, label, factItems);
+  const nHash = noteHash(finalRows, label, factItems, input.roleWords);
   const remembered = memory.get(nHash);
   let paragraph = "";
   let ask: string[] = [];
-  let betterSuited = "";
-  if (remembered?.kind === "note") {
+  let review: Review;
+  // The single-call note's "better suited" line has no place in the review;
+  // the field stays empty for older readers.
+  const betterSuited = "";
+  if (remembered?.kind === "note" && isReview(remembered.review)) {
     paragraph = remembered.paragraph;
     ask = remembered.ask;
-    betterSuited = remembered.betterSuited;
+    review = remembered.review;
   } else {
-    const noteUser =
-      `ROLE: ${input.roleTitle}\nCANDIDATE'S NAME, AS TO WRITE IT: ${first}\nLABEL SHOWN BESIDE THE NOTE: ${label === "contact" ? "Contact now" : label === "message" ? "Worth a message" : "Pass"}\n\n` +
+    const linesOf = (r: CardRow) => (r.quotes?.length ? r.quotes : r.quote ? [{ text: r.quote, source: r.source || "Profile" }] : []);
+    const rowLine = (r: CardRow) => {
+      const lines = linesOf(r);
+      return `- [${r.id}] (${r.tier}) ${r.label}: ${mark(r.status)}. ${r.evidence}${lines.length ? ` Lines copied from the material: ${lines.map((q) => `"${q.text}" (${q.source})`).join("; ")}` : ""}`;
+    };
+    const words = roleWordsOf(input.roleWords);
+    const roleBlock = [
+      words.about ? `About: ${words.about}` : "",
+      words.needs.length ? `Needs:\n${words.needs.map((x) => `- ${x}`).join("\n")}` : "",
+      words.doing.length ? `Doing:\n${words.doing.map((x) => `- ${x}`).join("\n")}` : "",
+      words.techStack ? `Tech stack: ${words.techStack}` : "",
+    ].filter(Boolean).join("\n");
+    const reviewUser =
+      `ROLE: ${input.roleTitle}\nCANDIDATE'S NAME, AS TO WRITE IT: ${first}\nLABEL SHOWN BESIDE THE REVIEW: ${label === "contact" ? "Contact now" : label === "message" ? "Worth a message" : "Pass"}\n\n` +
       `FACTS:\n${factItems.map((f) => `- ${f}`).join("\n") || "- (none)"}\n\n` +
-      `ROWS:\n${finalRows.map((r) => `- (${r.tier}) ${r.label}: ${mark(r.status)}. ${r.evidence}${r.quote ? ` [profile says: ${r.quote}]` : ""}`).join("\n")}`;
+      `ROWS (id, tier, status, what was found, the lines copied from the material):\n${finalRows.map(rowLine).join("\n")}` +
+      (roleBlock ? `\n\nTHE ROLE'S OWN WORDS (for phrasing the fit only; not evidence about the person):\n${roleBlock}` : "");
     const spare = spareMs();
-    // A missing note never fails the person: code writes one, and the
-    // verdict is not remembered, so the next review gets a proper note.
-    const n = spare >= 3_000 ? await askOpenAI({ model: NOTE_MODEL, system: NOTE_SYSTEM, user: noteUser, schemaName: "scorecard_note", schema: NOTE_SCHEMA, timeoutMs: Math.min(15_000, spare) }) : null;
+    // A missing review never fails the person: code writes one, and the
+    // verdict is not remembered, so the next review gets a proper one.
+    const n = spare >= 3_000
+      ? await askOpenAI({ model: NOTE_MODEL, system: REVIEW_SYSTEM, user: reviewUser, schemaName: "scorecard_review", schema: reviewSchema(finalRows.map((r) => r.id)), timeoutMs: Math.min(15_000, spare) })
+      : null;
     if (n) {
       calls++;
       usage = { input: usage.input + n.usage.input, output: usage.output + n.usage.output };
     }
-    const allowedText = `${factItems.join("\n")}\n${finalRows.map((r) => `${r.label} ${r.evidence} ${r.quote || ""}`).join("\n")}`;
+    // Every sentence is held to the rows and facts first (guardNote: no
+    // technology from outside them, no claim on an unmet row, they/their),
+    // then each bullet to the rows it cites (guardReview).
+    const allowedText = `${factItems.join("\n")}\n${finalRows.map((r) => `${r.label} ${r.evidence} ${linesOf(r).map((q) => q.text).join(" ")}`).join("\n")}`;
     const names = [...first.split(/\s+/), ...employers];
-    const clean = (list: unknown, max: number, len: number, questions = false) =>
-      (Array.isArray(list) ? list : [])
-        .map((x) => guardNote(String(x || ""), finalRows, allowedText, material, questions, names).slice(0, len))
-        .filter(Boolean)
-        .slice(0, max);
-    const written = n ? guardNote(String(n.out.paragraph || ""), finalRows, allowedText, material, false, names) : "";
-    const fromModel = sentences(written).length >= 2;
-    paragraph = withShortReason(withPassReason(fromModel ? written : fallbackNote(first, factItems, finalRows), label, finalRows), label, finalRows).slice(0, 700);
-    ask = n ? clean(n.out.ask, 3, 200, true) : [];
-    betterSuited = n ? guardNote(String(n.out.better_suited || ""), finalRows, allowedText, material, false, names).slice(0, 250) : "";
-    if (fromModel && !unassessed) memoryWrites.push({ hash: nHash, record: { kind: "note", paragraph, missing, ask, betterSuited, at: now } });
+    const tidy = (x: unknown) => noDashes(String(x ?? "")).replace(/\s+/g, " ").trim();
+    const held = (x: unknown, questions: boolean) => guardNote(tidy(x), finalRows, allowedText, material, questions, names);
+    const bulletsOf = (list: unknown, questions: boolean): ReviewBullet[] =>
+      (Array.isArray(list) ? list : []).map((b) => {
+        const raw = (b ?? {}) as { text?: unknown; row_ids?: unknown };
+        return { text: held(raw.text, questions), rowIds: (Array.isArray(raw.row_ids) ? raw.row_ids : []).map((id) => String(id)) };
+      });
+    const draft = n
+      ? guardReview(
+          // A fit and the bottom line are claims; a gap and a question may
+          // name what is not shown.
+          { bottomLine: held(n.out.bottom_line, false), fits: bulletsOf(n.out.fits, false), gaps: bulletsOf(n.out.gaps, true), ask: (Array.isArray(n.out.ask) ? n.out.ask : []).map((q) => held(q, true)) },
+          finalRows,
+          material
+        )
+      : null;
+    // The model's review stands when it has a bottom line and, for a person
+    // the rows make a contact or a message with something met, at least one
+    // fit bullet survived the guard; else code writes the review.
+    const anyMet = finalRows.some((r) => r.status === "yes" || r.status === "equivalent");
+    const fromModel = !!draft && !!draft.bottomLine && !((label === "contact" || label === "message") && anyMet && !draft.fits.length);
+    review = withReviewReasons(fromModel ? draft! : fallbackReview(finalRows, label), label, finalRows);
+    // The paragraph, for older readers: the bottom line and the first fit.
+    paragraph = `${review.bottomLine} ${review.fits[0]?.text ?? ""}`.trim().slice(0, 700);
+    ask = review.ask;
+    if (fromModel && !unassessed) memoryWrites.push({ hash: nHash, record: { kind: "note", paragraph, missing, ask, betterSuited, review, at: now } });
   }
 
   // ---- 6. technologies, by code: the current job against the rest ----
@@ -659,6 +762,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     unassessed,
     facts: factItems,
     profile,
+    review,
     technologiesNow,
     technologiesBefore,
     model: "code+jev",

@@ -8,11 +8,14 @@
 // Memory lives in verdict_cache (unique on org_role_id, candidate_key,
 // input_hash): one record per remembered judgment row (judge_version
 // "v14-row", keyed on the row's wording, its ladder, the judge and the
-// person's material) and one per remembered note ("v14-note", keyed on the
-// rows and facts it was written from). Nothing is keyed on the id, the tier,
-// the call flag or the rung the row counts from: the row shown is rebuilt
-// from the current criterion and the record on every read, so none of that
-// can go stale, and a changed "met from" re-labels without a re-judge. The
+// person's material; it carries the verified lines behind the rung) and one
+// per remembered note ("v14-note", keyed on the rows, facts and role words
+// it was written from, under REVIEW_VERSION; it carries the bulleted
+// review). Nothing is keyed on the id, the tier, the call flag or the rung
+// the row counts from: the row shown is rebuilt from the current criterion
+// and the record on every read, so none of that can go stale, and a changed
+// "met from" re-labels without a re-judge. A note remembered before the
+// review existed is never read back (its hash carries the old version); the
 // v13 whole-verdict records stay in the table as unread history.
 
 import { sbRest } from "../supabase";
@@ -56,9 +59,10 @@ export interface JudgedForRole {
 
 /** What is already known about this person on this card: the judgment rows
  *  by their exact hashes (at most ten), and the newest notes written for them
- *  on this role (the note's hash is only known once the rows are). Two reads
- *  at once, so the notes, which pile up, can never crowd a row out and have
- *  the person asked again. */
+ *  on this role (the note's hash is only known once the rows are). Each
+ *  record comes back whole (a row with its lines, a note with its review).
+ *  Two reads at once, so the notes, which pile up, can never crowd a row
+ *  out and have the person asked again. */
 async function readMemory(a: JudgeForRoleArgs, input: VerdictInput): Promise<Map<string, Memory>> {
   const memory = new Map<string, Memory>();
   if (!a.criteria.length) return memory;

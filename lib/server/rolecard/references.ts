@@ -1,7 +1,8 @@
 // The words behind a tick. A judgment row is decided by the judge's
 // probabilities (jev.ts) and NEVER by what is written here: this module only
-// finds, in the person's own material, the line that shows the situation
-// the row was judged to be in, so the recruiter can read it beside the tick.
+// finds, in the person's own material, the lines (up to three) that show the
+// situation the row was judged to be in, so the recruiter can read them
+// beside the tick.
 // One small model call points at the words; code checks that they really
 // are on the profile or resume, and works out where. A row for which no
 // single line says it keeps its tick and says so.
@@ -18,9 +19,9 @@ export const OPENAI_SEED = 7;
 /** The source line on a met row with no quotable line (lib/rolecard.ts, so
  *  the checklist can tell it from a real source). */
 export { NO_LINE_SOURCE } from "@/lib/rolecard";
-/** At most two passages of at most twelve words each, per row: what the
+/** At most three passages of at most twelve words each, per row: what the
  *  model is asked for, and what is taken whatever it sends. */
-const MAX_QUOTES = 2;
+export const MAX_QUOTES = 3;
 const MAX_QUOTE_WORDS = 12;
 const MAX_QUOTE = 160;
 
@@ -175,7 +176,7 @@ export async function askOpenAI(a: { model: string; system: string; user: string
 
 const REF_SYSTEM = `You find, in a candidate's own material, the words that show a situation described on a recruiter's scorecard. The rows are ALREADY DECIDED: you do not judge them, you only point at the words.
 
-For each row you are given the situation the candidate was judged to be in. Copy, exactly as written in the LinkedIn profile, the resume or the confirmed statements, at most two short passages of at most 12 words each that show that situation: a skill tag, a title, a team name, a line of a description. Copy words as they are written there: never paraphrase, never join words from different lines, never copy the scorecard's own words back. When no single line says it, return an empty list for that row: that is the expected answer for many rows, and a passage about something else is worse than none.`;
+For each row you are given the situation the candidate was judged to be in. Copy, exactly as written in the LinkedIn profile, the resume or the confirmed statements, at most three short passages of at most 12 words each that show that situation: a skill tag, a title, a team name, a line of a description. Each passage comes from a different line where the material has more than one. Copy words as they are written there: never paraphrase, never join words from different lines, never copy the scorecard's own words back. When no single line says it, return an empty list for that row: that is the expected answer for many rows, and a passage about something else is worse than none.`;
 
 export interface ReferenceMaterial {
   profileText: string;
@@ -190,8 +191,11 @@ export interface ReferenceMaterial {
 }
 
 export interface Reference {
+  /** The first verified line and where it was found (older readers). */
   quote: string;
   source: string;
+  /** Every verified line, in the order the model gave them, at most MAX_QUOTES. */
+  quotes: { text: string; source: string }[];
 }
 
 export interface ReferencesFound {
@@ -202,9 +206,11 @@ export interface ReferencesFound {
 }
 
 /** ONE call for every row that needs a line: the whole material plus, per
- *  row, the rung reached. Returns null when the call failed, so the caller
- *  can show the rows without references and NOT remember them: the next
- *  review tries again. Never touches a status. */
+ *  row, the rung reached. Up to MAX_QUOTES lines come back per row, each
+ *  checked against the material; the first verified one is the row's quote
+ *  and all of them are its quotes. Returns null when the call failed, so the
+ *  caller can show the rows without references and NOT remember them: the
+ *  next review tries again. Never touches a status. */
 export async function findReferences(rows: { id: string; rung: string }[], m: ReferenceMaterial, opts: { timeoutMs: number }): Promise<ReferencesFound | null> {
   const started = Date.now();
   const out: ReferencesFound = { refs: new Map(), usage: { input: 0, output: 0 }, ms: 0 };
@@ -247,7 +253,11 @@ export async function findReferences(rows: { id: string; rung: string }[], m: Re
   for (const a of answers) {
     const id = String(a?.id ?? "");
     if (!ids.includes(id) || out.refs.has(id)) continue;
+    // Only the first MAX_QUOTES passages sent are looked at; every one that
+    // checks out is kept, in the order given, and the first of them is the
+    // row's quote. The same line sent twice counts once.
     const quotes = (Array.isArray(a.quotes) ? a.quotes : []).map((q) => String(q ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, MAX_QUOTES);
+    const verified: { text: string; source: string }[] = [];
     for (const raw of quotes) {
       // A long quote is cut to its twelve-word allowance (a prefix of a real
       // line is still on that line), then at a separator: a word cut in half
@@ -255,11 +265,12 @@ export async function findReferences(rows: { id: string; rung: string }[], m: Re
       const words = raw.split(" ");
       const trimmed = words.length <= MAX_QUOTE_WORDS ? raw : words.slice(0, MAX_QUOTE_WORDS).join(" ");
       const quote = trimmed.length <= MAX_QUOTE ? trimmed : trimmed.slice(0, MAX_QUOTE).replace(/[,;.·]?\s*[^\s,;.·]*$/, "");
+      if (!quote || verified.some((v) => v.text.toLowerCase() === quote.toLowerCase())) continue;
       if (quoteCheck(quote, lineMaterial, m.employers, m.noise, m.resumeText) !== "ok") continue;
       const source = sourceOfQuote(quote, { jobs: m.jobs, profileText: m.profileText, resumeText: m.resumeText, confirmed: m.confirmed, employers: m.employers, noise: m.noise }) || "Profile";
-      out.refs.set(id, { quote, source });
-      break;
+      verified.push({ text: quote, source });
     }
+    if (verified.length) out.refs.set(id, { quote: verified[0].text, source: verified[0].source, quotes: verified });
   }
   out.ms = Date.now() - started;
   return out;
