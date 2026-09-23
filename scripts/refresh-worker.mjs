@@ -250,26 +250,37 @@ const queued = await rest(
   `refresh_queue?status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
 );
 if (queued.length < remaining) {
+  const needed = remaining - queued.length;
   const everQueued = new Set((await rest("refresh_queue?select=candidate_id")).map((r) => r.candidate_id));
-  const engaged = await rest(
-    `candidates?source=eq.airtable_sync&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc&limit=${(remaining - queued.length) * 3}`
-  );
   // Queue slots go to people who actually need refreshing — recently
   // enriched candidates (e.g. fresh website applicants) are excluded.
   const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const candidateIds = engaged.filter((c) => !everQueued.has(c.id)).map((c) => c.id);
-  const recentIds = candidateIds.length
-    ? new Set(
-        (
-          await rest(
-            `candidate_enrichments?candidate_id=in.(${candidateIds.join(",")})&provider=eq.harvest&status=eq.ok&created_at=gte.${since30}&select=candidate_id`
-          )
-        ).map((r) => r.candidate_id)
-      )
-    : new Set();
-  const topUp = engaged
-    .filter((c) => !everQueued.has(c.id) && !recentIds.has(c.id))
-    .slice(0, remaining - queued.length);
+  // Page through the engaged pool, most recently updated first, until enough
+  // people who were never queued and were not refreshed in the last 30 days
+  // are found. The first version looked only at the first 150 rows; those
+  // were all queued within three nights, and the queue then starved for a
+  // week ("processing 0 of 0 queued").
+  const PAGE = 500;
+  const MAX_PAGES = 40;
+  const topUp = [];
+  for (let page = 0; page < MAX_PAGES && topUp.length < needed; page++) {
+    const batch = await rest(
+      `candidates?source=eq.airtable_sync&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc,id.asc&limit=${PAGE}&offset=${page * PAGE}`
+    );
+    if (!batch.length) break;
+    const fresh = batch.filter((c) => !everQueued.has(c.id));
+    if (!fresh.length) continue;
+    const recentIds = new Set();
+    for (let i = 0; i < fresh.length; i += 100) {
+      const chunk = fresh.slice(i, i + 100).map((c) => c.id);
+      for (const r of await rest(
+        `candidate_enrichments?candidate_id=in.(${chunk.join(",")})&provider=eq.harvest&status=eq.ok&created_at=gte.${since30}&select=candidate_id`
+      ))
+        recentIds.add(r.candidate_id);
+    }
+    for (const c of fresh) if (!recentIds.has(c.id) && topUp.length < needed) topUp.push(c);
+  }
+  console.log(`engaged backfill: ${topUp.length} to queue (needed ${needed})`);
   if (topUp.length) {
     await rest("refresh_queue?on_conflict=candidate_id,status", {
       method: "POST",
