@@ -1,15 +1,20 @@
 "use client";
 // The verdict as a recruiter reads it. With a scorecard it is the report
-// card: the facts about the person (written by code), the companies they
-// worked at, the technologies strip, then the judged checklist beside the
-// review (label, the rows in one line, the paragraph, what to ask on a first
-// call) and the decision. `compact` is the table-row form: label, the rows
-// in one line, five chips. A verdict without a card (older reviews) renders
-// the old way: label, paragraph, strip.
+// card: on top, the label, the one-line bottom line and the decision beside
+// the facts block; below, the career and the skills on the left, and on the
+// right the review as bullets with evidence tags, then the judged checklist.
+// `compact` is the table-row form: label, the rows in one line, the bottom
+// line. A verdict without a card (older reviews) renders the old way: label,
+// paragraph, strip. Older cards without a profile, skills or a bulleted
+// review fall back piece by piece to what they do carry.
 import { useState } from "react";
 import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, shortRequirement, type TechChip, type VerdictView } from "@/lib/verdict-view";
-import { rowSummary, tally, type ProfileFacts } from "@/lib/rolecard";
+import { rowSummary } from "@/lib/rolecard";
 import Checklist, { type VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
+import FactsBlock from "./FactsBlock";
+import CareerList from "./CareerList";
+import SkillsTable from "./SkillsTable";
+import ReviewBullets, { BottomLine } from "./ReviewBullets";
 
 /** Yes or No on this person for this role, where the row on screen can hold
  *  it (a sourcing run's membership). Yes shortlists them; No hides them. */
@@ -32,11 +37,6 @@ const reviewedOn = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
 
-const yearsWord = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "year" : "years"}`;
-const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
-const monthsWord = (m: number) => (m >= 24 ? `${(m / 12).toFixed(m % 12 === 0 ? 0 : 1)} years` : m >= 12 ? (m === 12 ? "1 year" : `1 year ${plural(m - 12, "month")}`) : plural(m, "month"));
-const people = (n: number) => (n >= 1000 ? `~${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "")}k people` : `~${n} people`);
-
 function Chip({ c }: { c: TechChip }) {
   const title =
     c.status === "met"
@@ -52,100 +52,9 @@ function Chip({ c }: { c: TechChip }) {
   );
 }
 
-/** The facts strip: four things about the person, worked out in code from
- *  the dated positions and the employer's own page, never by a model. */
-function FactsStrip({ p }: { p: ProfileFacts }) {
-  const cur = p.current;
-  // The years the role's bar is about lead: engineering years on an
-  // engineering role, the career on any other (a data science or product
-  // role), so the strip says what the years row says.
-  const career = p.basis === "career" || (p.engineeringYears == null && p.careerYears != null);
-  const lead = career ? p.careerYears : p.engineeringYears;
-  return (
-    <dl className="vc-facts-grid" title="Facts, not the AI's reading: worked out in code from the dated positions on the profile, plus the employer's own company page">
-      <div>
-        <dt>Experience</dt>
-        <dd>
-          {lead != null ? <b>{yearsWord(lead)}</b> : <b>Not dated</b>}
-          <small>
-            {career ? "of career" : "in engineering roles"}
-            {p.careerSince && ` · since ${p.careerSince}`}
-            {!career && p.careerYears != null && p.engineeringYears != null && p.careerYears - p.engineeringYears >= 0.5 && ` · ${yearsWord(p.careerYears)} of career in all`}
-            {career && p.engineeringYears != null && p.engineeringYears >= 0.5 && ` · ${yearsWord(p.engineeringYears)} in engineering roles`}
-          </small>
-        </dd>
-      </div>
-      <div>
-        <dt>Average tenure</dt>
-        <dd>
-          {p.avgTenureYears != null ? <b>{yearsWord(p.avgTenureYears)}</b> : <b>Not dated</b>}
-          <small>{p.careerJobs === 0 ? "no dated career positions" : `across ${p.careerJobs} career ${p.careerJobs === 1 ? "job" : "jobs"}`}</small>
-        </dd>
-      </div>
-      <div>
-        <dt>Current company</dt>
-        <dd>
-          {cur?.company ? (
-            <>
-              <b>
-                {cur.company}
-                {cur.tag && (
-                  <span className={`vc-tag ${cur.tag}`} title={cur.tag === "startup" ? "Under 200 employees on the company's own page" : "Over 2,000 employees on the company's own page"}>
-                    {cur.tag}
-                    {cur.employees != null && ` · ${people(cur.employees)}`}
-                  </span>
-                )}
-              </b>
-              <small>
-                {[cur.title, cur.months != null ? monthsWord(cur.months) : null, !cur.tag && cur.employees != null ? people(cur.employees) : null, cur.founded ? `founded ${cur.founded}` : null].filter(Boolean).join(" · ")}
-              </small>
-            </>
-          ) : (
-            <>
-              <b>None listed</b>
-              <small>no current position on the profile</small>
-            </>
-          )}
-        </dd>
-      </div>
-      <div>
-        <dt>School</dt>
-        <dd>
-          {p.school ? (
-            <>
-              <b>{p.school.name}</b>
-              <small>{[p.school.degree, p.school.field, p.school.year].filter(Boolean).join(" · ") || "no degree listed"}</small>
-            </>
-          ) : (
-            <>
-              <b>None listed</b>
-              <small>no education on the profile</small>
-            </>
-          )}
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function Companies({ list }: { list: ProfileFacts["companies"] }) {
-  if (!list.length) return null;
-  return (
-    <ol className="vc-companies" title="The dated positions on the profile, current first. Internships and other non-career positions are greyed.">
-      {list.map((c, i) => (
-        <li key={i} className={c.career ? "" : "aside"}>
-          <b>{c.name}</b>
-          <span>{c.title}</span>
-          <small>
-            {[c.from && c.to ? `${c.from} · ${c.to}` : c.from ? `${c.from} · now` : null, c.years != null ? yearsWord(c.years) : null].filter(Boolean).join(" · ")}
-            {!c.career && " · not a career job"}
-          </small>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
+/** The technologies strip: what the person uses now and used before, and
+ *  what the role requires that was not found. Shown on verdicts written
+ *  before the profile carried a skills table. */
 function TechStrip({ view }: { view: VerdictView }) {
   const { now, before, gaps } = view.tech;
   const hasCard = !!view.card?.rows.length;
@@ -216,6 +125,22 @@ function DecideButtons({ d }: { d: Decision }) {
   );
 }
 
+/** The questions for a first call, on a verdict written before the review
+ *  folded them into its bullets. */
+function AskList({ ask }: { ask: string[] }) {
+  if (!ask.length) return null;
+  return (
+    <div className="cv2d-probe vc-ask">
+      <b>Ask on a first call</b>
+      <ul>
+        {ask.map((q, i) => (
+          <li key={i}>{q}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function VerdictCard({
   view,
   compact = false,
@@ -237,20 +162,40 @@ export default function VerdictCard({
   const card = view.card;
   const hasCard = !!card?.rows.length;
   const summary = hasCard ? rowSummary(card!.rows) : "";
+  // The bulleted review, when the verdict carries one with anything in it;
+  // the paragraph stands in for older verdicts.
+  const bullets = card?.review && (card.review.fits.length > 0 || card.review.gaps.length > 0) ? card.review : null;
+  const bottomLine = card?.review?.bottomLine?.trim() || "";
+
   if (compact) {
-    const chips = rowChips(view, 5);
+    if (!hasCard) {
+      // An older review, written before the role had a scorecard.
+      const chips = rowChips(view, 5);
+      return (
+        <div className="vc vc-compact">
+          <span className={`dash-tag ${VERDICT_CLASS[view.label]}`}>{VERDICT_LABEL[view.label]}</span>
+          <p className="vc-first">{firstSentences(view.paragraph, 2)}</p>
+          {chips.length > 0 && (
+            <div className="vc-chips">
+              {chips.map((c, i) => (
+                <Chip key={`${c.name}-${i}`} c={c} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="vc vc-compact">
         <span className={`dash-tag ${VERDICT_CLASS[view.label]}`}>{VERDICT_LABEL[view.label]}</span>
         {!!card?.confirm?.length && <span className="vc-confirm" title="Profiles rarely say this, so this role confirms it on a call. Everything else Required is met.">confirm {card.confirm.join(", ")}</span>}
-        {summary ? <p className="vc-summary" title="Every Required row, then the Exceptional and Bonus rows that are met">{summary}</p> : <p className="vc-first">{firstSentences(view.paragraph, 2)}</p>}
-        {chips.length > 0 && (
-          <div className="vc-chips">
-            {chips.map((c, i) => (
-              <Chip key={`${c.name}-${i}`} c={c} />
-            ))}
-          </div>
+        {summary && (
+          <p className="vc-summary" title="Every Required row, then the Exceptional and Bonus rows that are met">
+            {summary}
+          </p>
         )}
+        {/* Without a bulleted review the paragraph's first sentence stands in. */}
+        <BottomLine text={bottomLine || firstSentences(view.paragraph, 1)} />
       </div>
     );
   }
@@ -264,7 +209,7 @@ export default function VerdictCard({
     </div>
   );
   const when = reviewedOn(view.at) && (
-    <p className="vc-when" title="Years and tenure in this note are as of that day. Review again to refresh it.">
+    <p className="vc-when" title="Years and tenure on this card are as of that day. Review again to refresh it.">
       Reviewed {reviewedOn(view.at)}
     </p>
   );
@@ -298,72 +243,72 @@ export default function VerdictCard({
             {askOpen ? "Hide" : "Show"} questions for a first call ({view.ask.length})
           </button>
         )}
-        {askOpen && (
-          <div className="cv2d-probe">
-            <b>Ask about</b>
-            <ul>
-              {view.ask.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {askOpen && <AskList ask={view.ask} />}
         {decision && <DecideButtons d={decision} />}
         {reviewLink}
       </div>
     );
   }
 
-  const req = tally(card!.rows, "required");
-  const short = card!.rows.filter((r) => r.tier === "required" && r.status === "short").length;
-  const shortWord = short === 0 ? "" : short === 1 ? " · one short" : ` · ${short} short`;
+  const profile = card!.profile;
   return (
     <div className="vc vc-report">
-      {card!.profile ? (
-        <>
-          <FactsStrip p={card!.profile} />
-          <Companies list={card!.profile.companies} />
-        </>
-      ) : (
-        !!card!.facts?.length && (
-          <ul className="vc-facts" title="Facts, not the AI's reading: worked out in code from the dated positions on the profile, plus the employer's own company page">
-            {card!.facts.map((f, i) => (
-              <li key={i}>{f}</li>
-            ))}
-          </ul>
-        )
-      )}
-      <TechStrip view={view} />
-      <div className="vc-cols">
-        <div className="vc-col vc-col-rows">
-          <Checklist view={view} feedback={feedback} />
-        </div>
-        <div className="vc-col vc-col-review">
-          <div className="vc-lbl">Review</div>
+      <div className="vc-top">
+        <div className="vc-top-main">
           {head}
-          <p className="vc-reqline">
-            Required {req.met} of {req.of} met{shortWord}
-          </p>
-          {summary && (
-            <p className="vc-summary" title="Every Required row, then the Exceptional and Bonus rows that are met">
-              {summary}
-            </p>
-          )}
-          <p className="cv2d-why">{view.paragraph}</p>
-          {view.betterSuited && <div className="cv2d-route">↪ {view.betterSuited}</div>}
-          {view.ask.length > 0 && (
-            <div className="cv2d-probe vc-ask">
-              <b>Ask on a first call</b>
-              <ul>
-                {view.ask.map((q, i) => (
-                  <li key={i}>{q}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <p className="vc-note">Written from the rows and the facts above. It changes only when a row or a fact above changes.</p>
-          {when}
+          {bottomLine && <BottomLine text={bottomLine} />}
           {decision && <DecideButtons d={decision} />}
+        </div>
+        {profile && <FactsBlock p={profile} />}
+      </div>
+      <div className="vc-body">
+        <div className="vc-who">
+          {profile ? (
+            <>
+              <section className="vc-rsec">
+                <h4 className="vc-sec">Career</h4>
+                <CareerList p={profile} />
+              </section>
+              {profile.skills ? (
+                <section className="vc-rsec">
+                  <h4 className="vc-sec">Skills, from the jobs they were used on</h4>
+                  <SkillsTable skills={profile.skills} />
+                </section>
+              ) : (
+                <TechStrip view={view} />
+              )}
+            </>
+          ) : (
+            <>
+              {!!card!.facts?.length && (
+                <ul className="vc-facts" title="Facts, not the AI's reading: worked out in code from the dated positions on the profile, plus the employer's own company page">
+                  {card!.facts.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              )}
+              <TechStrip view={view} />
+            </>
+          )}
+        </div>
+        <div className="vc-review">
+          {bullets ? (
+            <ReviewBullets review={bullets} rows={card!.rows} />
+          ) : (
+            <section className="vc-rsec">
+              <h4 className="vc-sec">Review</h4>
+              <p className="cv2d-why">{view.paragraph}</p>
+              <AskList ask={view.ask} />
+            </section>
+          )}
+          {view.betterSuited && <div className="cv2d-route">↪ {view.betterSuited}</div>}
+          <p className="vc-note">{bullets ? "Written from the rows below. It changes only when a row changes." : "Written from the rows below and the facts. It changes only when a row or a fact changes."}</p>
+          <hr className="vc-divider" />
+          <section className="vc-rsec vc-card">
+            <h4 className="vc-sec">Against the card</h4>
+            <Checklist view={view} feedback={feedback} />
+          </section>
+          {when}
           {reviewLink}
         </div>
       </div>
