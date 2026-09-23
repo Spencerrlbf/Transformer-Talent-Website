@@ -695,23 +695,45 @@ export const reviewMark = (status: RowStatus): "✓" | "≈" | "△" | "?" | "×
  *  technology found neither in the rows nor in the person's material is
  *  dropped; counts and lengths are capped. Pure, so the same rows and the
  *  same draft always give the same review. */
-export function guardReview(draft: Partial<Review> | null | undefined, rows: CardRow[], material = ""): Review {
+/** Trailing filler a review bullet must not carry ("…, which aligns with the
+ *  role's needs"). Cosmetic and deterministic: the clause goes, the claim stays. */
+const FILLER_CLAUSE = /,\s*(which|that)?\s*(aligning|aligns?|indicating|indicates?|showing|shows?|demonstrating|demonstrates?|relevant|essential|core to|fulfilling|fulfils?|matching|meeting|exceeding|crucial|important|key to|in line with)\b[^.]*$/i;
+const stripFiller = (t: string) => { const cut = t.replace(FILLER_CLAUSE, ""); return words(cut).length >= 4 ? cut.replace(/[\s,;:]+$/, "") + (/[.!?]$/.test(cut) ? "" : ".") : t; };
+/** Every number in a bullet must be one the rows, facts or material state:
+ *  a year exactly, another number exactly or by its whole part (6 for 6.3). */
+const NUMBER = /\b\d+(?:\.\d+)?\b/g;
+const numbersOf = (t: string) => (t.match(NUMBER) || []).map(Number);
+const numbersAllowed = (text: string, allowed: number[]): boolean =>
+  numbersOf(text).every((n) => allowed.some((a) => a === n || (n < 1000 && Math.floor(a) === Math.floor(n))));
+
+export function guardReview(draft: Partial<Review> | null | undefined, rows: CardRow[], material = "", allowedText = ""): Review {
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const allowed = [material, ...rows.map((r) => `${r.label} ${r.evidence} ${(r.quotes || []).map((q) => q.text).join(" ")} ${r.quote || ""}`)].join("\n");
+  const allowed = [material, allowedText, ...rows.map((r) => `${r.label} ${r.evidence} ${(r.quotes || []).map((q) => q.text).join(" ")} ${r.quote || ""}`)].join("\n");
+  const allowedNums = numbersOf(allowed);
   const clean = (b: Partial<ReviewBullet> | null | undefined, fit: boolean): ReviewBullet | null => {
-    const text = capWords(String(b?.text || "").replace(/\s+/g, " "), REVIEW_LIMITS.bulletWords);
+    const text = capWords(stripFiller(String(b?.text || "").replace(/\s+/g, " ").trim()), REVIEW_LIMITS.bulletWords);
     if (!text) return null;
     const ids = [...new Set((Array.isArray(b?.rowIds) ? b!.rowIds : []).map((x) => String(x)).filter((id) => byId.has(id)))];
     const cited = ids.map((id) => byId.get(id)!);
     if (fit && !cited.some((r) => isMet(r.status))) return null;
     if (!fit && cited.some((r) => isMet(r.status))) return null;
     for (const group of technologiesNamed(text)) if (!namesAny(allowed, [group])) return null;
+    // A date or a number the material does not state is an invention, whatever the row says.
+    if (!numbersAllowed(text, allowedNums)) return null;
     return { text, rowIds: ids };
   };
-  const fits = (draft?.fits || []).map((b) => clean(b, true)).filter((b): b is ReviewBullet => !!b).slice(0, REVIEW_LIMITS.fits);
+  // One fit bullet per row: a second bullet on rows already covered is padding.
+  const covered = new Set<string>();
+  const fits = (draft?.fits || []).map((b) => clean(b, true)).filter((b): b is ReviewBullet => !!b).filter((b) => {
+    if (b.rowIds.every((id) => covered.has(id))) return false;
+    for (const id of b.rowIds) covered.add(id);
+    return true;
+  }).slice(0, REVIEW_LIMITS.fits);
   const gaps = (draft?.gaps || []).map((b) => clean(b, false)).filter((b): b is ReviewBullet => !!b).slice(0, REVIEW_LIMITS.gaps);
   const ask = (draft?.ask || []).map((q) => capWords(String(q || "").replace(/\s+/g, " "), REVIEW_LIMITS.bulletWords)).filter(Boolean).slice(0, REVIEW_LIMITS.ask);
-  return { v: 1, bottomLine: capWords(String(draft?.bottomLine || "").replace(/\s+/g, " "), REVIEW_LIMITS.bottomLineWords), fits, gaps, ask };
+  const bottomRaw = capWords(String(draft?.bottomLine || "").replace(/\s+/g, " ").trim(), REVIEW_LIMITS.bottomLineWords);
+  const bottomLine = numbersAllowed(bottomRaw, allowedNums) ? bottomRaw : "";
+  return { v: 1, bottomLine, fits, gaps, ask };
 }
 
 /** A review written by code from the rows alone, for when the model call

@@ -194,10 +194,11 @@ export const noteHash = (rows: CardRow[], label: VerdictLabel, factItems: string
 const REVIEW_SYSTEM = `You write the review a recruiter reads in ten seconds beside a candidate's scorecard: short bullets and one bottom line. Everything you may say about the person is in the message: FACTS, computed in code from dated positions, and ROWS, already decided, each with the lines copied from the profile or resume that decided it. You have not seen the profile. Add nothing to what is there. THE ROLE'S OWN WORDS are there only so that each fit is said in the role's terms; they are not evidence about the person.
 
 Return:
-- fits: why this person fits THIS role. One bullet per reason, at most 6, each resting on the rows it cites (row_ids: rows marked YES or EQUIVALENT only, at least one per bullet). Required rows first, then Exceptional, then Bonus. Each bullet names the concrete thing behind the row, the work, the title, the company and the years or dates as FACTS and the row's own lines give them, then why it matters for this role in the role's own terms, the way a recruiter says it to a hiring manager: "TypeScript backend as a founding engineer at Perch, 2025 to 2026, the role's own stack." "Leads the Agent Platform at Basis, with its harness and eval platform, the core of this role." Never restate the row's label ("has built AI agent systems") and never write "which aligns with", "which is essential", "demonstrating" or "fulfilling": say the thing and its use. Never copy a line word for word: the lines are shown beside the bullet. For an EQUIVALENT, say what stands in for what. When no row is YES or EQUIVALENT, return no fits.
-- A technology row is said in the words of what was found (tagged on a job, on the current job, in the resume's languages line) and a listing is never inflated into experience: "TypeScript listed in the resume's languages line, not on a dated job" is right; "backend experience in TypeScript" for that is wrong.
-- gaps: at most 4 bullets, Required rows first. A SHORT or NO years row gets its own bullet with its numbers. A Required row that is UNKNOWN gets its own bullet: what the profile does not show and the question to ask, in at most 20 words. Every other UNKNOWN row is folded into ONE bullet that lists them: "Not shown: agent systems, evals, browser automation." Never pad with "which is important for the role". When the label is Pass, the first bullet says which Required row is against and its numbers.
-- bottom_line: ONE sentence of at most 16 words: the verdict in the recruiter's terms, then the one thing to confirm: "Right stack, a year short; confirm the Perch backend." Never "strong candidate" or "good fit" on its own: say what makes it so.
+- fits: why this person fits THIS role. ONE bullet per row, at most 6, each resting on the rows it cites (row_ids: rows marked YES or EQUIVALENT only, at least one per bullet; a row with several copied lines is still one bullet). Required rows first, then Exceptional, then Bonus. Each bullet names the concrete thing behind the row in this shape: [the work done] as [title] at [company], [the dates or years as COMPANIES and FACTS give them], then a few words on what it is for in this role, in the role's own terms. Say it the way a recruiter says it to a hiring manager. Never restate the row's label and never write "which aligns with", "essential for", "demonstrating", "indicating", "relevant for", "fulfilling", "core to": say the thing and its use. Never copy a line word for word: the lines are shown beside the bullet. For an EQUIVALENT, say what stands in for what. When no row is YES or EQUIVALENT, return no fits.
+- A technology row is said in the words of what was found (tagged on a job, on the current job, in the resume's languages line) and a listing is never inflated into experience or expertise.
+- Dates, years and every other number come ONLY from FACTS and COMPANIES as written there. A bullet with a date or number that is not written there is removed by code, so leave the number out rather than guess.
+- gaps: at most 4 bullets, Required rows first. A SHORT or NO years row gets its own bullet with its numbers. A Required row that is UNKNOWN gets its own bullet: what the profile does not show and the question to ask, in at most 20 words. Every other UNKNOWN row is folded into ONE bullet that lists them, starting "Not shown:". No padding about why it matters. When the label is Pass, the first bullet says which Required row is against and its numbers.
+- bottom_line: ONE sentence of at most 16 words about THIS person: what makes the case, in the role's terms, then the one thing to confirm. Never a template and never "strong candidate" or "good fit" on its own.
 - ask: 0 to 3 short questions for a first call, one per open Required row first.
 
 Each bullet is one or two sentences and at most 36 words. Plain English: no headings, no quotation marks, no dashes as punctuation. Never state or imply experience for a row marked UNKNOWN or SHORT. Never name a technology, product, duty or employer that is not in FACTS or ROWS. Never write suggests, implies or likely: the rows are decided, say what they show. Use the candidate's name once at most, exactly as given, then "they" and "their", never he or she.`;
@@ -678,9 +679,13 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
       words.doing.length ? `Doing:\n${words.doing.map((x) => `- ${x}`).join("\n")}` : "",
       words.techStack ? `Tech stack: ${words.techStack}` : "",
     ].filter(Boolean).join("\n");
+    // The dated positions as code lists them: the only source of dates and
+    // years the review may use.
+    const companyLines = profile.companies.map((c) => `- ${c.name}: ${c.title || "(no title)"}${c.from || c.to ? `, ${c.from || "?"} to ${c.to || "now"}` : ""}${c.years != null ? `, ${years(c.years)}` : ""}${c.career ? "" : " (internship or part-time)"}`);
     const reviewUser =
       `ROLE: ${input.roleTitle}\nCANDIDATE'S NAME, AS TO WRITE IT: ${first}\nLABEL SHOWN BESIDE THE REVIEW: ${label === "contact" ? "Contact now" : label === "message" ? "Worth a message" : "Pass"}\n\n` +
       `FACTS:\n${factItems.map((f) => `- ${f}`).join("\n") || "- (none)"}\n\n` +
+      `COMPANIES (dated positions, current first):\n${companyLines.join("\n") || "- (none dated)"}\n\n` +
       `ROWS (id, tier, status, what was found, the lines copied from the material):\n${finalRows.map(rowLine).join("\n")}` +
       (roleBlock ? `\n\nTHE ROLE'S OWN WORDS (for phrasing the fit only; not evidence about the person):\n${roleBlock}` : "");
     const spare = spareMs();
@@ -696,7 +701,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     // Every sentence is held to the rows and facts first (guardNote: no
     // technology from outside them, no claim on an unmet row, they/their),
     // then each bullet to the rows it cites (guardReview).
-    const allowedText = `${factItems.join("\n")}\n${finalRows.map((r) => `${r.label} ${r.evidence} ${linesOf(r).map((q) => q.text).join(" ")}`).join("\n")}`;
+    const allowedText = `${factItems.join("\n")}\n${companyLines.join("\n")}\n${finalRows.map((r) => `${r.label} ${r.evidence} ${linesOf(r).map((q) => q.text).join(" ")}`).join("\n")}`;
     const names = [...first.split(/\s+/), ...employers];
     const tidy = (x: unknown) => noDashes(String(x ?? "")).replace(/\s+/g, " ").trim();
     const held = (x: unknown, questions: boolean) => guardNote(tidy(x), finalRows, allowedText, material, questions, names);
@@ -711,7 +716,8 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
           // name what is not shown.
           { bottomLine: held(n.out.bottom_line, false), fits: bulletsOf(n.out.fits, false), gaps: bulletsOf(n.out.gaps, true), ask: (Array.isArray(n.out.ask) ? n.out.ask : []).map((q) => held(q, true)) },
           finalRows,
-          material
+          material,
+          allowedText
         )
       : null;
     // The model's review stands when it has a bottom line and, for a person
