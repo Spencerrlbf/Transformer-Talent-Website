@@ -93,6 +93,9 @@ export async function judgeApplicantForRole(a: JudgeApplicantArgs): Promise<{ vi
       employerContext: null,
       employer,
       education: eduList,
+      // The role's own words, for the review's phrasing only (the judge and
+      // the reference call never see them).
+      roleWords: { about: jd.about, needs: jd.needs, doing: jd.doing, techStack: role.tech_stack },
       candidateName: a.name || "Candidate",
       // The whole profile and the whole resume (scorecard-judge.ts guards
       // the total once, at 100,000 characters).

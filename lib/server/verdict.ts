@@ -9,7 +9,7 @@
 import type { CandidateFacts, JobText } from "./facts";
 import { SCORECARD_JUDGE_VERSION, judgeWithScorecard, type Memory, type MemoryWrite } from "./rolecard/scorecard-judge";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
-import { cardStrength, chipLabel, toConfirm, type CardRow, type Criterion, type ProfileFacts } from "@/lib/rolecard";
+import { cardStrength, chipLabel, toConfirm, type CardRow, type Criterion, type ProfileFacts, type Review } from "@/lib/rolecard";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
@@ -54,6 +54,11 @@ export interface VerdictInput {
   employer?: { name: string; employees: number | null; founded: number | null } | null;
   /** The harvested education list, for the report card's school. */
   education?: unknown;
+  /** The role's own words (its summary, needs, duties and stack), for
+   *  phrasing the review's fit bullets in the role's terms. Read by the
+   *  review call ONLY: the judge and the reference call never see them,
+   *  since a role's words are not evidence about a person. */
+  roleWords?: { about?: string; needs?: string[]; doing?: string[]; techStack?: string | null };
   model: string;
   timeoutMs?: number;
   /** Failure visibility for callers that pace retries (rate limit vs dead key). */
@@ -84,6 +89,9 @@ export interface Verdict {
   facts: string[];
   /** Facts for the report card, computed by code; null without a scorecard. */
   profile: ProfileFacts | null;
+  /** The bulleted review, written from the rows and the role's own words and
+   *  guarded in code; null without a scorecard. */
+  review: Review | null;
   /** Technologies evidenced in the current position, and in earlier ones. */
   technologiesNow: string[];
   technologiesBefore: string[];
@@ -261,6 +269,7 @@ export async function judgeVerdict(input: VerdictInput): Promise<Verdict | null>
       unassessed: 0,
       facts: [],
       profile: null,
+      review: null,
       technologiesNow: cleanTech(out.technologies_now),
       technologiesBefore: cleanTech(out.technologies_before),
       model: input.model,
@@ -352,7 +361,7 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
     card: v.rows.length
       ? (() => {
           const rows: CardRow[] = v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) }));
-          return { rows, aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null, strength: cardStrength(rows), confirm: v.label === "contact" ? toConfirm(rows) : [], facts: v.facts, ...(v.profile ? { profile: v.profile } : {}) };
+          return { rows, aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null, strength: cardStrength(rows), confirm: v.label === "contact" ? toConfirm(rows) : [], facts: v.facts, ...(v.profile ? { profile: v.profile } : {}), ...(v.review ? { review: v.review } : {}) };
         })()
       : null,
     model: v.model,

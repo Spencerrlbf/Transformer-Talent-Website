@@ -28,6 +28,7 @@ import { searchLeadsPage, previewLeadCount, getFullProfile, providerMode, type L
 import { profileToFields, sourcedEmbedText } from "./import";
 import type { JudgeSkill } from "./judge";
 import { judgeForRole } from "../rolecard/judge";
+import type { VerdictInput } from "../verdict";
 import { criteriaOf, ensureRoleCard } from "../rolecard/store";
 import type { Criterion } from "@/lib/rolecard";
 import { getCompanyContexts, companyContextLine, companySlugFromUrl, employerOf } from "./company-context";
@@ -418,6 +419,7 @@ async function screenOneRow(
     roleTargets: string[];
     criteria: Criterion[];
     minYears: number | null;
+    roleWords: VerdictInput["roleWords"];
   },
   run: SourcingRun,
   leaseId: string
@@ -476,6 +478,9 @@ async function screenOneRow(
         // card's facts (never for a row).
         employer: employerOf(employerCtx),
         education,
+        // The role's own words, for the review's phrasing only (the judge
+        // and the reference call never see them).
+        roleWords: ctx.roleWords,
         candidateName: cand?.full_name || "Candidate",
         // The whole profile: the judge reads all of it (scorecard-judge.ts
         // guards the total once, at 100,000 characters).
@@ -718,6 +723,7 @@ export async function advanceRun(runId: string, budgetMs = 50_000): Promise<Adva
       const roleCtx = {
         role, jdText, judgeSkills, targetedCompanies, roleTargets, criteria,
         minYears: role.matching_profile?.min_years ?? null,
+        roleWords: { about: jd.about, needs: jd.needs, doing: jd.doing, techStack: role.tech_stack },
       };
 
       // The FIRST wave always runs regardless of budget — a caller with a

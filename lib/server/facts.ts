@@ -401,6 +401,10 @@ export interface JobText {
   from: string | null;
   to: string | null;
   years: number | null;
+  /** The position's own span in months since year 0 (see interval), so the
+   *  years of a skill tagged on several jobs can be merged without counting
+   *  an overlap twice. Null when the position is undated. */
+  span?: [number, number] | null;
 }
 const monthYear = (month: number | null, year: number | null): string | null =>
   year ? `${month ? `${MONTH_NAMES[month - 1]} ` : ""}${year}` : null;
@@ -425,6 +429,7 @@ export function jobTexts(experiences: ExperienceRow[], education: unknown = null
       from: monthYear(c.row.start_month, c.row.start_year),
       to: c.row.is_current ? "Present" : monthYear(c.row.end_month, c.row.end_year),
       years: own ? mergedYears([own]) : null,
+      span: own,
     };
   });
 }
@@ -460,14 +465,40 @@ export function schoolOf(education: unknown): ProfileFacts["school"] {
   return latest(bachelors.length ? bachelors : entries);
 }
 
+/** The level the current title states, and nothing else. A Staff, Principal,
+ *  Distinguished or Architect title reads staff; Lead, Head of, Manager,
+ *  Director, VP or CTO reads lead; Senior reads senior; Junior or an
+ *  internship reads junior; anything else is mid, "no senior title yet".
+ *  "Member of Technical Staff" is a rank at a lab, not a staff title. */
+export function seniorityOf(title: string | null | undefined): NonNullable<ProfileFacts["seniority"]> {
+  const given = (title || "").trim();
+  if (!given) return { level: null, note: "no current title" };
+  const t = given.replace(/member of (the )?technical staff|technical staff/gi, " ");
+  const from = "from the current title";
+  if (/\b(staff|principal|distinguished|architect)\b/i.test(t)) return { level: "staff", note: from };
+  if (/\b(lead|head of|manager|director|vp|vice president|cto|chief technology officer)\b/i.test(t)) return { level: "lead", note: from };
+  if (/\b(senior|sr)\b/i.test(t)) return { level: "senior", note: from };
+  if (/\b(junior|jr|intern|internship)\b/i.test(t)) return { level: "junior", note: from };
+  return { level: "mid", note: "no senior title yet" };
+}
+
+/** A skill tag as a key: "Rust (Programming Language)" and "rust" are one skill. */
+const skillKey = (tag: string) => tag.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9+#.]+/g, " ").trim();
+const skillName = (tag: string) => tag.replace(/\s*\(.*?\)\s*$/, "").trim() || tag.trim();
+const MAX_PROFILE_SKILLS = 40;
+const MAX_JOB_SKILLS = 8;
+
 /** Facts about the person for the report card, computed by CODE: years,
- *  tenure, the companies with their dates, the school, and the current
- *  employer's size when its company page is known. Never a model. */
+ *  tenure, the companies with their dates and skill tags, the school, the
+ *  level the current title states, the skills with their dated years, and
+ *  the current employer's size when its company page is known. Never a model. */
 export function profileFacts(args: {
   facts: CandidateFacts | null;
   jobs: JobText[];
   education?: unknown;
   employer?: { name: string; employees: number | null; founded: number | null } | null;
+  /** The profile's own skills list, for the skills never tagged on a dated job. */
+  profileSkills?: string[];
 }): ProfileFacts {
   const { facts, jobs } = args;
   const dated = jobs.filter((j) => j.career && j.years != null);
@@ -479,7 +510,41 @@ export function profileFacts(args: {
   const companies = ordered
     .filter((j) => j.from)
     .slice(0, 8)
-    .map((j) => ({ name: j.company, title: j.title, from: j.from, to: j.to, years: j.years, career: j.career }));
+    .map((j) => ({ name: j.company, title: j.title, from: j.from, to: j.to, years: j.years, career: j.career, ...(j.tags.length ? { skills: j.tags.slice(0, MAX_JOB_SKILLS) } : {}) }));
+  // Skills from the job tags, merged by dated positions: the years are the
+  // merged span of the CAREER jobs that tag the skill (an overlap counts
+  // once; an internship counts for nothing, as the facts rules say), where
+  // it was used is the companies, current job first, and a skill is current
+  // when the current job tags it. The profile's own list follows, for what
+  // was never tagged on a job.
+  const isCurrent = (j: JobText) => (currentJob ? j === currentJob : j.current && j.career);
+  type Acc = { name: string; ivs: [number, number][]; where: string[]; current: boolean };
+  const acc = new Map<string, Acc>();
+  for (const j of ordered) {
+    for (const tag of j.tags) {
+      const key = skillKey(tag);
+      if (!key) continue;
+      let a = acc.get(key);
+      if (!a) {
+        a = { name: skillName(tag), ivs: [], where: [], current: false };
+        acc.set(key, a);
+      }
+      if (j.career && j.span) a.ivs.push(j.span);
+      const at = j.company || j.title;
+      if (at && !a.where.includes(at)) a.where.push(at);
+      if (isCurrent(j)) a.current = true;
+    }
+  }
+  const tagged = [...acc.values()]
+    .map((a) => ({ name: a.name, years: a.ivs.length ? mergedYears(a.ivs) : null, where: a.where.slice(0, 4), current: a.current, listedOnly: false }))
+    .sort((a, b) => (b.years ?? -1) - (a.years ?? -1) || a.name.localeCompare(b.name));
+  const listed: ProfileFacts["skills"] = [];
+  for (const raw of args.profileSkills || []) {
+    const key = skillKey(raw);
+    if (!key || acc.has(key) || listed.some((s) => skillKey(s.name) === key)) continue;
+    listed.push({ name: skillName(raw), years: null, where: [], current: false, listedOnly: true });
+  }
+  const skills = [...tagged, ...listed].slice(0, MAX_PROFILE_SKILLS);
   const employer = args.employer && facts?.currentCompany && sameCompany(args.employer.name, facts.currentCompany) ? args.employer : null;
   const employees = employer?.employees ?? null;
   const current: ProfileFacts["current"] = facts?.currentTitle || facts?.currentCompany
@@ -501,6 +566,8 @@ export function profileFacts(args: {
     current,
     companies,
     school: schoolOf(args.education ?? null),
+    seniority: seniorityOf(facts?.currentTitle),
+    skills,
   };
 }
 
