@@ -59,6 +59,8 @@ const initials = (name: string) =>
 const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const DAY = 86400_000;
+/** People per page. */
+const PAGE = 50;
 
 function Avatar({ photoUrl, name }: { photoUrl: string | null; name: string }) {
   const [broken, setBroken] = useState(false);
@@ -105,6 +107,10 @@ export default function NetworkTable({
   const [fit, setFit] = useState("");
   const [newOnly, setNewOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Fifty people a page: the list is person-first, and one person can match
+  // several roles, so the count of matches runs well past the count of rows.
+  const [page, setPage] = useState(1);
+  const tableTop = useRef<HTMLDivElement>(null);
   const [confirm, setConfirm] = useState<{ person: NetPerson; match: NetMatch } | null>(null);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -174,9 +180,20 @@ export default function NetworkTable({
   }, [people, q, role, company, fit, newOnly]);
 
   useEffect(() => {
-    onKeys?.(filtered.map((p) => `net_${p.candidateId}`));
+    setPage(1);
+  }, [q, role, company, fit, newOnly]);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const current = Math.min(page, pages);
+  const visible = useMemo(() => filtered.slice((current - 1) * PAGE, current * PAGE), [filtered, current]);
+  const turnTo = (n: number) => {
+    setPage(n);
+    tableTop.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    onKeys?.(visible.map((p) => `net_${p.candidateId}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered]);
+  }, [visible]);
 
   const newSinceYesterday = (people || []).filter(
     (p) => new Date(p.latestMatchAt).getTime() >= dayAgo
@@ -394,9 +411,9 @@ export default function NetworkTable({
           </button>
         )}
         <span className="u-spacer" />
-        <span className="nw-count">
-          {filtered.length} {filtered.length === 1 ? "person" : "people"} · {visibleMatches}{" "}
-          {visibleMatches === 1 ? "match" : "matches"}
+        <span className="nw-count" title="The list is one row per person. A person can match several open roles, so the matches outnumber the people.">
+          {filtered.length.toLocaleString()} {filtered.length === 1 ? "person" : "people"} · {visibleMatches.toLocaleString()} role{" "}
+          {visibleMatches === 1 ? "match" : "matches"} between them
         </span>
       </div>
 
@@ -408,7 +425,7 @@ export default function NetworkTable({
       )}
 
       {filtered.length > 0 && (
-        <div className="cv2-scroll">
+        <div className="cv2-scroll" ref={tableTop}>
           <table className="cv2-table nw-tight">
             <thead>
               <tr>
@@ -423,7 +440,7 @@ export default function NetworkTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => (
+              {visible.map((p) => (
                 <PersonRows
                   key={p.candidateId}
                   person={p}
@@ -442,6 +459,27 @@ export default function NetworkTable({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {filtered.length > PAGE && (
+        <div className="dash-src-tfoot">
+          <span>
+            Showing {((current - 1) * PAGE + 1).toLocaleString()} to {Math.min(current * PAGE, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} people · best fit first, newest match next
+          </span>
+          <span className="dash-src-pager">
+            {current > 1 && (
+              <button type="button" className="dash-btn dash-btn-2" onClick={() => turnTo(current - 1)}>
+                ← Prev
+              </button>
+            )}
+            <span className="dash-muted">Page {current} of {pages}</span>
+            {current < pages && (
+              <button type="button" className="dash-btn dash-btn-2" onClick={() => turnTo(current + 1)}>
+                Next →
+              </button>
+            )}
+          </span>
         </div>
       )}
 
