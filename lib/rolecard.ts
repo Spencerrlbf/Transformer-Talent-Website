@@ -782,7 +782,7 @@ export function fallbackReview(rows: CardRow[], label: VerdictLabel): Review {
   const gaps = open.map((r) => ({ text: r.status === "short" || r.status === "no" ? `${r.label}: ${r.evidence}` : `${r.label}: not shown on the profile or resume.`, rowIds: [r.id] }));
   const bottomLine =
     label === "contact" ? (open.length ? `Every Required row is met or set for the call; confirm ${open.map((r) => r.short || chipLabel(r.label)).join(", ")}.` : "Every Required row is met.")
-    : label === "pass" ? `Against on ${open.filter((r) => r.status === "no").map((r) => r.short || chipLabel(r.label)).join(", ") || "a Required row"}.`
+    : label === "pass" ? (() => { const no = open.filter((r) => r.status === "no"); return no.length ? `Against on ${no.map((r) => r.short || chipLabel(r.label)).join(", ")}: ${no[0].evidence}`.replace(/\.\.$/, ".") : "Against on a Required row."; })()
     : open.length ? `Worth a call to confirm ${open.map((r) => r.short || chipLabel(r.label)).join(", ")}.` : "Worth a message.";
   return guardReview({ bottomLine, fits, gaps, ask: [] }, rows);
 }

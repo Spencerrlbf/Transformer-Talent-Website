@@ -11,6 +11,12 @@ import { capitalise, companySize, degreeShort, plural, yearsWord } from "./repor
 const NONE = "Not on file";
 
 /** "University of Michigan, BS · Computer Science · 2023" */
+/** The later degree leads; the other is shown small beneath it. */
+function laterFirst(a: NonNullable<ProfileFacts["school"]>, b: ProfileFacts["school2"] | undefined): [NonNullable<ProfileFacts["school"]>, NonNullable<ProfileFacts["school"]> | null] {
+  if (!b) return [a, null];
+  return (b.year ?? -1) > (a.year ?? -1) ? [b, a] : [a, b];
+}
+
 function schoolLine(s: NonNullable<ProfileFacts["school"]>) {
   const short = degreeShort(s.degree);
   return (
@@ -58,10 +64,10 @@ export default function FactsBlock({ p }: { p: ProfileFacts }) {
       <dt>School</dt>
       {p.school ? (
         <dd>
-          {schoolLine(p.school)}
-          {p.school2 && (
+          {schoolLine(laterFirst(p.school, p.school2)[0])}
+          {laterFirst(p.school, p.school2)[1] && (
             <small className="vc-school2" title="Their other degree">
-              {schoolLine(p.school2)}
+              {schoolLine(laterFirst(p.school, p.school2)[1]!)}
             </small>
           )}
         </dd>

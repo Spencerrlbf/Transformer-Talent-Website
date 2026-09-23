@@ -48,8 +48,7 @@ import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import {
   NO_LINE_SOURCE, REVIEW_LIMITS, careerYearsStatus, fallbackReview, guardReview, isCareerYearsRow, labelFromRows, ladderOf, metAtOf, rowKind, routeLevel,
   statusFromLevel, stripExamples, techLadder, techLevel, techSpec, techStatus, yearsBar,
-  type CardRow, type Criterion, type Review, type ReviewBullet, type RowStatus, type TechReach,
-} from "@/lib/rolecard";
+  type CardRow, type Criterion, type Review, type ReviewBullet, type RowStatus, type TechReach, chipLabel } from "@/lib/rolecard";
 import { isJevError, jevJudgeLadders, JEV_MODEL } from "./jev";
 import { askOpenAI, findReferences, jobSource, quoteCheck, REF_MODEL } from "./references";
 
@@ -440,15 +439,36 @@ export function withReviewReasons(review: Review, label: VerdictLabel, rows: Car
   const openRequired = rows.filter((r) => r.tier === "required" && !metIds.has(r.id));
   if (label === "message" && openRequired.length && !openRequired.some((r) => cited.has(r.id))) {
     const unknown = openRequired.filter((r) => r.status === "unknown");
-    if (unknown.length) added.push({ text: `Not shown: ${unknown.map((r) => r.label).join("; ")}.`, rowIds: unknown.map((r) => r.id) });
+    if (unknown.length) added.push({ text: `Not shown: ${unknown.map(shortName).join(", ")}.`, rowIds: unknown.map((r) => r.id) });
   }
+  // Rows are named by their short name, never by their id, and a "Not shown"
+  // bullet is written by code from the rows it cites, so the list reads the
+  // same every time. A gap whose rows an earlier gap already covers is padding.
+  const tidyBullet = (b: ReviewBullet): ReviewBullet => {
+    let text = b.text;
+    // Only a slug-shaped id (hyphenated, as the card mints them) is replaced, and
+    // only as a whole token: a row called "backend" must not rewrite the word.
+    for (const r of rows) if (r.id.includes("-")) text = text.replace(new RegExp(`(^|[^A-Za-z0-9-])${r.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^A-Za-z0-9-])`, "g"), `$1${shortName(r)}`);
+    const citedRows = b.rowIds.map((id) => byId.get(id)).filter((r): r is CardRow => !!r);
+    if (/^not shown\s*:/i.test(text) && citedRows.length) text = `Not shown: ${citedRows.map(shortName).join(", ")}.`;
+    return { ...b, text };
+  };
+  const seen = new Set<string>();
+  const gaps = [...added, ...review.gaps].map(tidyBullet).filter((g) => {
+    if (g.rowIds.length && g.rowIds.every((id) => seen.has(id))) return false;
+    for (const id of g.rowIds) seen.add(id);
+    return true;
+  });
   // The bottom line against the label.
   let bottomLine = review.bottomLine;
   const noRows = rows.filter((r) => r.tier === "required" && r.status === "no");
   const offLabel = label === "pass" ? noRows.length > 0 && !noRows.some((r) => namesAgainst(bottomLine, r)) : OFF_LABEL.test(bottomLine);
   if (offLabel) bottomLine = fallbackReview(rows, label).bottomLine;
-  return { ...review, bottomLine, fits, gaps: [...added, ...review.gaps].slice(0, REVIEW_LIMITS.gaps) };
+  return { ...review, bottomLine, fits: fits.map(tidyBullet), gaps: gaps.slice(0, REVIEW_LIMITS.gaps) };
 }
+
+/** A row as the review names it: its chip ("4+ years", "TypeScript"), never its id. */
+const shortName = (r: CardRow) => r.short || chipLabel(r.label);
 
 // ---------- rows decided by code ----------
 
