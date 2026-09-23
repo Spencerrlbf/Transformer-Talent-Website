@@ -129,6 +129,9 @@ export const canDraft = (input: DraftInput): boolean => {
 const ADJECTIVE = /\b(deep|deeply|strong|strongly|solid|expert|proven|extensive|significant|comfortable|comfort|familiar|familiarity|excellent|advanced|proficient|proficiency|production-grade|world-class|hands-on|robust)\b/i;
 const VAGUE_ENDING = /\b(experience|expertise|knowledge|skills?|background|understanding|intersection|ability|abilities|mindset)\s*$/i;
 const LOOSE_NOTE = /\bin any capacity\b|\bexposure to\b|\bfamiliarity\b|\bon-call\b|\bcode reviews?\b|\bstakeholder/i;
+// How a job is worked, not what was done: a label that ends on it tests nothing.
+const FILLER_PHRASE = /\b(fast[- ]moving|fast[- ]paced|dynamic|high[- ]pressure|startup pace|environments?|cross[- ]functional(ly)?)\b/i;
+const MAX_LABEL_WORDS = 10;
 const STOP = new Set(["the", "and", "for", "with", "from", "of", "in", "to", "a", "an", "or", "at", "on", "has", "have", "as", "is", "are", "that", "this", "their", "years", "year"]);
 const words = (t: string) => (t.toLowerCase().match(/[a-z0-9+#.]+/g) || []).map((w) => w.replace(/\.+$/, "")).filter((w) => w.length > 2 && !STOP.has(w));
 // "Experience with X" is a row anything can satisfy, whatever X is.
@@ -215,6 +218,11 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
     if (adj) out.push({ label: c.label, problem: `uses "${adj[0]}" as the test. Say the thing done instead (for example "Python services in production", "Has built distributed systems").` });
     else if (VAGUE_ENDING.test(core.trim())) out.push({ label: c.label, problem: `ends in "${core.trim().split(/\s+/).pop()}", which nobody can check. Name what the person has built, run or used.` });
     else if (WEAK_OPENER.test(core)) out.push({ label: c.label, problem: `opens with "${core.match(WEAK_OPENER)![0].trim()}", which anything can satisfy. Say what the person has built, run or shipped ("Has built ...").` });
+    const filler = core.match(FILLER_PHRASE);
+    if (filler) out.push({ label: c.label, problem: `names how the job is worked ("${filler[0]}"), not what was done. Drop it and say the thing built or run.` });
+    if (core.trim().split(/\s+/).length > MAX_LABEL_WORDS) out.push({ label: c.label, problem: `is ${core.trim().split(/\s+/).length} words. At most ${MAX_LABEL_WORDS}: one thing done, the rest goes in the slots.` });
+    // (c) a judgment row wearing a technology row's brackets asks two questions
+    if (rowKind(c) === "judgment" && c.kind === "judgment" && /\(([^)]*)accepted\)?/i.test(c.label)) out.push({ label: c.label, problem: `names a technology with what else is accepted, which is a technology row's job. Keep the technology row on its own ("Backend in X (Y accepted)") and put the work in a judgment row of its own.` });
     const w = words(core);
     const copied = w.length >= 3 && sentences.find((sn) => { const sw = new Set(words(sn)); return w.filter((x) => sw.has(x)).length / w.length >= 0.8; });
     // A requirement that was already checkable may be kept nearly as written,
@@ -277,25 +285,29 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
   // performance" is about observability).
   const VERBS = new Set(["has", "have", "built", "build", "designed", "owned", "own", "led", "lead", "shipped", "ran", "run", "used", "worked", "delivered", "created", "developed", "maintained", "operated", "implemented", "managed", "scaled"]);
   const subjectOf = (label: string) => words(label.replace(/\(.*?\)/g, " ")).map(stem).filter((x) => !GENERIC.has(x) && !VERBS.has(x) && !ADJECTIVE.test(x));
-  const isAbout = (c: Criterion, w: string) => { const ws = subjectOf(c.label); return ws[0] === w || (ws.length <= 2 && ws.includes(w)); };
-  for (const w of [...topic(input.title)]) {
-    if (w.length <= 3 || GENERIC.has(w) || technologiesNamed(w).length) continue;
-    const about = card.criteria.filter((c) => isAbout(c, w));
-    if (about.length && about.every((c) => c.tier === "bonus"))
-      out.push({ label: about[0].label, problem: `is in Bonus, but "${w}" is in the role's title: it is the work itself. Put this row in Exceptional (the ideal hire) or Required (without it, no).` });
+  // A row is ABOUT the word when it is among the first three subject words
+  // of the label ("Has built computer-use agents or browser automation" is
+  // about agents; "...observability systems for agent performance" is not).
+  const isAbout = (c: Criterion, w: string) => subjectOf(c.label).slice(0, 3).includes(w);
+  const titleWords = [...topic(input.title)].filter((w) => w.length > 3 && !GENERIC.has(w) && !technologiesNamed(w).length);
+  for (const w of titleWords) {
+    // The work the role is named after never sits in Bonus, whatever else the card says.
+    for (const c of card.criteria.filter((x) => x.tier === "bonus" && isAbout(x, w)))
+      out.push({ label: c.label, problem: `is in Bonus, but "${w}" is in the role's title: it is the work itself. Put this row in Exceptional (the ideal hire) or Required (without it, no).` });
   }
   // The core of the role has a row. A word of the role's TITLE that the
   // description itself uses three times or more, and that no row and no note
   // mentions, may be a requirement left out: an agent-platform card came back
   // with nothing about agents. Advice only: the word can just as well be the
   // job family ("data", "full stack") or how the job is worked ("remote").
-  const onCard = topic(card.criteria.map((c) => `${c.label} ${c.good || ""}`).join(" "));
+  // Covered when a Required or Exceptional row has the word among its subject words: Bonus never counts.
+  const coreCovered = (w: string) => card.criteria.some((c) => c.tier !== "bonus" && (subjectOf(c.label).includes(w) || topic(c.good || "").has(w)));
   const said = new Map<string, number>();
   for (const w of words([jd.about || input.description || "", ...(jd.doing || []), ...(jd.needs || []), ...(jd.bonus || [])].join(" ")).map(stem)) said.set(w, (said.get(w) || 0) + 1);
   for (const w of words(input.title)) {
     const n = said.get(stem(w)) || 0;
-    if (n >= 3 && w.length > 3 && !GENERIC.has(w) && !GENERIC.has(stem(w)) && !ADJECTIVE.test(w) && !technologiesNamed(w).length && !onCard.has(stem(w)))
-      out.push({ advisory: true, label: "(missing row)", problem: `no row mentions "${w}", which is in the role's title and which the description names ${n} times. If it is work the person must have done, add a row that says what they have built or done with it; if it is only the job family or the employer's market, change nothing.` });
+    if (n >= 3 && w.length > 3 && !GENERIC.has(w) && !GENERIC.has(stem(w)) && !ADJECTIVE.test(w) && !technologiesNamed(w).length && !coreCovered(stem(w)))
+      out.push({ advisory: n < 5, label: "(missing row)", problem: `no row mentions "${w}", which is in the role's title and which the description names ${n} times. If it is work the person must have done, add a Required or Exceptional row that says what they have built or done with it; if it is only the job family or the employer's market, change nothing.` });
   }
   const count = (t: string) => card.criteria.filter((c) => c.tier === t).length;
   if (count("exceptional") < 1) out.push({ label: "(exceptional tier)", problem: "is empty. Add 1 to 3 rows from the role's hardest responsibilities." });
@@ -319,7 +331,8 @@ export function toScorecard(rows: DraftRow[]): Scorecard | null {
   let years = false;
   const criteria: Partial<Criterion>[] = [];
   for (const r of rows) {
-    const label = tidy(r.label);
+    let label = tidy(r.label);
+    if ((label.match(/\(/g) || []).length > (label.match(/\)/g) || []).length) label += ")";
     if (r.kind === "years") {
       if (years || typeof r.years !== "number" || r.years < 1) continue;
       years = true;
