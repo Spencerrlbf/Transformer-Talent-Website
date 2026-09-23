@@ -167,6 +167,8 @@ const roleText = (input: DraftInput): string => {
   return [input.title, jd.about, input.description, ...(jd.doing || []), ...(jd.needs || []), ...(jd.bonus || []), (input.skills || []).flatMap((s) => [s.skill, ...(s.alternates || [])]).join(", "), input.techStack].filter(Boolean).join("\n");
 };
 const tidy = (s: string | null | undefined): string => String(s ?? "").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
+/** "in a fast-moving environment" and its kin say how a job is worked, not what was done: a slot loses them. */
+const dropFiller = (s: string): string => s.replace(/\s+(in|within|across)\s+(a|an|the)?\s*(fast[- ]moving|fast[- ]paced|dynamic|high[- ]pressure|startup|production)?\s*environments?\b/gi, "").replace(/\s+/g, " ").trim();
 /** A row whose subject is a thing one holds, not work one did: met when named. */
 const NAMED_THING = /\b(degree|bachelor'?s?|master'?s?|bsc|msc|mba|phd|doctorate|certif\w*|qualification|licen[cs]ed?|accredit\w*|clearance|fluent|native speaker)\b/i;
 const SLOT_HELP = {
@@ -192,9 +194,11 @@ export function slotProblems(rows: DraftRow[], input: DraftInput): DraftProblem[
     for (const k of ["signal", "work", "beyond"] as const) {
       if (!tidy(r[k])) out.push({ label, problem: `has no ${k} slot. ${SLOT_HELP[k]}` });
     }
-    const work = tidy(r.work);
+    const work = dropFiller(tidy(r.work));
     const signal = tidy(r.signal);
     if (work && !WORK_VERB.test(work)) out.push({ label, problem: `its work slot ("${work.slice(0, 60)}") has no verb of doing. Say what they built, ran, shipped, deployed or operated.` });
+    const wf = work.match(FILLER_PHRASE);
+    if (wf) out.push({ label, problem: `its work slot names how the job is worked ("${wf[0]}"), not what was done. Say the thing built or run.` });
     if (signal && WORK_VERB.test(signal)) out.push({ label, problem: `its signal slot ("${signal.slice(0, 60)}") describes work. A signal is a title, a team name, a skill tag or a mention: what names the subject without describing it.` });
     for (const g of technologiesNamed(`${work} ${signal} ${tidy(r.beyond)}`)) {
       if (!known.has(g[0])) out.push({ label, problem: `names ${g[0]}, which neither the description nor the role's stack does. Name only technologies the role itself names.` });
@@ -319,8 +323,9 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
 /** The last resort when a repair still leaves an adjective or a vague ending:
  *  take the word out in code rather than ship a row nobody can answer. */
 function tidyLabel(label: string): string {
-  const t = label.replace(new RegExp(`^\\s*${ADJECTIVE.source}\\s+`, "i"), "").replace(VAGUE_ENDING, "").replace(/\s+/g, " ").trim();
-  return t.length >= 6 ? t.charAt(0).toUpperCase() + t.slice(1) : label;
+  const [core, brackets] = label.match(/^(.*?)(\s*\(.*\))?$/)!.slice(1);
+  const t = core.replace(new RegExp(`^\\s*${ADJECTIVE.source}\\s+`, "i"), "").replace(VAGUE_ENDING, "").replace(FILLER_PHRASE, "").replace(/\s+(in|at)\s*$/i, "").replace(/\s+/g, " ").trim();
+  return t.length >= 6 ? `${t.charAt(0).toUpperCase() + t.slice(1)}${brackets || ""}` : label;
 }
 
 /** The rows as a card: the years label written by code in its fixed form,
@@ -344,7 +349,24 @@ export function toScorecard(rows: DraftRow[]): Scorecard | null {
       criteria.push({ tier: r.tier, label });
       continue;
     }
-    const slots: RungSlots = { signal: tidy(r.signal), work: tidy(r.work), beyond: tidy(r.beyond) };
+    // A judgment row that carries a language with its brackets is two rows
+    // asking two questions: the technology row goes on its own, the work
+    // keeps the slots ("Backend systems and workflow orchestration in
+    // TypeScript (Go, Java accepted)" becomes "Backend in TypeScript (Go,
+    // Java accepted)" and "Backend systems and workflow orchestration").
+    const bracket = label.match(/\(([^)]*)accepted\)$/i);
+    const languages = technologiesNamed(label.replace(/\(.*?\)/g, " ")).filter(isLanguage);
+    if (bracket && languages.length) {
+      const front = /\b(frontend|front-end|web|mobile|ios|android)\b/i.test(label);
+      criteria.push({ tier: r.tier, label: `${front ? "Frontend" : "Backend"} in ${languages.map((g) => g[0]).join(" or ")} (${bracket[1].trim()} accepted)` });
+      // The work keeps everything before "in <language>": the technology phrase and the brackets go.
+      const bare = label.replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
+      const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const at = bare.search(new RegExp(`\\s+(in|with|using)\\s+${esc(languages[0][0])}\\b`, "i"));
+      label = (at > 0 ? bare.slice(0, at) : bare).trim();
+      if (!label) continue;
+    }
+    const slots: RungSlots = { signal: tidy(r.signal), work: dropFiller(tidy(r.work)), beyond: tidy(r.beyond) };
     const filled = !!(slots.signal && slots.work && slots.beyond);
     // A degree, a certification or a licence is met when it is named: the
     // mention is the thing. Code decides that whatever the model said.
