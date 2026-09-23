@@ -14,7 +14,7 @@
 //
 // Docs: https://docs.typesafe.ai (POST /v1/systemone).
 
-import { ladderOf, type Criterion } from "@/lib/rolecard";
+import { ladderOf, metAtOf, workNotTitlesRule, type Criterion } from "@/lib/rolecard";
 
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 /** Pinned: a remembered row is keyed on the model that read it. */
@@ -71,7 +71,7 @@ export function jevQuestion(c: Criterion): { type: "score"; instructions: string
   return {
     type: "score",
     instructions:
-      `The row on the role's scorecard: "${c.label}". Judging only from candidate (their profile, resume, the years line and any confirmed statements), which one of these situations best describes this person? They are ordered from weakest to strongest. Choose the first whenever the material is silent or too thin to tell, however likely the rest may seem. Judge the person, not their employer: a company's product, technology stack or reputation is not evidence about them. Statements under confirmed were checked by a recruiter and are true.`,
+      `The row on the role's scorecard: "${c.label}". Judging only from candidate (their profile, resume, the years line and any confirmed statements), which one of these situations best describes this person? They are ordered from weakest to strongest and numbered from 1, the first. Choose the first whenever the material is silent or too thin to tell, however likely the rest may seem. Judge the person, not their employer: a company's product, technology stack or reputation is not evidence about them. Statements under confirmed were checked by a recruiter and are true. ${workNotTitlesRule(metAtOf(c))}`,
     criteria: ladderOf(c),
   };
 }

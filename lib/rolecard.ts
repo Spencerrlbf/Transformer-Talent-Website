@@ -66,6 +66,17 @@ export const FLOOR = "Nothing on the profile or resume shows this";
 export const MAX_CRITERIA = 10;
 export const MAX_RUNGS = 5;
 export const MAX_RUNG = 140;
+
+/** The rule every judgment row is read under: a job title or a team name
+ *  says where a person sat, not what they did. On its own it is a signal,
+ *  never proof that the work was done; the rung where a row counts as met
+ *  needs a line that describes the work itself. The judge's question says it
+ *  with the row's own rung numbers, the reference finder and the drafter say
+ *  it in prose, so the three agree. */
+export const WORK_NOT_TITLES = "A job title or a team name on its own says where the person sat, not what they did.";
+export function workNotTitlesRule(metAt: number): string {
+  return `${WORK_NOT_TITLES} By itself it places them no higher than situation ${Math.max(1, metAt - 1)}. Situation ${metAt} and above need a line that describes the work itself: what they built, ran, shipped or operated.`;
+}
 export const MAX_LABEL = 110;
 export const MAX_GOOD = 220;
 

@@ -42,7 +42,7 @@ const ROWS = {
 // from that role ("backend services in production", "evaluation or
 // observability"), and both came back word for word. Nothing here may be
 // taken from a role the drafter is being tested on.
-const SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Most candidates are judged from a LinkedIn profile alone, so each row must be something a profile, a resume or a ten-minute call can answer.
+export const DRAFT_SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Most candidates are judged from a LinkedIn profile alone, so each row must be something a profile, a resume or a ten-minute call can answer.
 
 THREE TIERS
 - required: the hiring manager would reject without it. 3 to 5 rows. Include the minimum years when the role states one, as its own row, in exactly one of these two forms: for a software or engineering role, "5+ years as a software engineer"; for any other role (data science, research, product, design), "5+ years of professional experience". Include the core skill and the core kind of work.
@@ -51,7 +51,7 @@ THREE TIERS
 
 EVERY ROW IS CHECKABLE FROM WHAT PEOPLE ACTUALLY WRITE
 - label: at most 10 words, no question mark. Never a sentence copied from the description. Never an adjective as the test: no deep, strong, solid, expert, proven, extensive, comfortable, familiar. Say the thing done: "Hands-on mobile experience" becomes "Has shipped an iOS or Android app to the store".
-- good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: titles, team names, skill tags, the words people use in a job description. Never the row's own words followed by "named in job titles or descriptions": that tells the judge nothing. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
+- good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: the words people use when they describe the work (what they built, ran or shipped) and the technologies tagged on such a job. A job title or a team name says where someone sat, not what they did: name it as a signal, never as what makes the row true. Never the row's own words followed by "named in job titles or descriptions": that tells the judge nothing. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
 - The work the role is named after ("Agent Platform Engineer": agents) is Required or Exceptional, never Bonus. Bonus never counts for or against anyone.
 - One row, one question. If a single line on a profile would tick two rows, they are one row: merge them. When the description pairs two names for one capability, keep both joined by "or" ("billing or invoicing systems"), because people describe their work with either word.
 - A technology row says what else would do the job, in brackets, taken from the role's own tech stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". When the stack lists several languages, every one that would do the row's job goes in the brackets, not only the closest. With no stated alternatives, name none. Put a years bar on a skill row ONLY when the description states one for that skill; how deep someone is, is a question for the call.
@@ -64,7 +64,7 @@ HOW DESCRIPTION LANGUAGE BECOMES A ROW (patterns from other roles)
 - "8+ years of engineering with deep Java expertise" is TWO rows: "8+ years as a software engineer" and "Backend in Java or Kotlin (Scala or C# accepted)".
 
 EXAMPLES OF THE FORM (from other roles; do not reuse their content)
-- required: "Has built payment or ledger systems in production" :: good: "Payments, billing, ledger, reconciliation or card-processing work named in a title, a team or a job description."
+- required: "Has built payment or ledger systems in production" :: good: "A line describing a payment, billing, ledger, reconciliation or card-processing system they built or ran; a payments title or team alone is a signal."
 - exceptional: "Has led a zero-to-one product as the first engineers" :: good: "Founding engineer, first engineer, early engineer or technical co-founder at a company that shipped."
 - bonus: "Data warehouse modelling" :: good: "dbt, Snowflake, BigQuery or Redshift named on a job; dimensional modelling or analytics engineering in a description."
 
@@ -280,7 +280,7 @@ export async function draftScorecard(input: DraftInput, timeoutMs = 25_000, budg
     (skills ? `SKILLS THE EMPLOYER LISTED:\n${skills}\n\n` : "") +
     (input.techStack ? `TECH STACK THE ROLE LISTS (not all must-haves; use it to name the alternatives a technology row accepts): ${input.techStack}\n` : "");
   const base = [
-    { role: "system", content: SYSTEM },
+    { role: "system", content: DRAFT_SYSTEM },
     { role: "user", content: user.slice(0, 9000) },
   ];
   const first = await askDrafter(base, timeoutMs);

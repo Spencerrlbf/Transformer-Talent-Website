@@ -33,7 +33,7 @@ const MAX_FACTS = 12;
 /** Notes pile up (one per distinct rows-and-facts state, and tenure moves
  *  monthly): only the newest few are read back. */
 const MAX_NOTES = 20;
-const ROW_VERSION = "v14-row";
+const ROW_VERSION = "v15-row";
 const NOTE_VERSION = "v14-note";
 
 export interface JudgeForRoleArgs {

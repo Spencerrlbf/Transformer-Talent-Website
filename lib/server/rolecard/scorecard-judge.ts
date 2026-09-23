@@ -52,7 +52,7 @@ import {
 import { isJevError, jevJudgeLadders, JEV_MODEL } from "./jev";
 import { askOpenAI, findReferences, jobSource, quoteCheck, REF_MODEL } from "./references";
 
-export const SCORECARD_JUDGE_VERSION = "v14";
+export const SCORECARD_JUDGE_VERSION = "v15";
 /** The review is versioned on its own: a change to how it is written goes
  *  into the note hash, so every remembered note is written once more, and
  *  no row is touched (rows, Jev and the row hashes stay v14). */
@@ -166,7 +166,9 @@ export function materialOf(input: VerdictInput, criteria: Criterion[]): JudgeMat
  *  NOT the id, the tier, the call flag, the rung it counts from, the other
  *  rows or the role: none of those change how the row reads. */
 export const rowHash = (c: Pick<Criterion, "label"> & Partial<Pick<Criterion, "kind" | "ladder" | "good" | "metAt">>, materialHash: string): string =>
-  sha(JSON.stringify(["v14", JEV_MODEL, REF_MODEL, c.label, ladderOf(c), materialHash]));
+  // v15: the question tells the judge that a title or a team name alone never
+  // reaches the rung the row is met from, so the answer depends on that rung.
+  sha(JSON.stringify(["v15", JEV_MODEL, REF_MODEL, c.label, ladderOf(c), metAtOf(c), materialHash]));
 
 /** The role's own words, as the review call reads them: its summary, what it
  *  needs, what the person will do, and its stack. Bounded, so a long job

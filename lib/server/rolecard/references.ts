@@ -174,9 +174,9 @@ export async function askOpenAI(a: { model: string; system: string; user: string
 
 // ---------- the references ----------
 
-const REF_SYSTEM = `You find, in a candidate's own material, the words that show a situation described on a recruiter's scorecard. The rows are ALREADY DECIDED: you do not judge them, you only point at the words.
+export const REF_SYSTEM = `You find, in a candidate's own material, the words that show a situation described on a recruiter's scorecard. The rows are ALREADY DECIDED: you do not judge them, you only point at the words.
 
-For each row you are given the situation the candidate was judged to be in. Copy, exactly as written in the LinkedIn profile, the resume or the confirmed statements, at most three short passages of at most 12 words each that show that situation: a skill tag, a title, a team name, a line of a description. Each passage comes from a different line where the material has more than one. Copy words as they are written there: never paraphrase, never join words from different lines, never copy the scorecard's own words back. When no single line says it, return an empty list for that row: that is the expected answer for many rows, and a passage about something else is worse than none.`;
+For each row you are given the situation the candidate was judged to be in. Copy, exactly as written in the LinkedIn profile, the resume or the confirmed statements, at most three short passages of at most 12 words each that show that situation: a skill tag, a title, a team name, a line of a description. For a situation about work the person has done (built, ran, shipped, owned), point at the line that describes the work: a job title, a team name or a skill tag alone is not the words that show it. Each passage comes from a different line where the material has more than one. Copy words as they are written there: never paraphrase, never join words from different lines, never copy the scorecard's own words back. When no single line says it, return an empty list for that row: that is the expected answer for many rows, and a passage about something else is worse than none.`;
 
 export interface ReferenceMaterial {
   profileText: string;
