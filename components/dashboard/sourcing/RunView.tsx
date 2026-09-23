@@ -3,8 +3,9 @@
 // review tags streaming in. Review-all: every imported candidate gets
 // reviewed. Drives the run via /advance in a sequential loop — the engine's
 // lease makes concurrent drivers harmless, and the run resumes from any
-// device (or the scheduled resumer) if this tab closes.
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+// device (or the scheduled resumer) if this tab closes. A person's name, or
+// "Open report" under their review, opens them in the candidate drawer.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import { TAG_UI, type CandidateRow, type RunSummary, summarizeParams } from "./types";
 import VerdictCard from "../candidates/VerdictCard";
@@ -12,8 +13,18 @@ import type { Criterion } from "@/lib/rolecard";
 
 const ACTIVE = new Set(["previewed", "importing", "ranking", "screening"]);
 
+/** What the drawer needs when a person is opened from the table: the run,
+ *  this page's people in order (to step through), and each one's membership
+ *  (to hold Yes or No), by candidate key. */
+export type RunOpenContext = {
+  runId: string;
+  keys: string[];
+  members: Record<string, { membershipId: string; shortlisted: boolean; hidden: boolean }>;
+};
+export type RunOpenHandler = (row: CandidateRow, ctx: RunOpenContext) => void;
+
 export default function RunView({
-  runId, jobId, onBack, onDuplicate,
+  runId, jobId, onBack, onDuplicate, onOpen, refreshKey,
 }: {
   runId: string;
   /** The role this run sourced for: a checked-off scorecard row is kept
@@ -21,6 +32,12 @@ export default function RunView({
   jobId: string;
   onBack: () => void;
   onDuplicate: (params: Record<string, unknown>) => void;
+  /** Opens a person in the candidate drawer (their report card on the Fit
+   *  tab). Without it the names are plain text. */
+  onOpen?: RunOpenHandler;
+  /** Bumped by the host when a decision was made elsewhere (the drawer's
+   *  Yes or No): the rows reload so the row follows. */
+  refreshKey?: number;
 }) {
   const { token } = useDash();
   const [run, setRun] = useState<RunSummary | null>(null);
@@ -49,15 +66,6 @@ export default function RunView({
       live = false;
     };
   }, [runId, token, run?.status, rereviewing]);
-  // Rows opened to their full verdict (paragraph, strip, questions).
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
-  const toggleOpen = (id: string) =>
-    setOpenIds((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true; // StrictMode remounts reuse the ref — re-arm it
@@ -123,6 +131,21 @@ export default function RunView({
   }, [run, page, filter, loadRun, loadRows]);
 
   useEffect(() => { loadRows(page, filter); }, [page, filter, loadRows]);
+
+  // A decision made in the drawer: the row on this page follows.
+  useEffect(() => {
+    if (!refreshKey) return;
+    loadRows(page, filter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
+  // What the drawer needs to step through this page and hold Yes or No on
+  // the person it shows.
+  const openCtx = (): RunOpenContext => ({
+    runId,
+    keys: rows.map((r) => r.candidateKey),
+    members: Object.fromEntries(rows.map((r) => [r.candidateKey, { membershipId: r.membershipId, shortlisted: r.shortlisted, hidden: r.hidden }])),
+  });
 
   async function rowAction(row: CandidateRow, patch: { shortlisted?: boolean; hidden?: boolean }) {
     setRows((rs) => rs.map((r) => (r.membershipId === row.membershipId ? { ...r, ...patch } : r)));
@@ -309,11 +332,16 @@ export default function RunView({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <Fragment key={r.membershipId}>
-                  <tr className={r.hidden ? "is-hidden" : ""}>
+                  <tr key={r.membershipId} className={r.hidden ? "is-hidden" : ""}>
                     <td className="rk">{r.rank ?? "–"}</td>
                     <td>
-                      <span className="nm">{r.name}</span>
+                      {onOpen ? (
+                        <button type="button" className="nm" title="Open their profile and report card" onClick={() => onOpen(r, openCtx())}>
+                          {r.name}
+                        </button>
+                      ) : (
+                        <span className="nm">{r.name}</span>
+                      )}
                       <div className="sub">{[r.title, r.company, r.location].filter(Boolean).join(" · ")}</div>
                       {(r.years != null || r.priorCompanies.length > 0 || (!r.verdict && r.topSkills.length > 0)) && (
                         <div className="dash-src-snapshot">
@@ -332,9 +360,11 @@ export default function RunView({
                       {r.verdict ? (
                         <>
                           <VerdictCard view={r.verdict} compact />
-                          <button type="button" className="dash-src-fullbtn" onClick={() => toggleOpen(r.membershipId)}>
-                            {openIds.has(r.membershipId) ? "Hide full verdict ▴" : "Full verdict ▾"}
-                          </button>
+                          {onOpen && (
+                            <button type="button" className="dash-src-fullbtn" onClick={() => onOpen(r, openCtx())}>
+                              Open report ▸
+                            </button>
+                          )}
                         </>
                       ) : r.tag ? (
                         <>
@@ -377,25 +407,6 @@ export default function RunView({
                       </span>
                     </td>
                   </tr>
-                  {r.verdict && openIds.has(r.membershipId) && (
-                    <tr className={`dash-src-full${r.hidden ? " is-hidden" : ""}`}>
-                      <td></td>
-                      <td colSpan={4}>
-                        <VerdictCard
-                          view={r.verdict}
-                          decision={{ shortlisted: r.shortlisted, hidden: r.hidden, onYes: () => sayYes(r), onNo: () => sayNo(r) }}
-                          feedback={{
-                            candidateKey: r.candidateKey,
-                            jobId,
-                            membershipId: r.membershipId,
-                            onChanged: (view) =>
-                              setRows((rs) => rs.map((x) => (x.membershipId === r.membershipId ? { ...x, verdict: view, tag: view.label } : x))),
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
                 ))}
               </tbody>
             </table>

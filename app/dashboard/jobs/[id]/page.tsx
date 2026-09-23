@@ -2,6 +2,8 @@
 // Job workspace: one page with horizontal tabs — Overview (job details),
 // Pipeline (unified candidates table + drawer), Sourcing (runs/builder),
 // Past (placeholder until rejection statuses land). Deep-linkable via ?tab=.
+// A person opened from a sourcing run's table gets the same drawer, with
+// that run's page to step through and Yes or No on its report card.
 import { Suspense, use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -10,7 +12,10 @@ import type { SkillChip } from "@/components/dashboard/JobForm";
 import CandidatesTable from "@/components/dashboard/candidates/CandidatesTable";
 import PipelineBoard from "@/components/dashboard/candidates/PipelineBoard";
 import CandidateDrawer from "@/components/dashboard/candidates/CandidateDrawer";
+import type { Decision } from "@/components/dashboard/candidates/VerdictCard";
 import SourcingPanel from "@/components/dashboard/sourcing/SourcingPanel";
+import type { RunOpenContext } from "@/components/dashboard/sourcing/RunView";
+import type { CandidateRow } from "@/components/dashboard/sourcing/types";
 import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
 import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
 import ClientLinkCard from "@/components/dashboard/jobs/ClientLinkCard";
@@ -67,6 +72,13 @@ function JobWorkspace({ id }: { id: string }) {
   } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [rowKeys, setRowKeys] = useState<string[]>([]);
+  // Opened from a sourcing run's table: that run, and each person on the
+  // page's membership, so the drawer can hold Yes or No on them; and the
+  // page's people in order, to step through.
+  const [runPick, setRunPick] = useState<{ runId: string; members: RunOpenContext["members"] } | null>(null);
+  const [runKeys, setRunKeys] = useState<string[]>([]);
+  // Bumped when the drawer decides Yes or No, so the run table's row follows.
+  const [sourcingRefresh, setSourcingRefresh] = useState(0);
   // Bumped when a Past-tab restore happens so the (mounted) Pipeline table refetches.
   const [pipelineRefresh, setPipelineRefresh] = useState(0);
   // Pipeline view: the table and the board are the same data in two shapes.
@@ -110,6 +122,38 @@ function JobWorkspace({ id }: { id: string }) {
     setBusy(false);
     load();
   }
+
+  const onOpenCandidate = (row: CandidateRow, ctx: RunOpenContext) => {
+    setRunPick({ runId: ctx.runId, members: ctx.members });
+    setRunKeys(ctx.keys);
+    setOpenKey(row.candidateKey);
+  };
+  // Yes or No from the drawer, on the run's membership: the same rule as the
+  // run table's own buttons, optimistic here, then the table reloads.
+  async function decide(key: string, patch: { shortlisted?: boolean; hidden?: boolean }) {
+    const pick = runPick;
+    const m = pick?.members[key];
+    if (!pick || !m) return;
+    setRunPick((p) => (p && p.members[key] ? { ...p, members: { ...p.members, [key]: { ...p.members[key], ...patch } } } : p));
+    await fetch(`/api/dashboard/sourcing/runs/${pick.runId}/candidates`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ membershipId: m.membershipId, ...patch }),
+    }).catch(() => {});
+    setSourcingRefresh((n) => n + 1);
+  }
+  // Yes shortlists (and un-hides); No hides (and un-shortlists). Pressing
+  // the one already filled takes it back.
+  const member = runPick && openKey ? runPick.members[openKey] : undefined;
+  const decision: Decision | undefined =
+    member && openKey
+      ? {
+          shortlisted: member.shortlisted,
+          hidden: member.hidden,
+          onYes: () => decide(openKey, member.shortlisted ? { shortlisted: false } : { shortlisted: true, hidden: false }),
+          onNo: () => decide(openKey, member.hidden ? { hidden: false } : { hidden: true, shortlisted: false }),
+        }
+      : undefined;
 
   if (job === undefined) return <p className="dash-muted">Loading…</p>;
   if (!job)
@@ -339,7 +383,7 @@ function JobWorkspace({ id }: { id: string }) {
         )}
       </div>
 
-      {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} />}
+      {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} onOpenCandidate={onOpenCandidate} refreshKey={sourcingRefresh} />}
 
       {tab === "past" && (
         <>
@@ -360,9 +404,14 @@ function JobWorkspace({ id }: { id: string }) {
       <CandidateDrawer
         candKey={openKey}
         roleContext={job.id}
-        onClose={() => setOpenKey(null)}
-        navKeys={rowKeys}
+        onClose={() => {
+          setOpenKey(null);
+          setRunPick(null);
+        }}
+        navKeys={runPick ? runKeys : rowKeys}
         onNavigate={setOpenKey}
+        decision={decision}
+        onVerdictChanged={() => setSourcingRefresh((n) => n + 1)}
       />
     </>
   );

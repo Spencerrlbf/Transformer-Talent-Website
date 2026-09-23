@@ -2,11 +2,14 @@
 // The facts block at the top right of the report card: six label and value
 // lines about the person, worked out in code from the dated positions, the
 // current title, the employer's own page and the education list. Never a
-// model's reading. Anything the profile does not carry reads "Not on file",
-// with the reason in its tooltip. Older saved reviews may lack the seniority
-// line's data and the second degree, and say so.
+// model's reading. The company's name opens a snapshot of its LinkedIn page
+// on hover when the card knows it. Anything the profile does not carry
+// reads "Not on file", with the reason in its tooltip. Older saved reviews
+// may lack the seniority line's data and the second degree, and say so.
 import type { ProfileFacts } from "@/lib/rolecard";
+import type { CompanyLookup } from "@/lib/company-snapshot";
 import { capitalise, companySize, degreeShort, plural, yearsWord } from "./report-format";
+import { CompanyName } from "./CompanyPop";
 
 const NONE = "Not on file";
 
@@ -28,7 +31,7 @@ function schoolLine(s: NonNullable<ProfileFacts["school"]>) {
   );
 }
 
-export default function FactsBlock({ p }: { p: ProfileFacts }) {
+export default function FactsBlock({ p, companies }: { p: ProfileFacts; companies?: CompanyLookup }) {
   const cur = p.current;
   // The years the role's bar is about lead: engineering years on an
   // engineering role, the career on any other (a data science or product
@@ -52,7 +55,7 @@ export default function FactsBlock({ p }: { p: ProfileFacts }) {
       <dt>Company</dt>
       {cur?.company ? (
         <dd>
-          {cur.company}
+          <CompanyName name={cur.company} lookup={companies} tenure={[cur.title, cur.months != null ? plural(cur.months, "month") : ""].filter(Boolean).join(" · ") || undefined} />
           {size && <small title={cur.founded ? `Founded ${cur.founded}, from the company's own page` : "From the company's own page"}> · {size}</small>}
         </dd>
       ) : (

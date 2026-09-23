@@ -1,15 +1,18 @@
 "use client";
-// Candidates v2 profile drawer: slides in over the table. Profile tab is the
+// Candidates v2 profile drawer: slides in over the table. The Fit tab leads
+// when the person has been reviewed: their report card for the role they
+// were opened from, then their other reviewed roles. Profile tab is the
 // pure LinkedIn-style profile (header, editable contact, experience grouped
-// by employer, education, skills); fit reviews live ONLY in the Pipeline tab,
-// one expandable row per role. Resume renders inline when on file. Notes is
-// the shared timeline: team notes, tasks, and the candidate's own ask.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+// by employer, education, skills); the Pipeline tab has one expandable row
+// per role. Resume renders inline when on file. Notes is the shared
+// timeline: team notes, tasks, and the candidate's own ask.
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fmtDue } from "@/lib/reminders";
 import { useDash } from "@/components/dashboard/DashShell";
 import { StageSelect } from "@/components/dashboard/candidates/CandidatesTable";
-import VerdictCard from "@/components/dashboard/candidates/VerdictCard";
+import VerdictCard, { type Decision } from "@/components/dashboard/candidates/VerdictCard";
 import type { VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
+import { companyKey, companySlug, slugsToAsk, type CompanyLookup, type CompanySnapshot } from "@/lib/company-snapshot";
 import { VERDICT_LABEL } from "@/lib/verdict-view";
 import type { VerdictView } from "@/lib/verdict-view";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
@@ -223,10 +226,10 @@ function ReviewAgain({ review, has }: { review?: ReviewControl; has: boolean }) 
   );
 }
 
-function FitReview({ entry, feedback, review }: { entry: PipelineEntry; feedback?: VerdictFeedbackTarget; review?: ReviewControl }) {
+function FitReview({ entry, feedback, review, companies }: { entry: PipelineEntry; feedback?: VerdictFeedbackTarget; review?: ReviewControl; companies?: CompanyLookup }) {
   // The report card carries its own "Review again" link. No Yes or No here:
   // someone who applied has no sourcing-run row to hold a decision.
-  if (entry.verdict) return <VerdictCard view={entry.verdict} feedback={feedback} review={review} />;
+  if (entry.verdict) return <VerdictCard view={entry.verdict} feedback={feedback} review={review} companies={companies} />;
   // Never screened for this role: there is no verdict row to keep a review on.
   if (!entry.reason) return <p className="cv2d-why cv2d-dim">Not reviewed yet.</p>;
   const { why, probes, route } = splitReason(entry.reason);
@@ -260,9 +263,12 @@ function PipelineRows({
   onOpenJob,
   feedback,
   review,
+  companies,
 }: {
   /** Makes the verdict's scorecard rows a one-click check-off. */
   feedback?: VerdictFeedbackTarget;
+  /** What the card knows of the companies on the profile, for the hovers. */
+  companies?: CompanyLookup;
   /** "Review again" for someone who applied. */
   review?: ReviewControl;
   entry: PipelineEntry;
@@ -347,7 +353,7 @@ function PipelineRows({
         <tr className="cv2d-preview-row">
           <td colSpan={5}>
             <div className="cv2d-pipe-detail">
-              <FitReview entry={entry} feedback={feedback} review={review} />
+              <FitReview entry={entry} feedback={feedback} review={review} companies={companies} />
             </div>
           </td>
         </tr>
@@ -356,7 +362,12 @@ function PipelineRows({
   );
 }
 
-type Tab = "profile" | "pipeline" | "resume" | "notes" | "email";
+type Tab = "fit" | "profile" | "pipeline" | "resume" | "notes" | "email";
+
+const NO_SNAPSHOTS: Record<string, CompanySnapshot | null> = {};
+
+/** How the person came to a role, as the Fit tab words it. */
+const viaWord = (via: PipelineEntry["via"]) => (via === "applied" ? "applied" : via === "matched" ? "matched" : via === "added" ? "added by your team" : "via sourcing run");
 
 export default function CandidateDrawer({
   candKey,
@@ -376,10 +387,18 @@ export default function CandidateDrawer({
   quickAction,
   onSilentReject,
   refreshKey,
+  decision,
+  onVerdictChanged,
 }: {
   candKey: string | null;
   roleContext?: string;
   onClose: () => void;
+  /** Yes or No on the person for `roleContext`, when the host can hold it (a
+   *  sourcing run's row): shown on that role's report card on the Fit tab. */
+  decision?: Decision;
+  /** A scorecard row was checked off, or a review re-run, on that role: the
+   *  host can reload a table whose row shows the verdict. */
+  onVerdictChanged?: (jobId: string) => void;
   /** The list's current row order — enables ‹ › stepping without closing. */
   navKeys?: string[];
   onNavigate?: (key: string) => void;
@@ -551,7 +570,8 @@ export default function CandidateDrawer({
         // Opened from a job page: that role's review is what they came for.
         const ctx = roleContext && d.pipeline.find((p) => p.jobId === roleContext);
         setExpanded(ctx ? ctx.jobId : d.pipeline[0]?.jobId ?? null);
-        if (ctx && !initialTab) setTab("pipeline");
+        // Anyone reviewed opens on their report card.
+        if (!initialTab && d.pipeline.some((p) => p.verdict)) setTab("fit");
       })
       .catch(() => setError(true));
     // initialTab is applied by the effect above; it must not refetch the profile.
@@ -623,6 +643,41 @@ export default function CandidateDrawer({
   // shown, here and in the role's tag, without refetching the person.
   const keyRef = useRef(candKey);
   keyRef.current = candKey;
+
+  // The companies on the profile, for the report card's hovers: their pages'
+  // snapshots, asked for once the profile is here (at most 12, current job
+  // first), keyed by the page's slug and held against the list they answer,
+  // so a late answer never lands on the next person. A failed ask leaves
+  // every snapshot null: the hover then only offers the LinkedIn link.
+  const [snap, setSnap] = useState<{ list: string; map: Record<string, CompanySnapshot | null> }>({ list: "", map: {} });
+  const slugList = detail ? slugsToAsk(detail.experience.map((g) => g.companyLinkedinUrl)).join(",") : "";
+  useEffect(() => {
+    if (!slugList) return;
+    const forKey = keyRef.current;
+    let live = true;
+    fetch(`/api/dashboard/companies?slugs=${encodeURIComponent(slugList)}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (r) => (r.ok ? ((await r.json()) as { companies?: Record<string, CompanySnapshot | null> }) : null))
+      .then((d) => {
+        if (live && keyRef.current === forKey && d?.companies) setSnap({ list: slugList, map: d.companies });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [slugList, token]);
+  const snapshots = snap.list === slugList ? snap.map : NO_SNAPSHOTS;
+  const companies = useMemo<CompanyLookup | undefined>(() => {
+    if (!detail) return undefined;
+    const lookup: CompanyLookup = {};
+    for (const g of detail.experience) {
+      const key = companyKey(g.company);
+      if (!key || lookup[key]) continue; // the same employer twice: the first (latest) group speaks
+      const slug = companySlug(g.companyLinkedinUrl);
+      lookup[key] = { snapshot: (slug && snapshots[slug]) || null, linkedinUrl: g.companyLinkedinUrl };
+    }
+    return lookup;
+  }, [detail, snapshots]);
+
   const feedbackFor = (p: PipelineEntry): VerdictFeedbackTarget | undefined => {
     const forKey = candKey; // a late answer must never land on the next person
     const jobId = p.jobId;
@@ -633,7 +688,7 @@ export default function CandidateDrawer({
           onSaved: () => {
             if (keyRef.current === forKey) refetchDetail();
           },
-          onChanged: (view) =>
+          onChanged: (view) => {
             setDetail((d) =>
               d && d.key === forKey
                 ? {
@@ -643,7 +698,9 @@ export default function CandidateDrawer({
                     ),
                   }
                 : d
-            ),
+            );
+            onVerdictChanged?.(jobId);
+          },
         }
       : undefined;
   };
@@ -839,6 +896,9 @@ export default function CandidateDrawer({
 
   const currentRole = detail?.experience[0]?.roles[0];
   const currentCompany = detail?.experience[0]?.company;
+  // The Fit tab: the role they were opened from first, then their other
+  // reviewed roles, at most three.
+  const fitEntries = detail ? [...detail.pipeline.filter((p) => p.verdict && p.jobId === roleContext), ...detail.pipeline.filter((p) => p.verdict && p.jobId !== roleContext)].slice(0, 3) : [];
 
   return (
     <div className="cv2d-overlay" onClick={onClose}>
@@ -1292,6 +1352,7 @@ export default function CandidateDrawer({
             <div className="dash-tabs cv2d-tabs">
               {(
                 [
+                  ...(detail.pipeline.some((p) => p.verdict) ? ([["fit", "Fit", null]] as [Tab, string, number | null][]) : []),
                   ["profile", "Profile", null],
                   ["pipeline", "Pipeline", detail.pipeline.length],
                   ["resume", "Resume", null],
@@ -1307,25 +1368,26 @@ export default function CandidateDrawer({
             </div>
 
             <div className="cv2d-body">
+              {tab === "fit" && (
+                <>
+                  {fitEntries.length === 0 && <p className="cv2d-dim">Not reviewed yet.</p>}
+                  {fitEntries.map((p) => (
+                    <section className="cv2d-fit-role" key={p.jobId}>
+                      <div className="cv2d-fit-title">
+                        {p.title} <em>#{p.jobId}</em>
+                        <span className="cv2d-fit-via">{viaWord(p.via)}</span>
+                        <button type="button" className="cv2d-rolebtn cv2d-fit-job" title="View this job" onClick={() => setOpenJob(p.jobId)}>
+                          View job
+                        </button>
+                      </div>
+                      <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} decision={p.jobId === roleContext ? decision : undefined} companies={companies} />
+                    </section>
+                  ))}
+                </>
+              )}
+
               {tab === "profile" && (
                 <>
-                  {detail.pipeline.some((p) => p.verdict) && (
-                    <section className="cv2d-fit">
-                      <h4 className="cv2d-sec">Fit</h4>
-                      {detail.pipeline
-                        .filter((p) => p.verdict)
-                        .slice(0, 3)
-                        .map((p) => (
-                          <div className="cv2d-fit-role" key={p.jobId}>
-                            <div className="cv2d-fit-title">
-                              {p.title} <em>#{p.jobId}</em>
-                              <span className="cv2d-fit-via">{p.via === "applied" ? "applied" : p.via === "sourced" ? "via sourcing run" : p.via}</span>
-                            </div>
-                            <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} />
-                          </div>
-                        ))}
-                    </section>
-                  )}
                   {detail.about && (
                     <>
                       <h4 className="cv2d-sec">About</h4>
@@ -1439,6 +1501,7 @@ export default function CandidateDrawer({
                               onOpenJob={setOpenJob}
                               feedback={feedbackFor(p)}
                               review={reviewFor(p)}
+                              companies={companies}
                             />
                           ))}
                         </tbody>

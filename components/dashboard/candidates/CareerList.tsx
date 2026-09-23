@@ -1,17 +1,27 @@
 "use client";
 // The career on the report card: one row per career job, current first,
-// with a bar as long as the job was, the company and its size where the
-// employer's page gave one, the dates, the title and the skills tagged on
-// that job. Internships and other non-career positions sit greyed on one
-// line at the end. All of it comes from the dated positions on the profile.
+// with a bar as long as the job was, the company (its LinkedIn page's
+// snapshot on hover, when the card knows it) and its size where a company
+// page gave one, the dates, the title and the skills tagged on that job.
+// Internships and other non-career positions sit greyed on one line at the
+// end. All of it comes from the dated positions on the profile.
 import type { ProfileFacts } from "@/lib/rolecard";
+import { companyKey, sizeWord, type CompanyLookup } from "@/lib/company-snapshot";
 import { companySize, stillThere, yearOf, yearsShort } from "./report-format";
+import { CompanyName } from "./CompanyPop";
 
 type Job = ProfileFacts["companies"][number];
 
 const MAX_SKILLS = 8;
 
-export default function CareerList({ p }: { p: ProfileFacts }) {
+/** "51-200 employees · startup": the size as the company's own page states
+ *  it, for a job the profile facts carry no size for (every past job). */
+const snapshotSize = (lookup: CompanyLookup | undefined, name: string) => {
+  const s = lookup?.[companyKey(name)]?.snapshot;
+  return s?.employeeRange ? [s.employeeRange, sizeWord(s.employees)].filter(Boolean).join(" · ") : "";
+};
+
+export default function CareerList({ p, companies }: { p: ProfileFacts; companies?: CompanyLookup }) {
   const jobs = p.companies.filter((c) => c.career);
   const asides = p.companies.filter((c) => !c.career);
   if (!jobs.length && !asides.length) return <p className="vc-none">No dated positions on the profile.</p>;
@@ -21,7 +31,7 @@ export default function CareerList({ p }: { p: ProfileFacts }) {
     <ol className="vc-career" title="The dated career positions on the profile, current first. The bar is as long as the job was.">
       {jobs.map((c, i) => {
         const now = isNow(c, i);
-        const size = now ? companySize(p.current) : "";
+        const size = (now ? companySize(p.current) : "") || snapshotSize(companies, c.name);
         const width = c.years != null ? Math.max(10, Math.round((c.years / longest) * 100)) : 10;
         const dates = [c.from && c.to ? `${c.from} to ${stillThere(c.to) ? "now" : c.to}` : c.from ? `${c.from} to now` : "", c.years != null ? yearsShort(c.years) : ""].filter(Boolean).join(" · ");
         const skills = (c.skills || []).slice(0, MAX_SKILLS);
@@ -30,7 +40,7 @@ export default function CareerList({ p }: { p: ProfileFacts }) {
             <span className="vc-bar" style={{ width: `${width}%` }} aria-hidden="true" title={c.years != null ? yearsShort(c.years) : undefined} />
             <div className="vc-job-body">
               <div className="vc-job-h">
-                <b>{c.name}</b>
+                <CompanyName name={c.name} lookup={companies} tenure={[c.title, dates].filter(Boolean).join(" · ") || undefined} />
                 {size ? <span className="vc-size"> · {size}</span> : <span className="vc-size faint"> · size not on file</span>}
                 {dates && <span className="vc-job-d">{dates}</span>}
               </div>

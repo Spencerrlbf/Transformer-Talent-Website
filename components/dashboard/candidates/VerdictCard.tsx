@@ -1,8 +1,10 @@
 "use client";
 // The verdict as a recruiter reads it. With a scorecard it is the report
 // card: on top, the label, the one-line bottom line and the decision beside
-// the facts block; below, the career and the skills on the left, and on the
-// right the review as bullets with evidence tags, then the judged checklist.
+// the facts block; below, the career and the skills (as chips, by when they
+// were used) on the left, and on the right the review as bullets with
+// evidence tags, then the judged checklist. A company's name on the card
+// opens a snapshot of its LinkedIn page when `companies` knows it.
 // `compact` is the table-row form: label, the rows in one line, the bottom
 // line. A verdict without a card (older reviews) renders the old way: label,
 // paragraph, strip. Older cards without a profile, skills or a bulleted
@@ -11,9 +13,10 @@ import { useId, useState } from "react";
 import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, shortRequirement, type TechChip, type VerdictView } from "@/lib/verdict-view";
 import { rowSummary } from "@/lib/rolecard";
 import Checklist, { anchorScopeOf, type VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
+import type { CompanyLookup } from "@/lib/company-snapshot";
 import FactsBlock from "./FactsBlock";
 import CareerList from "./CareerList";
-import SkillsTable from "./SkillsTable";
+import SkillsChips from "./SkillsChips";
 import ReviewBullets, { BottomLine } from "./ReviewBullets";
 
 /** Yes or No on this person for this role, where the row on screen can hold
@@ -147,6 +150,7 @@ export default function VerdictCard({
   feedback,
   decision,
   review,
+  companies,
 }: {
   view: VerdictView;
   compact?: boolean;
@@ -157,6 +161,9 @@ export default function VerdictCard({
   decision?: Decision;
   /** "Review again", when the person can be reviewed from here. */
   review?: ReviewControl;
+  /** What is known of each company on the profile, by companyKey(name): a
+   *  name on the career list or the facts block opens its snapshot on hover. */
+  companies?: CompanyLookup;
 }) {
   const [askOpen, setAskOpen] = useState(false);
   // This card's scope for its checklist anchors: two cards on one page (a
@@ -265,7 +272,7 @@ export default function VerdictCard({
           {bottomLine && <BottomLine text={bottomLine} />}
           {decision && <DecideButtons d={decision} />}
         </div>
-        {profile && <FactsBlock p={profile} />}
+        {profile && <FactsBlock p={profile} companies={companies} />}
       </div>
       <div className="vc-body">
         <div className="vc-who">
@@ -273,12 +280,14 @@ export default function VerdictCard({
             <>
               <section className="vc-rsec">
                 <h4 className="vc-sec">Career</h4>
-                <CareerList p={profile} />
+                <CareerList p={profile} companies={companies} />
               </section>
               {profile.skills ? (
                 <section className="vc-rsec">
-                  <h4 className="vc-sec">Skills, from the jobs they were used on</h4>
-                  <SkillsTable skills={profile.skills} companies={profile.companies} />
+                  <h4 className="vc-sec" title="Years are added up from the dated jobs each skill is tagged on">
+                    Skills, by when they were used
+                  </h4>
+                  <SkillsChips p={profile} />
                 </section>
               ) : (
                 <TechStrip view={view} />

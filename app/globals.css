@@ -4431,13 +4431,16 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .cv2d-fit-title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .cv2d-fit-title em { font-style: normal; font-weight: 500; color: var(--muted); }
 .cv2d-fit-via { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.cv2d-fit-title .cv2d-fit-job { margin-left: auto; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--accent-press); text-decoration: underline; }
 @media (max-width: 640px) { .vc-tech { grid-template-columns: 1fr; } .vc-lbl { padding-top: 0; } }
 .dash-src-again { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 14px; font-size: 13px; color: var(--body-2); }
-.dash-src-fullbtn { display: block; margin-top: 6px; background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: underline; cursor: pointer; }
-.dash-src-full td { padding-top: 0; background: var(--paper); }
-.dash-src-full .vc { max-width: 78ch; padding: 4px 0 12px; }
-/* The report card lays its facts strip and two columns out on the whole row. */
-.dash-src-full .vc-report { max-width: none; }
+/* "Open report" under the compact review, and the name itself: both open the
+   person in the drawer. */
+.dash-src-fullbtn { display: block; margin-top: 8px; background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent-press); text-decoration: underline; cursor: pointer; }
+.dash-src-fullbtn:hover { color: var(--accent); }
+.dash-src-table button.nm { appearance: none; display: inline; margin: 0; padding: 0; border: 0; background: none; font: inherit; font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); text-align: left; cursor: pointer; }
+.dash-src-table button.nm:hover { text-decoration: underline; color: var(--accent-press); }
+.dash-src-table button.nm:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 /* ---- Role scorecard: the editor, the job-page card, the judged checklist ---- */
 .rc-ico { width: 14px; height: 14px; flex: none; vertical-align: -2px; }
@@ -4633,14 +4636,40 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-asides { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .vc-asides .vc-bar { height: 22px; width: 24px; background: var(--page); border: 0; }
 .vc-aside-sep { margin: 0 8px; }
-/* Skills, from the jobs they were used on. */
-.vc-skills { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; row-gap: 3px; font-size: 12.5px; line-height: 1.5; }
-.vc-skill { display: grid; grid-template-columns: minmax(0, 1fr) minmax(44px, max-content) minmax(0, 1fr); gap: 8px; align-items: baseline; }
-.vc-skill b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
-.vc-skill .y { color: var(--pos); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.vc-skill .y.none { color: var(--faint); font-weight: 400; font-size: 11px; }
-.vc-skill .w { color: var(--muted); overflow-wrap: anywhere; }
-.vc-listed { grid-column: 1 / -1; margin-top: 3px; color: var(--muted); }
+/* Skills, by when they were used: three rows of chips (the current job,
+   previous jobs with the year each was last used, listed only). */
+.vc-skgroups { display: grid; gap: 12px; }
+.vc-skgroup { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.vc-skg-h { padding-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.vc-skg-h small { display: block; font-size: 11px; font-weight: 400; line-height: 1.4; color: var(--muted); }
+.vc-skchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.vc-skchip { display: inline-flex; align-items: baseline; gap: 6px; min-height: 28px; padding: 0 10px; border-radius: var(--r-control); font-size: 12.5px; font-weight: 600; line-height: 26px; white-space: nowrap; }
+.vc-skchip.now { background: var(--accent-wash); border: 1px solid rgba(91,75,255,.3); color: var(--accent-press); }
+.vc-skchip.before { background: var(--paper); border: 1px solid var(--control-line); color: var(--body); }
+.vc-skchip.listed { border: 1px dashed var(--control-line); color: var(--body-2); }
+.vc-skchip small { font-size: 11px; font-weight: 500; color: var(--muted); }
+.vc-skchip.now small { color: var(--accent-press); }
+/* A company on the card: its name is a button that opens a snapshot of its
+   LinkedIn page, hung under the name like the review's evidence popover. */
+.vc-co { appearance: none; padding: 0 0 1px; border: 0; border-bottom: 1px dotted var(--muted); background: none; font: inherit; font-weight: 600; color: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.vc-co:hover, .vc-co[aria-expanded="true"] { color: var(--accent-press); border-bottom-color: var(--accent-press); }
+.vc-co:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.vc-cowrap { position: relative; display: inline-block; }
+.vc-factsblock dd b, .vc-factsblock dd .vc-co { font-weight: inherit; }
+.vc-copop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: max-content; max-width: min(400px, calc(100vw - 32px)); padding: 12px 14px; border: 1px solid rgba(0,0,0,.14); border-radius: var(--r-card); background: var(--paper); box-shadow: var(--sh-menu); display: grid; gap: 10px; font-size: 12.5px; font-weight: 400; line-height: 1.45; color: var(--ink); text-align: left; white-space: normal; }
+.vc-copop.flip { left: auto; right: 0; }
+.vc-copop-h { display: flex; align-items: center; gap: 10px; }
+.vc-copop-hm { min-width: 0; }
+.vc-copop-i { width: 36px; height: 36px; flex: none; border-radius: var(--r-control); background: var(--accent-wash); color: var(--accent-press); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; }
+.vc-copop-h b { display: block; font-size: 14px; }
+.vc-copop-h small { display: block; font-size: 12px; color: var(--muted); }
+.vc-copop-h a { margin-left: auto; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.vc-copop-tag { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--body); }
+.vc-copop dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); row-gap: 4px; column-gap: 10px; margin: 0; font-size: 12.5px; line-height: 1.4; }
+.vc-copop dt { color: var(--muted); }
+.vc-copop dd { margin: 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.vc-copop dd small { font-weight: 400; color: var(--muted); }
+.vc-copop-f { font-size: 11px; color: var(--muted); }
 /* The review as bullets: the mark of the strongest row each rests on, the
    sentence, and its evidence tags. A tag opens the lines behind it. */
 .vc-bullets { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -4679,13 +4708,13 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-report { container-type: inline-size; }
 @container (max-width: 860px) { .vc-body { grid-template-columns: 1fr; } .vc-review { border-left: 0; padding-left: 0; padding-top: 12px; border-top: 1px dashed var(--control-line); } }
 @container (max-width: 620px) { .vc-top { grid-template-columns: 1fr; } }
-@container (max-width: 520px) { .vc-skills { grid-template-columns: 1fr; } .vc-job, .vc-asides { grid-template-columns: 48px minmax(0, 1fr); } .vc-job-d { margin-left: 0; width: 100%; white-space: normal; } }
+@container (max-width: 520px) { .vc-skgroup { grid-template-columns: 1fr; } .vc-job, .vc-asides { grid-template-columns: 48px minmax(0, 1fr); } .vc-job-d { margin-left: 0; width: 100%; white-space: normal; } }
 /* Without container queries (older browsers) the window stands in for the
    card: the drawer is 75vw with a 760px floor, and the card is about 100px
    narrower than the drawer. */
 @supports not (container-type: inline-size) {
   @media (max-width: 1290px) { .vc-body { grid-template-columns: 1fr; } .vc-review { border-left: 0; padding-left: 0; padding-top: 12px; border-top: 1px dashed var(--control-line); } }
   @media (max-width: 730px) { .vc-top { grid-template-columns: 1fr; } }
-  @media (max-width: 630px) { .vc-skills { grid-template-columns: 1fr; } .vc-job, .vc-asides { grid-template-columns: 48px minmax(0, 1fr); } .vc-job-d { margin-left: 0; width: 100%; white-space: normal; } }
+  @media (max-width: 630px) { .vc-skgroup { grid-template-columns: 1fr; } .vc-job, .vc-asides { grid-template-columns: 48px minmax(0, 1fr); } .vc-job-d { margin-left: 0; width: 100%; white-space: normal; } }
 }
 @media (prefers-reduced-motion: reduce) { .ck-row { transition: none; } }

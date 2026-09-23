@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dashboard/DashShell";
 import SearchBuilder, { type CreditSummary } from "@/components/dashboard/sourcing/SearchBuilder";
-import RunView from "@/components/dashboard/sourcing/RunView";
+import RunView, { type RunOpenHandler } from "@/components/dashboard/sourcing/RunView";
 import {
   draftFromParams,
   summarizeParams,
@@ -24,7 +24,19 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobTitle: string }) {
+export default function SourcingPanel({
+  jobId,
+  jobTitle,
+  onOpenCandidate,
+  refreshKey,
+}: {
+  jobId: string;
+  jobTitle: string;
+  /** Opens a person from a run's table in the candidate drawer. */
+  onOpenCandidate?: RunOpenHandler;
+  /** Bumped by the host when the drawer decided Yes or No: the run's rows reload. */
+  refreshKey?: number;
+}) {
   const { token } = useDash();
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [credits, setCredits] = useState<CreditSummary | null>(null);
@@ -118,6 +130,8 @@ export default function SourcingPanel({ jobId, jobTitle }: { jobId: string; jobT
         <RunView
           runId={view.runId}
           jobId={jobId}
+          onOpen={onOpenCandidate}
+          refreshKey={refreshKey}
           onBack={() => { setView({ kind: "list" }); loadRuns(); }}
           onDuplicate={(p) => setView({ kind: "builder", initial: draftFromParams(p) })}
         />

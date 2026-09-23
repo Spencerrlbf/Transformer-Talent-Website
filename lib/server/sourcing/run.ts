@@ -295,18 +295,30 @@ async function importOnePage(
       prefer: "resolution=ignore-duplicates,return=minimal",
     });
 
-    // Build the global company-context cache as we go: each new candidate's
-    // current employer is fetched once ever ($0.004) and shared across every
-    // run and tenant — the judge needs it to weigh no-name employers fairly.
-    const employerSlugs = importable
-      .map((f) => {
-        const exp = Array.isArray(f.profile!.experience) ? (f.profile!.experience as Record<string, unknown>[]) : [];
-        const current = exp.find((e) => /present/i.test(String((e.endDate as Record<string, unknown>)?.text ?? ""))) || exp[0];
-        return companySlugFromUrl(
-          (current?.companyLinkedinUrl as string) || (current?.companyLink as string) || f.lead.currentCompanyLinkedinUrl
-        );
-      })
-      .filter((x): x is string => !!x);
+    // Build the global company-context cache as we go. The report card's
+    // timeline and company hovers need every employer, not only the current
+    // one the judge weighs, so every experience entry's company page is
+    // fetched once ever ($0.004, shared across every run and tenant):
+    // current job first, at most 8 per person, each page once per batch
+    // (a page met again in a later batch is a cache hit, never a second fetch).
+    const MAX_COMPANY_PAGES_PER_PERSON = 8;
+    const employerSlugs: string[] = [];
+    for (const f of importable) {
+      const exp = Array.isArray(f.profile!.experience) ? (f.profile!.experience as Record<string, unknown>[]) : [];
+      const current = exp.find((e) => /present/i.test(String((e.endDate as Record<string, unknown>)?.text ?? ""))) || exp[0];
+      const pageOf = (e: Record<string, unknown> | undefined) =>
+        (e?.companyLinkedinUrl as string) || (e?.companyLink as string) || null;
+      const urls = [pageOf(current) || f.lead.currentCompanyLinkedinUrl, ...exp.filter((e) => e !== current).map(pageOf)];
+      const mine: string[] = [];
+      for (const url of urls) {
+        if (mine.length >= MAX_COMPANY_PAGES_PER_PERSON) break;
+        const slug = companySlugFromUrl(url);
+        if (slug && !mine.includes(slug)) mine.push(slug);
+      }
+      for (const slug of mine) {
+        if (!employerSlugs.includes(slug)) employerSlugs.push(slug);
+      }
+    }
     await getCompanyContexts(employerSlugs).catch(() => new Map());
   }
 
