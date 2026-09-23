@@ -80,6 +80,65 @@ export function workNotTitlesRule(metAt: number): string {
 export const MAX_LABEL = 110;
 export const MAX_GOOD = 220;
 
+/** The three things the drafter says about a judgment row, as phrases, from
+ *  which code writes the rungs and the note: what merely NAMES the subject on
+ *  a profile (titles, team names, skill tags, mentions), what a line
+ *  DESCRIBING the work says, and what owning or leading it looks like. One
+ *  template for every role, so every card reads the same way and a title can
+ *  never sit at the rung a row is met from. */
+export interface RungSlots {
+  signal: string;
+  work: string;
+  beyond: string;
+}
+
+/** A verb of doing: what tells a description of work from a name for it. */
+export const WORK_VERB =
+  /\b(built|build|builds|building|ran|run|runs|running|shipped|ships|shipping|deployed|deploys|deploying|operated|operates|operating|designed|designs|owned|owns|owning|led|leads|leading|migrated|scaled|trained|published|wrote|written|maintained|implemented|developed|delivered|launched|created|automated|integrated|managed|grew|founded|architected|tuned|optimi[sz]ed|debugged|instrumented|refactored|monitored|took|on call|mentored|coached|taught|supervised|hired|recruited|conducted|performed|investigated|researched|analy[sz]ed|modell?ed|forecast|forecasted|priced|presented|negotiated|sold|closed|audited|reconciled|documented|planned|prepared|processed|validated|evaluated|assessed|benchmarked|restructured|reorgani[sz]ed|transformed|completed|earned|won|raised|drove|oversaw|headed|chaired|advised|consulted|reviewed|tested|measured|reduced|improved|cut|saved|increased)\b/i;
+
+const clipWords = (s: string, max: number): string => {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const at = cut.lastIndexOf(" ");
+  return (at > max * 0.6 ? cut.slice(0, at) : cut).replace(/[,;:\s]+$/, "");
+};
+const tidySlot = (s: string): string => String(s || "").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
+/** "A payments title" reads "a payments title" inside a sentence; "AI agents" keeps its capitals. */
+const lower1 = (s: string): string => (/^[A-Z][a-z]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+const upper1 = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Rungs 2 to 4 written from the slots, each within MAX_RUNG: the signal
+ *  rung, the rung where the work is described, and the rung beyond it. A row
+ *  met from rung 2 (a degree, a certification: the mention IS the thing) has
+ *  the signal itself as rung 2, with no "nothing describing" clause. */
+export function rungsFromSlots(s: RungSlots, metFrom: 2 | 3 = 3): string[] {
+  const signal = tidySlot(s.signal);
+  const work = tidySlot(s.work).replace(/^describes\s+/i, "");
+  const beyond = tidySlot(s.beyond);
+  return [
+    clipWords(metFrom === 2 ? upper1(signal) : `${upper1(signal)}, but nothing describing the work itself`, MAX_RUNG),
+    clipWords(`Describes ${lower1(work)}`, MAX_RUNG),
+    clipWords(upper1(beyond), MAX_RUNG),
+  ];
+}
+
+/** The note under the row, within MAX_GOOD: what counts, and what is only a signal. */
+export function noteFromSlots(s: RungSlots, metFrom: 2 | 3 = 3): string {
+  const signal = tidySlot(s.signal);
+  const work = tidySlot(s.work).replace(/^describes\s+/i, "");
+  return clipWords(
+    metFrom === 2 ? `${upper1(signal)} counts on its own. A line describing ${lower1(work)} says more.` : `A line describing ${lower1(work)}. ${upper1(signal)} alone is a signal, not proof.`,
+    MAX_GOOD
+  );
+}
+
+/** The years row in one of its two fixed forms, the ones the years code reads. */
+export function yearsLabel(years: number, basis: "engineer" | "professional"): string {
+  const n = Math.max(1, Math.min(20, Math.round(years)));
+  return basis === "engineer" ? `${n}+ years as a software engineer` : `${n}+ years of professional experience`;
+}
+
 /** "short" is written by code only, on a years row whose dated years are
  *  within a year under the bar. It is never a button: a recruiter confirms
  *  yes, equivalent, not shown or no. */

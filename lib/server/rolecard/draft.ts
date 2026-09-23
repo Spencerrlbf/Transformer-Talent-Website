@@ -1,8 +1,18 @@
-// Drafts a role's scorecard from its job description: three tiers, short
-// testable rows. One call per role; the hiring manager or recruiter can then
+// Drafts a role's scorecard from its job description in one typed call:
+// three tiers of short, testable rows, each of a kind (years, technology or
+// judgment). A judgment row comes back as three SLOTS, not sentences: what
+// merely names the subject on a profile, what a line describing the work
+// says, and what owning or leading it looks like. Code writes the rungs and
+// the note from the slots (lib/rolecard.ts rungsFromSlots, noteFromSlots),
+// so every card reads the same way and a title can never sit at the rung a
+// row is met from. Code checks the draft and fixes what it can; the model is
+// asked once more only for what it alone can fix. The recruiter can then
 // reword, move, delete or add rows. Nothing here writes to the database.
 
-import { isCareerYearsRow, sanitizeScorecard, type Criterion, type Scorecard } from "@/lib/rolecard";
+import {
+  MAX_GOOD, MAX_RUNG, WORK_VERB, isCareerYearsRow, noteFromSlots, rowKind, rungsFromSlots, sanitizeScorecard, yearsLabel,
+  type Criterion, type RungSlots, type Scorecard, type Tier,
+} from "@/lib/rolecard";
 import { isLanguage, technologiesNamed } from "@/lib/tech-terms";
 
 export interface DraftInput {
@@ -23,52 +33,82 @@ export interface DraftInput {
 export const DRAFT_MODEL = "gpt-4o-2024-08-06";
 const DRAFT_SEED = 7;
 
-// One array per tier, so a tier cannot be skipped the way a single list let it be.
-const ROWS = {
-  type: "array",
-  items: {
-    type: "object",
-    additionalProperties: false,
-    properties: { label: { type: "string" }, good: { type: "string" } },
-    required: ["label", "good"],
+/** One row as the model returns it, with its tier attached. */
+export interface DraftRow {
+  tier: Tier;
+  kind: "years" | "technology" | "judgment";
+  label: string;
+  years: number | null;
+  basis: "engineer" | "professional" | null;
+  signal: string | null;
+  work: string | null;
+  beyond: string | null;
+  metFrom: number | null;
+}
+
+const ROW = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    kind: { type: "string", enum: ["years", "technology", "judgment"] },
+    label: { type: "string" },
+    years: { type: ["integer", "null"] },
+    basis: { type: ["string", "null"], enum: ["engineer", "professional", null] },
+    signal: { type: ["string", "null"] },
+    work: { type: ["string", "null"] },
+    beyond: { type: ["string", "null"] },
+    metFrom: { type: ["integer", "null"] },
   },
+  required: ["kind", "label", "years", "basis", "signal", "work", "beyond", "metFrom"],
+} as const;
+// One array per tier, so a tier cannot be skipped the way a single list let it be.
+const DRAFT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: { required: { type: "array", items: ROW }, exceptional: { type: "array", items: ROW }, bonus: { type: "array", items: ROW } },
+  required: ["required", "exceptional", "bonus"],
 } as const;
 
 // The examples below are deliberately from OTHER kinds of role (payments,
-// data platform, mobile). The first version used an agent-platform role as
-// its example; the first role it was tried on was an agent-platform role, and
-// it copied three rows from the prompt, including a "2+ years" bar no job
-// description had asked for. The second version still carried two phrases
-// from that role ("backend services in production", "evaluation or
-// observability"), and both came back word for word. Nothing here may be
-// taken from a role the drafter is being tested on.
+// mobile, data). An earlier version used an agent-platform role as its
+// example; the first role it was tried on was an agent-platform role, and it
+// copied three rows from the prompt. Nothing here may be taken from a role
+// the drafter is being tested on.
 export const DRAFT_SYSTEM = `You are a senior technical recruiter turning a job description into the scorecard every candidate for this role is checked against. Most candidates are judged from a LinkedIn profile alone, so each row must be something a profile, a resume or a ten-minute call can answer.
 
 THREE TIERS
-- required: the hiring manager would reject without it. 3 to 5 rows. Include the minimum years when the role states one, as its own row, in exactly one of these two forms: for a software or engineering role, "5+ years as a software engineer"; for any other role (data science, research, product, design), "5+ years of professional experience". Include the core skill and the core kind of work.
+- required: the hiring manager would reject without it. 3 to 5 rows. Include the minimum years when the role states one, as its own years row. Include the core skill and the core kind of work.
 - exceptional: what the ideal hire has beyond the bar: the rare thing that makes the hiring manager say yes on sight. 1 to 3 rows, drawn from the role's hardest responsibilities. Never generic praise.
 - bonus: nice to have. 1 to 4 rows.
 
+THREE KINDS OF ROW
+- years: the minimum years bar and nothing else. Give years as a whole number and basis: "engineer" for a software or engineering role, "professional" for any other (data science, research, product, design). Code writes the label. At most one years row, and only when the description states a minimum. No slots.
+- technology: a language, framework or tool the person must have used, checked by code against their skill tags and resume. The label names it and, in brackets, what else the employer would accept from the role's own stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". When the stack lists several languages, every one that would do the row's job goes in the brackets, not only the closest. With no stated alternatives, name none. Put a years bar on a technology row ONLY when the description states one for that skill. No slots.
+- judgment: work the person has done, judged on rungs that code writes from three slots you fill, each a phrase of at most 18 words, never a sentence:
+  - signal: the concrete things a profile shows when it merely NAMES the subject without describing work: the titles, team names, skill tags, tool or product names, or the mention itself, written as those things. No verb of doing. Examples: "A payments, billing or ledger title, team or skills tag"; "Kafka or Kinesis on a skills list"; "A chemistry or materials science degree on the profile".
+  - work: what a line DESCRIBING the work says: the thing, then what they did with it, with a verb of doing (built, ran, shipped, deployed, operated, designed, owned, led, migrated, scaled, trained, published). Example: "a payment, billing or ledger system they built, deployed or ran in production".
+  - beyond: what owning or leading it looks like. Example: "Owned or led the payments platform or ledger".
+  - metFrom: 3, the rung where the work is described. Use 2 only when the signal is the thing itself and nothing more needs describing: a degree, a certification, a licence, a security clearance, a language spoken.
+  A job title or a team name says where someone sat, not what they did: it belongs in signal, never in work.
+
 EVERY ROW IS CHECKABLE FROM WHAT PEOPLE ACTUALLY WRITE
 - label: at most 10 words, no question mark. Never a sentence copied from the description. Never an adjective as the test: no deep, strong, solid, expert, proven, extensive, comfortable, familiar. Say the thing done: "Hands-on mobile experience" becomes "Has shipped an iOS or Android app to the store".
-- good: one plain sentence, at most 28 words, naming what a PROFILE shows when this is true: the words people use when they describe the work (what they built, ran or shipped) and the technologies tagged on such a job. A job title or a team name says where someone sat, not what they did: name it as a signal, never as what makes the row true. Never the row's own words followed by "named in job titles or descriptions": that tells the judge nothing. Never duties nobody writes on a profile (on-call, code review, stakeholder management). Never "in any capacity", "exposure to", "familiarity with": they make everything count.
-- The work the role is named after ("Agent Platform Engineer": agents) is Required or Exceptional, never Bonus. Bonus never counts for or against anyone.
+- The work the role is named after ("Payments Engineer": payments) is Required or Exceptional, never Bonus. Bonus never counts for or against anyone.
 - One row, one question. If a single line on a profile would tick two rows, they are one row: merge them. When the description pairs two names for one capability, keep both joined by "or" ("billing or invoicing systems"), because people describe their work with either word.
-- A technology row says what else would do the job, in brackets, taken from the role's own tech stack: "Backend in Java or Kotlin (Go, Scala or C# accepted)". When the stack lists several languages, every one that would do the row's job goes in the brackets, not only the closest. With no stated alternatives, name none. Put a years bar on a skill row ONLY when the description states one for that skill; how deep someone is, is a question for the call.
-- A category row keeps technologies out of its label and lists them in good: label "Stream processing or message queues"; good "Kafka, Kinesis, Pub/Sub, RabbitMQ or SQS named on a job; Flink or Spark Streaming also count".
+- A category row keeps technologies out of its label and puts them in the slots: label "Stream processing or message queues"; signal "Kafka, Kinesis, Pub/Sub, RabbitMQ or SQS on a skills list or in a team name"; work "a stream or queue they built or ran in production with Kafka, Kinesis, Pub/Sub, RabbitMQ or SQS". Name only technologies the description or the stack names.
 
 HOW DESCRIPTION LANGUAGE BECOMES A ROW (patterns from other roles)
-- "Deep Python expertise" is not a row. "Python services in production (Go or Java accepted)" is.
-- "Strong distributed-systems background" is not a row. "Has built distributed systems (queues, consensus, sharding)" is.
+- "Deep Python expertise" is not a row. "Python services in production (Go or Java accepted)" is, as a technology row.
+- "Strong mobile background" is not a row. "Has shipped an iOS or Android app to the store" is, as a judgment row: signal "An iOS, Android or mobile title, team or skills tag", work "an iOS or Android app they built and shipped to the App Store or Google Play", beyond "Led the mobile team or owned the app end to end".
 - "Comfort at the intersection of data and product" is not a row. "Has shipped data products used by customers" is.
-- "8+ years of engineering with deep Java expertise" is TWO rows: "8+ years as a software engineer" and "Backend in Java or Kotlin (Scala or C# accepted)".
+- "8+ years of engineering with deep Java expertise" is TWO rows: a years row (8, engineer) and "Backend in Java or Kotlin (Scala or C# accepted)".
 
 EXAMPLES OF THE FORM (from other roles; do not reuse their content)
-- required: "Has built payment or ledger systems in production" :: good: "A line describing a payment, billing, ledger, reconciliation or card-processing system they built or ran; a payments title or team alone is a signal."
-- exceptional: "Has led a zero-to-one product as the first engineers" :: good: "Founding engineer, first engineer, early engineer or technical co-founder at a company that shipped."
-- bonus: "Data warehouse modelling" :: good: "dbt, Snowflake, BigQuery or Redshift named on a job; dimensional modelling or analytics engineering in a description."
+- required, judgment: "Has built payment or ledger systems in production" :: signal "A payments, billing or ledger title, team or skills tag" :: work "a payment, billing or ledger system they built, deployed or ran in production" :: beyond "Owned or led the payments platform or ledger" :: metFrom 3
+- exceptional, judgment: "Has led a zero-to-one product as one of the first engineers" :: signal "Founding engineer, first engineer, early engineer or technical co-founder in a title" :: work "a product they took from nothing to shipped as one of the first engineers" :: beyond "Founded the company or led the founding team" :: metFrom 3
+- bonus, technology: "Data warehouse modelling with dbt (Snowflake, BigQuery or Redshift accepted)"
 
-Every requirement and every hard responsibility in the description is covered by some row: reword what cannot be checked, never leave it out. Never invent requirements the description does not support. No rows about soft skills, culture, location, visa or salary. Order each tier by importance. 7 to 11 rows in total.`;
+Every requirement and every hard responsibility in the description is covered by some row: reword what cannot be checked, never leave it out. Never invent requirements the description does not support: a thin description gets fewer rows, not made-up ones. No rows about soft skills, culture, location, visa or salary. Order each tier by importance. 5 to 11 rows in total.`;
 
 /** Enough written about the role to draft from. A bare title would make the
  *  model invent requirements, and invented Required rows would pass people. */
@@ -79,7 +119,7 @@ export const canDraft = (input: DraftInput): boolean => {
   return text.trim().length >= 80 || (input.skills || []).length >= 2;
 };
 
-// ---------- a draft is checked in code, and sent back to be fixed ----------
+// ---------- a draft is checked in code; the model is asked once more only for what it alone can fix ----------
 // The first drafts ignored the rules above whenever the job description made
 // it easy to: "Deep TypeScript backend expertise" and "Production-grade
 // infrastructure experience" came straight from the description's
@@ -116,6 +156,50 @@ export interface DraftProblem {
   advisory?: boolean;
 }
 const hard = (ps: DraftProblem[]) => ps.filter((p) => !p.advisory);
+
+/** Everything the role says, in one text: what a technology named in a slot
+ *  must be found in. */
+const roleText = (input: DraftInput): string => {
+  const jd = input.jd || {};
+  return [input.title, jd.about, input.description, ...(jd.doing || []), ...(jd.needs || []), ...(jd.bonus || []), (input.skills || []).flatMap((s) => [s.skill, ...(s.alternates || [])]).join(", "), input.techStack].filter(Boolean).join("\n");
+};
+const tidy = (s: string | null | undefined): string => String(s ?? "").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
+/** A row whose subject is a thing one holds, not work one did: met when named. */
+const NAMED_THING = /\b(degree|bachelor'?s?|master'?s?|bsc|msc|mba|phd|doctorate|certif\w*|qualification|licen[cs]ed?|accredit\w*|clearance|fluent|native speaker)\b/i;
+const SLOT_HELP = {
+  signal: "The signal is what names the subject on a profile without describing work: a title, a team name, a skill tag, a product name.",
+  work: "The work is what a line describing the work says: the thing, then what they did with it, with a verb of doing.",
+  beyond: "Beyond is what owning or leading it looks like.",
+} as const;
+
+/** What is wrong with the rows as the model returned them: the slots, the
+ *  kinds, the years. In words the model can act on. */
+export function slotProblems(rows: DraftRow[], input: DraftInput): DraftProblem[] {
+  const out: DraftProblem[] = [];
+  const known = new Set(technologiesNamed(roleText(input)).map((g) => g[0]));
+  let yearsRows = 0;
+  for (const r of rows) {
+    const label = tidy(r.label) || "(unnamed row)";
+    if (r.kind === "years") {
+      yearsRows++;
+      if (!(typeof r.years === "number" && r.years >= 1)) out.push({ label, problem: "is a years row with no number of years. Give years as a whole number, or leave the row out." });
+      continue;
+    }
+    if (r.kind !== "judgment") continue;
+    for (const k of ["signal", "work", "beyond"] as const) {
+      if (!tidy(r[k])) out.push({ label, problem: `has no ${k} slot. ${SLOT_HELP[k]}` });
+    }
+    const work = tidy(r.work);
+    const signal = tidy(r.signal);
+    if (work && !WORK_VERB.test(work)) out.push({ label, problem: `its work slot ("${work.slice(0, 60)}") has no verb of doing. Say what they built, ran, shipped, deployed or operated.` });
+    if (signal && WORK_VERB.test(signal)) out.push({ label, problem: `its signal slot ("${signal.slice(0, 60)}") describes work. A signal is a title, a team name, a skill tag or a mention: what names the subject without describing it.` });
+    for (const g of technologiesNamed(`${work} ${signal} ${tidy(r.beyond)}`)) {
+      if (!known.has(g[0])) out.push({ label, problem: `names ${g[0]}, which neither the description nor the role's stack does. Name only technologies the role itself names.` });
+    }
+  }
+  if (yearsRows > 1) out.push({ label: "(years rows)", problem: `has ${yearsRows} years rows. Keep one, the minimum the description states.` });
+  return out;
+}
 
 /** What is wrong with a draft, row by row, in words the model can act on. */
 export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[] {
@@ -173,11 +257,10 @@ export function draftProblems(card: Scorecard, input: DraftInput): DraftProblem[
     });
     if (twin && !out.some((p) => p.label === b.c.label && DUPLICATE.test(p.problem))) out.push({ label: b.c.label, problem: `covers the same ground as "${twin.c.label}". One profile line would tick both: keep one row, in the tier it belongs to.` });
   });
-  // A note is what the judge follows, to the letter: "Infrastructure work
-  // named in job titles or descriptions" under "Has built infrastructure"
-  // adds nothing, and three people lost a true tick to it. A note must name
-  // evidence beyond the row's own words: a title, a team name, a technology,
-  // the words people use.
+  // A note is what the recruiter reads under the row. One written by hand
+  // that only repeats the row's own words ("Infrastructure work named in job
+  // titles or descriptions" under "Has built infrastructure") adds nothing.
+  // A note written from the slots always names the work, so it passes.
   const FILLER = new Set(["named", "shown", "listed", "mentioned", "described", "stated", "job", "jobs", "title", "titles", "description", "descriptions", "profile", "profiles", "role", "roles", "team", "teams", "similar", "related", "context", "such", "like", "any", "one", "more", "also", "count", "counts", "e.g", "eg", "including", "such as", "work", "working", "system", "systems", "tools", "tool", "environment", "environments", "production", "experience", "skill", "skills", "tag", "tags", "list", "lists"]);
   for (const c of card.criteria) {
     if (!c.good || isCareerYearsRow(c.label)) continue;
@@ -228,14 +311,49 @@ function tidyLabel(label: string): string {
   return t.length >= 6 ? t.charAt(0).toUpperCase() + t.slice(1) : label;
 }
 
-const DRAFT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: { required: ROWS, exceptional: ROWS, bonus: ROWS },
-  required: ["required", "exceptional", "bonus"],
-} as const;
+/** The rows as a card: the years label written by code in its fixed form,
+ *  a judgment row's rungs and note written from its slots, a technology row
+ *  as its label. A judgment row whose slots are missing is kept without a
+ *  ladder (its note or label seeds a single rung) and flagged for repair. */
+export function toScorecard(rows: DraftRow[]): Scorecard | null {
+  let years = false;
+  const criteria: Partial<Criterion>[] = [];
+  for (const r of rows) {
+    const label = tidy(r.label);
+    if (r.kind === "years") {
+      if (years || typeof r.years !== "number" || r.years < 1) continue;
+      years = true;
+      criteria.push({ tier: r.tier, label: yearsLabel(r.years, r.basis === "professional" ? "professional" : "engineer") });
+      continue;
+    }
+    if (!label) continue;
+    if (r.kind === "technology" || isCareerYearsRow(label)) {
+      criteria.push({ tier: r.tier, label });
+      continue;
+    }
+    const slots: RungSlots = { signal: tidy(r.signal), work: tidy(r.work), beyond: tidy(r.beyond) };
+    const filled = !!(slots.signal && slots.work && slots.beyond);
+    // A degree, a certification or a licence is met when it is named: the
+    // mention is the thing. Code decides that whatever the model said.
+    const metFrom: 2 | 3 = r.metFrom === 2 || NAMED_THING.test(label) ? 2 : 3;
+    // A judgment row whose label names a technology would be decided from job
+    // tags unless the kind is stored: the model asked for rungs, so it gets them.
+    const override = rowKind({ label }) === "tech" ? { kind: "judgment" as const } : {};
+    criteria.push({
+      tier: r.tier,
+      label,
+      ...override,
+      ...(filled ? { good: noteFromSlots(slots, metFrom), ladder: rungsFromSlots(slots, metFrom), metAt: metFrom } : {}),
+    });
+  }
+  return sanitizeScorecard({ criteria }, "ai");
+}
 
-async function askDrafter(messages: { role: string; content: string }[], timeoutMs: number): Promise<Scorecard | null> {
+/** The reply's shape, rebuilt from the rows, for the assistant turn of a repair. */
+const asReply = (rows: DraftRow[]) =>
+  JSON.stringify(Object.fromEntries((["required", "exceptional", "bonus"] as const).map((t) => [t, rows.filter((r) => r.tier === t).map(({ tier: _tier, ...rest }) => rest)])));
+
+async function askDrafter(messages: { role: string; content: string }[], timeoutMs: number): Promise<DraftRow[] | null> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -254,16 +372,30 @@ async function askDrafter(messages: { role: string; content: string }[], timeout
   }
   try {
     const data = (await res.json()) as { choices: { message: { content: string } }[] };
-    const out = JSON.parse(data.choices[0].message.content) as Record<"required" | "exceptional" | "bonus", { label: string; good: string }[]>;
-    const criteria = (["exceptional", "required", "bonus"] as const).flatMap((tier) => (Array.isArray(out[tier]) ? out[tier] : []).map((r) => ({ ...r, tier })));
-    return sanitizeScorecard({ criteria }, "ai");
+    const out = JSON.parse(data.choices[0].message.content) as Record<Tier, Partial<DraftRow>[]>;
+    const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+    const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+    return (["exceptional", "required", "bonus"] as const).flatMap((tier) =>
+      (Array.isArray(out[tier]) ? out[tier] : []).map((r) => ({
+        tier,
+        kind: r.kind === "years" || r.kind === "technology" ? r.kind : "judgment",
+        label: str(r.label) || "",
+        years: num(r.years),
+        basis: r.basis === "professional" ? "professional" : r.basis === "engineer" ? "engineer" : null,
+        signal: str(r.signal),
+        work: str(r.work),
+        beyond: str(r.beyond),
+        metFrom: num(r.metFrom),
+      }))
+    );
   } catch {
     return null;
   }
 }
 
-/** Draft, check, repair. `budgetMs` is how long the caller can wait in all:
- *  a repair is only attempted while there is time for one. */
+/** Draft, check, and ask once more only for what the model alone can fix.
+ *  `budgetMs` is how long the caller can wait in all: the repair is only
+ *  attempted while there is time for one. */
 export async function draftScorecard(input: DraftInput, timeoutMs = 25_000, budgetMs = 55_000): Promise<Scorecard | null> {
   if (!process.env.OPENAI_API_KEY || !canDraft(input)) return null;
   const started = Date.now();
@@ -283,74 +415,43 @@ export async function draftScorecard(input: DraftInput, timeoutMs = 25_000, budg
     { role: "system", content: DRAFT_SYSTEM },
     { role: "user", content: user.slice(0, 9000) },
   ];
+  const brief = (ps: DraftProblem[]) => ps.map((p) => `${p.advisory ? "(advice) " : ""}${p.label}: ${p.problem.slice(0, 70)}`).join(" | ").slice(0, 600);
+  const check = (rows: DraftRow[]) => {
+    const card = toScorecard(rows);
+    const problems = card ? [...slotProblems(rows, input), ...draftProblems(card, input)] : [{ label: "(card)", problem: "has no rows. Return the scorecard." }];
+    return { rows, card, problems };
+  };
+
   const first = await askDrafter(base, timeoutMs);
   if (!first) return null;
-  // A row with a problem is reworded, never deleted. "Deleted" is strict: the
-  // row's label is gone, the card is shorter for it, and no new row took up
-  // its subject. (A row left as it was is not deleted, and neither is one
-  // reworded in other words: both looked deleted to a looser test, and good
-  // repairs were thrown away for it.) What was deleted stays owed until a
-  // new row brings its subject back, however many rounds that takes.
-  type Owed = { label: string; subject: Set<string> };
-  const newlyDeleted = (before: Scorecard, beforeProblems: DraftProblem[], after: Scorecard): Owed[] => {
-    const has = (card: Scorecard, label: string) => card.criteria.some((x) => x.label === label);
-    const gone = before.criteria.filter((c) => !has(after, c.label));
-    const flaggedGone = gone.filter((c) => hard(beforeProblems).some((p) => p.label === c.label && !DUPLICATE.test(p.problem)));
-    const fresh = after.criteria.filter((x) => !has(before, x.label));
-    // every new row is somebody's rewording: only the shortfall was deleted
-    const shortfall = gone.length - fresh.length;
-    if (shortfall <= 0) return [];
-    return flaggedGone
-      .map((c) => ({ label: c.label, subject: topic(c.label.replace(/\(.*?\)/g, " ")) }))
-      .filter((o) => o.subject.size > 0 && !fresh.some((x) => [...topic(`${x.label} ${x.good || ""}`)].some((w) => o.subject.has(w))))
-      .slice(0, shortfall);
-  };
-  const stillOwed = (owed: Owed[], card: Scorecard): Owed[] =>
-    owed.filter((o) => !card.criteria.some((x) => !first.criteria.some((y) => y.label === x.label) && [...topic(`${x.label} ${x.good || ""}`)].some((w) => o.subject.has(w))));
-  const asProblems = (owed: Owed[]): DraftProblem[] => owed.map((o) => ({ label: "(deleted row)", problem: `"${o.label}" was removed instead of reworded. Bring back what it asked for, as something a person has built or done.` }));
-  const brief = (ps: DraftProblem[]) => ps.map((p) => `${p.advisory ? "(advice) " : ""}${p.label}: ${p.problem.slice(0, 70)}`).join(" | ").slice(0, 600);
-
-  let best = first;
-  let problems = draftProblems(first, input);
-  const notes = [`first draft: ${first.criteria.length} rows, ${hard(problems).length} problem(s)${problems.length ? `: ${brief(problems)}` : ""}`];
-  let latest = first;
-  let latestProblems = problems;
-  let owed: Owed[] = [];
-  // Advice alone never starts a repair: it rides along with one.
-  for (let round = 0; round < 2 && hard(latestProblems).length && Date.now() - started + timeoutMs < budgetMs; round++) {
-    const asJson = (c: Scorecard) => JSON.stringify(Object.fromEntries((["required", "exceptional", "bonus"] as const).map((t) => [t, c.criteria.filter((x) => x.tier === t).map((x) => ({ label: x.label, good: x.good || "" }))])));
+  let best = check(first);
+  const notes = [`first draft: ${best.card?.criteria.length ?? 0} rows, ${hard(best.problems).length} problem(s)${best.problems.length ? `: ${brief(best.problems)}` : ""}`];
+  // One repair, for the problems only the model can fix; advice rides along.
+  if (hard(best.problems).length && Date.now() - started + timeoutMs < budgetMs) {
     const next = await askDrafter(
       [
         ...base,
-        { role: "assistant", content: asJson(latest) },
-        { role: "user", content: `That draft breaks the rules in ${latestProblems.length} place${latestProblems.length > 1 ? "s" : ""}. Return the whole scorecard again with every one of these fixed. Reword a row that has a problem, never delete it, and leave rows that have no problem as they are:\n${latestProblems.map((p) => `- "${p.label}" ${p.problem}`).join("\n")}` },
+        { role: "assistant", content: asReply(best.rows) },
+        { role: "user", content: `That draft breaks the rules in ${best.problems.length} place${best.problems.length > 1 ? "s" : ""}. Return the whole scorecard again with every one of these fixed. Reword a row that has a problem, never delete it, and leave rows that have no problem as they are:\n${best.problems.map((p) => `- "${p.label}" ${p.problem}`).join("\n")}` },
       ],
       timeoutMs
     );
-    if (!next) {
-      notes.push(`repair ${round + 1}: no reply`);
-      break;
+    if (!next) notes.push("repair: no reply");
+    else {
+      const repaired = check(next);
+      notes.push(`repair: ${repaired.card?.criteria.length ?? 0} rows, ${hard(repaired.problems).length} problem(s)${repaired.problems.length ? `: ${brief(repaired.problems)}` : ""}`);
+      if (repaired.card && hard(repaired.problems).length < hard(best.problems).length) best = repaired;
     }
-    owed = stillOwed([...owed, ...newlyDeleted(latest, latestProblems, next)], next);
-    const left = [...draftProblems(next, input), ...asProblems(owed)];
-    notes.push(`repair ${round + 1}: ${next.criteria.length} rows, ${hard(left).length} problem(s)${left.length ? `: ${brief(left)}` : ""}`);
-    if (hard(left).length < hard(problems).length) {
-      best = next;
-      problems = left;
-    }
-    // The next round works on the latest reply either way: it carries the
-    // model's own last attempt, and what is still wrong with it.
-    latest = next;
-    latestProblems = left;
   }
-  if (hard(problems).length) {
-    console.warn(`scorecard draft: ${hard(problems).length} problem(s) left after repair:`, brief(hard(problems)));
-    const tidied = sanitizeScorecard({ criteria: best.criteria.map((c) => (isCareerYearsRow(c.label) ? c : { ...c, id: undefined, label: tidyLabel(c.label) })) }, "ai");
-    if (tidied) best = tidied;
-    notes.push(`kept with ${hard(problems).length} problem(s) after tidying`);
+  if (!best.card) return null;
+  let card = best.card;
+  if (hard(best.problems).length) {
+    console.warn(`scorecard draft: ${hard(best.problems).length} problem(s) left after repair:`, brief(hard(best.problems)));
+    const tidied = sanitizeScorecard({ criteria: card.criteria.map((c) => (isCareerYearsRow(c.label) ? c : { ...c, id: undefined, label: tidyLabel(c.label) })) }, "ai");
+    if (tidied) card = tidied;
+    notes.push(`kept with ${hard(best.problems).length} problem(s) after tidying`);
   }
   // What the drafter did, kept on the card (never shown): the only way to see
   // from the database how a draft on an unfamiliar role went.
-  best = { ...best, draftNotes: notes.map((n) => n.slice(0, 700)).slice(0, 6) };
-  return best;
+  return { ...card, draftNotes: notes.map((n) => n.slice(0, 700)).slice(0, 6) };
 }
