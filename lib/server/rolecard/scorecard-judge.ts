@@ -474,7 +474,8 @@ export function withReviewReasons(review: Review, label: VerdictLabel, rows: Car
 const shortName = (r: CardRow): string => {
   if ((r.kind ?? rowKind(r)) !== "judgment") return r.short || chipLabel(r.label);
   const bare = r.label.replace(/\(.*?\)/g, " ").replace(/^\s*(has|have)\s+(built|used|run|owned|led|shipped|worked on|developed|designed|managed|delivered|operated|maintained|created)\s+(and\s+\w+\s+)?/i, "").replace(/\s+/g, " ").trim();
-  return bare.length >= 3 ? bare.charAt(0).toLowerCase() + bare.slice(1) : r.label;
+  // The first letter drops its capital only when the word is not an acronym ("AI agent systems" keeps its AI).
+  return bare.length >= 3 ? (/^[A-Z][a-z]/.test(bare) ? bare.charAt(0).toLowerCase() + bare.slice(1) : bare) : r.label;
 };
 
 // ---------- rows decided by code ----------
