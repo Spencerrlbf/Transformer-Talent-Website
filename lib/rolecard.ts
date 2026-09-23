@@ -11,7 +11,7 @@
 // "no": only the years rule or a recruiter can make someone a Pass.
 
 import { shortRequirement, type VerdictLabel, type VerdictView } from "./verdict-view";
-import { technologiesNamed } from "./tech-terms";
+import { namesAny, technologiesNamed } from "./tech-terms";
 
 export type Tier = "exceptional" | "required" | "bonus";
 export const TIERS: Tier[] = ["exceptional", "required", "bonus"];
@@ -105,6 +105,9 @@ export interface CardRow {
    *  Addepar", "Resume", "Skills list"). Worked out in code from where the
    *  quote or the technology sits; never written by the model. */
   source?: string;
+  /** Up to three verified lines behind the answer, each with where it was
+   *  found; `quote` and `source` are the first of them, for older readers. */
+  quotes?: { text: string; source: string }[];
   /** Laid on from the role's scorecard: a Required row confirmed on a call. */
   call?: boolean;
   /** How the row was decided, as resolved when it was judged. */
@@ -142,11 +145,32 @@ export interface ProfileFacts {
   careerJobs: number;
   /** tag: under 200 employees is a startup, over 2,000 is large, else none. */
   current: { title: string | null; company: string | null; months: number | null; employees: number | null; founded: number | null; tag: "startup" | "large" | null } | null;
-  /** In profile order, current first; at most 8. */
-  companies: { name: string; title: string; from: string | null; to: string | null; years: number | null; career: boolean }[];
+  /** In profile order, current first; at most 8. `skills` are that job's tags, at most 8. */
+  companies: { name: string; title: string; from: string | null; to: string | null; years: number | null; career: boolean; skills?: string[] }[];
   /** The latest bachelor's if any, else the latest education entry. */
   school: { name: string; degree: string | null; field: string | null; year: number | null } | null;
+  /** From the words of the current title only ("no senior title yet" for mid). */
+  seniority?: { level: "junior" | "mid" | "senior" | "staff" | "lead" | null; note: string };
+  /** Skills from job tags with their dated years and where they were used,
+   *  strongest first; profile-only skills at the end with listedOnly. */
+  skills?: { name: string; years: number | null; where: string[]; current: boolean; listedOnly: boolean }[];
 }
+
+/** One bullet of the review: a sentence in the recruiter's terms and the
+ *  rows it rests on. The evidence is never in the sentence; the rows carry
+ *  the verified lines and the client shows them as hover tags. */
+export interface ReviewBullet { text: string; rowIds: string[] }
+export interface Review {
+  v: 1;
+  /** One sentence: the verdict and the one thing to confirm. */
+  bottomLine: string;
+  /** Why they fit this role; every bullet cites at least one met row. */
+  fits: ReviewBullet[];
+  /** What is short or not shown, and what to ask; cites only unmet rows, or none. */
+  gaps: ReviewBullet[];
+  ask: string[];
+}
+export const REVIEW_LIMITS = { fits: 6, gaps: 4, ask: 3, bulletWords: 36, bottomLineWords: 20 } as const;
 
 export interface VerdictCardData {
   rows: CardRow[];
@@ -163,6 +187,8 @@ export interface VerdictCardData {
   /** Facts about the person, written by code from dated positions (never by a model). */
   facts?: string[];
   profile?: ProfileFacts;
+  /** The bulleted review, written from the rows and the role's own words. */
+  review?: Review;
   wrongRole?: { by: string; at: string } | null;
 }
 
@@ -652,3 +678,54 @@ export function applyOverrides(
     card: { ...card, rows, aiLabel, aiGaps: baseGaps, wrongRole, strength: cardStrength(rows, whole), confirm: label === "contact" ? toConfirm(rows) : [] },
   };
 }
+
+// ---------- the review as bullets ----------
+
+const isMet = (st: RowStatus) => st === "yes" || st === "equivalent";
+const words = (t: string) => t.trim().split(/\s+/).filter(Boolean);
+const capWords = (t: string, n: number) => { const w = words(t); return w.length <= n ? t.trim() : `${w.slice(0, n).join(" ")}…`; };
+
+/** The mark a bullet carries for the row it rests on. */
+export const reviewMark = (status: RowStatus): "✓" | "≈" | "△" | "?" | "×" =>
+  status === "yes" ? "✓" : status === "equivalent" ? "≈" : status === "short" ? "△" : status === "no" ? "×" : "?";
+
+/** Keep only bullets that rest on the rows. A fit bullet must cite at least
+ *  one met row; a gap bullet may cite only rows that are not met, or none;
+ *  ids that are not on the card are dropped; a bullet that names a
+ *  technology found neither in the rows nor in the person's material is
+ *  dropped; counts and lengths are capped. Pure, so the same rows and the
+ *  same draft always give the same review. */
+export function guardReview(draft: Partial<Review> | null | undefined, rows: CardRow[], material = ""): Review {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const allowed = [material, ...rows.map((r) => `${r.label} ${r.evidence} ${(r.quotes || []).map((q) => q.text).join(" ")} ${r.quote || ""}`)].join("\n");
+  const clean = (b: Partial<ReviewBullet> | null | undefined, fit: boolean): ReviewBullet | null => {
+    const text = capWords(String(b?.text || "").replace(/\s+/g, " "), REVIEW_LIMITS.bulletWords);
+    if (!text) return null;
+    const ids = [...new Set((Array.isArray(b?.rowIds) ? b!.rowIds : []).map((x) => String(x)).filter((id) => byId.has(id)))];
+    const cited = ids.map((id) => byId.get(id)!);
+    if (fit && !cited.some((r) => isMet(r.status))) return null;
+    if (!fit && cited.some((r) => isMet(r.status))) return null;
+    for (const group of technologiesNamed(text)) if (!namesAny(allowed, [group])) return null;
+    return { text, rowIds: ids };
+  };
+  const fits = (draft?.fits || []).map((b) => clean(b, true)).filter((b): b is ReviewBullet => !!b).slice(0, REVIEW_LIMITS.fits);
+  const gaps = (draft?.gaps || []).map((b) => clean(b, false)).filter((b): b is ReviewBullet => !!b).slice(0, REVIEW_LIMITS.gaps);
+  const ask = (draft?.ask || []).map((q) => capWords(String(q || "").replace(/\s+/g, " "), REVIEW_LIMITS.bulletWords)).filter(Boolean).slice(0, REVIEW_LIMITS.ask);
+  return { v: 1, bottomLine: capWords(String(draft?.bottomLine || "").replace(/\s+/g, " "), REVIEW_LIMITS.bottomLineWords), fits, gaps, ask };
+}
+
+/** A review written by code from the rows alone, for when the model call
+ *  fails or leaves nothing usable. Plain, but never wrong. */
+export function fallbackReview(rows: CardRow[], label: VerdictLabel): Review {
+  const tierOrder: Tier[] = ["required", "exceptional", "bonus"];
+  const ordered = tierOrder.flatMap((t) => rows.filter((r) => r.tier === t));
+  const fits = ordered.filter((r) => isMet(r.status)).map((r) => ({ text: `${r.label}: ${r.evidence}`.replace(/\s+/g, " "), rowIds: [r.id] }));
+  const open = ordered.filter((r) => r.tier === "required" && !isMet(r.status));
+  const gaps = open.map((r) => ({ text: r.status === "short" || r.status === "no" ? `${r.label}: ${r.evidence}` : `${r.label}: not shown on the profile or resume.`, rowIds: [r.id] }));
+  const bottomLine =
+    label === "contact" ? (open.length ? `Every Required row is met or set for the call; confirm ${open.map((r) => r.short || chipLabel(r.label)).join(", ")}.` : "Every Required row is met.")
+    : label === "pass" ? `Against on ${open.filter((r) => r.status === "no").map((r) => r.short || chipLabel(r.label)).join(", ") || "a Required row"}.`
+    : open.length ? `Worth a call to confirm ${open.map((r) => r.short || chipLabel(r.label)).join(", ")}.` : "Worth a message.";
+  return guardReview({ bottomLine, fits, gaps, ask: [] }, rows);
+}
+
