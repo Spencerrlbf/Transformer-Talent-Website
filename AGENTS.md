@@ -41,10 +41,13 @@ every merge as a production release.
   (`candidate_profiles_v2`, `candidate_experiences_v2`, `companies_v2`, …)
   belong to the separate recruitment-ai-platform project — **read-only at
   most; never migrate, alter, or write to them.**
-- **Hide the machinery from clients.** Client-facing surfaces (dashboard,
-  boards, emails) must never expose Q&A evidence, scorecards, prompts, or
+- **Hide the machinery from clients.** Client-facing surfaces (client
+  boards, emails) must never expose Q&A evidence, scorecard rows, prompts, or
   internal shorthand. Clients see only a tag + plain-English reason, rendered
   via `lib/server/client-reason.ts`. This is a commercial rule, not styling.
+  The recruiter dashboard is the exception by design: it shows the role's
+  scorecard, each row's status and the quoted lines behind it (the report
+  card in the candidate drawer). Recruiters see the machinery; clients never.
 - **Auth pattern:** `supabaseBrowser` is for Supabase Auth ONLY — never for
   table reads. All data access is server-side with the service-role key
   behind `requireMember` (`lib/server/dashboard-auth.ts`). RLS is a backstop,

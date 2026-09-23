@@ -26,3 +26,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HARVEST_API_KEY: ${{ secrets.HARVEST_API_KEY }}
+          # The scorecard judge's own key (TypeSafe Jev): a run advanced from
+          # here judges rows exactly as the website does.
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
