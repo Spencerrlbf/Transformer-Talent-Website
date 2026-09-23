@@ -160,7 +160,16 @@ const EMPTY: ParsedCompany = { name: null, industry: null, employee_range: null,
  * unknown company is simply absent (the applicant path, which has no import
  * step to prefetch employers and no time budget for one).
  */
-export async function getCompanyContexts(slugs: string[], opts: { cacheOnly?: boolean } = {}): Promise<Map<string, CompanyContext>> {
+export async function getCompanyContexts(
+  slugs: string[],
+  opts: {
+    cacheOnly?: boolean;
+    /** Use the real provider whenever a key exists, even where runs are
+     *  mocked (preview deploys): for metadata a hover is worth $0.004 for,
+     *  cached for everyone. Without a key, mock mode fabricates as usual. */
+    liveIfKey?: boolean;
+  } = {}
+): Promise<Map<string, CompanyContext>> {
   const unique = [...new Set(slugs.filter(Boolean))].slice(0, 100);
   const out = new Map<string, CompanyContext>();
   if (!unique.length) return out;
@@ -174,7 +183,8 @@ export async function getCompanyContexts(slugs: string[], opts: { cacheOnly?: bo
 
   // Mock mode fabricates what the cache lacks, in memory only. It never
   // writes: fabricated rows once reached the shared cache this way.
-  if (providerMode() === "mock") {
+  const key = (process.env.HARVEST_API_KEY || "").trim();
+  if (providerMode() === "mock" && !(opts.liveIfKey && key)) {
     const now = new Date().toISOString();
     for (const slug of unique) {
       if (!out.has(slug)) out.set(slug, { linkedin_slug: slug, ...mockCompany(slug), fetch_failed: false, fetched_at: now, raw: ROW_FORMAT });
@@ -186,7 +196,6 @@ export async function getCompanyContexts(slugs: string[], opts: { cacheOnly?: bo
     const c = out.get(s);
     return !c || predatesSnapshot(c);
   });
-  const key = (process.env.HARVEST_API_KEY || "").trim();
   // Without a key nothing can be fetched, and nothing is remembered: a
   // missing key must not fill the shared cache with failures.
   if (!wanted.length || !key) return out;

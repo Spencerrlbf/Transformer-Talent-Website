@@ -5,7 +5,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { getCompanyContexts, snapshotOf } from "@/lib/server/sourcing/company-context";
-import { providerMode } from "@/lib/server/sourcing/harvest";
 import { MAX_COMPANY_SLUGS, type CompanySnapshot } from "@/lib/company-snapshot";
 
 export const maxDuration = 30;
@@ -32,10 +31,10 @@ export async function GET(req: NextRequest) {
   const companies: Record<string, CompanySnapshot | null> = {};
   for (const slug of slugs) companies[slug] = null;
   try {
-    // Mock mode fabricates context for the pipeline, in memory. A recruiter's
-    // hover must never show invented facts, so in mock mode only what the
-    // cache holds is served.
-    const contexts = await getCompanyContexts(slugs, { cacheOnly: providerMode() === "mock" });
+    // A recruiter's hover must never show invented facts: where runs are
+    // mocked (preview deploys) the real page is fetched when a key exists,
+    // and without one only what the cache holds is served.
+    const contexts = await getCompanyContexts(slugs, { liveIfKey: true });
     for (const slug of slugs) companies[slug] = snapshotOf(contexts.get(slug));
   } catch (err) {
     console.error("company snapshot lookup failed:", err);
