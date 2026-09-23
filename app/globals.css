@@ -4574,7 +4574,6 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-summary { margin: 0 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55; color: var(--body-2); overflow-wrap: anywhere; }
 .vc-compact .vc-summary { margin: 4px 0 0; max-width: 60ch; }
 .vc-ask { margin: 0 0 8px; }
-.vc-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 .vc-decide { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .vc-decide .dash-btn { min-height: 44px; padding: 0 18px; }
 .vc-decide .vc-yes.on { background: var(--pos); border-color: var(--pos); color: #fff; }
@@ -4610,6 +4609,8 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-factsblock dd { margin: 0; min-width: 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
 .vc-factsblock dd small { font-size: inherit; font-weight: 400; color: var(--muted); }
 .vc-factsblock dd.none { font-weight: 400; color: var(--muted); }
+/* The second degree, greyed under the first. */
+.vc-factsblock dd .vc-school2 { display: block; }
 .vc-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 26px; }
 .vc-who, .vc-review { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .vc-review { gap: 10px; border-left: 1px solid var(--hair); padding-left: 26px; }
@@ -4634,7 +4635,7 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-aside-sep { margin: 0 8px; }
 /* Skills, from the jobs they were used on. */
 .vc-skills { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; row-gap: 3px; font-size: 12.5px; line-height: 1.5; }
-.vc-skill { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.vc-skill { display: grid; grid-template-columns: minmax(0, 1fr) minmax(44px, max-content) minmax(0, 1fr); gap: 8px; align-items: baseline; }
 .vc-skill b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
 .vc-skill .y { color: var(--pos); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vc-skill .y.none { color: var(--faint); font-weight: 400; font-size: 11px; }
@@ -4653,7 +4654,7 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-btext { font-size: 13.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
 .vc-btext b { font-weight: 600; }
 .vc-evwrap { position: relative; display: inline-block; vertical-align: middle; margin: 0 2px; }
-.vc-evtag { appearance: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--r-pill); background: var(--page); border: 1px solid rgba(0,0,0,.1); color: var(--body); font: inherit; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.vc-evtag { appearance: none; display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: var(--r-pill); background: var(--page); border: 1px solid rgba(0,0,0,.1); color: var(--body); font: inherit; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
 .vc-evtag:hover, .vc-evtag.open { background: var(--accent-wash); border-color: rgba(91,75,255,.4); color: var(--accent-press); }
 .vc-evtag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .vc-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: max-content; max-width: min(480px, calc(100vw - 32px)); padding: 12px 14px; border: 1px solid rgba(0,0,0,.14); border-radius: var(--r-card); background: var(--paper); box-shadow: var(--sh-menu); display: grid; gap: 8px; font-size: 12.5px; font-weight: 400; line-height: 1.45; color: var(--ink); text-align: left; white-space: normal; }
@@ -4679,4 +4680,12 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 @container (max-width: 860px) { .vc-body { grid-template-columns: 1fr; } .vc-review { border-left: 0; padding-left: 0; padding-top: 12px; border-top: 1px dashed var(--control-line); } }
 @container (max-width: 620px) { .vc-top { grid-template-columns: 1fr; } }
 @container (max-width: 520px) { .vc-skills { grid-template-columns: 1fr; } .vc-job, .vc-asides { grid-template-columns: 48px minmax(0, 1fr); } .vc-job-d { margin-left: 0; width: 100%; white-space: normal; } }
+/* Without container queries (older browsers) the window stands in for the
+   card: the drawer is 75vw with a 760px floor, and the card is about 100px
+   narrower than the drawer. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 1290px) { .vc-body { grid-template-columns: 1fr; } .vc-review { border-left: 0; padding-left: 0; padding-top: 12px; border-top: 1px dashed var(--control-line); } }
+  @media (max-width: 730px) { .vc-top { grid-template-columns: 1fr; } }
+  @media (max-width: 630px) { .vc-skills { grid-template-columns: 1fr; } .vc-job, .vc-asides { grid-template-columns: 48px minmax(0, 1fr); } .vc-job-d { margin-left: 0; width: 100%; white-space: normal; } }
+}
 @media (prefers-reduced-motion: reduce) { .ck-row { transition: none; } }

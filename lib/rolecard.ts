@@ -149,6 +149,10 @@ export interface ProfileFacts {
   companies: { name: string; title: string; from: string | null; to: string | null; years: number | null; career: boolean; skills?: string[] }[];
   /** The latest bachelor's if any, else the latest education entry. */
   school: { name: string; degree: string | null; field: string | null; year: number | null } | null;
+  /** The latest OTHER degree, greyed under the school: a postgraduate degree
+   *  when `school` is the bachelor's, else the bachelor's. Never a school
+   *  with no degree named. Older saved cards lack it. */
+  school2?: { name: string; degree: string | null; field: string | null; year: number | null } | null;
   /** From the words of the current title only ("no senior title yet" for mid). */
   seniority?: { level: "junior" | "mid" | "senior" | "staff" | "lead" | null; note: string };
   /** Skills from job tags with their dated years and where they were used,

@@ -7,10 +7,10 @@
 // line. A verdict without a card (older reviews) renders the old way: label,
 // paragraph, strip. Older cards without a profile, skills or a bulleted
 // review fall back piece by piece to what they do carry.
-import { useState } from "react";
+import { useId, useState } from "react";
 import { VERDICT_CLASS, VERDICT_LABEL, firstSentences, rowChips, shortRequirement, type TechChip, type VerdictView } from "@/lib/verdict-view";
 import { rowSummary } from "@/lib/rolecard";
-import Checklist, { type VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
+import Checklist, { anchorScopeOf, type VerdictFeedbackTarget } from "@/components/dashboard/rolecard/Checklist";
 import FactsBlock from "./FactsBlock";
 import CareerList from "./CareerList";
 import SkillsTable from "./SkillsTable";
@@ -159,6 +159,9 @@ export default function VerdictCard({
   review?: ReviewControl;
 }) {
   const [askOpen, setAskOpen] = useState(false);
+  // This card's scope for its checklist anchors: two cards on one page (a
+  // run table can show two with the same rows) never share a row id.
+  const anchorScope = anchorScopeOf(useId());
   const card = view.card;
   const hasCard = !!card?.rows.length;
   const summary = hasCard ? rowSummary(card!.rows) : "";
@@ -166,6 +169,9 @@ export default function VerdictCard({
   // the paragraph stands in for older verdicts.
   const bullets = card?.review && (card.review.fits.length > 0 || card.review.gaps.length > 0) ? card.review : null;
   const bottomLine = card?.review?.bottomLine?.trim() || "";
+  // The paragraph opens with the bottom line (for older readers). With the
+  // bottom line already on top, only the rest of it stands in for a review.
+  const paragraph = bottomLine && view.paragraph.trim().startsWith(bottomLine) ? view.paragraph.trim().slice(bottomLine.length).trim() : view.paragraph.trim();
 
   if (compact) {
     if (!hasCard) {
@@ -195,7 +201,7 @@ export default function VerdictCard({
           </p>
         )}
         {/* Without a bulleted review the paragraph's first sentence stands in. */}
-        <BottomLine text={bottomLine || firstSentences(view.paragraph, 1)} />
+        {(bottomLine || firstSentences(view.paragraph, 1).trim()) && <BottomLine text={bottomLine || firstSentences(view.paragraph, 1).trim()} />}
       </div>
     );
   }
@@ -272,7 +278,7 @@ export default function VerdictCard({
               {profile.skills ? (
                 <section className="vc-rsec">
                   <h4 className="vc-sec">Skills, from the jobs they were used on</h4>
-                  <SkillsTable skills={profile.skills} />
+                  <SkillsTable skills={profile.skills} companies={profile.companies} />
                 </section>
               ) : (
                 <TechStrip view={view} />
@@ -293,20 +299,23 @@ export default function VerdictCard({
         </div>
         <div className="vc-review">
           {bullets ? (
-            <ReviewBullets review={bullets} rows={card!.rows} />
+            <ReviewBullets review={bullets} rows={card!.rows} anchorScope={anchorScope} />
           ) : (
-            <section className="vc-rsec">
-              <h4 className="vc-sec">Review</h4>
-              <p className="cv2d-why">{view.paragraph}</p>
-              <AskList ask={view.ask} />
-            </section>
+            (paragraph || view.ask.length > 0) && (
+              <section className="vc-rsec">
+                <h4 className="vc-sec">Review</h4>
+                {paragraph && <p className="cv2d-why">{paragraph}</p>}
+                <AskList ask={view.ask} />
+              </section>
+            )
           )}
           {view.betterSuited && <div className="cv2d-route">↪ {view.betterSuited}</div>}
-          <p className="vc-note">{bullets ? "Written from the rows and the facts; it changes when they do." : "Written from the rows below and the facts. It changes only when a row or a fact changes."}</p>
           <hr className="vc-divider" />
-          <section className="vc-rsec vc-card">
-            <h4 className="vc-sec">Against the card</h4>
-            <Checklist view={view} feedback={feedback} />
+          <section className="vc-rsec">
+            <h4 className="vc-sec" title="The judged rows the review rests on. Check a row off and the label and the review follow.">
+              Against the card
+            </h4>
+            <Checklist view={view} feedback={feedback} anchorScope={anchorScope} />
           </section>
           {when}
           {reviewLink}

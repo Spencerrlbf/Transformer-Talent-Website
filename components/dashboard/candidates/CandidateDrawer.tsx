@@ -703,8 +703,9 @@ export default function CandidateDrawer({
         const t = e.target as HTMLElement | null;
         const tag = t?.tagName || "";
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
-        // Nor while working down a scorecard: focus sits on its buttons.
-        if (t?.closest?.(".ck")) return;
+        // Nor while working on the report card: focus sits on its evidence
+        // tags, its Yes and No, or the scorecard's buttons.
+        if (t?.closest?.(".vc")) return;
         if (e.key === "ArrowLeft" && canPrev) goPrev();
         if (e.key === "ArrowRight" && canNext) goNext();
       }

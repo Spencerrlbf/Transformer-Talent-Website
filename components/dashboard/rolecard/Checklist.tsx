@@ -8,7 +8,7 @@
 // Clicks never lock the list. Each one shows at once and is sent in turn; the
 // server's answer replaces the view only when nothing newer is waiting, and a
 // failed save puts back the last state the server confirmed.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useDash } from "../DashShell";
 import {
   NO_LINE_SOURCE,
@@ -54,19 +54,26 @@ const nameFromEmail = (email: string) => {
 const overridesOf = (rows: CardRow[]): RowOverride[] =>
   rows.filter((r) => r.confirmed).map((r) => ({ criterionId: r.id, status: r.status, note: r.confirmed!.note, by: r.confirmed!.by, at: r.confirmed!.at }));
 
-/** The anchor of a row on the judged checklist; the review's evidence tags link to it. */
-export const rowAnchor = (id: string) => `ck-row-${id}`;
+/** The anchor of a row on the judged checklist; the review's evidence tags
+ *  link to it. `scope` is the card's own id, so two cards on one page (a run
+ *  table can show two with the same rows) never share an anchor. */
+export const rowAnchor = (id: string, scope = "") => `ck-row-${id}${scope ? `-${scope}` : ""}`;
+
+/** A card's anchor scope from React's useId: letters, digits, dashes and
+ *  underscores only, so it sits in an id and in a hash link as it is. */
+export const anchorScopeOf = (uid: string) => uid.replace(/[^A-Za-z0-9_-]/g, "");
 
 const LIT_FOR_MS = 2000;
 
 /** Scroll the checklist to a row and light it for two seconds. Looks inside
  *  the card `from` sits in first (a run table can show two cards with the
- *  same rows), then anywhere on the page. */
+ *  same rows), then anywhere on the page. Rows are found by the criterion
+ *  id they carry, whatever card scope their anchor has. */
 export function openChecklistRow(id: string, from?: Element | null) {
   if (typeof document === "undefined") return;
-  const anchor = rowAnchor(id);
   const scope: ParentNode = from?.closest(".vc") ?? document;
-  const el = (scope.querySelector(`[id="${anchor}"]`) ?? document.getElementById(anchor)) as HTMLElement | null;
+  const sel = `[data-ck-row="${id.replace(/["\\]/g, "\\$&")}"]`;
+  const el = (scope.querySelector(sel) ?? document.querySelector(sel)) as HTMLElement | null;
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   el.focus({ preventScroll: true });
@@ -112,9 +119,12 @@ const FAIL: Record<string, string> = {
   role_not_found: "That role could not be found.",
 };
 
-export default function Checklist({ view, feedback }: { view: VerdictView; feedback?: VerdictFeedbackTarget }) {
+export default function Checklist({ view, feedback, anchorScope }: { view: VerdictView; feedback?: VerdictFeedbackTarget; anchorScope?: string }) {
   const { token, name, email } = useDash();
   const me = name || nameFromEmail(email);
+  // The card's own scope for its row anchors, so two cards never share an id.
+  const ownScope = anchorScopeOf(useId());
+  const scope = anchorScope ?? ownScope;
   const [waiting, setWaiting] = useState(0);
   const [error, setError] = useState("");
   const [noteFor, setNoteFor] = useState<string | null>(null);
@@ -212,7 +222,7 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
         return (
           <div className={`ck-tier rc-${tier}`} key={tier}>
             {rows.map((r) => (
-              <div className={`ck-row s-${r.status}${r.confirmed ? " confirmed" : ""}`} key={r.id} id={rowAnchor(r.id)} tabIndex={-1}>
+              <div className={`ck-row s-${r.status}${r.confirmed ? " confirmed" : ""}`} key={r.id} id={rowAnchor(r.id, scope)} data-ck-row={r.id} tabIndex={-1}>
                 <span className="ck-ico" title={TIER_LABEL[tier]}>
                   <TierIcon tier={tier} />
                 </span>

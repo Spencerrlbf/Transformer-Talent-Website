@@ -2,14 +2,31 @@
 // block, the career list and the skills table so a year reads the same
 // everywhere on the card.
 
+/** A number of years as the card prints it: whole when whole, else to one
+ *  decimal place, so 0.96 reads "1" and 1.25 reads "1.3". */
+const num = (n: number) => (Number.isInteger(n) ? n : Number(n.toFixed(1)));
+
+/** Under a year the card says months: 0.4 years is "5 months". Never under
+ *  one month, and eleven and a half months round up to the year. */
+const monthsOf = (n: number) => Math.max(1, Math.round(n * 12));
+const underAYear = (n: number) => n < 1 && monthsOf(n) < 12;
+
 /** "4.7 years", "1 year", "3 years". */
-export const yearsWord = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "year" : "years"}`;
+export const yearsWord = (n: number) => {
+  const d = num(n);
+  return `${d} ${d === 1 ? "year" : "years"}`;
+};
 
-/** "2.2 yrs", "1 yr": the short form beside a date range. */
-export const yearsShort = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "yr" : "yrs"}`;
+/** "2.2 yrs", "1 yr": the short form beside a date range; under a year,
+ *  "7 months". */
+export const yearsShort = (n: number) => {
+  if (underAYear(n)) return `${monthsOf(n)} ${monthsOf(n) === 1 ? "month" : "months"}`;
+  const d = num(n);
+  return `${d} ${d === 1 ? "yr" : "yrs"}`;
+};
 
-/** "2.2y", "3y": the shortest form, in a table column. */
-export const yearsTiny = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)}y`;
+/** "2.2y", "3y": the shortest form, in a table column; under a year, "7 mo". */
+export const yearsTiny = (n: number) => (underAYear(n) ? `${monthsOf(n)} mo` : `${num(n)}y`);
 
 export const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
 

@@ -447,11 +447,15 @@ export const sameCompany = (a: string, b: string) => {
   return !!x && !!y && (x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `));
 };
 
-/** The school shown on the report card: the latest bachelor's when there is
- *  one, else the latest education entry. */
-export function schoolOf(education: unknown): ProfileFacts["school"] {
-  if (!Array.isArray(education)) return null;
-  const entries = (education as Record<string, any>[])
+// A postgraduate degree, as people write it: a master's, an MBA, a doctorate.
+const POSTGRAD = /\bmaster|\bm\.?\s?s\.?(?:c|e)?\b|\bm\.?\s?eng\b|\bm\.?\s?tech\b|\bm\.?\s?phil\b|\bm\.?\s?a\b|\bm\.?\s?f\.?\s?a\b|\bmba\b|\bmres\b|\bmpa\b|\bmpp\b|\bllm\b|\bj\.?\s?d\b|\bm\.?\s?d\b|\bph\.?\s?d\b|\bd\.?\s?phil\b|\bdoctor|\bpostgrad|\bgraduate\b/i;
+
+type School = NonNullable<ProfileFacts["school"]>;
+
+/** The education list as the card reads it: one entry per named school. */
+function schoolEntries(education: unknown): School[] {
+  if (!Array.isArray(education)) return [];
+  return (education as Record<string, any>[])
     .map((ed) => {
       const name = String(ed?.schoolName || ed?.school || "").trim();
       let year: number | null = typeof ed?.endDate?.year === "number" ? ed.endDate.year : null;
@@ -463,12 +467,29 @@ export function schoolOf(education: unknown): ProfileFacts["school"] {
       const field = String(ed?.fieldOfStudy || "").trim() || null;
       return name ? { name, degree, field, year } : null;
     })
-    .filter((e): e is NonNullable<typeof e> => !!e);
-  if (!entries.length) return null;
-  const latest = (list: typeof entries) => [...list].sort((a, b) => (b.year ?? -1) - (a.year ?? -1))[0];
-  const bachelors = entries.filter((e) => e.degree && BACHELOR.test(e.degree));
-  return latest(bachelors.length ? bachelors : entries);
+    .filter((e): e is School => !!e);
 }
+const latestOf = (list: School[]): School | null => [...list].sort((a, b) => (b.year ?? -1) - (a.year ?? -1))[0] ?? null;
+const isBachelor = (e: School) => !!e.degree && BACHELOR.test(e.degree);
+const isPostgrad = (e: School) => !!e.degree && !isBachelor(e) && POSTGRAD.test(e.degree);
+
+/** The schools on the report card. `school` is the latest bachelor's when
+ *  there is one, else the latest education entry. `school2` is the latest
+ *  OTHER degree, greyed under it: a postgraduate degree when the first is
+ *  the bachelor's, else the bachelor's; never a school with no degree named
+ *  (a high school, a certificate). */
+export function schoolsOf(education: unknown): { school: ProfileFacts["school"]; school2: ProfileFacts["school2"] } {
+  const entries = schoolEntries(education);
+  if (!entries.length) return { school: null, school2: null };
+  const bachelors = entries.filter(isBachelor);
+  const school = latestOf(bachelors.length ? bachelors : entries) as School;
+  const others = entries.filter((e) => e !== school);
+  const school2 = latestOf(others.filter(isBachelor(school) ? isPostgrad : (e) => isBachelor(e) || isPostgrad(e)));
+  return { school, school2 };
+}
+
+/** The school shown first on the report card. */
+export const schoolOf = (education: unknown): ProfileFacts["school"] => schoolsOf(education).school;
 
 /** The level the current title states, and nothing else. An internship or
  *  a Junior title reads junior whatever else the title says ("Senior
@@ -576,7 +597,7 @@ export function profileFacts(args: {
     careerJobs: dated.length,
     current,
     companies,
-    school: schoolOf(args.education ?? null),
+    ...schoolsOf(args.education ?? null),
     seniority: seniorityOf(facts?.currentTitle),
     skills,
   };
