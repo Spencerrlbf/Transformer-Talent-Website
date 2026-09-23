@@ -54,6 +54,26 @@ const nameFromEmail = (email: string) => {
 const overridesOf = (rows: CardRow[]): RowOverride[] =>
   rows.filter((r) => r.confirmed).map((r) => ({ criterionId: r.id, status: r.status, note: r.confirmed!.note, by: r.confirmed!.by, at: r.confirmed!.at }));
 
+/** The anchor of a row on the judged checklist; the review's evidence tags link to it. */
+export const rowAnchor = (id: string) => `ck-row-${id}`;
+
+const LIT_FOR_MS = 2000;
+
+/** Scroll the checklist to a row and light it for two seconds. Looks inside
+ *  the card `from` sits in first (a run table can show two cards with the
+ *  same rows), then anywhere on the page. */
+export function openChecklistRow(id: string, from?: Element | null) {
+  if (typeof document === "undefined") return;
+  const anchor = rowAnchor(id);
+  const scope: ParentNode = from?.closest(".vc") ?? document;
+  const el = (scope.querySelector(`[id="${anchor}"]`) ?? document.getElementById(anchor)) as HTMLElement | null;
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.focus({ preventScroll: true });
+  el.classList.add("ck-hl");
+  window.setTimeout(() => el.classList.remove("ck-hl"), LIT_FOR_MS);
+}
+
 /** Who decided the row and how far up its ladder it got. Code decides years
  *  and technology rows; a judgment row carries the judge's rung and how sure
  *  it was of it. Older saved reviews carry none of this and show nothing. */
@@ -192,7 +212,7 @@ export default function Checklist({ view, feedback }: { view: VerdictView; feedb
         return (
           <div className={`ck-tier rc-${tier}`} key={tier}>
             {rows.map((r) => (
-              <div className={`ck-row s-${r.status}${r.confirmed ? " confirmed" : ""}`} key={r.id}>
+              <div className={`ck-row s-${r.status}${r.confirmed ? " confirmed" : ""}`} key={r.id} id={rowAnchor(r.id)} tabIndex={-1}>
                 <span className="ck-ico" title={TIER_LABEL[tier]}>
                   <TierIcon tier={tier} />
                 </span>
