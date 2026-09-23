@@ -364,15 +364,23 @@ export function toScorecard(rows: DraftRow[]): Scorecard | null {
       const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const at = bare.search(new RegExp(`\\s+(in|with|using)\\s+${esc(languages[0][0])}\\b`, "i"));
       label = (at > 0 ? bare.slice(0, at) : bare).trim();
-      if (!label) continue;
+      // "Has built systems" is no row once the technology is gone: only the technology row stays.
+      if (!label || topic(label).size === 0) continue;
     }
     const slots: RungSlots = { signal: tidy(r.signal), work: dropFiller(tidy(r.work)), beyond: tidy(r.beyond) };
     const filled = !!(slots.signal && slots.work && slots.beyond);
     // A degree, a certification or a licence is met when it is named: the
     // mention is the thing. Code decides that whatever the model said.
     const metFrom: 2 | 3 = r.metFrom === 2 || NAMED_THING.test(label) ? 2 : 3;
-    // A judgment row whose label names a technology would be decided from job
-    // tags unless the kind is stored: the model asked for rungs, so it gets them.
+    // A short label that names a technology ("Workflow orchestration with
+    // Temporal") is a technology row, decided from job tags by code, whatever
+    // kind the model gave it. A longer one that describes work around a
+    // technology ("Has built Kafka pipelines in production") keeps its rungs,
+    // and the stored kind says so, since the label alone would read as tech.
+    if (rowKind({ label }) === "tech" && label.split(/\s+/).length <= 4) {
+      criteria.push({ tier: r.tier, label });
+      continue;
+    }
     const override = rowKind({ label }) === "tech" ? { kind: "judgment" as const } : {};
     criteria.push({
       tier: r.tier,
