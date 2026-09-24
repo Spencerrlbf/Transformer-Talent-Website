@@ -56,14 +56,23 @@ for (const role of roles) {
     const facets = await rest(`job_embeddings?org_role_id=eq.${role.id}&select=facet,embedding`);
     if (!facets.length) { console.log(`  #${role.external_id} ${role.title}: no embeddings yet, skipped`); continue; }
 
-    // Nearest people per facet, best similarity kept.
+    // Nearest people per facet, best similarity kept. A location that leaves
+    // too few people (a town the pool writes differently) widens to anywhere.
     const near = new Map();
-    for (const f of facets) {
-      const rows = await rest("rpc/match_candidates_v2", { method: "POST", body: JSON.stringify({ query_embedding: f.embedding, match_count: PER_FACET, min_years: null, location_patterns: patterns }) });
-      for (const r of rows) {
-        const prev = near.get(r.id);
-        if (!prev || r.similarity > prev.similarity) near.set(r.id, { id: r.id, similarity: r.similarity, source: r.source, top_skills: r.top_skills || [], headline: r.headline || "" });
+    let located = !!patterns;
+    const gather = async (loc) => {
+      for (const f of facets) {
+        const rows = await rest("rpc/match_candidates_v2", { method: "POST", body: JSON.stringify({ query_embedding: f.embedding, match_count: PER_FACET, min_years: null, location_patterns: loc }) });
+        for (const r of rows) {
+          const prev = near.get(r.id);
+          if (!prev || r.similarity > prev.similarity) near.set(r.id, { id: r.id, similarity: r.similarity, source: r.source, top_skills: r.top_skills || [], headline: r.headline || "" });
+        }
       }
+    };
+    await gather(patterns);
+    if (patterns && near.size < 100) {
+      located = false;
+      await gather(null);
     }
     const ids = [...near.keys()];
     tally.considered += ids.length;
@@ -96,7 +105,7 @@ for (const role of roles) {
     }
     tally.roles++;
     const yrs = rules.yearsRequired != null ? `${rules.yearsRequired}+ ${rules.engineeringYears ? "engineering " : ""}years` : "no years rule";
-    console.log(`  #${role.external_id} ${role.title}: ${ids.length} considered, ${scored.length} kept, ${DRY_RUN ? "would save" : "saved"} ${rows.length} (top score ${top[0]?.score ?? "-"}); ${yrs}, ${rules.families ? rules.families.join("/") + " titles" : "any title"}, ${rules.tech.length} tech row(s)${rules.topRow ? `, top ${rules.topRow.kind}${rules.topRow.required ? " required" : ""}` : ""}${patterns ? `, ${patterns.length} location pattern(s)` : ", remote"}`);
+    console.log(`  #${role.external_id} ${role.title}: ${ids.length} considered, ${scored.length} kept, ${DRY_RUN ? "would save" : "saved"} ${rows.length} (top score ${top[0]?.score ?? "-"}); ${yrs}, ${rules.families ? rules.families.join("/") + " titles" : "any title"}, ${rules.tech.length} tech row(s)${rules.topRow ? `, top ${rules.topRow.kind}${rules.topRow.required ? " required" : ""}` : ""}${patterns ? `, ${patterns.length} location pattern(s)${located ? "" : " (too few nearby: widened to anywhere)"}` : ", remote"}`);
   } catch (err) {
     tally.failed++;
     console.log(`  #${role.external_id} ${role.title}: FAILED ${err instanceof Error ? err.message : err}`);
