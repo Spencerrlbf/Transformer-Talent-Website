@@ -126,7 +126,7 @@ export const syncHash = (m, fetchedAt) => crypto.createHash("sha256").update(JSO
 
 const recordIds = (v) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,\s]+/) : []).map((s) => String(s).trim()).filter((s) => /^rec[A-Za-z0-9]{14}$/.test(s));
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
-const inList = (values) => `(${values.map((v) => `"${String(v).replace(/"/g, "")}"`).join(",")})`;
+const inList = (values) => encodeURIComponent(`(${values.map((v) => `"${String(v).replace(/"/g, "")}"`).join(",")})`);
 
 async function main() {
   const { COMMS_DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY } = process.env;
@@ -147,7 +147,13 @@ async function main() {
 
   const headers = { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/json" };
   async function sb(path, init = {}) {
-    const res = await fetch(`${SUPABASE_URL.trim()}/rest/v1/${path}`, { ...init, headers: { ...headers, ...(init.headers || {}) } });
+    const url = `${SUPABASE_URL.trim().replace(/\/+$/, "")}/rest/v1/${path}`;
+    let res;
+    try {
+      res = await fetch(url, { ...init, headers: { ...headers, ...(init.headers || {}) } });
+    } catch (err) {
+      throw new Error(`${init.method || "GET"} ${path.split("?")[0]} (url ${url.length} chars, body ${init.body ? init.body.length : 0} chars): ${err instanceof Error ? err.cause?.message || err.message : err}`);
+    }
     if (!res.ok) throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const text = await res.text();
     return text ? JSON.parse(text) : null;
@@ -185,11 +191,9 @@ async function main() {
     last = rows[rows.length - 1].contact_id;
     tally.read += rows.length;
     const ids = rows.map((r) => r.contact_id);
-    const [harvest, exps, edus] = await Promise.all([
-      db.query("select * from comms.harvest_profiles where contact_id = any($1)", [ids]),
-      db.query("select contact_id, title, company_name, company_linkedin_url, location, start_month, start_year, end_month, end_year, is_current, duration_text, description, sort_order from comms.contact_experiences where contact_id = any($1) and superseded_at is null", [ids]),
-      db.query("select contact_id, school_name, degree, field_of_study, start_year, end_year, sort_order from comms.contact_educations where contact_id = any($1) and superseded_at is null", [ids]),
-    ]);
+    const harvest = await db.query("select * from comms.harvest_profiles where contact_id = any($1)", [ids]);
+    const exps = await db.query("select contact_id, title, company_name, company_linkedin_url, location, start_month, start_year, end_month, end_year, is_current, duration_text, description, sort_order from comms.contact_experiences where contact_id = any($1) and superseded_at is null", [ids]);
+    const edus = await db.query("select contact_id, school_name, degree, field_of_study, start_year, end_year, sort_order from comms.contact_educations where contact_id = any($1) and superseded_at is null", [ids]);
     const byContact = (rs) => rs.rows.reduce((m, r) => ((m[r.contact_id] ||= []).push(r), m), {});
     const harvestBy = Object.fromEntries(harvest.rows.map((r) => [r.contact_id, r]));
     const expsBy = byContact(exps);
@@ -197,8 +201,10 @@ async function main() {
 
     // Existing website rows for these contacts, by the strongest link first.
     const existing = new Map(); // contact_id -> row
-    const byDirectory = await sb(`candidates?directory_contact_id=in.${inList(ids)}&select=id,directory_contact_id,directory_sync_hash,matching_embedding`);
-    for (const r of byDirectory) existing.set(r.directory_contact_id, r);
+    for (const part of chunk(ids, 100)) {
+      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,directory_contact_id,directory_sync_hash,matching_embedding`);
+      for (const r of found) existing.set(r.directory_contact_id, r);
+    }
     const airtableIds = rows.flatMap((r) => (existing.has(r.contact_id) ? [] : recordIds(r.airtable_record_ids).map((a) => [a, r.contact_id])));
     for (const part of chunk(airtableIds, 100)) {
       const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,directory_contact_id,directory_sync_hash,matching_embedding`);
@@ -210,7 +216,7 @@ async function main() {
     const mapped = rows.map((r) => ({ row: r, m: mapContact(r, harvestBy[r.contact_id], expsBy[r.contact_id], edusBy[r.contact_id]) }));
     const usernames = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.linkedin_username).map(({ m }) => m.linkedin_username);
     for (const part of chunk([...new Set(usernames)], 100)) {
-      const found = await sb(`candidates?linkedin_username=in.${encodeURIComponent(inList(part))}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding&order=updated_at.desc`);
+      const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.linkedin_username) continue;
         const r = found.find((x) => x.linkedin_username === m.linkedin_username && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -219,7 +225,7 @@ async function main() {
     }
     const emails = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.email).map(({ m }) => m.email.toLowerCase());
     for (const part of chunk([...new Set(emails)], 100)) {
-      const found = await sb(`candidates?email=in.${encodeURIComponent(inList(part))}&select=id,email,directory_contact_id,directory_sync_hash,matching_embedding&order=updated_at.desc`);
+      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,directory_contact_id,directory_sync_hash,matching_embedding&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.email) continue;
         const r = found.find((x) => x.email && x.email.toLowerCase() === m.email.toLowerCase() && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
