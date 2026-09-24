@@ -69,8 +69,14 @@ const userId = link.user?.id || link.id;
 if (!userId) throw new Error("no user id in generate_link response");
 console.log(`auth user: ${email} (${userId})`);
 
-// 3. Membership (idempotent)
-const existing = await sb(`org_members?organization_id=eq.${org.id}&user_id=eq.${userId}&select=id`);
+// 3. Membership (idempotent). One organization per login: the dashboard
+// refuses a login that belongs to two, so a seat elsewhere is an error here.
+const existing = await sb(`org_members?user_id=eq.${userId}&select=id,organization_id`);
+const elsewhere = existing.find((m) => m.organization_id !== org.id);
+if (elsewhere) {
+  console.error(`${email} already has a seat in another organization; use a different email`);
+  process.exit(1);
+}
 if (existing.length) {
   console.log("membership already exists");
 } else {

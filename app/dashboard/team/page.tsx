@@ -38,6 +38,7 @@ type TeamData = { seatLimit: number | null; seatsUsed: number; members: Member[]
 const ERRORS: Record<string, string> = {
   bad_email: "That doesn't look like an email address.",
   already_member: "That person is already a member.",
+  member_elsewhere: "That email is already used by another team. Invite them with a different email address.",
   no_seats: "All seats are in use. Remove a member first, or contact us for more seats.",
   last_admin: "An organization needs at least one admin.",
   cannot_change_self: "You can't change your own role.",

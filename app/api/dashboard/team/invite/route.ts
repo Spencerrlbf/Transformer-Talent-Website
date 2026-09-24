@@ -35,6 +35,18 @@ export async function POST(req: NextRequest) {
   const link = await mintSignInLink(email);
   if (!link) return NextResponse.json({ error: "invite_failed" }, { status: 502 });
 
+  // One organization per login: someone who already has a dashboard seat
+  // (in any company) is never added to a second one. Checked before the
+  // membership is written and before anything is emailed.
+  const seat = await sbRest(`org_members?user_id=eq.${link.userId}&select=organization_id&limit=1`);
+  if (!seat.ok) return NextResponse.json({ error: "invite_failed" }, { status: 502 });
+  const [held] = (await seat.json()) as { organization_id: string }[];
+  if (held)
+    return NextResponse.json(
+      { error: held.organization_id === admin.org.id ? "already_member" : "member_elsewhere" },
+      { status: 409 }
+    );
+
   try {
     await sbInsert("org_members", {
       organization_id: admin.org.id,
