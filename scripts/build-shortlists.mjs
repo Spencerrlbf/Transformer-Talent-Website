@@ -56,24 +56,34 @@ for (const role of roles) {
     const facets = await rest(`job_embeddings?org_role_id=eq.${role.id}&select=facet,embedding`);
     if (!facets.length) { console.log(`  #${role.external_id} ${role.title}: no embeddings yet, skipped`); continue; }
 
-    // Nearest people per facet, best similarity kept. A location that leaves
-    // too few people (a town the pool writes differently) widens to anywhere.
+    // Nearest people per facet, best similarity kept. The match function
+    // takes the nearest few hundred overall and only then applies the
+    // location, so a located role is asked twice: nearby people first, then
+    // anyone, and nearby people rank first in the list.
     const near = new Map();
-    let located = !!patterns;
-    const gather = async (loc) => {
-      for (const f of facets) {
-        const rows = await rest("rpc/match_candidates_v2", { method: "POST", body: JSON.stringify({ query_embedding: f.embedding, match_count: PER_FACET, min_years: null, location_patterns: loc }) });
-        for (const r of rows) {
-          const prev = near.get(r.id);
-          if (!prev || r.similarity > prev.similarity) near.set(r.id, { id: r.id, similarity: r.similarity, source: r.source, top_skills: r.top_skills || [], headline: r.headline || "" });
+    const nearby = new Set();
+    const match = async (embedding, loc) => {
+      const body = JSON.stringify({ query_embedding: embedding, match_count: PER_FACET, min_years: null, location_patterns: loc });
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await rest("rpc/match_candidates_v2", { method: "POST", body });
+        } catch (err) {
+          if (attempt >= 3 || !/57014|statement timeout/.test(String(err))) throw err;
+          await new Promise((r) => setTimeout(r, 3000 * attempt));
         }
       }
     };
-    await gather(patterns);
-    if (patterns && near.size < 100) {
-      located = false;
-      await gather(null);
-    }
+    const gather = async (loc) => {
+      for (const f of facets) {
+        for (const r of await match(f.embedding, loc)) {
+          const prev = near.get(r.id);
+          if (!prev || r.similarity > prev.similarity) near.set(r.id, { id: r.id, similarity: r.similarity, source: r.source, top_skills: r.top_skills || [], headline: r.headline || "" });
+          if (loc) nearby.add(r.id);
+        }
+      }
+    };
+    if (patterns) await gather(patterns);
+    await gather(null);
     const ids = [...near.keys()];
     tally.considered += ids.length;
 
@@ -92,9 +102,14 @@ for (const role of roles) {
       const s = signals.get(n.id) || {};
       const t = texts.get(n.id) || { text: n.headline };
       const a = assess(rules, { years: s.years, engineering_years: s.engineering_years, title_family: s.title_family || [], top_university_tier: s.top_university_tier, top_university: s.top_university, top_employer_tier: s.top_employer_tier, top_employer: s.top_employer, status: t.status, source: t.source ?? n.source, text: t.text || "" }, n.similarity);
-      if (a.keep) scored.push({ id: n.id, similarity: n.similarity, ...a });
+      if (!a.keep) continue;
+      const local = patterns ? nearby.has(n.id) : null;
+      a.checks.location = local;
+      if (local) a.reasons.unshift("nearby");
+      scored.push({ id: n.id, similarity: n.similarity, local, ...a });
     }
-    scored.sort((x, y) => y.score - x.score);
+    // Nearby people first, then the best from anywhere.
+    scored.sort((x, y) => Number(!!y.local) - Number(!!x.local) || y.score - x.score);
     const top = scored.slice(0, SIZE);
     tally.kept += scored.length;
     const rows = top.map((x, i) => ({ org_role_id: role.id, candidate_id: x.id, rank: i + 1, score: x.score, similarity: Math.round(x.similarity * 10000) / 10000, keyword_hits: x.keyword_hits, checks: x.checks, reasons: x.reasons, built_at: new Date().toISOString() }));
@@ -105,7 +120,8 @@ for (const role of roles) {
     }
     tally.roles++;
     const yrs = rules.yearsRequired != null ? `${rules.yearsRequired}+ ${rules.engineeringYears ? "engineering " : ""}years` : "no years rule";
-    console.log(`  #${role.external_id} ${role.title}: ${ids.length} considered, ${scored.length} kept, ${DRY_RUN ? "would save" : "saved"} ${rows.length} (top score ${top[0]?.score ?? "-"}); ${yrs}, ${rules.families ? rules.families.join("/") + " titles" : "any title"}, ${rules.tech.length} tech row(s)${rules.topRow ? `, top ${rules.topRow.kind}${rules.topRow.required ? " required" : ""}` : ""}${patterns ? `, ${patterns.length} location pattern(s)${located ? "" : " (too few nearby: widened to anywhere)"}` : ", remote"}`);
+    const nearbyKept = scored.filter((x) => x.local).length;
+    console.log(`  #${role.external_id} ${role.title}: ${ids.length} considered, ${scored.length} kept${patterns ? ` (${nearbyKept} nearby)` : ""}, ${DRY_RUN ? "would save" : "saved"} ${rows.length} (top score ${top[0]?.score ?? "-"}); ${yrs}, ${rules.families ? rules.families.join("/") + " titles" : "any title"}, ${rules.tech.length} tech row(s)${rules.topRow ? `, top ${rules.topRow.kind}${rules.topRow.required ? " required" : ""}` : ""}${patterns ? `, ${patterns.length} location pattern(s)` : ", remote"}`);
   } catch (err) {
     tally.failed++;
     console.log(`  #${role.external_id} ${role.title}: FAILED ${err instanceof Error ? err.message : err}`);
