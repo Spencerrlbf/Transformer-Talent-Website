@@ -1,8 +1,9 @@
 name: Build role shortlists
 
 on:
-  # Run by hand until the first lists have been looked at; the nightly
-  # schedule (08:15 UTC, after the signals) comes with the job page tab.
+  schedule:
+    # After the signals (07:30 UTC); the Harvest refresh at 08:00 is independent.
+    - cron: "15 8 * * *"
   workflow_dispatch:
     inputs:
       role:
