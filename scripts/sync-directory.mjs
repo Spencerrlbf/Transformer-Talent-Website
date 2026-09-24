@@ -24,6 +24,14 @@ const list = (v) => {
   return [];
 };
 
+/** A date from the directory (pg hands dates over as Date objects) as YYYY-MM-DD. */
+export const dateOnly = (v) => {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
+  const m = String(v).match(/^\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : null;
+};
+
 export function normalizeLinkedin(url) {
   if (!url || typeof url !== "string") return null;
   let u = url.trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
@@ -102,7 +110,7 @@ export function mapContact(row, harvest, exps, edus) {
     work_experience: positions.length ? positions : null,
     calculated_experience_years: Number.isFinite(years) ? years : null,
     status: dnc ? "Do Not Contact" : clean(row.status) || "engaged",
-    follow_up_at: row.follow_up_date ? String(row.follow_up_date).slice(0, 10) : null,
+    follow_up_at: dateOnly(row.follow_up_date),
     // When the directory fetched this person from Harvest (the status column
     // has a fixed set of values, so only the date is stamped).
     linkedin_enrichment_date: harvest?.fetched_at ? new Date(harvest.fetched_at).toISOString() : null,
