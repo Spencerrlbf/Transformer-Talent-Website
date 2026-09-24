@@ -36,7 +36,7 @@ if (!/^https?:\/\//.test(BASE)) {
 }
 
 const run = newRun();
-const TOKEN_RE = new RegExp(`zzlk${run.id}([abcdtsp])-([a-z0-9-]+)`, "g");
+const TOKEN_RE = new RegExp(`zzlk${run.id}([abcdtspr])-([a-z0-9-]+)`, "g");
 const findings = []; // { kind, actor, what, detail }
 const calls = []; // every probe, for the summary
 const labels = new Map(); // uuid -> readable label for printing
@@ -138,9 +138,9 @@ async function snapshotClient(C, ownKeys) {
 async function snapshotTT(W) {
   const o = `organization_id=eq.${W.TT.tt.id}`;
   return {
-    role: await q(`org_roles?id=eq.${W.TT.role.id}&select=title,description,status,scorecard,linked_org_role,target_companies`),
-    pool: await q(`candidates?id=in.(${W.TT.sent.id},${W.TT.unsent.id})&select=id,full_name,email,contact,notes,follow_up_at&order=id`),
-    verdicts: await q(`match_verdicts?${o}&org_role_id=eq.${W.TT.role.id}&select=candidate_id,verdict,outcome&order=candidate_id`),
+    role: await q(`org_roles?id=in.(${W.TT.role.id},${W.TT.role2.id})&select=id,title,description,status,scorecard,linked_org_role,target_companies&order=id`),
+    pool: await q(`candidates?id=in.(${W.TT.sent.id},${W.TT.unsent.id},${W.TT.second.id})&select=id,full_name,email,contact,notes,follow_up_at&order=id`),
+    verdicts: await q(`match_verdicts?${o}&org_role_id=in.(${W.TT.role.id},${W.TT.role2.id})&select=candidate_id,verdict,outcome&order=candidate_id`),
     members: await q(`org_members?${o}&select=user_id,member_role&order=user_id`),
   };
 }
@@ -322,14 +322,14 @@ try {
     ["A own sourced", A.ownSrc.id], ["B own sourced", B.ownSrc.id],
     ["A task", A.task.id], ["B task", B.task.id], ["A note", A.note.id], ["B note", B.note.id],
     ["A list", A.list.id], ["B list", B.list.id], ["A template", A.tpl.id], ["B template", B.tpl.id],
-    ["A run", A.run.id], ["B run", B.run.id], ["pool: sent", TT.sent.id], ["pool: unsent", TT.unsent.id],
+    ["A run", A.run.id], ["B run", B.run.id], ["pool: sent", TT.sent.id], ["pool: unsent", TT.unsent.id], ["pool: sent to B", TT.second.id],
   ])
     labels.set(id, n);
 
   const actor = (name, login, allow, extra) => ({ name, token: login.token, allowed: new Set(allow), ...extra });
   const XA = actor("A", A.login, ["a", "c", "p", "s"], { appKey: A.appKey, sharedKey: A.sharedKey, ownKey: A.ownKey, jobId: "9001", task: A.task, note: A.note, list: A.list, tpl: A.tpl, run: A.run, runCands: A.runCands });
-  const XB = actor("B", B.login, ["b", "d", "p"], { appKey: B.appKey, sharedKey: B.sharedKey, ownKey: B.ownKey, jobId: "9001", task: B.task, note: B.note, list: B.list, tpl: B.tpl, run: B.run, runCands: B.runCands });
-  const XT = actor("TT", TT.login, ["t", "s", "c", "d"], { jobId: run.ttJob, netKeys: [`net_${TT.sent.id}`, `net_${TT.unsent.id}`] });
+  const XB = actor("B", B.login, ["b", "d", "p", "r"], { appKey: B.appKey, sharedKey: B.sharedKey, ownKey: B.ownKey, jobId: "9001", task: B.task, note: B.note, list: B.list, tpl: B.tpl, run: B.run, runCands: B.runCands });
+  const XT = actor("TT", TT.login, ["t", "s", "r", "c", "d"], { jobId: run.ttJob, netKeys: [`net_${TT.sent.id}`, `net_${TT.unsent.id}`, `net_${TT.second.id}`] });
 
   // 1. The one allowed bridge: TT sends its pool person to A's linked job.
   const sendDeny = { group: "send bridge", deny: true };
@@ -346,9 +346,28 @@ try {
     await call(XA, "POST", `/api/dashboard/candidates/v2/${XA.sentKey}/timeline`, { kind: "note", body: `${run.tokens.a}-sentnote` }, { group: "setup" });
     await call(XA, "PUT", `/api/dashboard/candidates/v2/${XA.sentKey}/status`, { jobId: "9001", status: "interviewing" }, { group: "setup" });
   }
+  // A second send, to B, of someone TT judged with a report card only.
+  const sent2 = await call(XT, "POST", "/api/dashboard/network/send", { candidateId: TT.second.id, jobId: run.ttJob2 }, { group: "send bridge" });
+  if (sent2.status !== 200 || !sent2.json?.applicationId) {
+    findings.push({ kind: "SETUP", actor: "TT", what: "network send to B", detail: `send failed (${sent2.status})` });
+  } else {
+    XB.sentKey = `app_${sent2.json.applicationId}`;
+    W.sentKeyB = XB.sentKey;
+    labels.set(sent2.json.applicationId, "B's copy of the person sent to B");
+  }
+  // A sent person arrives with the client-safe tag and reason, not "Screening…".
+  for (const [X, key] of [[XA, XA.sentKey], [XB, XB.sentKey]]) {
+    if (!key) continue;
+    const d = await call(X, "GET", `/api/dashboard/candidates/v2/${key}`, undefined, { group: "send bridge" });
+    const first = d.json?.pipeline?.[0];
+    if (!first?.tag || !first?.reason)
+      findings.push({ kind: "BROKEN", actor: X.name, what: `the person TT sent to ${X.name}`, detail: "arrived without a tag and reason" });
+    if (first?.verdict)
+      findings.push({ kind: "READ LEAK", actor: X.name, what: `the person TT sent to ${X.name}`, detail: "a report card came across with them" });
+  }
 
   const ownA = [XA.appKey, XA.sharedKey, XA.ownKey, XA.sentKey].filter(Boolean);
-  const ownB = [XB.appKey, XB.sharedKey, XB.ownKey];
+  const ownB = [XB.appKey, XB.sharedKey, XB.ownKey, XB.sentKey].filter(Boolean);
 
   // 2. Each company's own views carry only what it may see. (Reading can
   // mint a company's own tracked links, so the snapshot comes after this.)
@@ -374,7 +393,9 @@ try {
     await call(X, "GET", "/api/dashboard/client-orgs", undefined, d);
     await call(X, "GET", "/api/dashboard/client-requests", undefined, d);
     await call(X, "POST", "/api/dashboard/client-requests", { orgId: A.org.id, jobId: "9001" }, d);
-    // The verdict comparison tool is TT's own calibration page.
+    // The verdict comparison tool is TT's own calibration page, and the
+    // shortlist is TT's pool.
+    await call(X, "GET", "/api/dashboard/jobs/9001/shortlist", undefined, d);
     await call(X, "POST", "/api/dashboard/eval/verdicts", { action: "build" }, d);
     await call(X, "GET", "/api/dashboard/eval/verdicts", undefined, d);
     for (const k of XT.netKeys) {
@@ -423,7 +444,7 @@ try {
   await publicPages(W);
 
   // 10. Positive controls: a run that saw nothing proves nothing.
-  const expect = { A: ["a", "c", "p", "s"], B: ["b", "d", "p"], TT: ["t", "s"] };
+  const expect = { A: ["a", "c", "p", "s"], B: ["b", "d", "p", "r"], TT: ["t", "s", "r"] };
   for (const [who, classes] of Object.entries(expect)) {
     const seen = seenBy.get(who) || new Set();
     const missing = classes.filter((c) => !seen.has(c));
@@ -443,8 +464,8 @@ try {
 
 function collectKeys(W) {
   if (!W) return [];
-  const k = [W.A?.appKey, W.B?.appKey, W.A?.sharedKey, W.B?.sharedKey, W.A?.ownKey, W.B?.ownKey, W.sentKey];
-  if (W.TT) k.push(`net_${W.TT.sent.id}`, `net_${W.TT.unsent.id}`);
+  const k = [W.A?.appKey, W.B?.appKey, W.A?.sharedKey, W.B?.sharedKey, W.A?.ownKey, W.B?.ownKey, W.sentKey, W.sentKeyB];
+  if (W.TT) k.push(`net_${W.TT.sent.id}`, `net_${W.TT.unsent.id}`, `net_${W.TT.second.id}`);
   return k.filter(Boolean);
 }
 
@@ -453,7 +474,7 @@ function collectKeys(W) {
 const byGroup = new Map();
 for (const c of calls) byGroup.set(c.group, (byGroup.get(c.group) || 0) + 1);
 console.log(`\n${calls.length} calls in ${Math.round((Date.now() - started) / 1000)}s: ${[...byGroup].map(([g, n]) => `${g || "other"} ${n}`).join(" · ")}`);
-const order = ["CRASH", "SETUP", "BLIND", "WRITE LEAK", "READ LEAK", "NOT REFUSED", "ERROR"];
+const order = ["CRASH", "SETUP", "BLIND", "BROKEN", "WRITE LEAK", "READ LEAK", "NOT REFUSED", "ERROR"];
 findings.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 if (!findings.length) {
   console.log("PASS: no cross-organization reads or writes found.");

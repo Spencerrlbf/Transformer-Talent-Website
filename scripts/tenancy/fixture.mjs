@@ -8,6 +8,8 @@
 //   zzlk<run>a-*  A's private data        zzlk<run>c-*  A's name + job titles
 //   zzlk<run>b-*  B's private data        zzlk<run>d-*  B's name + job titles
 //   zzlk<run>t-*  TT's private data       zzlk<run>s-*  the person TT sends to A
+//   zzlk<run>r-*  the person TT sends to B (and the names of the requirements
+//                 TT's report card finds missing, which B's reason may name)
 //   zzlk<run>p-*  public LinkedIn data both clients hold (shared by design)
 //
 // Nothing here touches real records: the only writes to shared tables are two
@@ -100,8 +102,9 @@ export function newRun() {
   const id = Date.now().toString(36).slice(-5) + crypto.randomBytes(2).toString("hex");
   const T = (cls) => `zzlk${id}${cls}`;
   // TT job numbers run to the low hundreds; 99xxx cannot collide with a real one.
-  const ttJob = String(99000 + crypto.randomInt(1000));
-  return { id, T, ttJob, tokens: { a: T("a"), b: T("b"), c: T("c"), d: T("d"), t: T("t"), s: T("s"), p: T("p") } };
+  const ttJob = String(99000 + crypto.randomInt(500));
+  const ttJob2 = String(99500 + crypto.randomInt(500));
+  return { id, T, ttJob, ttJob2, tokens: { a: T("a"), b: T("b"), c: T("c"), d: T("d"), t: T("t"), s: T("s"), r: T("r"), p: T("p") } };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -268,10 +271,11 @@ async function seedClient(run, x /* "a" | "b" */) {
   };
 }
 
-/** The Transformer Talent side: a test login, a job linked to A's job 9001, two fake pool people. */
-async function seedTT(run, A) {
+/** The Transformer Talent side: a test login, jobs linked to A's and B's job 9001, three fake pool people. */
+async function seedTT(run, A, B) {
   const t = run.tokens.t;
   const s = run.tokens.s;
+  const r = run.tokens.r;
   const [tt] = await svc(`organizations?slug=eq.${TT_SLUG}&select=id,slug,name`);
   if (!tt) throw new Error("Transformer Talent org not found");
   const login = await testLogin(`${EMAIL_PREFIX}${run.id}-tt@example.com`);
@@ -288,6 +292,18 @@ async function seedTT(run, A) {
       source: "dashboard",
       scorecard: { v: 1, draftedBy: "user", draftedAt: new Date().toISOString(), criteria: [{ id: "r1", tier: "required", label: `${t}-cardrow`, good: `${t}-cardgood` }] },
       linked_org_role: { orgId: A.org.id, jobId: "9001" },
+    },
+  ]);
+  const [role2] = await insert("org_roles", [
+    {
+      organization_id: tt.id,
+      external_id: run.ttJob2,
+      title: `TT job ${t}-role2`,
+      description: `${t}-jd2`,
+      status: "closed",
+      source: "dashboard",
+      scorecard: { v: 1, draftedBy: "user", draftedAt: new Date().toISOString(), criteria: [{ id: "r1", tier: "required", label: `${r}-techrow`, good: `${t}-cardgood2` }] },
+      linked_org_role: { orgId: B.org.id, jobId: "9001" },
     },
   ]);
 
@@ -317,6 +333,18 @@ async function seedTT(run, A) {
       ai_summary: null,
       contact: null,
       follow_up_at: null,
+    },
+  ]);
+  const [second] = await insert("candidates", [
+    {
+      full_name: `Second Sent ${r}-name`,
+      linkedin_username: `${r}-li`,
+      linkedin_url: `https://www.linkedin.com/in/${r}-li`,
+      email: `${r}-email@example.com`,
+      current_title: `${r}-title`,
+      current_company: "Example Corp",
+      source: POOL_SOURCE,
+      notes: `${t}-poolnotes3`,
     },
   ]);
 
@@ -363,17 +391,51 @@ async function seedTT(run, A) {
     { organization_id: tt.id, candidate_id: sent.id, org_role_id: role.id, candidate_hash: `${t}-ch1`, role_hash: `${t}-rh`, verdict: { qualified: true, scorecard: scorecard(s), notes: `${t}-verdictnotes`, answers: [{ question: `${t}-question2`, answer: "yes", evidence: `${t}-answerevidence` }], v2: reportCard }, model: "leaktest", source: "worker" },
     { organization_id: tt.id, candidate_id: unsent.id, org_role_id: role.id, candidate_hash: `${t}-ch2`, role_hash: `${t}-rh`, verdict: { qualified: true, scorecard: scorecard(t) }, model: "leaktest", source: "worker" },
   ]);
+  // The scorecard judge's shape: a report card only, no older scorecard.
+  // Requirement names may reach B (as the reason's "worth probing"); the
+  // paragraph, evidence, quotes and check-off never may.
+  await insert("match_verdicts", [
+    {
+      organization_id: tt.id,
+      candidate_id: second.id,
+      org_role_id: role2.id,
+      candidate_hash: `${t}-ch3`,
+      role_hash: `${t}-rh2`,
+      model: "leaktest",
+      source: "shortlist",
+      verdict: {
+        v2: {
+          v: 2,
+          label: "message",
+          paragraph: `${t}-paragraph2`,
+          missing: [`${t}-missing2`],
+          ask: [`${t}-ask2`],
+          betterSuited: `${t}-bettersuited2`,
+          requirements: [{ label: `${t}-requirement2`, status: "yes", evidence: `${t}-reqevidence2` }],
+          tech: { now: [], before: [], gaps: [] },
+          card: {
+            rows: [
+              { id: "r1", label: `${r}-techrow`, tier: "required", kind: "tech", status: "yes", ai: "yes", evidence: `${t}-rowevidence2`, quote: `${t}-quote3` },
+              { id: "r2", label: `${r}-gaprow`, tier: "required", kind: "judgment", status: "unknown", ai: "unknown", evidence: `${t}-rowevidence3`, confirmed: { by: `${t}-recruiter2`, at: now, note: `${t}-confirmnote2` } },
+            ],
+          },
+          model: "leaktest",
+          at: now,
+        },
+      },
+    },
+  ]);
   await insert("candidate_enrichments", [
     { organization_id: tt.id, candidate_id: sent.id, linkedin_username: `${s}-li`, provider: "leaktest", operation: "full_profile", status: "completed", cache_status: "miss", raw_payload: { firstName: "Sent", lastName: `${s}-last`, headline: `${s}-harvestheadline` } },
   ]);
 
-  return { tt, login, role, sent, unsent };
+  return { tt, login, role, role2, sent, unsent, second };
 }
 
 export async function setup(run) {
   const A = await seedClient(run, "a");
   const B = await seedClient(run, "b");
-  const TT = await seedTT(run, A);
+  const TT = await seedTT(run, A, B);
   return { A, B, TT };
 }
 
