@@ -248,6 +248,7 @@ export const EMPLOYER_OVERRIDES: { name: string; tier: 1 | 2 }[] = [
   { name: "EY", tier: 2 },
   { name: "Genentech", tier: 2 },
   { name: "McKinsey & Company", tier: 2 },
+  { name: "Morgan Stanley", tier: 2 },
 ];
 
 /** The hand list merged with the Paraform grades, then the overrides. */
