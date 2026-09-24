@@ -301,12 +301,18 @@ async function main() {
       if (prev) {
         const patch = patchFor(m);
         const holder = m.linkedin_username ? taken.get(m.linkedin_username) : undefined;
-        if (prev.linkedin_username || (holder && holder !== prev.id)) {
+        const heldElsewhere = !!holder && holder !== prev.id;
+        if (!prev.linkedin_username && (!m.linkedin_username || heldElsewhere)) {
+          // The pool refuses any change to a row without a LinkedIn name, and the directory cannot give it one.
+          if (heldElsewhere) tally.conflicts++; else tally.noLinkedin++;
+          continue;
+        }
+        if (prev.linkedin_username || heldElsewhere) {
           // The row keeps the LinkedIn name it has; another row's name is never copied onto it.
           delete patch.linkedin_username;
           delete patch.linkedin_url;
-          if (holder && holder !== prev.id) tally.conflicts++;
-        } else if (m.linkedin_username) taken.set(m.linkedin_username, prev.id);
+          if (heldElsewhere) tally.conflicts++;
+        } else taken.set(m.linkedin_username, prev.id);
         updates.push({ id: prev.id, ...patch, directory_sync_hash: hash, updated_at: now });
         if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
       } else if (!m.linkedin_username) {
@@ -333,11 +339,10 @@ async function main() {
             try {
               await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify([one]) });
             } catch (e) {
-              if (!/23505|duplicate key/.test(String(e))) throw e;
-              const { linkedin_username, linkedin_url, ...rest } = one;
-              void linkedin_username; void linkedin_url;
-              await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify([rest]) });
+              if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(e))) throw e;
+              // A name held elsewhere, or a row the pool refuses to change: leave that one row as it is.
               tally.conflicts++;
+              tally.updated--;
             }
           }
         }
@@ -347,13 +352,13 @@ async function main() {
         try {
           made = await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(part) });
         } catch (err) {
-          if (!/23505|duplicate key/.test(String(err))) throw err;
+          if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
           made = [];
           for (const one of part) {
             try {
               made.push(...(await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify([one]) })));
             } catch (e) {
-              if (!/23505|duplicate key/.test(String(e))) throw e;
+              if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(e))) throw e;
               tally.conflicts++;
               tally.inserted--;
             }
