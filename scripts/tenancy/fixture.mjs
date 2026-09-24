@@ -10,6 +10,8 @@
 //   zzlk<run>t-*  TT's private data       zzlk<run>s-*  the person TT sends to A
 //   zzlk<run>r-*  the person TT sends to B (and the names of the requirements
 //                 TT's report card finds missing, which B's reason may name)
+//   zzlk<run>u-*  B's open job that never asked TT for help: public on B's
+//                 board, but never in TT's dashboard (link picker, copies)
 //   zzlk<run>p-*  public LinkedIn data both clients hold (shared by design)
 //
 // Nothing here touches real records: the only writes to shared tables are two
@@ -104,7 +106,7 @@ export function newRun() {
   // TT job numbers run to the low hundreds; 99xxx cannot collide with a real one.
   const ttJob = String(99000 + crypto.randomInt(500));
   const ttJob2 = String(99500 + crypto.randomInt(500));
-  return { id, T, ttJob, ttJob2, tokens: { a: T("a"), b: T("b"), c: T("c"), d: T("d"), t: T("t"), s: T("s"), r: T("r"), p: T("p") } };
+  return { id, T, ttJob, ttJob2, tokens: { a: T("a"), b: T("b"), c: T("c"), d: T("d"), t: T("t"), s: T("s"), r: T("r"), u: T("u"), p: T("p") } };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -146,11 +148,12 @@ async function seedClient(run, x /* "a" | "b" */) {
       sourcing_requested_at: new Date().toISOString(),
     },
   ]);
-  // A second open job that never asked TT for help: its title is private
-  // to the company (TT must not see it, link it or copy it).
-  await insert("org_roles", [
-    { organization_id: org.id, external_id: "9002", title: `Engineer ${priv}-unrequested`, description: `${priv}-jd2`, status: "open", source: "dashboard", sourcing_requested: false },
-  ]);
+  // B also has an open job that never asked TT for help: public on B's
+  // board, never listed, linked or copied by TT.
+  if (x === "b")
+    await insert("org_roles", [
+      { organization_id: org.id, external_id: "9002", title: `Engineer ${run.T("u")}-unrequested`, description: `${run.T("u")}-jd`, status: "open", source: "dashboard", sourcing_requested: false },
+    ]);
 
   const resumePath = `leaktest/${run.id}/${x}-applicant.pdf`;
   await uploadResume(resumePath);

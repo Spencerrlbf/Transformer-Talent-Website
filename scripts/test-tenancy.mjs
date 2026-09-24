@@ -36,7 +36,7 @@ if (!/^https?:\/\//.test(BASE)) {
 }
 
 const run = newRun();
-const TOKEN_RE = new RegExp(`zzlk${run.id}([abcdtspr])-([a-z0-9-]+)`, "g");
+const TOKEN_RE = new RegExp(`zzlk${run.id}([abcdtspru])-([a-z0-9-]+)`, "g");
 const findings = []; // { kind, actor, what, detail }
 const calls = []; // every probe, for the summary
 const labels = new Map(); // uuid -> readable label for printing
@@ -296,7 +296,7 @@ async function publicPages(W) {
   const pub = (allow) => ({ name: "public", token: null, allowed: new Set(allow) });
   const g = { group: "public pages" };
   await call(pub(["c"]), "GET", `/board/${W.A.slug}`, undefined, g);
-  await call(pub(["d"]), "GET", `/board/${W.B.slug}`, undefined, g);
+  await call(pub(["d", "u"]), "GET", `/board/${W.B.slug}`, undefined, g);
   await call(pub([]), "GET", "/board/transformer-talent", undefined, g);
   await call(pub([]), "GET", `/r/${W.A.profile.slug}`, undefined, g); // unpublished: must not render
   await call(pub([]), "GET", "/roles", undefined, g);
@@ -328,7 +328,7 @@ try {
 
   const actor = (name, login, allow, extra) => ({ name, token: login.token, allowed: new Set(allow), ...extra });
   const XA = actor("A", A.login, ["a", "c", "p", "s"], { appKey: A.appKey, sharedKey: A.sharedKey, ownKey: A.ownKey, jobId: "9001", task: A.task, note: A.note, list: A.list, tpl: A.tpl, run: A.run, runCands: A.runCands });
-  const XB = actor("B", B.login, ["b", "d", "p", "r"], { appKey: B.appKey, sharedKey: B.sharedKey, ownKey: B.ownKey, jobId: "9001", task: B.task, note: B.note, list: B.list, tpl: B.tpl, run: B.run, runCands: B.runCands });
+  const XB = actor("B", B.login, ["b", "d", "p", "r", "u"], { appKey: B.appKey, sharedKey: B.sharedKey, ownKey: B.ownKey, jobId: "9001", task: B.task, note: B.note, list: B.list, tpl: B.tpl, run: B.run, runCands: B.runCands });
   const XT = actor("TT", TT.login, ["t", "s", "r", "c", "d"], { jobId: run.ttJob, netKeys: [`net_${TT.sent.id}`, `net_${TT.unsent.id}`, `net_${TT.second.id}`] });
 
   // 1. The one allowed bridge: TT sends its pool person to A's linked job.
@@ -409,7 +409,7 @@ try {
     const g = { group: "TT -> unrequested client job", deny: true };
     await call(XT, "PATCH", `/api/dashboard/jobs/${run.ttJob2}`, { linkedOrgRole: { orgId: B.org.id, jobId: "9002" } }, g);
     await call(XT, "POST", "/api/dashboard/client-requests", { orgId: B.org.id, jobId: "9002" }, g);
-    const copies = await q(`org_roles?organization_id=eq.${TT.tt.id}&title=like.*${run.tokens.b}*&select=id`);
+    const copies = await q(`org_roles?organization_id=eq.${TT.tt.id}&title=like.*${run.tokens.u}*&select=id`);
     if (copies?.length) findings.push({ kind: "WRITE LEAK", actor: "TT", what: "copy of B's unrequested job", detail: "TT copied a job B never asked for help with" });
   }
 
@@ -453,7 +453,7 @@ try {
   await publicPages(W);
 
   // 10. Positive controls: a run that saw nothing proves nothing.
-  const expect = { A: ["a", "c", "p", "s"], B: ["b", "d", "p", "r"], TT: ["t", "s", "r"] };
+  const expect = { A: ["a", "c", "p", "s"], B: ["b", "d", "p", "r", "u"], TT: ["t", "s", "r"] };
   for (const [who, classes] of Object.entries(expect)) {
     const seen = seenBy.get(who) || new Set();
     const missing = classes.filter((c) => !seen.has(c));
