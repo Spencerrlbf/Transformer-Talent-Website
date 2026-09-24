@@ -137,7 +137,8 @@ export function embeddingText(m) {
  *  over data the pool already holds. Status, source, the link and the
  *  contact details always come across. */
 export function patchFor(m) {
-  const always = new Set(["directory_contact_id", "source", "status", "email", "linkedin_url", "linkedin_username", "follow_up_at"]);
+  // The pool requires a LinkedIn username, so those two never go across empty.
+  const always = new Set(["directory_contact_id", "source", "status", "email", "follow_up_at"]);
   const out = {};
   for (const [k, v] of Object.entries(m)) {
     const empty = v === null || v === undefined || (Array.isArray(v) && v.length === 0);
@@ -219,7 +220,7 @@ async function main() {
   Object.assign(coverage, enriched);
   console.log(`directory "${ws.name}": ${coverage.contacts} contacts (${coverage.do_not_contact} do not contact), Harvest profiles ${coverage.harvest_profiles}, with experiences ${coverage.with_experiences}, with educations ${coverage.with_educations}; with a LinkedIn URL ${coverage.with_linkedin}, of which without Harvest ${coverage.linkedin_no_harvest} (${coverage.linkedin_no_harvest_with_email} with an email)${SINCE ? `; syncing those changed since ${SINCE}` : "; syncing all"}`);
 
-  const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, conflicts: 0, embedded: 0, failed: 0 };
+  const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, noLinkedin: 0, conflicts: 0, embedded: 0, failed: 0 };
   const claimed = new Set();
   const toEmbed = []; // { id, text }
   let last = "00000000-0000-0000-0000-000000000000";
@@ -298,6 +299,9 @@ async function main() {
       if (prev) {
         updates.push({ id: prev.id, ...patchFor(m), directory_sync_hash: hash, updated_at: now });
         if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
+      } else if (!m.linkedin_username) {
+        // The pool keys people on their LinkedIn name; an email-only contact stays in the directory.
+        tally.noLinkedin++;
       } else inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
     }
     if (!DRY_RUN) {
@@ -315,7 +319,7 @@ async function main() {
     }
     tally.updated += updates.length;
     tally.inserted += inserts.length;
-    if (page % 10 === 0 || rows.length < PAGE) console.log(`page ${page}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, conflicts ${tally.conflicts}`);
+    if (page % 10 === 0 || rows.length < PAGE) console.log(`page ${page}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}`);
     if (LIMIT && tally.read >= LIMIT) break;
   }
   await db.end();
@@ -329,7 +333,7 @@ async function main() {
       tally.embedded += part.length;
     }
   }
-  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
+  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
