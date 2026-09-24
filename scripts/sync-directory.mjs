@@ -137,7 +137,11 @@ async function main() {
     if (!v) throw new Error(`Missing env: ${k}`);
   }
   const { default: pg } = await import("pg");
-  const db = new pg.Client({ connectionString: COMMS_DATABASE_URL, ssl: { rejectUnauthorized: false }, application_name: "tt-website-directory-sync", statement_timeout: 120_000 });
+  // The string may name a CA file on the machine it was copied from; the
+  // runner has no such file, so TLS is on without that check.
+  const dsn = new URL(COMMS_DATABASE_URL);
+  for (const k of ["sslrootcert", "sslcert", "sslkey", "sslmode"]) dsn.searchParams.delete(k);
+  const db = new pg.Client({ connectionString: dsn.toString(), ssl: { rejectUnauthorized: false }, application_name: "tt-website-directory-sync", statement_timeout: 120_000 });
   await db.connect();
   await db.query("set default_transaction_read_only = on");
 
