@@ -161,7 +161,7 @@ async function main() {
   // runner has no such file, so TLS is on without that check.
   const dsn = new URL(COMMS_DATABASE_URL);
   for (const k of ["sslrootcert", "sslcert", "sslkey", "sslmode"]) dsn.searchParams.delete(k);
-  const db = new pg.Client({ connectionString: dsn.toString(), ssl: { rejectUnauthorized: false }, application_name: "tt-website-directory-sync", statement_timeout: 120_000 });
+  const db = new pg.Client({ connectionString: dsn.toString(), ssl: { rejectUnauthorized: false }, application_name: "tt-website-directory-sync", statement_timeout: 300_000 });
   await db.connect();
   await db.query("set default_transaction_read_only = on");
 
@@ -192,15 +192,23 @@ async function main() {
   if (!ws) throw new Error(wanted ? `workspace "${wanted}" not found` : "more than one workspace: set COMMS_WORKSPACE to the one to sync");
   const cols = (await db.query("select column_name from information_schema.columns where table_schema = 'board' and table_name = 'candidates' order by ordinal_position")).rows.map((r) => r.column_name);
   console.log(`board.candidates columns: ${cols.join(", ")}`);
+  // One pass over the view: it is a wide join, and a correlated count per
+  // question timed out.
   const coverage = (await db.query(`select
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1) as contacts,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and v.do_not_contact) as do_not_contact,
-      (select count(*) from comms.harvest_profiles where workspace_id = $1) as harvest_profiles,
-      (select count(distinct contact_id) from comms.contact_experiences where workspace_id = $1 and superseded_at is null) as with_experiences,
-      (select count(distinct contact_id) from comms.contact_educations where workspace_id = $1 and superseded_at is null) as with_educations,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '') as with_linkedin,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '' and not exists (select 1 from comms.harvest_profiles h where h.contact_id = v.contact_id)) as linkedin_no_harvest,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '' and not exists (select 1 from comms.harvest_profiles h where h.contact_id = v.contact_id) and coalesce(v.primary_email, '') <> '') as linkedin_no_harvest_with_email`, [ws.id])).rows[0];
+      count(*)::int as contacts,
+      count(*) filter (where v.do_not_contact)::int as do_not_contact,
+      count(h.contact_id)::int as harvest_profiles,
+      count(*) filter (where coalesce(v.linkedin_url, '') <> '')::int as with_linkedin,
+      count(*) filter (where coalesce(v.linkedin_url, '') <> '' and h.contact_id is null)::int as linkedin_no_harvest,
+      count(*) filter (where coalesce(v.linkedin_url, '') <> '' and h.contact_id is null and coalesce(v.primary_email, '') <> '')::int as linkedin_no_harvest_with_email
+    from board.candidates v
+    join comms.contacts c on c.id = v.contact_id
+    left join comms.harvest_profiles h on h.contact_id = v.contact_id
+    where c.workspace_id = $1`, [ws.id])).rows[0];
+  const enriched = (await db.query(`select
+      (select count(distinct contact_id) from comms.contact_experiences where workspace_id = $1 and superseded_at is null)::int as with_experiences,
+      (select count(distinct contact_id) from comms.contact_educations where workspace_id = $1 and superseded_at is null)::int as with_educations`, [ws.id])).rows[0];
+  Object.assign(coverage, enriched);
   console.log(`directory "${ws.name}": ${coverage.contacts} contacts (${coverage.do_not_contact} do not contact), Harvest profiles ${coverage.harvest_profiles}, with experiences ${coverage.with_experiences}, with educations ${coverage.with_educations}; with a LinkedIn URL ${coverage.with_linkedin}, of which without Harvest ${coverage.linkedin_no_harvest} (${coverage.linkedin_no_harvest_with_email} with an email)${SINCE ? `; syncing those changed since ${SINCE}` : "; syncing all"}`);
 
   const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, conflicts: 0, embedded: 0, failed: 0 };
