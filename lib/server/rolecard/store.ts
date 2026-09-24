@@ -10,7 +10,7 @@
 
 import { sbRest } from "../supabase";
 import { isScorecard, type Criterion, type RowOverride, type RowStatus, type Scorecard } from "@/lib/rolecard";
-import { draftScorecard } from "./draft";
+import { draftScorecard, type DraftInput } from "./draft";
 
 export interface RoleForCard {
   id: string;
@@ -26,6 +26,17 @@ export interface RoleForCard {
 
 /** Columns a caller must select for ensureRoleCard. */
 export const ROLE_CARD_COLS = "id,title,yoe,description,jd,skills,matching_profile,tech_stack,scorecard";
+
+/** What the drafter is given for a role: the same for the job page and the scripts. */
+export const roleDraftInput = (role: RoleForCard): DraftInput => ({
+  title: role.title,
+  yoe: role.yoe,
+  jd: role.jd,
+  description: role.description,
+  skills: role.skills,
+  techStack: role.tech_stack,
+  minYears: role.matching_profile?.min_years ?? null,
+});
 
 export async function saveRoleCard(orgRoleId: string, card: Scorecard, onlyIfEmpty = false): Promise<boolean> {
   const res = await sbRest(`org_roles?id=eq.${orgRoleId}${onlyIfEmpty ? "&scorecard=is.null" : ""}`, {
@@ -54,15 +65,7 @@ export async function ensureRoleCard(
   const failed = draftFailedAt.get(role.id);
   if (failed && Date.now() - failed < DRAFT_BACKOFF_MS) return { card: null, drafted: false };
   const draft = await draftScorecard(
-    {
-      title: role.title,
-      yoe: role.yoe,
-      jd: role.jd,
-      description: role.description,
-      skills: role.skills,
-      techStack: role.tech_stack,
-      minYears: role.matching_profile?.min_years ?? null,
-    },
+    roleDraftInput(role),
     opts.timeoutMs,
     // A caller on a short leash (a judging loop) gets one repair at most.
     opts.timeoutMs ? opts.timeoutMs * 2 : undefined
