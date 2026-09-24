@@ -16,6 +16,7 @@
 //  5. This is the single source of years — gates and facts can't disagree.
 
 import { sbRest } from "./supabase";
+import { topEmployerOf, topUniversityOf } from "./signals/match";
 import type { ProfileFacts } from "@/lib/rolecard";
 
 export interface ExperienceRow {
@@ -453,6 +454,11 @@ const POSTGRAD = /\bmaster|\bm\.?\s?s\.?(?:c|e)?\b|\bm\.?\s?eng\b|\bm\.?\s?tech\
 type School = NonNullable<ProfileFacts["school"]>;
 
 /** The education list as the card reads it: one entry per named school. */
+/** Every school named on the profile, for the top-university list. */
+export function schoolNamesOf(education: unknown): string[] {
+  return schoolEntries(education).map((e) => e.name).filter(Boolean);
+}
+
 function schoolEntries(education: unknown): School[] {
   if (!Array.isArray(education)) return [];
   return (education as Record<string, any>[])
@@ -598,6 +604,10 @@ export function profileFacts(args: {
     current,
     companies,
     ...schoolsOf(args.education ?? null),
+    // Facts from the lists, by code: a top university among the schools, a
+    // top employer among the companies. Never a row, never a label.
+    topSchool: topUniversityOf(schoolNamesOf(args.education ?? null)),
+    topEmployer: topEmployerOf([facts?.currentCompany, ...jobs.map((j) => j.company)]),
     seniority: seniorityOf(facts?.currentTitle),
     skills,
   };

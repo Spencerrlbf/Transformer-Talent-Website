@@ -36,4 +36,10 @@ export { advanceRun, RunFailure } from "./sourcing/run";
 export { ensureRoleCard, ROLE_CARD_COLS, roleDraftInput } from "./rolecard/store";
 export type { RoleForCard } from "./rolecard/store";
 export { canDraft } from "./rolecard/draft";
+
+// The pool as the judge and the signals read it (scripts/compute-signals.mjs).
+export { poolExperiences, poolEducation, poolProfileText, poolSignals, poolSkills, poolSourceHash } from "./pool/profile";
+export type { PoolCandidate, PersonSignals } from "./pool/profile";
+export { titleFamilyOf, topEmployerOf, topUniversityOf, normalise } from "./signals/match";
+export { TOP_EMPLOYERS, TOP_UNIVERSITIES } from "./signals/lists";
 export type { AdvanceResult } from "./sourcing/run";
