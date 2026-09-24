@@ -20,6 +20,7 @@ import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/componen
 import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
 import ClientLinkCard from "@/components/dashboard/jobs/ClientLinkCard";
 import SourcingHelpCard from "@/components/dashboard/jobs/SourcingHelpCard";
+import ShortlistPanel from "@/components/dashboard/jobs/ShortlistPanel";
 import ScorecardCard from "@/components/dashboard/rolecard/ScorecardCard";
 
 type Job = {
@@ -46,6 +47,7 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "pipeline", label: "Pipeline" },
   { id: "sourcing", label: "Sourcing" },
+  { id: "shortlist", label: "Shortlist" },
   { id: "past", label: "Past" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -72,6 +74,7 @@ function JobWorkspace({ id }: { id: string }) {
   } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [rowKeys, setRowKeys] = useState<string[]>([]);
+  const [shortlistCount, setShortlistCount] = useState<number | null>(null);
   // Opened from a sourcing run's table: that run, and each person on the
   // page's membership, so the drawer can hold Yes or No on them; and the
   // page's people in order, to step through.
@@ -216,6 +219,7 @@ function JobWorkspace({ id }: { id: string }) {
           >
             {t.label}
             {t.id === "pipeline" && counts !== null && <span className="n">{counts.all}</span>}
+            {t.id === "shortlist" && shortlistCount !== null && shortlistCount > 0 && <span className="n">{shortlistCount}</span>}
             {t.id === "past" && counts !== null && counts.rejected > 0 && (
               <span className="n">{counts.rejected}</span>
             )}
@@ -384,6 +388,8 @@ function JobWorkspace({ id }: { id: string }) {
       </div>
 
       {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} onOpenCandidate={onOpenCandidate} refreshKey={sourcingRefresh} />}
+
+      {tab === "shortlist" && <ShortlistPanel jobId={job.id} onOpen={setOpenKey} onKeys={setRowKeys} onCount={setShortlistCount} />}
 
       {tab === "past" && (
         <>

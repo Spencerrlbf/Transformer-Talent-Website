@@ -43,3 +43,13 @@ export type { PoolCandidate, PersonSignals } from "./pool/profile";
 export { titleFamilyOf, topEmployerOf, topUniversityOf, normalise } from "./signals/match";
 export { TOP_EMPLOYERS, TOP_UNIVERSITIES } from "./signals/lists";
 export type { AdvanceResult } from "./sourcing/run";
+
+// Phase 2: who is worth judging for a role (scripts/build-shortlists.mjs).
+export { rulesOf, assess } from "./shortlist/rules";
+export type { RoleRules, PersonForShortlist, Assessment } from "./shortlist/rules";
+export { expandLocations } from "./matcher";
+
+// Phase 3: the light judge over the shortlists (scripts/judge-shortlists.mjs).
+export { shortlistRoleContext, judgePoolCandidate, roleHashOf, SHORTLIST_ROLE_COLS } from "./shortlist/judge";
+export type { ShortlistRoleRow, ShortlistRoleContext, PoolJudgement } from "./shortlist/judge";
+export { JEV_MODEL } from "./rolecard/jev";
