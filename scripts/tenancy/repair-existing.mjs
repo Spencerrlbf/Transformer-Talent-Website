@@ -31,6 +31,12 @@ execFileSync("npx", ["--yes", "esbuild@0.28.2", "lib/server/client-reason.ts", "
 const { clientSafeVerdict } = await import(path.join(root, "scripts/dist/client-reason.mjs"));
 
 const patch = (p, body) => svc(p, { method: "PATCH", body: JSON.stringify(body), prefer: "return=minimal" });
+// Postgres stores jsonb with its own key order: compare with keys sorted, so
+// a rerun after --apply finds nothing left to do.
+const canon = (v) =>
+  Array.isArray(v) ? `[${v.map(canon).join(",")}]`
+  : v && typeof v === "object" ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}`
+  : JSON.stringify(v ?? null);
 const [tt] = await svc(`organizations?slug=eq.${TT_SLUG}&select=id`);
 if (!tt) throw new Error("Transformer Talent org not found");
 console.log(APPLY ? "APPLYING" : "DRY RUN (pass --apply to change rows)");
@@ -42,7 +48,7 @@ let mirrorFix = 0;
 for (const m of mirrors) {
   const safe = clientSafeVerdict(m.verdict);
   const next = safe ? { ...safe, job_id: m.verdict?.job_id } : null;
-  if (JSON.stringify(next) === JSON.stringify(m.verdict)) continue;
+  if (canon(next) === canon(m.verdict)) continue;
   mirrorFix++;
   if (!APPLY) continue;
   if (next) await patch(`match_verdicts?id=eq.${m.id}`, { verdict: next, model: null });
@@ -59,7 +65,7 @@ for (const a of sent) {
     return safe ? { ...safe, job_id: v?.job_id } : null;
   }).filter(Boolean);
   const value = next.length ? next : null;
-  if (JSON.stringify(value) === JSON.stringify(a.screening ?? null)) continue;
+  if (canon(value) === canon(a.screening ?? null)) continue;
   sentFix++;
   if (APPLY) await patch(`website_applications?id=eq.${a.id}`, { screening: value });
 }

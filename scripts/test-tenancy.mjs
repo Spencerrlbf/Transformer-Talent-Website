@@ -404,6 +404,15 @@ try {
     }
   }
 
+  // TT may link and copy only jobs whose company asked for help: B's 9002 never did.
+  {
+    const g = { group: "TT -> unrequested client job", deny: true };
+    await call(XT, "PATCH", `/api/dashboard/jobs/${run.ttJob2}`, { linkedOrgRole: { orgId: B.org.id, jobId: "9002" } }, g);
+    await call(XT, "POST", "/api/dashboard/client-requests", { orgId: B.org.id, jobId: "9002" }, g);
+    const copies = await q(`org_roles?organization_id=eq.${TT.tt.id}&title=like.*${run.tokens.b}*&select=id`);
+    if (copies?.length) findings.push({ kind: "WRITE LEAK", actor: "TT", what: "copy of B's unrequested job", detail: "TT copied a job B never asked for help with" });
+  }
+
   // TT has no job 9001: asking for it must not return a client's job 9001.
   for (const p of ["/api/dashboard/jobs/9001", "/api/dashboard/jobs/9001/stages", "/api/dashboard/rolecard/9001", "/api/dashboard/jobs/9001/candidates", "/api/dashboard/candidates/v2?pageSize=100&jobId=9001", "/api/dashboard/sourcing/runs?jobId=9001"])
     await call(XT, "GET", p, undefined, { group: "TT -> client job numbers", deny: true });

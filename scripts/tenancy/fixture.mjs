@@ -142,7 +142,14 @@ async function seedClient(run, x /* "a" | "b" */) {
         criteria: [{ id: "r1", tier: "required", label: `${priv}-cardrow`, good: `${priv}-cardgood` }],
       },
       interview_stages: [{ id: "s1", label: `${priv}-stage` }],
+      sourcing_requested: true,
+      sourcing_requested_at: new Date().toISOString(),
     },
+  ]);
+  // A second open job that never asked TT for help: its title is private
+  // to the company (TT must not see it, link it or copy it).
+  await insert("org_roles", [
+    { organization_id: org.id, external_id: "9002", title: `Engineer ${priv}-unrequested`, description: `${priv}-jd2`, status: "open", source: "dashboard", sourcing_requested: false },
   ]);
 
   const resumePath = `leaktest/${run.id}/${x}-applicant.pdf`;
@@ -461,7 +468,7 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
 
   // The fake TT job and the TT test login's own traces.
   if (tt) {
-    const roles = (await svc(`org_roles?organization_id=eq.${tt.id}&title=like.TT%20job%20${tokenLike}&select=id`, {}, { soft: true })) || [];
+    const roles = (await svc(`org_roles?organization_id=eq.${tt.id}&title=like.*${tokenLike}&select=id`, {}, { soft: true })) || [];
     for (const { id } of roles) {
       await del(`match_verdicts?org_role_id=eq.${id}`);
       await del(`org_roles?id=eq.${id}`);
