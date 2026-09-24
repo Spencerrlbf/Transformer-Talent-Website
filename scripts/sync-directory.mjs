@@ -24,6 +24,14 @@ const list = (v) => {
   return [];
 };
 
+/** A date from the directory (pg hands dates over as Date objects) as YYYY-MM-DD. */
+export const dateOnly = (v) => {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
+  const m = String(v).match(/^\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : null;
+};
+
 export function normalizeLinkedin(url) {
   if (!url || typeof url !== "string") return null;
   let u = url.trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
@@ -102,11 +110,10 @@ export function mapContact(row, harvest, exps, edus) {
     work_experience: positions.length ? positions : null,
     calculated_experience_years: Number.isFinite(years) ? years : null,
     status: dnc ? "Do Not Contact" : clean(row.status) || "engaged",
-    follow_up_at: row.follow_up_date ? String(row.follow_up_date).slice(0, 10) : null,
-    // When the directory has fetched this person from Harvest, the website's
-    // own refresh need not pay for them again.
+    follow_up_at: dateOnly(row.follow_up_date),
+    // When the directory fetched this person from Harvest (the status column
+    // has a fixed set of values, so only the date is stamped).
     linkedin_enrichment_date: harvest?.fetched_at ? new Date(harvest.fetched_at).toISOString() : null,
-    linkedin_enrichment_status: harvest?.fetched_at ? "directory" : null,
     source: "directory",
   };
 }
@@ -130,7 +137,8 @@ export function embeddingText(m) {
  *  over data the pool already holds. Status, source, the link and the
  *  contact details always come across. */
 export function patchFor(m) {
-  const always = new Set(["directory_contact_id", "source", "status", "email", "linkedin_url", "linkedin_username", "follow_up_at"]);
+  // The pool requires a LinkedIn username, so those two never go across empty.
+  const always = new Set(["directory_contact_id", "source", "status", "email", "follow_up_at"]);
   const out = {};
   for (const [k, v] of Object.entries(m)) {
     const empty = v === null || v === undefined || (Array.isArray(v) && v.length === 0);
@@ -162,7 +170,7 @@ async function main() {
   // runner has no such file, so TLS is on without that check.
   const dsn = new URL(COMMS_DATABASE_URL);
   for (const k of ["sslrootcert", "sslcert", "sslkey", "sslmode"]) dsn.searchParams.delete(k);
-  const db = new pg.Client({ connectionString: dsn.toString(), ssl: { rejectUnauthorized: false }, application_name: "tt-website-directory-sync", statement_timeout: 120_000 });
+  const db = new pg.Client({ connectionString: dsn.toString(), ssl: { rejectUnauthorized: false }, application_name: "tt-website-directory-sync", statement_timeout: 300_000 });
   await db.connect();
   await db.query("set default_transaction_read_only = on");
 
@@ -175,7 +183,13 @@ async function main() {
     } catch (err) {
       throw new Error(`${init.method || "GET"} ${path.split("?")[0]} (url ${url.length} chars, body ${init.body ? init.body.length : 0} chars): ${err instanceof Error ? err.cause?.message || err.message : err}`);
     }
-    if (!res.ok) throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) {
+      // The error's "details" quotes the failing row, which is personal data: keep it out of the log.
+      const raw = await res.text();
+      let why = raw.slice(0, 200);
+      try { const j = JSON.parse(raw); why = [j.code, j.message, j.hint].filter(Boolean).join(" | ").slice(0, 300); } catch {}
+      throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${why}`);
+    }
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   }
@@ -188,18 +202,26 @@ async function main() {
   if (!ws) throw new Error(wanted ? `workspace "${wanted}" not found` : "more than one workspace: set COMMS_WORKSPACE to the one to sync");
   const cols = (await db.query("select column_name from information_schema.columns where table_schema = 'board' and table_name = 'candidates' order by ordinal_position")).rows.map((r) => r.column_name);
   console.log(`board.candidates columns: ${cols.join(", ")}`);
+  // One pass over the view: it is a wide join, and a correlated count per
+  // question timed out.
   const coverage = (await db.query(`select
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1) as contacts,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and v.do_not_contact) as do_not_contact,
-      (select count(*) from comms.harvest_profiles where workspace_id = $1) as harvest_profiles,
-      (select count(distinct contact_id) from comms.contact_experiences where workspace_id = $1 and superseded_at is null) as with_experiences,
-      (select count(distinct contact_id) from comms.contact_educations where workspace_id = $1 and superseded_at is null) as with_educations,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '') as with_linkedin,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '' and not exists (select 1 from comms.harvest_profiles h where h.contact_id = v.contact_id)) as linkedin_no_harvest,
-      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '' and not exists (select 1 from comms.harvest_profiles h where h.contact_id = v.contact_id) and coalesce(v.primary_email, '') <> '') as linkedin_no_harvest_with_email`, [ws.id])).rows[0];
+      count(*)::int as contacts,
+      count(*) filter (where v.do_not_contact)::int as do_not_contact,
+      count(h.contact_id)::int as harvest_profiles,
+      count(*) filter (where coalesce(v.linkedin_url, '') <> '')::int as with_linkedin,
+      count(*) filter (where coalesce(v.linkedin_url, '') <> '' and h.contact_id is null)::int as linkedin_no_harvest,
+      count(*) filter (where coalesce(v.linkedin_url, '') <> '' and h.contact_id is null and coalesce(v.primary_email, '') <> '')::int as linkedin_no_harvest_with_email
+    from board.candidates v
+    join comms.contacts c on c.id = v.contact_id
+    left join comms.harvest_profiles h on h.contact_id = v.contact_id
+    where c.workspace_id = $1`, [ws.id])).rows[0];
+  const enriched = (await db.query(`select
+      (select count(distinct contact_id) from comms.contact_experiences where workspace_id = $1 and superseded_at is null)::int as with_experiences,
+      (select count(distinct contact_id) from comms.contact_educations where workspace_id = $1 and superseded_at is null)::int as with_educations`, [ws.id])).rows[0];
+  Object.assign(coverage, enriched);
   console.log(`directory "${ws.name}": ${coverage.contacts} contacts (${coverage.do_not_contact} do not contact), Harvest profiles ${coverage.harvest_profiles}, with experiences ${coverage.with_experiences}, with educations ${coverage.with_educations}; with a LinkedIn URL ${coverage.with_linkedin}, of which without Harvest ${coverage.linkedin_no_harvest} (${coverage.linkedin_no_harvest_with_email} with an email)${SINCE ? `; syncing those changed since ${SINCE}` : "; syncing all"}`);
 
-  const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, conflicts: 0, embedded: 0, failed: 0 };
+  const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, noLinkedin: 0, conflicts: 0, embedded: 0, failed: 0 };
   const claimed = new Set();
   const toEmbed = []; // { id, text }
   let last = "00000000-0000-0000-0000-000000000000";
@@ -226,21 +248,23 @@ async function main() {
     // Existing website rows for these contacts, by the strongest link first.
     const existing = new Map(); // contact_id -> row
     for (const part of chunk(ids, 100)) {
-      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
+      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
       for (const r of found) existing.set(r.directory_contact_id, r);
     }
     const airtableIds = rows.flatMap((r) => (existing.has(r.contact_id) ? [] : recordIds(r.airtable_record_ids).map((a) => [a, r.contact_id])));
     for (const part of chunk(airtableIds, 100)) {
-      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
+      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
       for (const r of found) {
         const cid = part.find(([a]) => a === r.airtable_id)?.[1];
         if (cid && !existing.has(cid) && (!r.directory_contact_id || r.directory_contact_id === cid)) existing.set(cid, r);
       }
     }
     const mapped = rows.map((r) => ({ row: r, m: mapContact(r, harvestBy[r.contact_id], expsBy[r.contact_id], edusBy[r.contact_id]) }));
-    const usernames = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.linkedin_username).map(({ m }) => m.linkedin_username);
+    const usernames = mapped.filter(({ m }) => m.linkedin_username).map(({ m }) => m.linkedin_username);
+    const taken = new Map(); // LinkedIn name -> website row id that holds it
     for (const part of chunk([...new Set(usernames)], 100)) {
       const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
+      for (const f of found) if (!taken.has(f.linkedin_username)) taken.set(f.linkedin_username, f.id);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.linkedin_username) continue;
         const r = found.find((x) => x.linkedin_username === m.linkedin_username && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -249,7 +273,7 @@ async function main() {
     }
     const emails = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.email).map(({ m }) => m.email.toLowerCase());
     for (const part of chunk([...new Set(emails)], 100)) {
-      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
+      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.email) continue;
         const r = found.find((x) => x.email && x.email.toLowerCase() === m.email.toLowerCase() && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -267,7 +291,7 @@ async function main() {
       if (prev) claimed.add(prev.id);
       if (m.status === "Do Not Contact") {
         tally.suppressed++;
-        if (prev && prev.directory_sync_hash !== hash) updates.push({ id: prev.id, directory_contact_id: m.directory_contact_id, status: m.status, directory_sync_hash: hash, updated_at: now });
+        if (prev && prev.directory_sync_hash !== hash && prev.linkedin_username) updates.push({ id: prev.id, directory_contact_id: m.directory_contact_id, status: m.status, directory_sync_hash: hash, updated_at: now });
         continue;
       }
       if (prev && prev.directory_sync_hash === hash) {
@@ -276,26 +300,71 @@ async function main() {
         continue;
       }
       if (prev) {
-        updates.push({ id: prev.id, ...patchFor(m), directory_sync_hash: hash, updated_at: now });
+        const patch = patchFor(m);
+        const holder = m.linkedin_username ? taken.get(m.linkedin_username) : undefined;
+        const heldElsewhere = !!holder && holder !== prev.id;
+        if (!prev.linkedin_username && (!m.linkedin_username || heldElsewhere)) {
+          // The pool refuses any change to a row without a LinkedIn name, and the directory cannot give it one.
+          if (heldElsewhere) tally.conflicts++; else tally.noLinkedin++;
+          continue;
+        }
+        if (prev.linkedin_username || heldElsewhere) {
+          // The row keeps the LinkedIn name it has; another row's name is never copied onto it.
+          delete patch.linkedin_username;
+          delete patch.linkedin_url;
+          if (heldElsewhere) tally.conflicts++;
+        } else taken.set(m.linkedin_username, prev.id);
+        updates.push({ id: prev.id, ...patch, directory_sync_hash: hash, updated_at: now });
         if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
-      } else inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
+      } else if (!m.linkedin_username) {
+        // The pool keys people on their LinkedIn name; an email-only contact stays in the directory.
+        tally.noLinkedin++;
+      } else if (taken.has(m.linkedin_username)) {
+        // Another contact already owns that LinkedIn name in the pool.
+        tally.conflicts++;
+      } else {
+        taken.set(m.linkedin_username, "new");
+        inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
+      }
     }
     if (!DRY_RUN) {
-      // Rows patched in one request must share one column list.
-      const groups = new Map();
-      for (const u of updates) (groups.get(Object.keys(u).sort().join(",")) || groups.set(Object.keys(u).sort().join(","), []).get(Object.keys(u).sort().join(","))).push(u);
-      for (const rows of groups.values()) for (const part of chunk(rows, 200)) {
-        await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part) });
+      // A PATCH changes only the columns sent and never goes through the insert
+      // path, so the pool's trigger and its not-null columns stay out of the way.
+      for (const part of chunk(updates, 8)) {
+        await Promise.all(part.map(async ({ id, ...body }) => {
+          try {
+            await sb(`candidates?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(body) });
+          } catch (err) {
+            if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
+            tally.conflicts++;
+            tally.updated--;
+          }
+        }));
       }
       for (const part of chunk(inserts, 200)) {
-        const made = await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(part) });
+        let made;
+        try {
+          made = await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(part) });
+        } catch (err) {
+          if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
+          made = [];
+          for (const one of part) {
+            try {
+              made.push(...(await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify([one]) })));
+            } catch (e) {
+              if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(e))) throw e;
+              tally.conflicts++;
+              tally.inserted--;
+            }
+          }
+        }
         const idOf = Object.fromEntries(made.map((r) => [r.directory_contact_id, r.id]));
         for (const i of part) if (idOf[i.directory_contact_id]) toEmbed.push({ id: idOf[i.directory_contact_id], text: embeddingText(i) });
       }
     }
     tally.updated += updates.length;
     tally.inserted += inserts.length;
-    if (page % 10 === 0 || rows.length < PAGE) console.log(`page ${page}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, conflicts ${tally.conflicts}`);
+    if (page % 10 === 0 || rows.length < PAGE) console.log(`page ${page}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}`);
     if (LIMIT && tally.read >= LIMIT) break;
   }
   await db.end();
@@ -305,11 +374,21 @@ async function main() {
       const res = await fetch("https://api.openai.com/v1/embeddings", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "text-embedding-3-small", input: part.map((p) => p.text.slice(0, 8000)) }) });
       if (!res.ok) { tally.failed += part.length; console.log(`embeddings ${res.status}: ${(await res.text()).slice(0, 200)}`); continue; }
       const { data } = await res.json();
-      await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part.map((p, i) => ({ id: p.id, matching_embedding: JSON.stringify(data[i].embedding), embedding_type: "directory" }))) });
-      tally.embedded += part.length;
+      // Patches, never upserts: the pool's insert trigger would reject a row without its LinkedIn name.
+      for (const rows of chunk(part.map((p, i) => ({ id: p.id, embedding: data[i].embedding })), 8)) {
+        await Promise.all(rows.map(async ({ id, embedding }) => {
+          try {
+            await sb(`candidates?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ matching_embedding: JSON.stringify(embedding), embedding_type: "directory" }) });
+            tally.embedded++;
+          } catch (err) {
+            if (!/P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
+            tally.failed++;
+          }
+        }));
+      }
     }
   }
-  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
+  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
