@@ -189,8 +189,11 @@ async function main() {
       (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and v.do_not_contact) as do_not_contact,
       (select count(*) from comms.harvest_profiles where workspace_id = $1) as harvest_profiles,
       (select count(distinct contact_id) from comms.contact_experiences where workspace_id = $1 and superseded_at is null) as with_experiences,
-      (select count(distinct contact_id) from comms.contact_educations where workspace_id = $1 and superseded_at is null) as with_educations`, [ws.id])).rows[0];
-  console.log(`directory "${ws.name}": ${coverage.contacts} contacts (${coverage.do_not_contact} do not contact), Harvest profiles ${coverage.harvest_profiles}, with experiences ${coverage.with_experiences}, with educations ${coverage.with_educations}${SINCE ? `; syncing those changed since ${SINCE}` : "; syncing all"}`);
+      (select count(distinct contact_id) from comms.contact_educations where workspace_id = $1 and superseded_at is null) as with_educations,
+      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '') as with_linkedin,
+      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '' and not exists (select 1 from comms.harvest_profiles h where h.contact_id = v.contact_id)) as linkedin_no_harvest,
+      (select count(*) from board.candidates v join comms.contacts c on c.id = v.contact_id where c.workspace_id = $1 and coalesce(v.linkedin_url, '') <> '' and not exists (select 1 from comms.harvest_profiles h where h.contact_id = v.contact_id) and coalesce(v.primary_email, '') <> '') as linkedin_no_harvest_with_email`, [ws.id])).rows[0];
+  console.log(`directory "${ws.name}": ${coverage.contacts} contacts (${coverage.do_not_contact} do not contact), Harvest profiles ${coverage.harvest_profiles}, with experiences ${coverage.with_experiences}, with educations ${coverage.with_educations}; with a LinkedIn URL ${coverage.with_linkedin}, of which without Harvest ${coverage.linkedin_no_harvest} (${coverage.linkedin_no_harvest_with_email} with an email)${SINCE ? `; syncing those changed since ${SINCE}` : "; syncing all"}`);
 
   const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, conflicts: 0, embedded: 0, failed: 0 };
   const claimed = new Set();
