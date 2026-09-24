@@ -374,8 +374,18 @@ async function main() {
       const res = await fetch("https://api.openai.com/v1/embeddings", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "text-embedding-3-small", input: part.map((p) => p.text.slice(0, 8000)) }) });
       if (!res.ok) { tally.failed += part.length; console.log(`embeddings ${res.status}: ${(await res.text()).slice(0, 200)}`); continue; }
       const { data } = await res.json();
-      await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part.map((p, i) => ({ id: p.id, matching_embedding: JSON.stringify(data[i].embedding), embedding_type: "directory" }))) });
-      tally.embedded += part.length;
+      // Patches, never upserts: the pool's insert trigger would reject a row without its LinkedIn name.
+      for (const rows of chunk(part.map((p, i) => ({ id: p.id, embedding: data[i].embedding })), 8)) {
+        await Promise.all(rows.map(async ({ id, embedding }) => {
+          try {
+            await sb(`candidates?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ matching_embedding: JSON.stringify(embedding), embedding_type: "directory" }) });
+            tally.embedded++;
+          } catch (err) {
+            if (!/P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
+            tally.failed++;
+          }
+        }));
+      }
     }
   }
   console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
