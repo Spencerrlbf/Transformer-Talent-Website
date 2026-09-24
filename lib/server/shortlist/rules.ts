@@ -72,7 +72,7 @@ export interface Assessment {
   keep: boolean;
   score: number;
   keyword_hits: number;
-  checks: { years: boolean | null; family: boolean | null; top: boolean | null };
+  checks: { years: boolean | null; family: boolean | null; top: boolean | null; location?: boolean | null };
   reasons: string[];
 }
 

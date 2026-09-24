@@ -14,7 +14,7 @@ export interface ShortlistRow {
   score: number;
   similarity: number | null;
   keywordHits: number;
-  checks: { years: boolean | null; family: boolean | null; top: boolean | null };
+  checks: { years: boolean | null; family: boolean | null; top: boolean | null; location?: boolean | null };
   reasons: string[];
   name: string;
   title: string | null;
