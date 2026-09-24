@@ -103,10 +103,9 @@ export function mapContact(row, harvest, exps, edus) {
     calculated_experience_years: Number.isFinite(years) ? years : null,
     status: dnc ? "Do Not Contact" : clean(row.status) || "engaged",
     follow_up_at: row.follow_up_date ? String(row.follow_up_date).slice(0, 10) : null,
-    // When the directory has fetched this person from Harvest, the website's
-    // own refresh need not pay for them again.
+    // When the directory fetched this person from Harvest (the status column
+    // has a fixed set of values, so only the date is stamped).
     linkedin_enrichment_date: harvest?.fetched_at ? new Date(harvest.fetched_at).toISOString() : null,
-    linkedin_enrichment_status: harvest?.fetched_at ? "directory" : null,
     source: "directory",
   };
 }
@@ -175,7 +174,12 @@ async function main() {
     } catch (err) {
       throw new Error(`${init.method || "GET"} ${path.split("?")[0]} (url ${url.length} chars, body ${init.body ? init.body.length : 0} chars): ${err instanceof Error ? err.cause?.message || err.message : err}`);
     }
-    if (!res.ok) throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) {
+      // The error's "details" quotes the failing row, which is personal data: keep it out of the log.
+      let why = (await res.text()).slice(0, 300);
+      try { const j = JSON.parse(why); why = [j.code, j.message, j.hint].filter(Boolean).join(" | "); } catch {}
+      throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${why}`);
+    }
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   }
