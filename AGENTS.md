@@ -60,9 +60,13 @@ every merge as a production release.
   prompts/logic without bumping the prefix serves stale verdicts; bumping it
   invalidates the cache and re-screening costs real money. Change it
   deliberately and tell the user.
-- **Airtable coexists.** Airtable is the founder's private ops view and must
-  keep working alongside the dashboard. Do not remove or break its sync
-  paths.
+- **The directory is the source of engaged people.** The communications
+  Supabase project (the reply-ops repo) holds the engaged directory;
+  `scripts/sync-directory.mjs` copies it nightly into `candidates` (source
+  `directory`, linked by `directory_contact_id`). It is read-only against the
+  directory: never write to that project from this repo. Airtable is closing
+  and its sync scripts are gone; rows with source `airtable_sync` are the
+  same people before the move and stay engaged.
 - **Cost discipline:** anything that fans out LLM calls (screening,
   enrichment, sourcing) must have an explicit cap or budget in code.
 - **Secrets** stay server-side (env vars). Never in client bundles, never

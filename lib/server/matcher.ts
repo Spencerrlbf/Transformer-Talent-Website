@@ -230,7 +230,7 @@ export function rankAndAnonymize(
       previousCompanies: prev,
       education,
       skills: (row.top_skills || []).slice(0, 6),
-      engaged: row.source === "airtable_sync" || row.source === "website_applicant",
+      engaged: row.source === "directory" || row.source === "airtable_sync" || row.source === "website_applicant",
       applied: row.source === "website_applicant",
       score: Math.round(score * 100) / 100,
     };

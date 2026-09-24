@@ -265,7 +265,7 @@ if (queued.length < remaining) {
   const topUp = [];
   for (let page = 0; page < MAX_PAGES && topUp.length < needed; page++) {
     const batch = await rest(
-      `candidates?source=eq.airtable_sync&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc,id.asc&limit=${PAGE}&offset=${page * PAGE}`
+      `candidates?source=in.(directory,airtable_sync)&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc,id.asc&limit=${PAGE}&offset=${page * PAGE}`
     );
     if (!batch.length) break;
     const fresh = batch.filter((c) => !everQueued.has(c.id));
