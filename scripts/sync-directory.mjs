@@ -103,6 +103,10 @@ export function mapContact(row, harvest, exps, edus) {
     calculated_experience_years: Number.isFinite(years) ? years : null,
     status: dnc ? "Do Not Contact" : clean(row.status) || "engaged",
     follow_up_at: row.follow_up_date ? String(row.follow_up_date).slice(0, 10) : null,
+    // When the directory has fetched this person from Harvest, the website's
+    // own refresh need not pay for them again.
+    linkedin_enrichment_date: harvest?.fetched_at ? new Date(harvest.fetched_at).toISOString() : null,
+    linkedin_enrichment_status: harvest?.fetched_at ? "directory" : null,
     source: "directory",
   };
 }
