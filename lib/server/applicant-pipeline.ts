@@ -8,6 +8,8 @@ import {
   harvestProfile,
   parseProfile,
   promoteToCandidatePool,
+  applicantVector,
+  tenantPersonId,
   matchRolesForApplicant,
   mirrorToAirtable,
   mirrorApplicationToAirtable,
@@ -108,6 +110,12 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     }
   }
 
+  // Whose applicant this is: a client company's board or page, or the site's
+  // own (Transformer Talent). Decided on the organization, not the surface.
+  const ttOrgId = await getOrgId();
+  const tenantOrgId: string | null =
+    boardOrg?.id ?? (orgId && ttOrgId && orgId !== ttOrgId ? orgId : null);
+
   const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
   const roles = boardRoles ?? (await getRoles());
   const applied = roles.filter((r) => roleIds.includes(r.jobId));
@@ -150,38 +158,51 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     )
       .map((s) => s?.name || "")
       .filter(Boolean);
-    const { candidateId, vector } = await promoteToCandidatePool({
-      name,
-      email,
-      linkedinUrl: linkedin,
-      resumeText,
-      parsed,
-      allSkills: harvestSkills,
-    });
+    // A client company's applicant stays inside that company: no pool row,
+    // no pool enrichment, experiences or embeddings, no TT Airtable. They
+    // are judged under the company's own person key; the ledger keeps only
+    // the spend, under the company.
+    const { candidateId, vector } = tenantOrgId
+      ? {
+          candidateId: await tenantPersonId(tenantOrgId, username, submissionId),
+          vector: username ? await applicantVector(parsed, resumeText) : null,
+        }
+      : await promoteToCandidatePool({
+          name,
+          email,
+          linkedinUrl: linkedin,
+          resumeText,
+          parsed,
+          allSkills: harvestSkills,
+        });
 
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
     if (harvest) {
-      await recordEnrichment({
-        candidateId,
-        linkedinUsername: username,
-        provider: "harvest",
-        operation: "full_profile",
-        cacheStatus: harvestCache,
-        normalized: parsed,
-        raw: harvest,
-        costCredits: harvestCache === "miss" ? 1 : 0,
-      });
+      await recordEnrichment(
+        tenantOrgId
+          ? { orgId: tenantOrgId, candidateId: null, linkedinUsername: username, provider: "harvest", operation: "full_profile", cacheStatus: harvestCache, costCredits: harvestCache === "miss" ? 1 : 0 }
+          : {
+              candidateId,
+              linkedinUsername: username,
+              provider: "harvest",
+              operation: "full_profile",
+              cacheStatus: harvestCache,
+              normalized: parsed,
+              raw: harvest,
+              costCredits: harvestCache === "miss" ? 1 : 0,
+            }
+      );
     }
     if (resumeParser) {
       await recordEnrichment({
-        candidateId,
+        ...(tenantOrgId ? { orgId: tenantOrgId, candidateId: null } : { candidateId }),
         linkedinUsername: username,
         provider: resumeParser,
         operation: "resume_parse",
         cacheStatus: "miss",
       });
     }
-    if (candidateId) {
+    if (candidateId && !tenantOrgId) {
       await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
       await syncCandidateEmbeddings(candidateId, {
         linkedin_profile: linkedinProfileText(harvest as Record<string, unknown> | null),
@@ -366,8 +387,9 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
 
 
     // Future interest travels with the person, not just the application —
-    // the pool record carries the date and what to come back with.
-    if (p.followUpAt && candidateId) {
+    // the pool record carries the date and what to come back with. (Only
+    // TT's own applicants have a pool record.)
+    if (p.followUpAt && candidateId && !tenantOrgId) {
       await sbRest(`candidates?id=eq.${candidateId}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -384,14 +406,17 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       }).catch(() => {});
     }
 
-    await mirrorToAirtable({
-      name,
-      email,
-      linkedinUrl: linkedin,
-      currentTitle: parsed?.current_title || null,
-      currentCompany: parsed?.current_company || null,
-      roleTitles,
-    });
+    // TT's own Airtable: TT's own applicants only.
+    if (!tenantOrgId) {
+      await mirrorToAirtable({
+        name,
+        email,
+        linkedinUrl: linkedin,
+        currentTitle: parsed?.current_title || null,
+        currentCompany: parsed?.current_company || null,
+        roleTitles,
+      });
+    }
   } catch (err) {
     console.error("applicant pipeline failed", err);
     await sbRest(`website_applications?id=eq.${submissionId}`, {
@@ -409,8 +434,9 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     }
   }
 
-  // Review row for EVERY entry — even when enrichment failed above.
-  await mirrorApplicationToAirtable({
+  // Review row for EVERY entry of TT's own — even when enrichment failed
+  // above. A client company's applicants never reach TT's Airtable.
+  if (!tenantOrgId) await mirrorApplicationToAirtable({
     applicationId: submissionId,
     name: name || email,
     email,

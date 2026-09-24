@@ -80,8 +80,15 @@ for (const r of roles) {
   }
 }
 
-// 3. Hash-dedupe against what's already stored; drop superseded vectors.
-const existing = await rest("job_embeddings?select=id,org_role_id,facet,content_hash");
+// 3. Hash-dedupe against what's already stored; drop superseded vectors, of
+// the roles this sync owns only (TT's Notion roles). Every other
+// organization's roles, and TT's dashboard-made ones, keep their vectors.
+const managed = [...new Set(roles.map((r) => byExternal.get(r.jobId)).filter(Boolean))];
+const existing = [];
+for (let i = 0; i < managed.length; i += 100) {
+  const ids = managed.slice(i, i + 100).join(",");
+  existing.push(...(await rest(`job_embeddings?org_role_id=in.(${ids})&select=id,org_role_id,facet,content_hash`)));
+}
 const have = new Set(existing.map((e) => `${e.org_role_id}|${e.facet}|${e.content_hash}`));
 const wantKeys = new Set(wanted.map((w) => `${w.org_role_id}|${w.facet}|${w.content_hash}`));
 const superseded = existing.filter((e) => !wantKeys.has(`${e.org_role_id}|${e.facet}|${e.content_hash}`));

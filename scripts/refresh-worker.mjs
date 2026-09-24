@@ -79,13 +79,15 @@ async function precomputeVerdicts(candidateId, h, vector, username) {
     return [];
   };
   // Website applicants: their strongest evidence (resume) and the roles they
-  // applied to / were suggested live on their application — use both.
+  // applied to / were suggested live on their application — use both. Only
+  // an application made to TT: a client company's application (or TT's own
+  // send into a client's pipeline) is theirs, and their job numbers are not ours.
   let resumeText = "";
   let appRoleIds = [];
   let preferredLocations = [];
   try {
     const [appRow] = await rest(
-      `website_applications?candidate_id=eq.${candidateId}&select=resume_text,role_ids,matched_role_ids,preferred_locations&order=created_at.desc&limit=1`
+      `website_applications?candidate_id=eq.${candidateId}&organization_id=eq.${org.id}&select=resume_text,role_ids,matched_role_ids,preferred_locations&order=created_at.desc&limit=1`
     );
     if (appRow) {
       resumeText = appRow.resume_text || "";

@@ -169,7 +169,8 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(prefs),
       prefer: "return=minimal",
     }).catch(() => {});
-    if (dup.candidate_id) {
+    // TT's pool record is TT's: a client board's entry never rewrites it.
+    if (dup.candidate_id && !boardOrg) {
       await sbRest(`candidates?id=eq.${dup.candidate_id}`, {
         method: "PATCH",
         body: JSON.stringify({

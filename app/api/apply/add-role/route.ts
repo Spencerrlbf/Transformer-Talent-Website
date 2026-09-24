@@ -3,11 +3,14 @@ import { allow } from "@/lib/server/ratelimit";
 import { sbRest } from "@/lib/server/supabase";
 import { getRoles } from "@/lib/roles";
 import { updateAirtableApplicationRoles } from "@/lib/server/applicants";
+import { getOrgId } from "@/lib/server/spine";
 
 // Adds one suggested role to a just-submitted application. Guarded hard:
 // the application must be under an hour old, the role must be one WE
 // suggested (matched_role_ids), and totals stay capped — so the uuid the
-// applicant holds can't be used to spray applications.
+// applicant holds can't be used to spray applications. Transformer Talent's
+// own applications only: the role list and the Airtable here are TT's, and a
+// client company's job numbers mean something else.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_TOTAL_ROLES = 7; // 3 applied + up to 4 suggested
@@ -33,8 +36,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
+  const ttOrgId = await getOrgId();
+  if (!ttOrgId) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   const res = await sbRest(
-    `website_applications?id=eq.${applicationId}&select=id,created_at,role_ids,role_titles,matched_role_ids`
+    `website_applications?id=eq.${applicationId}&organization_id=eq.${ttOrgId}&select=id,created_at,role_ids,role_titles,matched_role_ids`
   );
   if (!res.ok) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   const [app] = await res.json();
