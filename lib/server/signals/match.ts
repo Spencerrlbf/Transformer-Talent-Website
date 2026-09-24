@@ -52,7 +52,7 @@ function indexOf(entries: ListEntry[]): ListIndex {
       // A single ordinary word stands for the whole name, never a part of one.
       // Judged on the normalised key: "X Corp" is the one word "x" once the
       // legal suffix is gone.
-      if (k.includes(" ") || isAcronym(raw)) {
+      if (k.includes(" ") || (isAcronym(raw) && !entry.wholeName)) {
         const first = k.split(" ")[0];
         const list = idx.byFirstWord.get(first) || [];
         list.push({ key: k, entry });

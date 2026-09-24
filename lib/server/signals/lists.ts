@@ -9,12 +9,17 @@
 // where S and A are tier 1 and B and C tier 2. TOP_EMPLOYERS merges them: a
 // graded company already on the hand list moves up when its grade says so
 // and never moves down; a graded subsidiary listed as an alias becomes its
-// own entry when its grade beats its parent's.
+// own entry when its grade beats its parent's; EMPLOYER_OVERRIDES has the
+// last word.
 import paraform from "./paraform-employers.json";
 export interface ListEntry {
   name: string;
   aliases?: string[];
   tier: 1 | 2;
+  /** Matches only when the whole company name is this name: set on the
+   *  imported entries, whose one-word names in capitals ("AIR", "SHIP")
+   *  are names, not acronyms. */
+  wholeName?: boolean;
 }
 
 export const TOP_UNIVERSITIES: ListEntry[] = [
@@ -228,26 +233,45 @@ const key = (s: string): string =>
     .trim()
     .replace(/^the /, "");
 
-/** A hand entry changes tier only when this many graded people back the
- *  grade; a new company is added at its grade however few people carry it. */
-export const MIN_PEOPLE_TO_MOVE = 3;
+/** How many graded people a grade needs before it moves a hand entry, and
+ *  before a new company is added. Spencer, 24 September 2026: the grade
+ *  decides, so both are 1. */
+export const MIN_PEOPLE_TO_MOVE = 1;
+export const MIN_PEOPLE_TO_ADD = 1;
 
-/** The hand list merged with the Paraform grades. */
-export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): ListEntry[] {
-  const out: ListEntry[] = hand.map((e) => ({ ...e, aliases: e.aliases ? [...e.aliases] : undefined }));
+/** Spencer's calls that beat the grades: these sit at the tier given
+ *  whatever the exports say. A name here that is on neither list is added. */
+export const EMPLOYER_OVERRIDES: { name: string; tier: 1 | 2 }[] = [
+  { name: "JPMorgan Chase", tier: 2 }, // also written JPMorganChase
+  { name: "Booz Allen Hamilton", tier: 2 },
+  { name: "Bank of America", tier: 2 },
+  { name: "EY", tier: 2 },
+  { name: "Genentech", tier: 2 },
+  { name: "McKinsey & Company", tier: 2 },
+];
+
+/** The hand list merged with the Paraform grades, then the overrides. */
+export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[], overrides: { name: string; tier: 1 | 2 }[] = EMPLOYER_OVERRIDES): ListEntry[] {
+  const out: ListEntry[] = hand.map((e) => (e.aliases ? { ...e, aliases: [...e.aliases] } : { ...e }));
   const byName = new Map<string, ListEntry>();
+  const byTight = new Map<string, ListEntry>();
   const byAlias = new Map<string, ListEntry>();
+  const tight = (k: string) => k.replace(/ /g, "");
   for (const e of out) {
     byName.set(key(e.name), e);
+    byTight.set(tight(key(e.name)), e);
     for (const a of e.aliases || []) byAlias.set(key(a), e);
   }
   const gradeOf = new Map(graded.map((g) => [key(g.name), g] as const));
   for (const g of graded) {
     const k = key(g.name);
-    if (!k) continue;
-    const own = byName.get(k);
+    if (!k || g.people < MIN_PEOPLE_TO_ADD) continue;
+    // "JPMorganChase" is the hand list's "JPMorgan Chase", and profiles
+    // that spell it that way should still match it.
+    const own = byName.get(k) ?? byTight.get(tight(k));
     if (own) {
       if (g.tier < own.tier && g.people >= MIN_PEOPLE_TO_MOVE) own.tier = g.tier;
+      if (!byName.has(k) && !(own.aliases || []).some((a) => key(a) === k)) own.aliases = [...(own.aliases || []), g.name];
       continue;
     }
     const parent = byAlias.get(k);
@@ -257,7 +281,7 @@ export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): List
       if (parentGrade && parentGrade.tier > g.tier) {
         // "Slack" graded above "Salesforce": Slack stands on its own.
         parent.aliases = (parent.aliases || []).filter((a) => key(a) !== k);
-        const entry: ListEntry = { name: g.name, tier: g.tier };
+        const entry: ListEntry = { name: g.name, tier: g.tier, wholeName: true };
         out.push(entry);
         byName.set(k, entry);
       } else {
@@ -265,9 +289,15 @@ export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): List
       }
       continue;
     }
-    const entry: ListEntry = { name: g.name, tier: g.tier };
+    const entry: ListEntry = { name: g.name, tier: g.tier, wholeName: true };
     out.push(entry);
     byName.set(k, entry);
+  }
+  for (const o of overrides) {
+    const k = key(o.name);
+    const e = byName.get(k) ?? byTight.get(tight(k)) ?? byAlias.get(k);
+    if (e) e.tier = o.tier;
+    else out.push({ name: o.name, tier: o.tier, wholeName: true });
   }
   return out;
 }
