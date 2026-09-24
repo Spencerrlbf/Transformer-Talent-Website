@@ -241,15 +241,18 @@ export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): List
   const out: ListEntry[] = hand.map((e) => ({ ...e, aliases: e.aliases ? [...e.aliases] : undefined }));
   const byName = new Map<string, ListEntry>();
   const byAlias = new Map<string, ListEntry>();
+  const tight = (k: string) => k.replace(/ /g, "");
   for (const e of out) {
     byName.set(key(e.name), e);
+    byName.set(tight(key(e.name)), e);
     for (const a of e.aliases || []) byAlias.set(key(a), e);
   }
   const gradeOf = new Map(graded.map((g) => [key(g.name), g] as const));
   for (const g of graded) {
     const k = key(g.name);
     if (!k) continue;
-    const own = byName.get(k);
+    // "JPMorganChase" is the hand list's "JPMorgan Chase".
+    const own = byName.get(k) ?? byName.get(tight(k));
     if (own) {
       if (g.tier < own.tier && g.people >= MIN_PEOPLE_TO_MOVE) own.tier = g.tier;
       continue;
