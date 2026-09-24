@@ -42,9 +42,9 @@ async function storedViews(orgId: string, orgRoleId: string, candidateKey: strin
     for (const r of rows) if (isVerdictView(r.verdict)) out.push({ kind: "run", id: r.id, view: r.verdict });
   } else if (candidateId) {
     const res = await sbRest(
-      // (by person and role only: screening files its rows under the site's own
-      // organisation whichever board the person applied through, and the role
-      // id is already this organisation's)
+      // (by person and role only: rows screened before 2026-09-24 carry the
+      // site's own organisation whichever board the person applied through,
+      // and the role id is already this organisation's)
       `match_verdicts?candidate_id=eq.${candidateId}&org_role_id=eq.${orgRoleId}&select=id,verdict`
     );
     const rows = res.ok ? ((await res.json()) as { id: string; verdict: Record<string, unknown> | null }[]) : [];

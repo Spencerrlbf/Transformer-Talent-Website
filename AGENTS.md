@@ -52,6 +52,25 @@ every merge as a production release.
   table reads. All data access is server-side with the service-role key
   behind `requireMember` (`lib/server/dashboard-auth.ts`). RLS is a backstop,
   not the tenancy mechanism.
+- **Tenancy: organizations are sealed, and code is the only wall.**
+  - Every read and write of an organization's table filters on
+    `member.org.id`. Any id, job number or candidate key that comes from a
+    request is proven to be the caller's before it is read or written
+    (`candidateInOrg` in `lib/server/tasks.ts`, `keysInOrg` in
+    `lib/server/lists.ts`, or the organization filter on the lookup). Job
+    numbers repeat across organizations.
+  - Transformer Talent's pool (`candidates` and everything keyed to it) is
+    TT's. A client company's applicants never enter it: the apply pipeline
+    keys them by the company's own application. Client actions never write
+    to it either.
+  - The only thing that crosses from TT to a client is a Send
+    (`lib/server/network.ts`). It carries the person's profile and email, and
+    only `clientSafeVerdict` of TT's verdict (the tag and reason). TT-only
+    routes return 404 to every other organization, on the server.
+  - One organization per login. `requireMember` refuses a login that has
+    two memberships.
+  - Before merging anything that touches data access, run
+    `node scripts/test-tenancy.mjs --base <preview url>`. It must print PASS.
 - **Single-source pipeline:** role artifacts (matching profiles, embeddings,
   facet texts) are generated only via `lib/server/roles-pipeline.ts`. Scripts
   and dashboard share it. If it changes, rebuild the worker bundle with

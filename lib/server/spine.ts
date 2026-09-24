@@ -35,9 +35,12 @@ export async function recordEnrichment(args: {
   normalized?: unknown;
   raw?: unknown;
   costCredits?: number;
+  /** Whose spend this is; default the site's own organization. A client
+   *  company's applicant records spend only (no candidate, no payload). */
+  orgId?: string;
 }): Promise<void> {
   try {
-    const orgId = await getOrgId();
+    const orgId = args.orgId ?? (await getOrgId());
     if (!orgId) return;
     await sbInsert("candidate_enrichments", {
       organization_id: orgId,

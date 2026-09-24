@@ -257,9 +257,10 @@ export async function screenRolesWithCache(args: {
       return { ...corrected, scorecard, cached: false as const };
     });
     verdicts.push(...fresh);
-    // Store fresh verdicts for reuse + audit.
+    // Store fresh verdicts for reuse + audit, under the organization that owns
+    // the roles (a client company's applicant's verdicts are that company's).
     if (args.candidateId) {
-      const orgId = await getOrgId();
+      const orgId = args.organizationId || (await getOrgId());
       if (orgId) {
         const rows = fresh
           .map((v) => {

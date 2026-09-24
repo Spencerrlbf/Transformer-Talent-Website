@@ -3,6 +3,7 @@ import { requireMember } from "@/lib/server/dashboard-auth";
 import { accountFor, listThreadsFor } from "@/lib/server/email-compose";
 import { openReminders } from "@/lib/server/reminders";
 import { noReplyMarkFor } from "@/lib/server/no-reply-marks";
+import { candidateInOrg } from "@/lib/server/tasks";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
 
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const key = url.searchParams.get("key") || "";
   if (!KEY_RE.test(key)) return NextResponse.json({ error: "bad_key" }, { status: 400 });
+  if (!(await candidateInOrg(member.org.id, key))) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const { threads, hiddenThreads, visibility } = await listThreadsFor(member.org.id, key, member.email);
   const awaiting = threads.filter((t) => t.awaiting).length;

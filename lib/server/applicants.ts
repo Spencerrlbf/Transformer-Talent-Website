@@ -144,6 +144,41 @@ async function patchCandidate(id: string, payload: Record<string, unknown>) {
   }
 }
 
+/** The vector an applicant is matched to roles with: their profile summary,
+ *  else title at company, else the start of their resume. */
+export async function applicantVector(
+  parsed: ParsedProfile | null,
+  resumeText: string | null
+): Promise<number[] | null> {
+  const summaryText =
+    parsed?.profile_summary ||
+    [parsed?.current_title, parsed?.current_company && `at ${parsed.current_company}`]
+      .filter(Boolean)
+      .join(" ") ||
+    resumeText?.slice(0, 2000) ||
+    "";
+  return summaryText ? await embed(summaryText).catch(() => null) : null;
+}
+
+/** The person key a client company's applicant is judged under. They never
+ *  enter Transformer Talent's pool, so their verdicts hang off the company's
+ *  own first application from this LinkedIn profile: the same person applying
+ *  twice keeps one set of verdicts and confirmed rows, and no two companies
+ *  ever share a key. (People TT sent keep TT's pool id and are skipped.) */
+export async function tenantPersonId(
+  orgId: string,
+  username: string | null,
+  submissionId: string
+): Promise<string> {
+  if (!username) return submissionId;
+  const res = await sbRest(
+    `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(username)}` +
+      `&or=(source.is.null,source.neq.transformer_talent)&select=id&order=created_at.asc&limit=1`
+  );
+  const [first] = res.ok ? ((await res.json()) as { id: string }[]) : [];
+  return first?.id ?? submissionId;
+}
+
 export async function promoteToCandidatePool(args: {
   name: string;
   email: string;
@@ -156,14 +191,7 @@ export async function promoteToCandidatePool(args: {
   const username = linkedinUrl ? linkedinUsername(linkedinUrl) : null;
   if (!username) return { candidateId: null, vector: null };
 
-  const summaryText =
-    parsed?.profile_summary ||
-    [parsed?.current_title, parsed?.current_company && `at ${parsed.current_company}`]
-      .filter(Boolean)
-      .join(" ") ||
-    resumeText?.slice(0, 2000) ||
-    "";
-  const vector = summaryText ? await embed(summaryText).catch(() => null) : null;
+  const vector = await applicantVector(parsed, resumeText);
 
   const fields: Record<string, unknown> = {
     source: "website_applicant",

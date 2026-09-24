@@ -98,7 +98,9 @@ export async function POST(req: NextRequest) {
 
   // Same person again within 14 days (same org, matched by email OR LinkedIn
   // username): no duplicate row, no pipeline — their existing application is
-  // already being reviewed against every role. Friendly response instead.
+  // already being reviewed against every role. The answer is the same as for
+  // a fresh application: anything else would let a stranger type in someone's
+  // LinkedIn and learn whether they applied to this company.
   const orgId = boardOrg?.id ?? (await getOrgId());
   const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
   const dupUsername = linkedinUsername(linkedin) || "";
@@ -115,7 +117,7 @@ export async function POST(req: NextRequest) {
     ...(dupByLinkedin.ok ? ((await dupByLinkedin.json()) as { id: string }[]) : []),
   ];
   if (dupRows.length > 0) {
-    return NextResponse.json({ ok: true, alreadyApplied: true });
+    return NextResponse.json({ ok: true });
   }
 
   const ip =
@@ -230,5 +232,6 @@ export async function POST(req: NextRequest) {
       applicationType: roleIds.length ? "Applied" : "Speculative",
     });
   });
-  return NextResponse.json({ ok: true, applicationId: submission.id });
+  // Same body as the duplicate answer above (nothing on the page reads an id).
+  return NextResponse.json({ ok: true });
 }

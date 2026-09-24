@@ -4,6 +4,7 @@
 // crossing to the client goes through client-reason — never raw verdicts.
 import { sbRest } from "./supabase";
 import { signResumeUrl } from "./applicants";
+import { getOrgId } from "./spine";
 import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
 import type { Scorecard } from "./scorecard";
 
@@ -141,6 +142,9 @@ export async function sourcedForOrg(
   orgId: string,
   jobId?: string
 ): Promise<SourcedCandidate[]> {
+  // Pool people reach a client company only through a send (Network page),
+  // never by being matched onto its roles: this list is TT's own.
+  if (orgId !== (await getOrgId())) return [];
   const pairings = newestPerPairing(await orgVerdicts(orgId));
 
   const appsRes = await sbRest(

@@ -3,6 +3,8 @@
 // structured fields — no LLM, and none of the internal shorthand or evidence
 // trail ever crosses this boundary.
 import type { Scorecard } from "./scorecard";
+import { stripExamples, type CardRow } from "@/lib/rolecard";
+import type { VerdictView } from "@/lib/verdict-view";
 
 export type ClientTag = "strong" | "possible" | "stretch";
 
@@ -51,4 +53,52 @@ export function clientReason(sc: Scorecard): string {
   }
 
   return parts.join(" ");
+}
+
+/** What of Transformer Talent's verdict may travel with a person TT sends to
+ *  a client: the numbers the tag and reason above are computed from, and
+ *  nothing else. Never the internal reason, the evidence behind each answer,
+ *  the stack items, the report card or a recruiter's check-off notes. Null
+ *  when the verdict has nothing to show. */
+export function clientSafeVerdict(v: unknown): { qualified: boolean; scorecard: Scorecard } | null {
+  const sc = (v as { scorecard?: Partial<Scorecard> } | null)?.scorecard;
+  if (!sc?.tier) return fromReportCard((v as { v2?: VerdictView } | null)?.v2);
+  return {
+    qualified: (v as { qualified?: unknown }).qualified === true,
+    scorecard: {
+      tier: sc.tier,
+      reason: "",
+      stack: { items: [], matched: Number(sc.stack?.matched) || 0, total: Number(sc.stack?.total) || 0 },
+      years: { required: sc.years?.required ?? null, actual: sc.years?.actual ?? null, met: sc.years?.met ?? null },
+      seniority: { level: sc.seniority?.level ?? "unknown", signals: [] },
+      // clientReason names two at most; the rest stay with TT.
+      gaps: (sc.gaps || []).slice(0, 2).map(String),
+    },
+  };
+}
+
+/** A verdict that is a report card only (the scorecard judge), in the same
+ *  client-safe shape: the tier from its label, the stack count from its
+ *  technology rows, the gaps from the names of its Required rows not met.
+ *  Nothing of the paragraph, evidence, quotes or check-offs. */
+function fromReportCard(view: VerdictView | null | undefined): { qualified: boolean; scorecard: Scorecard } | null {
+  if (!view?.label) return null;
+  const rows: CardRow[] = view.card?.rows || [];
+  const met = (r: CardRow) => r.status === "yes" || r.status === "equivalent";
+  const tech = rows.filter((r) => r.kind === "tech");
+  const gaps = rows
+    .filter((r) => r.tier === "required" && !met(r))
+    .map((r) => stripExamples(r.label).replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  return {
+    qualified: view.label !== "pass",
+    scorecard: {
+      tier: view.label === "contact" ? "STRONG" : view.label === "message" ? "POSSIBLE" : "WEAK",
+      reason: "",
+      stack: { items: [], matched: tech.filter(met).length, total: tech.length },
+      years: { required: null, actual: null, met: null },
+      seniority: { level: "unknown", signals: [] },
+      gaps: gaps.slice(0, 2),
+    },
+  };
 }

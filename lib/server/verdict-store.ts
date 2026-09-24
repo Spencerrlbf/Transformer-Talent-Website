@@ -5,10 +5,10 @@ import { sbRest } from "./supabase";
 import type { VerdictView } from "@/lib/verdict-view";
 
 /** The verdict row the dashboard reads for this person and role: the newest.
- *  Found by person and role only. Screening writes its rows under the site's
- *  own organisation whichever board the person applied through, so filtering
- *  by the member's organisation hid every tenant applicant's row; the role id
- *  is already scoped to the organisation by whoever loaded it. */
+ *  Found by person and role only. Rows screened before 2026-09-24 carry the
+ *  site's own organisation whichever board the person applied through, so
+ *  filtering by the member's organisation would hide them; the role id is
+ *  already scoped to the organisation by whoever loaded it. */
 export async function findVerdictRow(candidateId: string, orgRoleId: string): Promise<{ id: string; verdict: Record<string, unknown> | null } | null> {
   const res = await sbRest(`match_verdicts?candidate_id=eq.${candidateId}&org_role_id=eq.${orgRoleId}&select=id,verdict&order=created_at.desc&limit=1`);
   if (!res.ok) throw new Error(`findVerdictRow: ${res.status}`);

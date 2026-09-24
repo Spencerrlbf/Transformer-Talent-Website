@@ -211,7 +211,8 @@ function JobWorkspace({ id }: { id: string }) {
       </div>
 
       <nav className="dash-tabs jobws-tabs" aria-label="Job sections">
-        {TABS.map((t) => (
+        {/* The Shortlist is TT's pool: TT's own jobs only (the API 404s others). */}
+        {TABS.filter((t) => t.id !== "shortlist" || org.slug === "transformer-talent").map((t) => (
           <button
             key={t.id}
             className={tab === t.id ? "on" : ""}
@@ -389,7 +390,7 @@ function JobWorkspace({ id }: { id: string }) {
 
       {tab === "sourcing" && <SourcingPanel jobId={job.id} jobTitle={job.title} onOpenCandidate={onOpenCandidate} refreshKey={sourcingRefresh} />}
 
-      {tab === "shortlist" && <ShortlistPanel jobId={job.id} onOpen={setOpenKey} onKeys={setRowKeys} onCount={setShortlistCount} />}
+      {tab === "shortlist" && org.slug === "transformer-talent" && <ShortlistPanel jobId={job.id} onOpen={setOpenKey} onKeys={setRowKeys} onCount={setShortlistCount} />}
 
       {tab === "past" && (
         <>

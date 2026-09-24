@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
+import { TT_ORG_SLUG } from "@/lib/server/network";
 
 // The role's shortlist (Phase 2): who is worth judging, by code, in rank
-// order, with the reasons. Org-scoped through the role.
+// order, with the reasons. These are TT's pool people, so the route is
+// Transformer Talent's only (404 for every other organization, like the
+// Network routes); within TT it is scoped through the role.
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -29,6 +32,7 @@ const ENGAGED = new Set(["directory", "airtable_sync", "website_applicant"]);
 export async function GET(req: NextRequest, { params }: Params) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
+  if (member.org.slug !== TT_ORG_SLUG) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const { id } = await params;
   const roleRes = await sbRest(`org_roles?organization_id=eq.${member.org.id}&external_id=eq.${encodeURIComponent(id)}&select=id&limit=1`);
   if (!roleRes.ok) return NextResponse.json({ error: "role_lookup_failed" }, { status: 500 });

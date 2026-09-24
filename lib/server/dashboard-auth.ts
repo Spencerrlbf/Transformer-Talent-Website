@@ -27,14 +27,19 @@ export async function requireMember(req: Request): Promise<DashMember | null> {
   const user = (await ures.json()) as { id?: string; email?: string };
   if (!user.id) return null;
 
+  // One organization per login. Two memberships would make the org a coin
+  // toss (and everything this user types land in either company), so an
+  // ambiguous login is refused rather than guessed.
   const mres = await sbRest(
-    `org_members?user_id=eq.${user.id}&select=member_role,organizations(id,slug,name)&limit=1`
+    `org_members?user_id=eq.${user.id}&select=member_role,organizations(id,slug,name)&limit=2`
   );
   if (!mres.ok) return null;
-  const [row] = (await mres.json()) as {
+  const rows = (await mres.json()) as {
     member_role: string;
     organizations: { id: string; slug: string; name: string } | null;
   }[];
+  if (rows.length !== 1) return null;
+  const [row] = rows;
   if (!row?.organizations) return null;
 
   return {

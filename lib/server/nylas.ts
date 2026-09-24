@@ -35,16 +35,23 @@ export function requestOrigin(req: Request): string {
 
 // ---- hosted OAuth -----------------------------------------------------
 
+/** Cookie holding the connect nonce: set by /connect on the browser that
+ *  starts the flow, read back by /api/nylas/callback. */
+export const CONNECT_COOKIE = "tt_mail_connect";
+
 /** State ties the callback to the seat that started it (the callback
- *  arrives as a bare browser redirect, with no dashboard auth attached). */
-export function signState(orgId: string, memberEmail: string): string {
+ *  arrives as a bare browser redirect, with no dashboard auth attached) and,
+ *  through the nonce, to the browser that started it: the same nonce sits in
+ *  a cookie on that browser, so a connect link forwarded to anyone else
+ *  (say, someone at another company) is refused at the callback. */
+export function signState(orgId: string, memberEmail: string, nonce: string): string {
   const ts = Date.now();
-  const payload = `${orgId}|${memberEmail}|${ts}`;
+  const payload = `${orgId}|${memberEmail}|${nonce}|${ts}`;
   const mac = createHmac("sha256", apiKey()).update(payload).digest("hex");
   return Buffer.from(`${payload}|${mac}`).toString("base64url");
 }
 
-export function verifyState(state: string): { orgId: string; memberEmail: string } | null {
+export function verifyState(state: string): { orgId: string; memberEmail: string; nonce: string } | null {
   let raw = "";
   try {
     raw = Buffer.from(state, "base64url").toString("utf8");
@@ -52,14 +59,14 @@ export function verifyState(state: string): { orgId: string; memberEmail: string
     return null;
   }
   const parts = raw.split("|");
-  if (parts.length !== 4) return null;
-  const [orgId, memberEmail, ts, mac] = parts;
-  const expect = createHmac("sha256", apiKey()).update(`${orgId}|${memberEmail}|${ts}`).digest("hex");
+  if (parts.length !== 5) return null;
+  const [orgId, memberEmail, nonce, ts, mac] = parts;
+  const expect = createHmac("sha256", apiKey()).update(`${orgId}|${memberEmail}|${nonce}|${ts}`).digest("hex");
   const a = Buffer.from(mac);
   const b = Buffer.from(expect);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   if (Date.now() - Number(ts) > 15 * 60_000) return null;
-  return { orgId, memberEmail };
+  return { orgId, memberEmail, nonce };
 }
 
 export function authUrl(redirectUri: string, state: string): string {
