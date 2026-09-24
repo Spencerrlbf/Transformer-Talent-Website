@@ -57,6 +57,7 @@ export default function FactsBlock({ p, companies }: { p: ProfileFacts; companie
         <dd>
           <CompanyName name={cur.company} lookup={companies} tenure={[cur.title, cur.months != null ? plural(cur.months, "month") : ""].filter(Boolean).join(" · ") || undefined} />
           {size && <small title={cur.founded ? `Founded ${cur.founded}, from the company's own page` : "From the company's own page"}> · {size}</small>}
+          {p.topEmployer && <small className="vc-top" title={`${p.topEmployer.name} is on the top-employer list, tier ${p.topEmployer.tier}`}> · top employer</small>}
         </dd>
       ) : (
         <dd className="none" title="No current position on the profile">
@@ -68,6 +69,7 @@ export default function FactsBlock({ p, companies }: { p: ProfileFacts; companie
       {p.school ? (
         <dd>
           {schoolLine(laterFirst(p.school, p.school2)[0])}
+          {p.topSchool && <small className="vc-top" title={`${p.topSchool.name} is on the top-university list, tier ${p.topSchool.tier}`}> · top university</small>}
           {laterFirst(p.school, p.school2)[1] && (
             <small className="vc-school2" title="Their other degree">
               {schoolLine(laterFirst(p.school, p.school2)[1]!)}

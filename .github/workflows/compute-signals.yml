@@ -1,0 +1,35 @@
+name: Compute person signals
+
+on:
+  schedule:
+    # After the Airtable sync (07:00 UTC), before the Harvest refresh (08:00 UTC).
+    - cron: "30 7 * * *"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Recompute the whole pool (otherwise only people updated in the last two days)"
+        type: boolean
+        default: false
+      limit:
+        description: "Stop after this many people (a bounded test run)"
+        required: false
+        default: ""
+
+jobs:
+  signals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/build-worker-lib.mjs
+      - run: |
+          if [ "${{ inputs.full }}" != "true" ]; then
+            export SINCE="$(date -u -d '2 days ago' +%Y-%m-%d)"
+          fi
+          node scripts/compute-signals.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LIMIT: ${{ inputs.limit }}

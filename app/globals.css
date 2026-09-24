@@ -4614,6 +4614,7 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-factsblock dd.none { font-weight: 400; color: var(--muted); }
 /* The second degree, greyed under the first. */
 .vc-factsblock dd .vc-school2 { display: block; }
+.vc-factsblock dd .vc-top { color: var(--pos); font-weight: 600; }
 .vc-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 26px; }
 .vc-who, .vc-review { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .vc-review { gap: 10px; border-left: 1px solid var(--hair); padding-left: 26px; }

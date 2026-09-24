@@ -223,6 +223,12 @@ export interface ProfileFacts {
    *  when `school` is the bachelor's, else the bachelor's. Never a school
    *  with no degree named. Older saved cards lack it. */
   school2?: { name: string; degree: string | null; field: string | null; year: number | null } | null;
+  /** A school on the profile that is on the top-university list, tier 1 or
+   *  2, with the list's name for it. A fact beside the school line; never a
+   *  row on its own. Older saved cards lack it. */
+  topSchool?: { name: string; tier: 1 | 2 } | null;
+  /** An employer on the profile that is on the top-employer list. */
+  topEmployer?: { name: string; tier: 1 | 2 } | null;
   /** From the words of the current title only ("no senior title yet" for mid). */
   seniority?: { level: "junior" | "mid" | "senior" | "staff" | "lead" | null; note: string };
   /** Skills from job tags with their dated years and where they were used,
