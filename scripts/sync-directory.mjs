@@ -122,6 +122,23 @@ export function embeddingText(m) {
   ].filter(Boolean).join(". ").slice(0, 8000);
 }
 
+/** What an existing website row gets: the directory's values, never a blank
+ *  over data the pool already holds. Status, source, the link and the
+ *  contact details always come across. */
+export function patchFor(m) {
+  const always = new Set(["directory_contact_id", "source", "status", "email", "linkedin_url", "linkedin_username", "follow_up_at"]);
+  const out = {};
+  for (const [k, v] of Object.entries(m)) {
+    const empty = v === null || v === undefined || (Array.isArray(v) && v.length === 0);
+    if (!empty || always.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+/** Embed when the row has no embedding, or only the old Airtable one-liner
+ *  and the directory now has real experience for the person. */
+export const needsEmbedding = (prev, m) => !prev.matching_embedding || (prev.embedding_type === "airtable_sync" && !!m.work_experience);
+
 export const syncHash = (m, fetchedAt) => crypto.createHash("sha256").update(JSON.stringify([m, fetchedAt || null, "v1"])).digest("hex").slice(0, 32);
 
 const recordIds = (v) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,\s]+/) : []).map((s) => String(s).trim()).filter((s) => /^rec[A-Za-z0-9]{14}$/.test(s));
@@ -202,12 +219,12 @@ async function main() {
     // Existing website rows for these contacts, by the strongest link first.
     const existing = new Map(); // contact_id -> row
     for (const part of chunk(ids, 100)) {
-      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,directory_contact_id,directory_sync_hash,matching_embedding`);
+      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
       for (const r of found) existing.set(r.directory_contact_id, r);
     }
     const airtableIds = rows.flatMap((r) => (existing.has(r.contact_id) ? [] : recordIds(r.airtable_record_ids).map((a) => [a, r.contact_id])));
     for (const part of chunk(airtableIds, 100)) {
-      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,directory_contact_id,directory_sync_hash,matching_embedding`);
+      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
       for (const r of found) {
         const cid = part.find(([a]) => a === r.airtable_id)?.[1];
         if (cid && !existing.has(cid) && (!r.directory_contact_id || r.directory_contact_id === cid)) existing.set(cid, r);
@@ -216,7 +233,7 @@ async function main() {
     const mapped = rows.map((r) => ({ row: r, m: mapContact(r, harvestBy[r.contact_id], expsBy[r.contact_id], edusBy[r.contact_id]) }));
     const usernames = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.linkedin_username).map(({ m }) => m.linkedin_username);
     for (const part of chunk([...new Set(usernames)], 100)) {
-      const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding&order=updated_at.desc`);
+      const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.linkedin_username) continue;
         const r = found.find((x) => x.linkedin_username === m.linkedin_username && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -225,7 +242,7 @@ async function main() {
     }
     const emails = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.email).map(({ m }) => m.email.toLowerCase());
     for (const part of chunk([...new Set(emails)], 100)) {
-      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,directory_contact_id,directory_sync_hash,matching_embedding&order=updated_at.desc`);
+      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.email) continue;
         const r = found.find((x) => x.email && x.email.toLowerCase() === m.email.toLowerCase() && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -248,16 +265,20 @@ async function main() {
       }
       if (prev && prev.directory_sync_hash === hash) {
         tally.unchanged++;
-        if (!prev.matching_embedding) toEmbed.push({ id: prev.id, text: embeddingText(m) });
+        if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
         continue;
       }
-      if (prev) updates.push({ id: prev.id, ...m, directory_sync_hash: hash, updated_at: now });
-      else inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
+      if (prev) {
+        updates.push({ id: prev.id, ...patchFor(m), directory_sync_hash: hash, updated_at: now });
+        if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
+      } else inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
     }
     if (!DRY_RUN) {
-      for (const part of chunk(updates, 200)) {
+      // Rows patched in one request must share one column list.
+      const groups = new Map();
+      for (const u of updates) (groups.get(Object.keys(u).sort().join(",")) || groups.set(Object.keys(u).sort().join(","), []).get(Object.keys(u).sort().join(","))).push(u);
+      for (const rows of groups.values()) for (const part of chunk(rows, 200)) {
         await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part) });
-        for (const u of part) if (u.full_name) toEmbed.push({ id: u.id, text: embeddingText(u) });
       }
       for (const part of chunk(inserts, 200)) {
         const made = await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(part) });
@@ -281,7 +302,7 @@ async function main() {
       tally.embedded += part.length;
     }
   }
-  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.updated + tally.inserted})` : ""}, failed ${tally.failed}`);
+  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
