@@ -233,28 +233,34 @@ const key = (s: string): string =>
     .replace(/^the /, "");
 
 /** A hand entry changes tier only when this many graded people back the
- *  grade; a new company is added at its grade however few people carry it. */
+ *  grade. */
 export const MIN_PEOPLE_TO_MOVE = 3;
+/** A company not on the hand list is added when this many graded people
+ *  carry its grade: 1 means every graded company counts. */
+export const MIN_PEOPLE_TO_ADD = 1;
 
 /** The hand list merged with the Paraform grades. */
 export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): ListEntry[] {
-  const out: ListEntry[] = hand.map((e) => ({ ...e, aliases: e.aliases ? [...e.aliases] : undefined }));
+  const out: ListEntry[] = hand.map((e) => (e.aliases ? { ...e, aliases: [...e.aliases] } : { ...e }));
   const byName = new Map<string, ListEntry>();
+  const byTight = new Map<string, ListEntry>();
   const byAlias = new Map<string, ListEntry>();
   const tight = (k: string) => k.replace(/ /g, "");
   for (const e of out) {
     byName.set(key(e.name), e);
-    byName.set(tight(key(e.name)), e);
+    byTight.set(tight(key(e.name)), e);
     for (const a of e.aliases || []) byAlias.set(key(a), e);
   }
   const gradeOf = new Map(graded.map((g) => [key(g.name), g] as const));
   for (const g of graded) {
     const k = key(g.name);
-    if (!k) continue;
-    // "JPMorganChase" is the hand list's "JPMorgan Chase".
-    const own = byName.get(k) ?? byName.get(tight(k));
+    if (!k || g.people < MIN_PEOPLE_TO_ADD) continue;
+    // "JPMorganChase" is the hand list's "JPMorgan Chase", and profiles
+    // that spell it that way should still match it.
+    const own = byName.get(k) ?? byTight.get(tight(k));
     if (own) {
       if (g.tier < own.tier && g.people >= MIN_PEOPLE_TO_MOVE) own.tier = g.tier;
+      if (!byName.has(k) && !(own.aliases || []).some((a) => key(a) === k)) own.aliases = [...(own.aliases || []), g.name];
       continue;
     }
     const parent = byAlias.get(k);

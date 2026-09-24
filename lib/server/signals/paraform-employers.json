@@ -6244,18 +6244,6 @@
    }
   },
   {
-   "name": "Berkeley Artificial Intelligence Research",
-   "grade": "A",
-   "tier": 1,
-   "people": 2,
-   "grades": {
-    "S": 0,
-    "A": 2,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
    "name": "Berry Street",
    "grade": "B",
    "tier": 2,
@@ -6961,18 +6949,6 @@
     "A": 0,
     "B": 0,
     "C": 2
-   }
-  },
-  {
-   "name": "Cornell Tech",
-   "grade": "A",
-   "tier": 1,
-   "people": 2,
-   "grades": {
-    "S": 0,
-    "A": 1,
-    "B": 1,
-    "C": 0
    }
   },
   {
@@ -9412,18 +9388,6 @@
    }
   },
   {
-   "name": "Open Source",
-   "grade": "A",
-   "tier": 1,
-   "people": 2,
-   "grades": {
-    "S": 0,
-    "A": 2,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
    "name": "OpenFin",
    "grade": "C",
    "tier": 2,
@@ -11340,18 +11304,6 @@
     "S": 1,
     "A": 0,
     "B": 1,
-    "C": 0
-   }
-  },
-  {
-   "name": "UC Berkeley Electrical Engineering & Computer Sciences",
-   "grade": "S",
-   "tier": 1,
-   "people": 2,
-   "grades": {
-    "S": 1,
-    "A": 1,
-    "B": 0,
     "C": 0
    }
   },
@@ -14320,18 +14272,6 @@
    }
   },
   {
-   "name": "Berkeley Center for Law & Technology",
-   "grade": "B",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 1,
-    "C": 0
-   }
-  },
-  {
    "name": "Bestow",
    "grade": "C",
    "tier": 2,
@@ -16480,42 +16420,6 @@
    }
   },
   {
-   "name": "Columbia Consulting Group",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
-   }
-  },
-  {
-   "name": "Columbia Data Agents Process Lab",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
-   }
-  },
-  {
-   "name": "Columbia Pre-Law Society",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
-   }
-  },
-  {
    "name": "ComfyUI",
    "grade": "A",
    "tier": 1,
@@ -16853,18 +16757,6 @@
   },
   {
    "name": "Cornelis Networks",
-   "grade": "A",
-   "tier": 1,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 1,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
-   "name": "Cornell Digital Tech & Innovation",
    "grade": "A",
    "tier": 1,
    "people": 1,
@@ -19732,18 +19624,6 @@
    }
   },
   {
-   "name": "Formula Electric at Berkeley",
-   "grade": "B",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 1,
-    "C": 0
-   }
-  },
-  {
    "name": "Forum AI",
    "grade": "C",
    "tier": 2,
@@ -20116,18 +19996,6 @@
    }
   },
   {
-   "name": "Galvanize",
-   "grade": "A",
-   "tier": 1,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 1,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
    "name": "GameChange Solar",
    "grade": "C",
    "tier": 2,
@@ -20357,30 +20225,6 @@
   },
   {
    "name": "Generation Lab",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
-   }
-  },
-  {
-   "name": "Generative AI at Berkeley",
-   "grade": "B",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 1,
-    "C": 0
-   }
-  },
-  {
-   "name": "Generative AI at Cornell",
    "grade": "C",
    "tier": 2,
    "people": 1,
@@ -21208,18 +21052,6 @@
    }
   },
   {
-   "name": "Harvard SEAS Professional Education",
-   "grade": "A",
-   "tier": 1,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 1,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
    "name": "Hatch",
    "grade": "A",
    "tier": 1,
@@ -21277,18 +21109,6 @@
     "A": 1,
     "B": 0,
     "C": 0
-   }
-  },
-  {
-   "name": "HeadStart Fellowship",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
    }
   },
   {
@@ -22153,18 +21973,6 @@
     "A": 0,
     "B": 0,
     "C": 0
-   }
-  },
-  {
-   "name": "Insight Data Science",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
    }
   },
   {
@@ -25925,18 +25733,6 @@
   },
   {
    "name": "Neural Concept",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
-   }
-  },
-  {
-   "name": "Neurotech X Columbia",
    "grade": "C",
    "tier": 2,
    "people": 1,
@@ -31972,18 +31768,6 @@
    }
   },
   {
-   "name": "Stanford Applied Cyber",
-   "grade": "B",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 1,
-    "C": 0
-   }
-  },
-  {
    "name": "Stardrift",
    "grade": "C",
    "tier": 2,
@@ -32819,18 +32603,6 @@
    "grades": {
     "S": 1,
     "A": 0,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
-   "name": "TEKsystems",
-   "grade": "A",
-   "tier": 1,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 1,
     "B": 0,
     "C": 0
    }
@@ -34217,18 +33989,6 @@
   },
   {
    "name": "Ubicloud",
-   "grade": "A",
-   "tier": 1,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 1,
-    "B": 0,
-    "C": 0
-   }
-  },
-  {
-   "name": "UC Berkeley EECS",
    "grade": "A",
    "tier": 1,
    "people": 1,
