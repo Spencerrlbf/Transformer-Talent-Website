@@ -247,23 +247,23 @@ async function main() {
     // Existing website rows for these contacts, by the strongest link first.
     const existing = new Map(); // contact_id -> row
     for (const part of chunk(ids, 100)) {
-      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
+      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
       for (const r of found) existing.set(r.directory_contact_id, r);
     }
     const airtableIds = rows.flatMap((r) => (existing.has(r.contact_id) ? [] : recordIds(r.airtable_record_ids).map((a) => [a, r.contact_id])));
     for (const part of chunk(airtableIds, 100)) {
-      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
+      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
       for (const r of found) {
         const cid = part.find(([a]) => a === r.airtable_id)?.[1];
         if (cid && !existing.has(cid) && (!r.directory_contact_id || r.directory_contact_id === cid)) existing.set(cid, r);
       }
     }
     const mapped = rows.map((r) => ({ row: r, m: mapContact(r, harvestBy[r.contact_id], expsBy[r.contact_id], edusBy[r.contact_id]) }));
-    const usernames = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.linkedin_username).map(({ m }) => m.linkedin_username);
-    const taken = new Set(); // LinkedIn names the pool already holds, whoever they are linked to
+    const usernames = mapped.filter(({ m }) => m.linkedin_username).map(({ m }) => m.linkedin_username);
+    const taken = new Map(); // LinkedIn name -> website row id that holds it
     for (const part of chunk([...new Set(usernames)], 100)) {
       const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
-      for (const f of found) taken.add(f.linkedin_username);
+      for (const f of found) if (!taken.has(f.linkedin_username)) taken.set(f.linkedin_username, f.id);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.linkedin_username) continue;
         const r = found.find((x) => x.linkedin_username === m.linkedin_username && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -272,7 +272,7 @@ async function main() {
     }
     const emails = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.email).map(({ m }) => m.email.toLowerCase());
     for (const part of chunk([...new Set(emails)], 100)) {
-      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
+      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.email) continue;
         const r = found.find((x) => x.email && x.email.toLowerCase() === m.email.toLowerCase() && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -299,7 +299,15 @@ async function main() {
         continue;
       }
       if (prev) {
-        updates.push({ id: prev.id, ...patchFor(m), directory_sync_hash: hash, updated_at: now });
+        const patch = patchFor(m);
+        const holder = m.linkedin_username ? taken.get(m.linkedin_username) : undefined;
+        if (prev.linkedin_username || (holder && holder !== prev.id)) {
+          // The row keeps the LinkedIn name it has; another row's name is never copied onto it.
+          delete patch.linkedin_username;
+          delete patch.linkedin_url;
+          if (holder && holder !== prev.id) tally.conflicts++;
+        } else if (m.linkedin_username) taken.set(m.linkedin_username, prev.id);
+        updates.push({ id: prev.id, ...patch, directory_sync_hash: hash, updated_at: now });
         if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
       } else if (!m.linkedin_username) {
         // The pool keys people on their LinkedIn name; an email-only contact stays in the directory.
@@ -308,7 +316,7 @@ async function main() {
         // Another contact already owns that LinkedIn name in the pool.
         tally.conflicts++;
       } else {
-        taken.add(m.linkedin_username);
+        taken.set(m.linkedin_username, "new");
         inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
       }
     }
@@ -317,7 +325,22 @@ async function main() {
       const groups = new Map();
       for (const u of updates) (groups.get(Object.keys(u).sort().join(",")) || groups.set(Object.keys(u).sort().join(","), []).get(Object.keys(u).sort().join(","))).push(u);
       for (const rows of groups.values()) for (const part of chunk(rows, 200)) {
-        await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part) });
+        try {
+          await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part) });
+        } catch (err) {
+          if (!/23505|duplicate key/.test(String(err))) throw err;
+          for (const one of part) {
+            try {
+              await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify([one]) });
+            } catch (e) {
+              if (!/23505|duplicate key/.test(String(e))) throw e;
+              const { linkedin_username, linkedin_url, ...rest } = one;
+              void linkedin_username; void linkedin_url;
+              await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify([rest]) });
+              tally.conflicts++;
+            }
+          }
+        }
       }
       for (const part of chunk(inserts, 200)) {
         let made;
