@@ -3,6 +3,14 @@
 // "Signal lists: top universities and employers"; edit the doc, then this.
 // Tier 1 is the short list a hiring manager reads as elite; tier 2 is
 // strong. The aliases are the other ways a profile writes the same name.
+//
+// Employers come from two places: the hand list below, and the Paraform
+// grades in paraform-employers.json (scripts/import-paraform-grades.mjs),
+// where S and A are tier 1 and B and C tier 2. TOP_EMPLOYERS merges them: a
+// graded company already on the hand list moves up when its grade says so
+// and never moves down; a graded subsidiary listed as an alias becomes its
+// own entry when its grade beats its parent's.
+import paraform from "./paraform-employers.json";
 export interface ListEntry {
   name: string;
   aliases?: string[];
@@ -101,7 +109,7 @@ export const TOP_UNIVERSITIES: ListEntry[] = [
   { name: "University of New South Wales", aliases: ["UNSW"], tier: 2 },
 ];
 
-export const TOP_EMPLOYERS: ListEntry[] = [
+export const HAND_EMPLOYERS: ListEntry[] = [
   { name: "Meta", aliases: ["Meta Platforms", "Facebook", "Instagram", "WhatsApp", "Oculus"], tier: 1 },
   { name: "Google", aliases: ["Alphabet", "Google DeepMind", "DeepMind", "YouTube", "Waymo", "Verily", "Google Research"], tier: 1 },
   { name: "Apple", tier: 1 },
@@ -199,3 +207,77 @@ export const TOP_EMPLOYERS: ListEntry[] = [
   { name: "Perplexity", aliases: ["Perplexity AI"], tier: 2 },
   { name: "Anysphere", aliases: ["Cursor"], tier: 2 },
 ];
+
+interface GradedCompany {
+  name: string;
+  grade: "S" | "A" | "B" | "C";
+  tier: 1 | 2;
+  people: number;
+}
+
+/** A loose key for telling two spellings of one company apart. */
+const key = (s: string): string =>
+  s
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(inc|llc|ltd|limited|corp|corporation|plc|gmbh|pvt|pte|nv|bv|co)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^the /, "");
+
+/** A hand entry changes tier only when this many graded people back the
+ *  grade; a new company is added at its grade however few people carry it. */
+export const MIN_PEOPLE_TO_MOVE = 3;
+
+/** The hand list merged with the Paraform grades. */
+export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): ListEntry[] {
+  const out: ListEntry[] = hand.map((e) => ({ ...e, aliases: e.aliases ? [...e.aliases] : undefined }));
+  const byName = new Map<string, ListEntry>();
+  const byAlias = new Map<string, ListEntry>();
+  for (const e of out) {
+    byName.set(key(e.name), e);
+    for (const a of e.aliases || []) byAlias.set(key(a), e);
+  }
+  const gradeOf = new Map(graded.map((g) => [key(g.name), g] as const));
+  for (const g of graded) {
+    const k = key(g.name);
+    if (!k) continue;
+    const own = byName.get(k);
+    if (own) {
+      if (g.tier < own.tier && g.people >= MIN_PEOPLE_TO_MOVE) own.tier = g.tier;
+      continue;
+    }
+    const parent = byAlias.get(k);
+    if (parent) {
+      const parentGrade = gradeOf.get(key(parent.name));
+      if (g.tier >= parent.tier || g.people < MIN_PEOPLE_TO_MOVE) continue;
+      if (parentGrade && parentGrade.tier > g.tier) {
+        // "Slack" graded above "Salesforce": Slack stands on its own.
+        parent.aliases = (parent.aliases || []).filter((a) => key(a) !== k);
+        const entry: ListEntry = { name: g.name, tier: g.tier };
+        out.push(entry);
+        byName.set(k, entry);
+      } else {
+        parent.tier = g.tier;
+      }
+      continue;
+    }
+    const entry: ListEntry = { name: g.name, tier: g.tier };
+    out.push(entry);
+    byName.set(k, entry);
+  }
+  return out;
+}
+
+export const TOP_EMPLOYERS: ListEntry[] = mergeEmployers(HAND_EMPLOYERS, paraform.companies as GradedCompany[]);
+
+/** Changes with either list, so stored signals are recomputed after an edit. */
+export const LISTS_VERSION: string = (() => {
+  const text = JSON.stringify([TOP_UNIVERSITIES, TOP_EMPLOYERS]);
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0");
+})();
