@@ -260,8 +260,10 @@ async function main() {
     }
     const mapped = rows.map((r) => ({ row: r, m: mapContact(r, harvestBy[r.contact_id], expsBy[r.contact_id], edusBy[r.contact_id]) }));
     const usernames = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.linkedin_username).map(({ m }) => m.linkedin_username);
+    const taken = new Set(); // LinkedIn names the pool already holds, whoever they are linked to
     for (const part of chunk([...new Set(usernames)], 100)) {
       const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
+      for (const f of found) taken.add(f.linkedin_username);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.linkedin_username) continue;
         const r = found.find((x) => x.linkedin_username === m.linkedin_username && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -302,7 +304,13 @@ async function main() {
       } else if (!m.linkedin_username) {
         // The pool keys people on their LinkedIn name; an email-only contact stays in the directory.
         tally.noLinkedin++;
-      } else inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
+      } else if (taken.has(m.linkedin_username)) {
+        // Another contact already owns that LinkedIn name in the pool.
+        tally.conflicts++;
+      } else {
+        taken.add(m.linkedin_username);
+        inserts.push({ ...m, directory_sync_hash: hash, updated_at: now });
+      }
     }
     if (!DRY_RUN) {
       // Rows patched in one request must share one column list.
@@ -312,7 +320,22 @@ async function main() {
         await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part) });
       }
       for (const part of chunk(inserts, 200)) {
-        const made = await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(part) });
+        let made;
+        try {
+          made = await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(part) });
+        } catch (err) {
+          if (!/23505|duplicate key/.test(String(err))) throw err;
+          made = [];
+          for (const one of part) {
+            try {
+              made.push(...(await sb("candidates?select=id,directory_contact_id", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify([one]) })));
+            } catch (e) {
+              if (!/23505|duplicate key/.test(String(e))) throw e;
+              tally.conflicts++;
+              tally.inserted--;
+            }
+          }
+        }
         const idOf = Object.fromEntries(made.map((r) => [r.directory_contact_id, r.id]));
         for (const i of part) if (idOf[i.directory_contact_id]) toEmbed.push({ id: idOf[i.directory_contact_id], text: embeddingText(i) });
       }
