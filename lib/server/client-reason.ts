@@ -52,3 +52,25 @@ export function clientReason(sc: Scorecard): string {
 
   return parts.join(" ");
 }
+
+/** What of Transformer Talent's verdict may travel with a person TT sends to
+ *  a client: the numbers the tag and reason above are computed from, and
+ *  nothing else. Never the internal reason, the evidence behind each answer,
+ *  the stack items, the report card or a recruiter's check-off notes. Null
+ *  when the verdict has no scorecard to show. */
+export function clientSafeVerdict(v: unknown): { qualified: boolean; scorecard: Scorecard } | null {
+  const sc = (v as { scorecard?: Partial<Scorecard> } | null)?.scorecard;
+  if (!sc?.tier) return null;
+  return {
+    qualified: (v as { qualified?: unknown }).qualified === true,
+    scorecard: {
+      tier: sc.tier,
+      reason: "",
+      stack: { items: [], matched: Number(sc.stack?.matched) || 0, total: Number(sc.stack?.total) || 0 },
+      years: { required: sc.years?.required ?? null, actual: sc.years?.actual ?? null, met: sc.years?.met ?? null },
+      seniority: { level: sc.seniority?.level ?? "unknown", signals: [] },
+      // clientReason names two at most; the rest stay with TT.
+      gaps: (sc.gaps || []).slice(0, 2).map(String),
+    },
+  };
+}

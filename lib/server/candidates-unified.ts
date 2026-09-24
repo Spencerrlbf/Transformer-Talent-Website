@@ -16,6 +16,7 @@ import {
   type RowListEntry,
 } from "./lists";
 import { signResumeUrl } from "./applicants";
+import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
@@ -355,6 +356,16 @@ async function orgVerdictPairings(orgId: string): Promise<Map<string, VerdictRow
   return map;
 }
 
+/** A verdict as this organization may read it. A row that came across with a
+ *  person Transformer Talent sent (source "referral") shows the client-safe
+ *  tag and reason only: never TT's report card, even where an older send
+ *  copied one across. */
+function readable(row: VerdictRow | undefined): { sc?: Scorecard; v2?: VerdictView } {
+  const v = row?.verdict;
+  if (!v) return {};
+  return row!.source === "referral" ? { sc: v.scorecard } : { sc: v.scorecard, v2: v.v2 };
+}
+
 function appRoleTitle(a: AppRow, jobId: string, i: number): string {
   return (
     (a.role_titles || []).find((t) => t.includes(`#${jobId}`))?.replace(` (#${jobId})`, "") ||
@@ -381,8 +392,8 @@ function matchedVerdicts(
 
 function appRoles(a: AppRow, pairings: Map<string, VerdictRow>): UnifiedRole[] {
   const applied = (a.role_ids || []).map((jobId, i) => {
-    const v = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict : undefined;
-    const tag: string | null = v?.v2 ? v.v2.label : v?.scorecard ? clientTag(v.scorecard) : null;
+    const { sc, v2 } = readable(a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`) : undefined);
+    const tag: string | null = v2 ? v2.label : sc ? clientTag(sc) : null;
     return {
       jobId,
       title: appRoleTitle(a, jobId, i),
@@ -393,8 +404,8 @@ function appRoles(a: AppRow, pairings: Map<string, VerdictRow>): UnifiedRole[] {
   });
   if (applied.length > 0) return applied;
   return matchedVerdicts(pairings, a.candidate_id).map(({ jobId, row }) => {
-    const v = row.verdict;
-    const tag: string | null = v?.v2 ? v.v2.label : v?.scorecard ? clientTag(v.scorecard) : null;
+    const { sc, v2 } = readable(row);
+    const tag: string | null = v2 ? v2.label : sc ? clientTag(sc) : null;
     return {
       jobId,
       title: row.org_roles?.title || `Role #${jobId}`,
@@ -1064,6 +1075,13 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   return { items, total: filtered.length, counts, followups, filters: filterOptions, page, pageSize };
 }
 
+/** The pool record behind an application belongs to Transformer Talent: only
+ *  TT's own edits are mirrored onto it. A client company's edits stay on its
+ *  own application row (people TT sent them carry TT's pool id). */
+async function mirrorsToPool(orgId: string): Promise<boolean> {
+  return orgId === (await getOrgId());
+}
+
 /** Edit a future-interest ask: date and preferences, validated against the
  *  fixed vocabularies, written to the application row and mirrored onto the
  *  candidate record — the same shape a fresh submission produces. */
@@ -1120,7 +1138,7 @@ export async function updateFollowUp(
     prefer: "return=minimal",
   });
   if (!saved.ok) return { ok: false, error: "save_failed" };
-  if (row.candidate_id) {
+  if (row.candidate_id && (await mirrorsToPool(orgId))) {
     await sbRest(`candidates?id=eq.${row.candidate_id}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -1164,7 +1182,7 @@ export async function updateFollowUpDate(
     prefer: "return=minimal",
   });
   if (!saved.ok) return { ok: false, error: "save_failed" };
-  if (row.candidate_id) {
+  if (row.candidate_id && (await mirrorsToPool(orgId))) {
     await sbRest(`candidates?id=eq.${row.candidate_id}`, {
       method: "PATCH",
       body: JSON.stringify({ follow_up_at: date }),
@@ -1194,7 +1212,7 @@ export async function clearFollowUp(
     prefer: "return=minimal",
   });
   if (!patch.ok) return { ok: false, error: "save_failed" };
-  if (row.candidate_id) {
+  if (row.candidate_id && (await mirrorsToPool(orgId))) {
     await sbRest(`candidates?id=eq.${row.candidate_id}`, {
       method: "PATCH",
       body: JSON.stringify({ follow_up_at: null }),
@@ -1357,9 +1375,8 @@ function applicantPipeline(
   byExternal?: Map<string, RoleInfo>
 ): UnifiedDetail["pipeline"] {
   const applied = (a.role_ids || []).map((jobId, i) => {
-    const v = a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`)?.verdict : undefined;
-    const sc = v?.scorecard;
-    const tag: string | null = v?.v2 ? v.v2.label : sc ? clientTag(sc) : null;
+    const { sc, v2 } = readable(a.candidate_id ? pairings.get(`${a.candidate_id}|${jobId}`) : undefined);
+    const tag: string | null = v2 ? v2.label : sc ? clientTag(sc) : null;
     const info = byExternal?.get(jobId);
     return {
       jobId,
@@ -1370,8 +1387,8 @@ function applicantPipeline(
       via: "applied" as const,
       tag,
       tagLabel: labelOf(tag),
-      reason: v?.v2 ? v.v2.paragraph : sc ? clientReason(sc) : null,
-      verdict: v?.v2 ?? null,
+      reason: v2 ? v2.paragraph : sc ? clientReason(sc) : null,
+      verdict: v2 ?? null,
       feedbackKey: `app_${a.id}`,
       addedAt: a.created_at,
       stage: "new",
@@ -1380,9 +1397,8 @@ function applicantPipeline(
   if (applied.length > 0) return applied;
   // No chosen roles (speculative/referral): show the matched-role verdicts.
   return matchedVerdicts(pairings, a.candidate_id).map(({ jobId, row }) => {
-    const v = row.verdict;
-    const sc = v?.scorecard;
-    const tag: string | null = v?.v2 ? v.v2.label : sc ? clientTag(sc) : null;
+    const { sc, v2 } = readable(row);
+    const tag: string | null = v2 ? v2.label : sc ? clientTag(sc) : null;
     const info = byExternal?.get(jobId);
     return {
       jobId,
@@ -1393,8 +1409,8 @@ function applicantPipeline(
       via: "matched" as const,
       tag,
       tagLabel: labelOf(tag),
-      reason: v?.v2 ? v.v2.paragraph : sc ? clientReason(sc) : null,
-      verdict: v?.v2 ?? null,
+      reason: v2 ? v2.paragraph : sc ? clientReason(sc) : null,
+      verdict: v2 ?? null,
       feedbackKey: `app_${a.id}`,
       addedAt: row.created_at || a.created_at,
       stage: "new",

@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
+import { TT_ORG_SLUG } from "@/lib/server/network";
 import { buildEvalSet, DEFAULT_MODEL, listEval, listModels, runEval, voteEval } from "@/lib/server/verdict-eval";
 
 export const maxDuration = 60;
 
-// Owner-only verdict comparison. GET lists the golden set with today's
-// verdict, the proposed one per model, and the owner's votes. POST:
+// Owner-only verdict comparison, Transformer Talent's own calibration tool:
+// it shows full scorecards and spends TT's model budget, so every other
+// organization gets a 404, like the Network routes. GET lists the golden set
+// with today's verdict, the proposed one per model, and the owner's votes. POST:
 //   {action:"build"}                      assemble the golden set (idempotent)
 //   {action:"run", model}                 judge up to 12 rows lacking this model
 //   {action:"vote", id, model, vote}      'new' | 'old' | 'neither'
 async function owner(req: NextRequest) {
   const member = await requireMember(req);
   if (!member) return { err: NextResponse.json({ error: "not_a_member" }, { status: 403 }) };
+  if (member.org.slug !== TT_ORG_SLUG) return { err: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   if (member.memberRole !== "owner") return { err: NextResponse.json({ error: "owner_only" }, { status: 403 }) };
   return { member };
 }

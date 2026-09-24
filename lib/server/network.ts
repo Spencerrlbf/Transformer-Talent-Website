@@ -7,7 +7,7 @@
 // normal website_applications row marked source=transformer_talent, which
 // renders in the job's pipeline as an applicant with the Via-TT badge.
 import { sbRest, sbInsert } from "./supabase";
-import { clientTag, clientReason, TAG_LABEL, type ClientTag } from "./client-reason";
+import { clientTag, clientReason, clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
 import type { Scorecard } from "./scorecard";
 
 export const TT_ORG_SLUG = "transformer-talent";
@@ -388,6 +388,12 @@ export async function sendNetworkCandidate(
     verdict: Record<string, unknown> | null;
     candidate_hash: string; role_hash: string; model: string | null;
   }[];
+  // Into a client's organization only the client-safe tag and reason travel
+  // (the scorecard numbers they are computed from). TT's evidence, report
+  // card and recruiters' check-off notes stay with TT. A send into our own
+  // pipeline keeps the whole verdict.
+  const crossOrg = target.orgId !== orgId;
+  const carried = crossOrg ? clientSafeVerdict(v?.verdict) : v?.verdict ?? null;
 
   const inserted = await sbInsert<{ id: string }>(
     "website_applications",
@@ -408,7 +414,7 @@ export async function sendNetworkCandidate(
         location: str(cand.location),
       },
       harvest_profile: enr?.raw_payload ?? null,
-      screening: v?.verdict ? [{ ...v.verdict, job_id: target.jobId }] : null,
+      screening: carried ? [{ ...carried, job_id: target.jobId }] : null,
       contact:
         bestEmail || str(cand.contact?.phone) || str(cand.phone)
           ? { email: bestEmail, phone: str(cand.contact?.phone) ?? str(cand.phone) }
@@ -421,10 +427,10 @@ export async function sendNetworkCandidate(
   });
   if (!inserted?.id) return { ok: false, error: "insert_failed" };
 
-  // Cross-org send: mirror the verdict onto the client's role so their
-  // pipeline (which reads org-scoped match_verdicts) shows the fit tag and
-  // review immediately — not "Screening…" forever.
-  if (target.orgId !== orgId && v?.verdict) {
+  // Cross-org send: mirror the client-safe verdict onto the client's role so
+  // their pipeline (which reads org-scoped match_verdicts) shows the fit tag
+  // and reason immediately — not "Screening…" forever.
+  if (crossOrg && v && carried) {
     const existing = await sbRest(
       `match_verdicts?candidate_id=eq.${candidateId}&org_role_id=eq.${target.roleUuid}&select=id&limit=1`
     );
@@ -437,8 +443,8 @@ export async function sendNetworkCandidate(
           org_role_id: target.roleUuid,
           candidate_hash: v.candidate_hash,
           role_hash: v.role_hash,
-          verdict: { ...v.verdict, job_id: target.jobId },
-          model: v.model,
+          verdict: { ...carried, job_id: target.jobId },
+          model: null,
           source: "referral",
         },
         false

@@ -163,8 +163,12 @@ export async function buildEvalSet(orgId: string): Promise<{ added: number; tota
     verdict: { scorecard?: Scorecard; facts?: { careerYears?: number | null } } | null;
     created_at: string;
   };
+  // Verdicts on this organization's own roles only: a row's organization
+  // stamp alone is not proof (older screening stamped every applicant's
+  // verdict with the site's organization, whichever board they came from).
   const verdicts = await rest<VRow[]>(
-    `match_verdicts?organization_id=eq.${orgId}&select=id,candidate_id,org_role_id,verdict,created_at&order=created_at.desc&limit=800`
+    `match_verdicts?organization_id=eq.${orgId}&org_roles.organization_id=eq.${orgId}` +
+      `&select=id,candidate_id,org_role_id,verdict,created_at,org_roles!inner(organization_id)&order=created_at.desc&limit=800`
   ).catch(() => [] as VRow[]);
   const newest = new Map<string, VRow>();
   for (const v of verdicts) {
@@ -245,19 +249,19 @@ type RoleRow = {
   target_companies: { name?: string }[] | null;
 };
 
-async function verdictFor(row: DbRow, role: RoleRow, model: string): Promise<Verdict | null> {
+async function verdictFor(orgId: string, row: DbRow, role: RoleRow, model: string): Promise<Verdict | null> {
   let profile: Record<string, unknown> | null = null;
   let skills: string[] = [];
   let resumeText: string | null = null;
   if (row.kind === "sourced") {
     const [c] = await rest<{ profile: Record<string, unknown> | null; skills: string[] | null }[]>(
-      `sourced_candidates?id=eq.${row.subject_id}&select=profile,skills`
+      `sourced_candidates?id=eq.${row.subject_id}&organization_id=eq.${orgId}&select=profile,skills`
     );
     profile = c?.profile || null;
     skills = c?.skills || [];
   } else if (row.application_id) {
     const [a] = await rest<{ harvest_profile: Record<string, unknown> | null; resume_text: string | null }[]>(
-      `website_applications?id=eq.${row.application_id}&select=harvest_profile,resume_text`
+      `website_applications?id=eq.${row.application_id}&organization_id=eq.${orgId}&select=harvest_profile,resume_text`
     );
     profile = a?.harvest_profile || null;
     resumeText = a?.resume_text || null;
@@ -316,7 +320,7 @@ export async function runEval(
   const batch = todo.slice(0, opts.limit);
   const roleIds = [...new Set(batch.map((r) => r.org_role_id))];
   const roles = roleIds.length
-    ? await rest<RoleRow[]>(`org_roles?id=in.(${roleIds.join(",")})&select=id,title,tech_stack,jd,skills,matching_profile,target_companies`)
+    ? await rest<RoleRow[]>(`org_roles?id=in.(${roleIds.join(",")})&organization_id=eq.${orgId}&select=id,title,tech_stack,jd,skills,matching_profile,target_companies`)
     : [];
   const roleOf = new Map(roles.map((r) => [r.id, r]));
   let done = 0;
@@ -328,7 +332,7 @@ export async function runEval(
       failed++;
       return;
     }
-    const v = await verdictFor(row, role, model).catch(() => null);
+    const v = await verdictFor(orgId, row, role, model).catch(() => null);
     if (!v) {
       failed++;
       return;
