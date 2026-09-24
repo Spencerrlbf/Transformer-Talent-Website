@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
-import { addNote, candidateTimeline } from "@/lib/server/tasks";
+import { addNote, candidateInOrg, candidateTimeline } from "@/lib/server/tasks";
 import { listCandidateEmailsFor } from "@/lib/server/email-compose";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
@@ -13,6 +13,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ key: string
 
   const { key } = await ctx.params;
   if (!KEY_RE.test(key)) return NextResponse.json({ error: "bad_key" }, { status: 400 });
+  if (!(await candidateInOrg(member.org.id, key))) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const [data, mail] = await Promise.all([
     candidateTimeline(member.org.id, key),

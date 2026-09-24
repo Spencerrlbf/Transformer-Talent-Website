@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { saveUnifiedStatus, STAGE_LABEL, type Stage } from "@/lib/server/candidates-unified";
 import { noteStageMoved } from "@/lib/server/inbox";
+import { candidateInOrg } from "@/lib/server/tasks";
 
 // Set a candidate's human pipeline status for one role.
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string }> }) {
@@ -11,6 +12,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
   const { key } = await ctx.params;
   if (!/^(app|src)_[0-9a-f-]{36}$/i.test(key))
     return NextResponse.json({ error: "bad_key" }, { status: 400 });
+  if (!(await candidateInOrg(member.org.id, key)))
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   let body: { jobId?: unknown; status?: unknown; interviewStage?: unknown };
   try {

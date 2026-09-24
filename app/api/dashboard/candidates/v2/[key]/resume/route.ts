@@ -3,6 +3,7 @@ import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
 import { saveUnifiedResumePath, resumeNameFromPath } from "@/lib/server/candidates-unified";
 import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "@/lib/server/contact-extract";
+import { candidateInOrg } from "@/lib/server/tasks";
 
 export const maxDuration = 60;
 
@@ -17,6 +18,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   const { key } = await ctx.params;
   if (!/^(app|src)_[0-9a-f-]{36}$/i.test(key))
     return NextResponse.json({ error: "bad_key" }, { status: 400 });
+  // This company's person, checked before anything is stored.
+  if (!(await candidateInOrg(member.org.id, key)))
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   let form: FormData;
   try {

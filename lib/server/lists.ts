@@ -24,7 +24,7 @@ export type RowListEntry = {
 };
 
 /** Keep only keys that really belong to this org (two IN queries, not N). */
-async function keysInOrg(orgId: string, keys: string[]): Promise<string[]> {
+export async function keysInOrg(orgId: string, keys: string[]): Promise<string[]> {
   const valid = [...new Set(keys.filter((k) => KEY_RE.test(k)))].slice(0, 1000);
   const appIds = valid.filter((k) => k.startsWith("app_")).map((k) => k.slice(4));
   const srcIds = valid.filter((k) => k.startsWith("src_")).map((k) => k.slice(4));
