@@ -48,3 +48,8 @@ export type { AdvanceResult } from "./sourcing/run";
 export { rulesOf, assess } from "./shortlist/rules";
 export type { RoleRules, PersonForShortlist, Assessment } from "./shortlist/rules";
 export { expandLocations } from "./matcher";
+
+// Phase 3: the light judge over the shortlists (scripts/judge-shortlists.mjs).
+export { shortlistRoleContext, judgePoolCandidate, roleHashOf, SHORTLIST_ROLE_COLS } from "./shortlist/judge";
+export type { ShortlistRoleRow, ShortlistRoleContext, PoolJudgement } from "./shortlist/judge";
+export { JEV_MODEL } from "./rolecard/jev";

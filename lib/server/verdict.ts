@@ -61,6 +61,10 @@ export interface VerdictInput {
   roleWords?: { about?: string; needs?: string[]; doing?: string[]; techStack?: string | null };
   model: string;
   timeoutMs?: number;
+  /** Rows only: no reference quotes and no written review. The nightly
+   *  shortlist judge runs this way; the rows are remembered, the review is
+   *  not, so opening the report card later fills in quotes and review. */
+  light?: boolean;
   /** Failure visibility for callers that pace retries (rate limit vs dead key). */
   onError?: (info: { status: number; code?: string; retryAfter?: string }) => void;
 }

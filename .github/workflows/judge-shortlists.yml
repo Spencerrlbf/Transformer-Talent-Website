@@ -1,0 +1,45 @@
+name: Judge role shortlists
+
+on:
+  schedule:
+    # After the shortlists (08:15 UTC).
+    - cron: "45 8 * * *"
+  workflow_dispatch:
+    inputs:
+      role:
+        description: "One role by its job id (blank = every open role with a scorecard)"
+        required: false
+        default: ""
+      limit:
+        description: "Stop after this many roles"
+        required: false
+        default: ""
+      max_judgings:
+        description: "Paid judgings before the job stops (the nightly default is 3000, about $0.45)"
+        required: false
+        default: "3000"
+      dry_run:
+        description: "Count what would be judged, call nothing"
+        type: boolean
+        default: false
+
+jobs:
+  judge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/judge-shortlists.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ROLE: ${{ inputs.role }}
+          LIMIT: ${{ inputs.limit }}
+          MAX_JUDGINGS: ${{ inputs.max_judgings || '3000' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
