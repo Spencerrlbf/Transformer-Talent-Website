@@ -255,9 +255,6 @@ if (queued.length < remaining) {
   // Queue slots go to people who actually need refreshing — recently
   // enriched candidates (e.g. fresh website applicants) are excluded.
   const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
-  // People the directory (reply-ops) fetched from Harvest in the last 90
-  // days arrive through the nightly sync; no need to pay for them here.
-  const since90 = new Date(Date.now() - 90 * 86400_000).toISOString();
   // Page through the engaged pool, most recently updated first, until enough
   // people who were never queued and were not refreshed in the last 30 days
   // are found. The first version looked only at the first 150 rows; those
@@ -268,7 +265,7 @@ if (queued.length < remaining) {
   const topUp = [];
   for (let page = 0; page < MAX_PAGES && topUp.length < needed; page++) {
     const batch = await rest(
-      `candidates?source=in.(directory,airtable_sync)&linkedin_username=not.is.null&or=(linkedin_enrichment_date.is.null,linkedin_enrichment_date.lt.${since90})&select=id,linkedin_url,linkedin_username&order=updated_at.desc,id.asc&limit=${PAGE}&offset=${page * PAGE}`
+      `candidates?source=in.(directory,airtable_sync)&linkedin_username=not.is.null&select=id,linkedin_url,linkedin_username&order=updated_at.desc,id.asc&limit=${PAGE}&offset=${page * PAGE}`
     );
     if (!batch.length) break;
     const fresh = batch.filter((c) => !everQueued.has(c.id));
