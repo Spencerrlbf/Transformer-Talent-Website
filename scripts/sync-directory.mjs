@@ -290,7 +290,7 @@ async function main() {
       if (prev) claimed.add(prev.id);
       if (m.status === "Do Not Contact") {
         tally.suppressed++;
-        if (prev && prev.directory_sync_hash !== hash) updates.push({ id: prev.id, directory_contact_id: m.directory_contact_id, status: m.status, directory_sync_hash: hash, updated_at: now });
+        if (prev && prev.directory_sync_hash !== hash && prev.linkedin_username) updates.push({ id: prev.id, linkedin_username: prev.linkedin_username, directory_contact_id: m.directory_contact_id, status: m.status, directory_sync_hash: hash, updated_at: now });
         continue;
       }
       if (prev && prev.directory_sync_hash === hash) {
@@ -309,7 +309,9 @@ async function main() {
         }
         if (prev.linkedin_username || heldElsewhere) {
           // The row keeps the LinkedIn name it has; another row's name is never copied onto it.
-          delete patch.linkedin_username;
+          // The name still travels in the body: an upsert is an insert first, and the pool's
+          // trigger rejects a proposed row without one.
+          patch.linkedin_username = prev.linkedin_username;
           delete patch.linkedin_url;
           if (heldElsewhere) tally.conflicts++;
         } else taken.set(m.linkedin_username, prev.id);
@@ -334,7 +336,7 @@ async function main() {
         try {
           await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(part) });
         } catch (err) {
-          if (!/23505|duplicate key/.test(String(err))) throw err;
+          if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
           for (const one of part) {
             try {
               await sb("candidates?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify([one]) });
