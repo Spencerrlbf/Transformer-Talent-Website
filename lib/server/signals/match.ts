@@ -28,33 +28,68 @@ export function normalise(s: string): string {
     .replace(/^the\s+/, "");
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isAcronym = (key: string) => /^[A-Z][A-Z0-9.&-]{1,9}$/.test(key.trim());
 
-function keyMatches(text: string, key: string, company: boolean): boolean {
-  const t = normalise(text);
-  const k = normalise(key);
-  if (!t || !k) return false;
-  if (t === k) return true;
-  // "Uber Technologies" is Uber; "Google Research" is Google.
-  if (company && t.replace(COMPANY_TAIL, "") === k) return true;
-  // A single ordinary word stands for the whole name, never a part of one.
-  // Judged on the normalised key: "X Corp" is the one word "x" once the
-  // legal suffix is gone.
-  if (!k.includes(" ") && !isAcronym(key)) return false;
-  return new RegExp(`(^| )${escapeRe(k)}( |$)`).test(t);
+/** One list, indexed: exact keys for equality, and the entries whose
+ *  multi-word (or acronym) key could sit inside a longer name, by the key's
+ *  first word. Built once per list. */
+interface ListIndex {
+  exact: Map<string, ListEntry[]>;
+  byFirstWord: Map<string, { key: string; entry: ListEntry }[]>;
+}
+const indexes = new WeakMap<ListEntry[], ListIndex>();
+function indexOf(entries: ListEntry[]): ListIndex {
+  let idx = indexes.get(entries);
+  if (idx) return idx;
+  idx = { exact: new Map(), byFirstWord: new Map() };
+  for (const entry of entries) {
+    for (const raw of [entry.name, ...(entry.aliases || [])]) {
+      const k = normalise(raw);
+      if (!k) continue;
+      const list = idx.exact.get(k) || [];
+      list.push(entry);
+      idx.exact.set(k, list);
+      // A single ordinary word stands for the whole name, never a part of one.
+      // Judged on the normalised key: "X Corp" is the one word "x" once the
+      // legal suffix is gone.
+      if (k.includes(" ") || isAcronym(raw)) {
+        const first = k.split(" ")[0];
+        const list = idx.byFirstWord.get(first) || [];
+        list.push({ key: k, entry });
+        idx.byFirstWord.set(first, list);
+      }
+    }
+  }
+  indexes.set(entries, idx);
+  return idx;
 }
 
-/** The best entry a name matches, tier 1 before tier 2, or null. */
+const better = (a: TopMatch | null, e: ListEntry): TopMatch | null => (!a || e.tier < a.tier ? { name: e.name, tier: e.tier } : a);
+
+/** The best entry a name matches, tier 1 before tier 2, or null. A name
+ *  matches an entry when, normalised, it equals the entry's name or an
+ *  alias (a company also with its tail words dropped: "Uber Technologies"
+ *  is Uber), or contains a multi-word name or an acronym as whole words. */
 export function matchEntry(text: string, entries: ListEntry[], company = false): TopMatch | null {
+  const t = normalise(text);
+  if (!t) return null;
+  const idx = indexOf(entries);
   let best: TopMatch | null = null;
-  for (const e of entries) {
-    if (best && best.tier <= e.tier) continue;
-    for (const key of [e.name, ...(e.aliases || [])]) {
-      if (keyMatches(text, key, company)) {
-        best = { name: e.name, tier: e.tier };
-        break;
-      }
+  for (const e of idx.exact.get(t) || []) best = better(best, e);
+  if (company && best?.tier !== 1) {
+    const stripped = t.replace(COMPANY_TAIL, "");
+    if (stripped !== t) for (const e of idx.exact.get(stripped) || []) best = better(best, e);
+  }
+  if (best?.tier === 1) return best;
+  const words = t.split(" ");
+  for (let i = 0; i < words.length; i++) {
+    const candidates = idx.byFirstWord.get(words[i]);
+    if (!candidates) continue;
+    for (const { key, entry } of candidates) {
+      if (best && entry.tier >= best.tier) continue;
+      // Whole words from this position: the key, then a space or the end.
+      const from = words.slice(i).join(" ");
+      if (from === key || from.startsWith(key + " ")) best = better(best, entry);
     }
     if (best?.tier === 1) break;
   }

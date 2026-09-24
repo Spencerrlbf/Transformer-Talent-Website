@@ -3,6 +3,7 @@
 // text, all from what is already stored. Only 434 of 420,000 people have a
 // Harvest payload; everyone else is read from the columns the old database
 // import filled (work_experience, education, profile_summary, top_skills).
+import { LISTS_VERSION } from "../signals/lists";
 import crypto from "node:crypto";
 import { computeFacts, seniorityOf, type ExperienceRow } from "../facts";
 import { titleFamilyOf, topEmployerOf, topUniversityOf, type TitleFamily } from "../signals/match";
@@ -180,7 +181,7 @@ export interface PersonSignals {
 export function poolSourceHash(c: PoolCandidate): string {
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify([c.current_title, c.current_company, c.headline, c.work_experience ?? null, c.education, c.education_schools, c.calculated_experience_years, c.total_experience_years, "v1"]))
+    .update(JSON.stringify([c.current_title, c.current_company, c.headline, c.work_experience ?? null, c.education, c.education_schools, c.calculated_experience_years, c.total_experience_years, "v2", LISTS_VERSION]))
     .digest("hex")
     .slice(0, 32);
 }
