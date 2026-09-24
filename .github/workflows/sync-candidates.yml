@@ -1,9 +1,23 @@
-name: Sync engaged candidates from Airtable
+name: Sync engaged candidates from the directory
 
 on:
   schedule:
+    # Before the signals (07:30 UTC) and the Harvest refresh (08:00 UTC).
     - cron: "0 7 * * *"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "Sync the whole directory (otherwise only people changed in the last two days)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Read everything, write nothing, print what would change"
+        type: boolean
+        default: false
+      limit:
+        description: "Stop after this many contacts (a bounded test)"
+        required: false
+        default: ""
 
 jobs:
   sync:
@@ -13,10 +27,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node scripts/sync-airtable.mjs
+      - run: npm install --no-save --no-audit --no-fund pg@8
+      - run: |
+          if [ "${{ inputs.full }}" != "true" ]; then
+            export SINCE="$(date -u -d '2 days ago' +%Y-%m-%d)"
+          fi
+          node scripts/sync-directory.mjs
         env:
-          AIRTABLE_API_TOKEN: ${{ secrets.AIRTABLE_API_TOKEN }}
-          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+          COMMS_WORKSPACE: ${{ vars.COMMS_WORKSPACE }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          LIMIT: ${{ inputs.limit }}
