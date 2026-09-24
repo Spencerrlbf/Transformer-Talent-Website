@@ -698,7 +698,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   let refsFailed = false;
   if (needRefs.length) {
     const spare = spareMs();
-    const found = spare >= 3_000
+    const found = spare >= 3_000 && !input.light
       ? await findReferences(
           needRefs.map((x) => ({ id: x.c.id, rung: rows[x.index]!.evidence })),
           { profileText: m.profileText, resumeText: m.resumeText, confirmed: m.confirmedTrue, jobs, employers, noise },
@@ -789,7 +789,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     const spare = spareMs();
     // A missing review never fails the person: code writes one, and the
     // verdict is not remembered, so the next review gets a proper one.
-    const n = spare >= 3_000
+    const n = spare >= 3_000 && !input.light
       ? await askOpenAI({ model: NOTE_MODEL, system: REVIEW_SYSTEM, user: reviewUser, schemaName: "scorecard_review", schema: reviewSchema(finalRows.map((r) => r.id)), timeoutMs: Math.min(15_000, spare) })
       : null;
     if (n) {
