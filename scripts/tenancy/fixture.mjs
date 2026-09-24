@@ -457,7 +457,8 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
   const orgFilter = sweep ? `slug=like.${SLUG_PREFIX}*` : `slug=like.${SLUG_PREFIX}${runId}-*`;
   const orgs = (await svc(`organizations?${orgFilter}&select=id,slug`, {}, { soft: true })) || [];
   const [tt] = (await svc(`organizations?slug=eq.${TT_SLUG}&select=id`, {}, { soft: true })) || [];
-  const emailLike = sweep ? `${EMAIL_PREFIX}*` : `${EMAIL_PREFIX}${runId}-*`;
+  // Encoded: a bare "+" in a query string reads as a space and matches nothing.
+  const emailLike = encodeURIComponent(sweep ? `${EMAIL_PREFIX}*` : `${EMAIL_PREFIX}${runId}-*`);
   const tokenLike = sweep ? "zzlk*" : `zzlk${runId}*`;
 
   // Fake pool people (and everything keyed to them).
@@ -568,7 +569,7 @@ export async function leftovers(runId) {
     ["referrals", `referrer_name=like.${like}`],
     ["match_verdicts", `role_hash=like.${like}`],
     ["candidate_enrichments", `linkedin_username=like.${like}`],
-    ["org_members", `email=like.${EMAIL_PREFIX}${runId}-*`],
+    ["org_members", `email=like.${encodeURIComponent(`${EMAIL_PREFIX}${runId}-*`)}`],
   ];
   const out = [];
   for (const [t, f] of checks) {
