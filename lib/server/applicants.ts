@@ -223,16 +223,26 @@ export async function promoteToCandidatePool(args: {
     ...(vector ? { matching_embedding: JSON.stringify(vector), embedding_type: "website_applicant" } : {}),
   };
 
+  const cols = Object.keys(fields).filter((k) => k !== "matching_embedding" && k !== "embedding_type");
   const existing = await sbRest(
-    `candidates?linkedin_username=eq.${encodeURIComponent(username)}&select=id,matching_embedding`
+    `candidates?linkedin_username=eq.${encodeURIComponent(username)}&select=id,matching_embedding,${cols.join(",")}`
   );
-  const rows = existing.ok ? await existing.json() : [];
+  const rows = (existing.ok ? await existing.json() : []) as Record<string, unknown>[];
   if (rows.length > 0) {
-    // Merge into the enriched profile; keep its richer embedding if ours is thin.
-    const keep = { ...fields };
-    if (rows[0].matching_embedding && !resumeText) delete keep.matching_embedding;
-    await patchCandidate(rows[0].id, keep);
-    return { candidateId: rows[0].id, vector };
+    // A public form can't prove who is typing: someone else's LinkedIn in the
+    // form must never rewrite that person's pool record (their email above
+    // all). So an existing record only gains what it lacks; everything the
+    // person typed stays on their application.
+    const row = rows[0];
+    const empty = (v: unknown) => v == null || v === "" || (Array.isArray(v) && v.length === 0);
+    const keep: Record<string, unknown> = {};
+    for (const k of cols) if (empty(row[k])) keep[k] = fields[k];
+    if (!row.matching_embedding && fields.matching_embedding) {
+      keep.matching_embedding = fields.matching_embedding;
+      keep.embedding_type = fields.embedding_type;
+    }
+    if (Object.keys(keep).length) await patchCandidate(row.id as string, keep);
+    return { candidateId: row.id as string, vector };
   }
 
   const [first, ...restName] = name.split(/\s+/);
