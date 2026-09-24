@@ -30,4 +30,10 @@ export {
 } from "./roles-pipeline";
 export type { RoleInput, MatchingProfile } from "./roles-pipeline";
 export { advanceRun, RunFailure } from "./sourcing/run";
+// A role's scorecard, drafted and saved the first time it is needed: the
+// job page does this on open, scripts/draft-open-roles.mjs does it for
+// every open role at once.
+export { ensureRoleCard, ROLE_CARD_COLS, roleDraftInput } from "./rolecard/store";
+export type { RoleForCard } from "./rolecard/store";
+export { canDraft } from "./rolecard/draft";
 export type { AdvanceResult } from "./sourcing/run";

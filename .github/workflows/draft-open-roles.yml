@@ -1,0 +1,30 @@
+name: Draft scorecards for open roles
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Draft at most this many roles (blank = every open role without a card)"
+        required: false
+        default: ""
+      dry_run:
+        description: "List the roles that would be drafted and draft nothing"
+        type: boolean
+        default: false
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/draft-open-roles.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LIMIT: ${{ inputs.limit }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
