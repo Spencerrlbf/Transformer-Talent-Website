@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
 }
 
 // Copy a client's job into TT's jobs (their JD, skills and all) and link it.
+// Only a job whose company asked TT for help, and only while it is open.
 export async function POST(req: NextRequest) {
   const member = await requireTT(req);
   if (!member) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_target" }, { status: 400 });
 
   const res = await sbRest(
-    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}` +
+    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&status=eq.open&sourcing_requested=is.true` +
       `&select=organization_id,external_id,title,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,description,skills,sourcing_requested_at&limit=1`
   );
   const [src] = res.ok ? ((await res.json()) as ClientJobRow[]) : [];

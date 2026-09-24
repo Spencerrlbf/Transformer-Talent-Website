@@ -134,8 +134,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const jobId = String(l?.jobId ?? "").slice(0, 40);
         if (!/^[0-9a-f-]{36}$/.test(orgId) || !jobId || orgId === member.org.id)
           return NextResponse.json({ error: "bad_link" }, { status: 400 });
+        // Only a job whose company asked TT for help (open, "ask for help" on).
         const tRes = await sbRest(
-          `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}&select=id&limit=1`
+          `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}` +
+            `&status=eq.open&sourcing_requested=is.true&select=id&limit=1`
         );
         if (!tRes.ok || ((await tRes.json()) as unknown[]).length === 0)
           return NextResponse.json({ error: "target_job_not_found" }, { status: 400 });
