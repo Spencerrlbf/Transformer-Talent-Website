@@ -16,7 +16,7 @@ const OUT = new URL("../lib/server/signals/paraform-employers.json", import.meta
 const GRADE_TIER = { S: 1, A: 1, B: 2, C: 2 };
 const ORDER = ["S", "A", "B", "C"];
 // Not companies: placeholders, self-employment, schools, clubs, funds.
-const NOT_A_COMPANY = /\b(stealth|self[- ]?employed|freelanc|independent|consultant|university|college|school|institute of technology|academy|laboratory|club|careers|hiring|untitled|coming soon|\.edu)\b|^(none|n\/a|unemployed|retired|student|various|ucla|ucsd|ucsf|mit|caltech|ieee|nyu)$/i;
+const NOT_A_COMPANY = /\b(stealth|self[- ]?employed|freelanc\w*|independent|consultant|contractor|university|college|school|institute of technology|academy|laboratory|club|careers|hiring|untitled|coming soon|\.edu)\b|^(none|n\/a|unemployed|retired|student|various|ucla|ucsd|ucsf|mit|caltech|ieee|nyu)$/i;
 // A cell that names more than one thing, or is not a name at all.
 const NOT_A_NAME = /[\/|@]|www\.|https?:|[^\x20-\x7E\u00C0-\u024F]/;
 

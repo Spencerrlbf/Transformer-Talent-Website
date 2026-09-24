@@ -19900,18 +19900,6 @@
    }
   },
   {
-   "name": "Freelance",
-   "grade": "C",
-   "tier": 2,
-   "people": 1,
-   "grades": {
-    "S": 0,
-    "A": 0,
-    "B": 0,
-    "C": 1
-   }
-  },
-  {
    "name": "Freeport Markets",
    "grade": "C",
    "tier": 2,

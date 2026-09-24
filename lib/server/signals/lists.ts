@@ -15,6 +15,10 @@ export interface ListEntry {
   name: string;
   aliases?: string[];
   tier: 1 | 2;
+  /** Matches only when the whole company name is this name: set on the
+   *  imported entries, whose one-word names in capitals ("AIR", "SHIP")
+   *  are names, not acronyms. */
+  wholeName?: boolean;
 }
 
 export const TOP_UNIVERSITIES: ListEntry[] = [
@@ -257,7 +261,7 @@ export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): List
       if (parentGrade && parentGrade.tier > g.tier) {
         // "Slack" graded above "Salesforce": Slack stands on its own.
         parent.aliases = (parent.aliases || []).filter((a) => key(a) !== k);
-        const entry: ListEntry = { name: g.name, tier: g.tier };
+        const entry: ListEntry = { name: g.name, tier: g.tier, wholeName: true };
         out.push(entry);
         byName.set(k, entry);
       } else {
@@ -265,7 +269,7 @@ export function mergeEmployers(hand: ListEntry[], graded: GradedCompany[]): List
       }
       continue;
     }
-    const entry: ListEntry = { name: g.name, tier: g.tier };
+    const entry: ListEntry = { name: g.name, tier: g.tier, wholeName: true };
     out.push(entry);
     byName.set(k, entry);
   }
