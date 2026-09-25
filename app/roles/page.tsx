@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getRoles, parseSalary } from "@/lib/roles";
+import { getRoles, parseSalary, tableRole } from "@/lib/roles";
 import RolesTable from "@/components/RolesTable";
 import { jsonForScript } from "@/lib/server/html";
 
@@ -24,7 +24,7 @@ export default async function RolesPage() {
       "@type": "JobPosting",
       title: role.title,
       description: role.description || role.title,
-      datePosted: POSTED,
+      datePosted: role.posted || POSTED,
       employmentType: "FULL_TIME",
       hiringOrganization: {
         "@type": "Organization",
@@ -68,7 +68,7 @@ export default async function RolesPage() {
           we&apos;re working on, including roles that never get posted.
         </p>
         <div className="b3">
-          <RolesTable roles={roles} />
+          <RolesTable roles={roles.map(tableRole)} />
         </div>
         <p className="page-intro" style={{ marginTop: "2.4rem" }}>
           No fit above?{" "}

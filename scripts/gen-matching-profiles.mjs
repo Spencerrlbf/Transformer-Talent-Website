@@ -20,9 +20,17 @@ const { generateMatchingProfile } = await import("./dist/worker-lib.mjs");
 
 const roles = JSON.parse(fs.readFileSync(new URL("../data/roles.json", import.meta.url)));
 
-const out = {};
+// ONLY_MISSING=1 keeps every existing profile untouched and generates only
+// for roles that have none (new roles), so cached verdicts on existing roles
+// stay valid.
+const onlyMissing = process.env.ONLY_MISSING === "1";
+const existing = onlyMissing
+  ? JSON.parse(fs.readFileSync(new URL("../data/matching-profiles.json", import.meta.url)))
+  : {};
+const out = { ...existing };
 let done = 0;
-const queue = [...roles];
+const queue = roles.filter((r) => !out[r.jobId]);
+if (onlyMissing) console.log(`ONLY_MISSING: ${queue.length} roles without a profile, ${Object.keys(existing).length} kept`);
 await Promise.all(Array.from({ length: 8 }, async () => {
   while (queue.length) {
     const r = queue.shift();
@@ -32,7 +40,7 @@ await Promise.all(Array.from({ length: 8 }, async () => {
       console.error("fail", r.jobId, String(e).slice(0, 120));
     }
     done++;
-    if (done % 20 === 0) console.log(done, "/", roles.length);
+    if (done % 20 === 0) console.log(done, "/", queue.length + done);
   }
 }));
 fs.writeFileSync(new URL("../data/matching-profiles.json", import.meta.url), JSON.stringify(out, null, 1));
