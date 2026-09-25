@@ -42,17 +42,21 @@
 import crypto from "node:crypto";
 import type { Verdict, VerdictInput } from "../verdict";
 import { profileFacts, sameCompany, workKind, type CandidateFacts, type JobText } from "../facts";
+import { holdsFor } from "./role-type";
 import type { RequirementRead, VerdictLabel } from "@/lib/verdict-view";
 import { sentences } from "@/lib/verdict-view";
 import { namesAny, technologiesNamed } from "@/lib/tech-terms";
 import {
   NO_LINE_SOURCE, REVIEW_LIMITS, careerYearsStatus, fallbackReview, guardReview, isCareerYearsRow, labelFromRows, ladderOf, metAtOf, rowKind, routeLevel,
   statusFromLevel, stripExamples, techLadder, techLevel, techSpec, techStatus, yearsBar,
-  type CardRow, type Criterion, type Review, type ReviewBullet, type RowStatus, type TechReach, chipLabel } from "@/lib/rolecard";
+  type CardRow, type Criterion, type Review, type ReviewBullet, type RowStatus, type TechReach, chipLabel, holdLabel, type Hold,
+} from "@/lib/rolecard";
 import { isJevError, jevJudgeLadders, JEV_MODEL } from "./jev";
 import { askOpenAI, findReferences, jobSource, quoteCheck, REF_MODEL } from "./references";
 
-export const SCORECARD_JUDGE_VERSION = "v15";
+// v16 (2026-09-25): holds for the kind of job a person does now and for
+// level (role-type.ts); management titles no longer count as engineering years.
+export const SCORECARD_JUDGE_VERSION = "v16";
 /** The review is versioned on its own: a change to how it is written goes
  *  into the note hash, so every remembered note is written once more, and
  *  no row is touched (rows, Jev and the row hashes stay v14). */
@@ -738,6 +742,11 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   // overrule, the call flag) and the rail must still hold then.
   const railNote = input.minYears != null && datedYears != null && datedYears < input.minYears - 1 ? `Dated history shows ${datedYears} years against ${input.minYears}+ required.` : null;
   if (label === "contact" && railNote) label = "message";
+  // Holds on the person, not a row (role-type.ts): the kind of job they do
+  // now, and whether their level fits the role's. A hold only lowers the
+  // label, and no overrule of a row lifts it (lib/rolecard.ts holdLabel).
+  const holds: Hold[] = holdsFor({ roleTitle: input.roleTitle, minYears: input.minYears, facts, roleType: input.roleType });
+  label = holdLabel(label, holds);
   const factItems = factLine(input, facts, jobs, m.basis);
   // The report card leads with the years the role's bar is about.
   // The profile's own skills list, as the profile text prints it, for the
@@ -745,9 +754,10 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
   const profileSkills = (m.profileText.split("\n").find((l) => /^(all )?skills:/i.test(l.trim())) || "").replace(/^\s*(all )?skills:/i, "").split(/,\s*/).map((t) => t.trim()).filter(Boolean);
   const profile = { ...profileFacts({ facts, jobs, education: input.education ?? null, employer: input.employer ?? null, profileSkills }), basis: m.basis };
   const openRequired = finalRows.filter((r) => r.tier === "required" && r.status !== "yes" && r.status !== "equivalent");
-  const missing = openRequired
-    .map((r) => (r.status === "no" ? `${r.label}: against.` : r.status === "short" && r.numbers ? `${r.label}: ${years(r.numbers.have)} against ${r.numbers.bar}+, a year short.` : `${r.label}: not shown on the profile.`))
-    .slice(0, 4);
+  const missing = [
+    ...holds.map((h) => h.note),
+    ...openRequired.map((r) => (r.status === "no" ? `${r.label}: against.` : r.status === "short" && r.numbers ? `${r.label}: ${years(r.numbers.have)} against ${r.numbers.bar}+, a year short.` : `${r.label}: not shown on the profile.`)),
+  ].slice(0, 4);
 
   // ---- 5. the review, from the rows, the facts and the role's own words ----
   const first = noteName(input.candidateName);
@@ -832,6 +842,16 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     if (fromModel && !unassessed) memoryWrites.push({ hash: nHash, record: { kind: "note", paragraph, missing, ask, betterSuited, review, at: now } });
   }
 
+  // A hold leads what is said about the person: first in the paragraph the
+  // Network tab shows, first among the review's gaps. Laid on after memory,
+  // so a remembered review carries it too and is stored without it.
+  if (holds.length) {
+    const lead = holds.map((h) => `${h.label === "pass" ? "Pass" : "Held at Worth a message"}: ${h.note}`).join(" ");
+    paragraph = `${lead} ${paragraph}`.trim().slice(0, 700);
+    const extra = holds.filter((h) => !review.gaps.some((g) => g.text === h.note)).map((h) => ({ text: h.note, rowIds: [] as string[] }));
+    review = { ...review, gaps: [...extra, ...review.gaps].slice(0, REVIEW_LIMITS.gaps) };
+  }
+
   // ---- 6. technologies, by code: the current job against the rest ----
   const techOf = (text: string) => technologiesNamed(text).map((g) => g[0]);
   const uniq = (list: string[]) => {
@@ -866,6 +886,7 @@ export async function judgeWithScorecard(input: VerdictInput, allCriteria: Crite
     rows: finalRows,
     aiLabel: label,
     railNote,
+    holds,
     unassessed,
     facts: factItems,
     profile,

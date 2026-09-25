@@ -24,6 +24,7 @@ import type { CandidateFacts } from "../facts";
 import { applyOverrides, rowKind, type Criterion } from "@/lib/rolecard";
 import type { VerdictView } from "@/lib/verdict-view";
 import { isMemory, materialOf, rowHash, NOTE_MODEL, type Memory, type MemoryWrite } from "./scorecard-judge";
+import { roleTypeFor } from "./role-type";
 import { JEV_MODEL } from "./jev";
 import { factLine, loadPersonContext, type PersonContext } from "./store";
 
@@ -124,12 +125,15 @@ export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> 
   const factLines = facts.slice(-MAX_FACTS).map(factLine);
   const input: VerdictInput = { ...a.input, criteria: a.criteria, confirmedFacts: factLines };
   const memory = await readMemory(a, input);
+  // What kind of job the person does now: read once per person, not per
+  // role (role-type.ts), and only when a recent title could mean either.
+  const { roleType, called } = a.criteria.length ? await roleTypeFor(a.personKey, a.input.jobs ?? [], null) : { roleType: null, called: false };
 
-  const judged = await judgeVerdict({ ...input, memory });
+  const judged = await judgeVerdict({ ...input, memory, roleType });
   if (!judged) return { view: null, saved: false };
   const view = buildVerdictView(judged, a.factsFor, a.roleSkills);
   await writeMemory(a, judged.memoryWrites);
-  const saved = judged.calls === 0;
+  const saved = judged.calls === 0 && !called;
 
   // A model call takes seconds: a row checked off meanwhile must not be
   // written over, so the recruiter's word is read again before it is laid on.

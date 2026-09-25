@@ -114,6 +114,7 @@ const OTHER_DISCIPLINE =
 const SOFTWARE_TITLE =
   /\b(software|developer|programmer|swe|sde|mts|member of (the )?technical staff|sre|devops|full[- ]?stack|back[- ]?end|front[- ]?end|firmware|embedded|applied scientist|machine learning|ml|data engineer|platform engineer|infrastructure engineer|security engineer|site reliability|cto|chief technology)\b/i;
 const ENGINEER_WORD = /\b(engineer|engineering|architect|tech(nical)? lead)\b/i;
+const MANAGES_PEOPLE = /\b(manager|director|head of|vp|vice president|svp|evp)\b/i;
 // A row under a non-engineering title is lifted out of "other" only when its
 // own text says engineering work was done: two or more distinct signs. One
 // language tag is not one (a quantitative trader tags Python; so does every
@@ -133,6 +134,11 @@ export function workKind(title: string | null | undefined, rowText = ""): WorkKi
   // itself an engineer's ("Software Engineer, Trading Systems").
   const isEngineerTitle = SOFTWARE_TITLE.test(t) || ENGINEER_WORD.test(t);
   if (NOT_ENGINEERING_FUNCTION.test(t) && !/\b(engineer|developer|programmer|architect)\b/i.test(t)) return lift("other");
+  // Managing engineers is not engineering ("Engineering Manager", "Director
+  // of Engineering", "Head of Platform"): such years cannot meet a software
+  // engineering bar, and cannot make anyone a Pass either. A CTO's stay
+  // engineering (at most companies that hire from this pool they build).
+  if (MANAGES_PEOPLE.test(t) && !/\b(cto|chief technology)\b/i.test(t)) return "unclassified";
   if (SOFTWARE_TITLE.test(t)) return "engineering";
   if (ENGINEER_WORD.test(t)) return OTHER_DISCIPLINE.test(t) ? "unclassified" : "engineering";
   return isEngineerTitle ? "engineering" : "unclassified";
