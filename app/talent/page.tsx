@@ -17,7 +17,7 @@ export default function TalentPage() {
           </h1>
           <p className="page-intro">
             Upload your job description and we&apos;ll share a few potential
-            matches from our network — <b>anonymized, in seconds, no call
+            matches from our network: <b>anonymized, in seconds, no call
             required</b>. Like what you see? One conversation gets you the
             introductions.
           </p>

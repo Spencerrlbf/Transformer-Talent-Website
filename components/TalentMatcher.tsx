@@ -61,12 +61,12 @@ export default function TalentMatcher() {
       } else {
         setStatus({
           kind: "error",
-          message: json.error || "Something went wrong — please try again.",
+          message: json.error || "Something went wrong. Please try again.",
         });
       }
     } catch {
       resetTurnstile(formEl);
-      setStatus({ kind: "error", message: "Network error — please try again." });
+      setStatus({ kind: "error", message: "Network error. Please try again." });
     }
   }
 
@@ -130,7 +130,7 @@ export default function TalentMatcher() {
         )}
         <p className="tal-after">
           {lowConfidence
-            ? "These are our closest instant matches — your JD is with the team, and we'll hand-pick a stronger shortlist from the full network and reply within 24 hours."
+            ? "These are our closest instant matches. Your JD is with the team, and we'll hand-pick a stronger shortlist from the full network and reply within 24 hours."
             : "Profiles are anonymized. Introductions, full profiles, and comp expectations take one conversation."}
         </p>
         <a
