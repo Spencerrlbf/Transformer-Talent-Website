@@ -150,12 +150,14 @@ export async function roleTypeFor(personKey: string, jobs: JobText[], headline: 
 
 // ---------- the holds ----------
 
-/** A hands-on engineering role: an engineering or data title that is not
- *  itself a manager's. Other roles (product, design, a manager's role) get no
- *  role-type hold. */
+/** A hands-on engineering role: the title names building work (engineer,
+ *  developer, scientist, researcher, member of technical staff...) and is not
+ *  itself a manager's. A strategist's, a product manager's or a manager's
+ *  role gets no role-type hold. */
 export function isHandsOnRole(roleTitle: string): boolean {
   const fam = titleFamilyOf(roleTitle);
   if (!fam.includes("engineering") && !fam.includes("data")) return false;
+  if (!/\b(engineer|engineering|developer|programmer|scientist|researcher|member of (the )?technical staff|mts|sre|devops|architect)\b/i.test(roleTitle)) return false;
   return !/\b(manager|director|head of|vp|vice president|chief|cto)\b/i.test(roleTitle);
 }
 
@@ -174,33 +176,37 @@ export function managerHold(roleTitle: string, rt: RoleType | null | undefined):
 
 /** Levels: junior 0, mid 1, senior 2, lead 2.5, staff or principal 3. */
 const LEVEL_NAME = (n: number) => (n <= 0 ? "junior" : n < 2 ? "mid-level" : n < 2.5 ? "senior" : n < 3 ? "lead" : "staff or principal");
-const titleLevel = (title: string): number | null => {
+/** Every level word in a title: a role can name a range ("Senior / Staff",
+ *  "Junior/Mid"), a person's title usually names one. */
+const titleLevels = (title: string): number[] => {
   const t = title.replace(/member of (the )?technical staff|chief of staff/gi, " ");
-  if (/\b(junior|jr|intern|graduate|entry[- ]level|new grad)\b/i.test(t)) return 0;
-  if (/\b(staff|principal|distinguished|architect)\b/i.test(t)) return 3;
-  if (/\b(head of|director|vp|vice president|cto|chief technology)\b/i.test(t)) return 3;
-  if (/\b(lead|tech lead)\b/i.test(t)) return 2.5;
-  if (/\b(senior|sr)\b/i.test(t)) return 2;
-  return null;
+  const found: number[] = [];
+  if (/\b(junior|jr|intern|graduate|entry[- ]level|new grad)\b/i.test(t)) found.push(0);
+  if (/\b(mid|mid-level|intermediate)\b/i.test(t)) found.push(1);
+  if (/\b(senior|sr)\b/i.test(t)) found.push(2);
+  if (/\b(lead|tech lead)\b/i.test(t)) found.push(2.5);
+  if (/\b(staff|principal|distinguished|architect|head of|director|vp|vice president|cto|chief technology)\b/i.test(t)) found.push(3);
+  return found;
 };
-/** The role's level: its title's word, else its years bar. */
-export function roleLevel(roleTitle: string, minYears: number | null): number {
-  const t = titleLevel(roleTitle);
-  if (t != null) return t;
-  if (minYears != null && minYears >= 8) return 3;
-  if (minYears != null && minYears >= 5) return 2;
-  return 1;
+/** The role's level as a range: the words its title names, else its years bar. */
+export function roleLevel(roleTitle: string, minYears: number | null): { min: number; max: number } {
+  const found = titleLevels(roleTitle);
+  if (found.length) return { min: Math.min(...found), max: Math.max(...found) };
+  const byYears = minYears != null && minYears >= 8 ? 3 : minYears != null && minYears >= 5 ? 2 : 1;
+  return { min: byYears, max: byYears };
 }
-/** The person's level: their current title's word, else their engineering years. */
+/** The person's level: the highest word in their current title, else their
+ *  engineering years (six or more reads senior). */
 export function personLevel(facts: CandidateFacts | null | undefined): number | null {
   const title = facts?.currentTitle || "";
   if (!title) return null;
-  const t = titleLevel(title);
-  if (t != null) return t;
+  const found = titleLevels(title);
+  if (found.length) return Math.max(...found);
   const eng = facts?.engineeringYears ?? null;
-  return eng != null && eng >= 8 ? 2 : 1;
+  return eng != null && eng >= 6 ? 2 : 1;
 }
 
+/** Two or more levels outside the role's range, either way. */
 export function levelHold(roleTitle: string, minYears: number | null, facts: CandidateFacts | null | undefined): Hold | null {
   const person = personLevel(facts);
   if (person == null) return null;
@@ -208,10 +214,11 @@ export function levelHold(roleTitle: string, minYears: number | null, facts: Can
   const title = facts?.currentTitle || "";
   const eng = facts?.engineeringYears;
   const yrs = eng != null ? ` with ${fmtYears(Math.round(eng * 10) / 10)} in engineering` : "";
-  if (role - person >= 2)
-    return { kind: "level", label: "message", note: `The role reads ${LEVEL_NAME(role)}; "${title}"${yrs} reads ${LEVEL_NAME(person)}.` };
-  if (person - role >= 2)
-    return { kind: "level", label: "message", note: `"${title}"${yrs} reads ${LEVEL_NAME(person)} for a ${LEVEL_NAME(role)} role; check the level and pay suit them.` };
+  const range = role.min === role.max ? LEVEL_NAME(role.min) : `${LEVEL_NAME(role.min)} to ${LEVEL_NAME(role.max)}`;
+  if (role.min - person >= 2)
+    return { kind: "level", label: "message", note: `The role reads ${range}; "${title}"${yrs} reads ${LEVEL_NAME(person)}.` };
+  if (person - role.max >= 2)
+    return { kind: "level", label: "message", note: `"${title}"${yrs} reads ${LEVEL_NAME(person)} for a ${range} role; check the level and pay suit them.` };
   return null;
 }
 
