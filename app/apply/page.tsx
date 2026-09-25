@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import ApplyForm from "@/components/ApplyForm";
 import RolesTable from "@/components/RolesTable";
-import { getRoles } from "@/lib/roles";
+import { getRoles, tableRole } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Apply",
@@ -37,7 +37,7 @@ export default async function ApplyPage({
           {speculative !== "1" && (
             <div style={{ minWidth: 0 }}>
               <h1 className="apply-h">Add roles to your application</h1>
-              <RolesTable roles={roles} showSelectionUI={false} variant="apply" />
+              <RolesTable roles={roles.map(tableRole)} showSelectionUI={false} variant="apply" />
             </div>
           )}
           <aside className={speculative === "1" ? "apply-rail-solo" : "apply-rail"}>

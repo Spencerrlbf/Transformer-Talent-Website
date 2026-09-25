@@ -49,6 +49,17 @@ export function roleSlug(role: Role): string {
   return `${base}-${role.jobId}`;
 }
 
+// What the roles table needs on the client: its columns plus the text it
+// searches (company blurb, JD summary and requirements). Full JDs stay on the
+// role pages, which keeps the table's page data small as the board grows.
+export function tableRole(r: Role): Role {
+  return {
+    ...r,
+    company: r.company ? { blurb: r.company.blurb } : undefined,
+    jd: r.jd ? { about: r.jd.about, needs: r.jd.needs } : undefined,
+  };
+}
+
 export async function getRoleBySlug(slug: string): Promise<Role | undefined> {
   const roles = await getRoles();
   const exact = roles.find((r) => roleSlug(r) === slug);
