@@ -10,6 +10,7 @@
 //   ROLE=100 / LIMIT=5    one role, or the first N roles
 //   DRY_RUN=1             count what would be judged, call nothing
 //   CONCURRENCY=4         judgings in flight
+//   FROM_ID=137 / SHARD=0/4   only roles with job id >= 137; this process's quarter
 //
 // Shared logic comes from the compiled website library: run
 // `node scripts/build-worker-lib.mjs` first (the GitHub Action does).
@@ -43,10 +44,18 @@ const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, 
 
 const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("Transformer Talent organisation not found");
-const roles = await rest(
+let roles = await rest(
   `org_roles?organization_id=eq.${org.id}&status=eq.open&scorecard=not.is.null${ROLE ? `&external_id=eq.${encodeURIComponent(ROLE)}` : ""}` +
     `&select=${SHORTLIST_ROLE_COLS}&order=external_id.asc${LIMIT ? `&limit=${LIMIT}` : ""}`
 );
+// FROM_ID=137 keeps only roles whose job id is at least that number (a batch of
+// newly added roles); SHARD=i/n splits the list so n processes can run side by
+// side without overlapping (SHARD=0/4, 1/4, 2/4, 3/4).
+const FROM_ID = parseInt(process.env.FROM_ID || "0", 10) || 0;
+const [SHARD_I, SHARD_N] = (process.env.SHARD || "0/1").split("/").map((n) => parseInt(n, 10));
+roles = roles
+  .filter((r) => !FROM_ID || parseInt(r.external_id, 10) >= FROM_ID)
+  .filter((_, i) => i % SHARD_N === SHARD_I);
 console.log(`${roles.length} open role(s) with a scorecard${DRY_RUN ? ", dry run" : ""}; at most ${MAX_JUDGINGS} paid judgings`);
 
 const t0 = Date.now();

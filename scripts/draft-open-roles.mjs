@@ -9,6 +9,7 @@
 //   node scripts/draft-open-roles.mjs                 draft every open role without a card
 //   LIMIT=5 node scripts/draft-open-roles.mjs         the first five only (by external id)
 //   DRY_RUN=1 node scripts/draft-open-roles.mjs       list what would be drafted, draft nothing
+//   FROM_ID=137 SHARD=0/4 node scripts/draft-open-roles.mjs   new roles only, one quarter
 //
 // Shared logic comes from the compiled website library: run
 // `node scripts/build-worker-lib.mjs` first (the GitHub Action does).
@@ -47,6 +48,14 @@ if (!org) throw new Error("organization not found");
 let roles = await rest(
   `org_roles?organization_id=eq.${org.id}&status=eq.open&scorecard=is.null&select=${ROLE_CARD_COLS},external_id&order=external_id.asc`
 );
+// FROM_ID=137 keeps only roles whose job id is at least that number (a batch of
+// newly added roles); SHARD=i/n splits the list so n processes can run side by
+// side without overlapping (SHARD=0/4, 1/4, 2/4, 3/4).
+const FROM_ID = parseInt(process.env.FROM_ID || "0", 10) || 0;
+const [SHARD_I, SHARD_N] = (process.env.SHARD || "0/1").split("/").map((n) => parseInt(n, 10));
+roles = roles
+  .filter((r) => !FROM_ID || parseInt(r.external_id, 10) >= FROM_ID)
+  .filter((_, i) => i % SHARD_N === SHARD_I);
 if (LIMIT) roles = roles.slice(0, LIMIT);
 console.log(`${roles.length} open role(s) without a scorecard${LIMIT ? ` (limit ${LIMIT})` : ""}${DRY_RUN ? ", dry run" : ""}`);
 

@@ -35,6 +35,9 @@ export interface Role {
   yoe: string;
   company?: CompanyProfile;
   jd?: RoleJD;
+  // First-posted date (YYYY-MM-DD) for roles added from the Paraform sheet;
+  // older roles fall back to the original import date.
+  posted?: string;
 }
 
 export function roleSlug(role: Role): string {
@@ -48,7 +51,12 @@ export function roleSlug(role: Role): string {
 
 export async function getRoleBySlug(slug: string): Promise<Role | undefined> {
   const roles = await getRoles();
-  return roles.find((r) => roleSlug(r) === slug);
+  const exact = roles.find((r) => roleSlug(r) === slug);
+  if (exact) return exact;
+  // A retitled role keeps its job id, and every slug ends in "-<id>", so an old
+  // link still finds the role (the page then redirects to the current slug).
+  const id = slug.match(/-(\d+)$/)?.[1];
+  return id ? roles.find((r) => r.jobId === id) : undefined;
 }
 
 const NOTION_VERSION = "2022-06-28";

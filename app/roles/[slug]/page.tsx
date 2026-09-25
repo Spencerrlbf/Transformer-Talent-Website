@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { getRoles, getRoleBySlug, roleSlug, parseSalary } from "@/lib/roles";
 import { jsonForScript } from "@/lib/server/html";
 
@@ -41,6 +41,7 @@ export default async function RolePage({
   const { slug } = await params;
   const role = await getRoleBySlug(slug);
   if (!role) notFound();
+  if (roleSlug(role) !== slug) permanentRedirect(`/roles/${roleSlug(role)}`);
 
   const band = parseSalary(role.salary);
   const ld = {
@@ -55,7 +56,7 @@ export default async function RolePage({
     ]
       .filter(Boolean)
       .join(" "),
-    datePosted: POSTED,
+    datePosted: role.posted || POSTED,
     employmentType: "FULL_TIME",
     hiringOrganization: {
       "@type": "Organization",

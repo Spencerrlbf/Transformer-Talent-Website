@@ -24,7 +24,7 @@ export default async function RolesPage() {
       "@type": "JobPosting",
       title: role.title,
       description: role.description || role.title,
-      datePosted: POSTED,
+      datePosted: role.posted || POSTED,
       employmentType: "FULL_TIME",
       hiringOrganization: {
         "@type": "Organization",

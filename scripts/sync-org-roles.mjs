@@ -48,10 +48,12 @@ await rest("org_roles?on_conflict=organization_id,external_id", {
   body: JSON.stringify(roleRows),
 });
 
-// Close roles that dropped out of roles.json (delisted/removed in Notion).
+// Close roles that dropped out of roles.json (delisted or removed). Only the
+// roles this sync owns (source 'notion'); roles made in the dashboard are not
+// in roles.json and must stay as they are.
 const current = new Set(roles.map((r) => r.jobId));
-const dbRoles = await rest(`org_roles?organization_id=eq.${org.id}&select=id,external_id,status`);
-const stale = dbRoles.filter((d) => !current.has(d.external_id) && d.status === "open");
+const dbRoles = await rest(`org_roles?organization_id=eq.${org.id}&select=id,external_id,status,source`);
+const stale = dbRoles.filter((d) => !current.has(d.external_id) && d.status === "open" && d.source === "notion");
 for (const s of stale) {
   await rest(`org_roles?id=eq.${s.id}`, {
     method: "PATCH",
