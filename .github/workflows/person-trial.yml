@@ -1,0 +1,56 @@
+name: Person writer trial
+
+# The 50-person trial of the one writer (lib/server/person + save_person,
+# migration 072): reads every stored source for the given people, saves them
+# into the new tables only and checks the counts. Manual only, never scheduled.
+# The log shows ids, counts and check results; never a name, email or phone.
+# Undo: scripts/person-trial-undo.mjs with the same ids.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "Candidate ids, comma separated (not needed for describe)"
+        type: string
+        required: false
+        default: ""
+      dry_run:
+        description: "Read everything and build the docs; save nothing"
+        type: boolean
+        default: true
+      repeat:
+        description: "Save everything twice; the second pass must change nothing"
+        type: boolean
+        default: false
+      describe:
+        description: "Only print the directory's table and column names the trial reads"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: person-trial
+  cancel-in-progress: false
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --no-audit --no-fund pg@8
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/person-trial.mjs
+        env:
+          TRIAL_IDS: ${{ inputs.ids }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          REPEAT: ${{ inputs.repeat && '1' || '' }}
+          DESCRIBE: ${{ inputs.describe && '1' || '' }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
