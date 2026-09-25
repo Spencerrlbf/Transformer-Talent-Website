@@ -65,6 +65,39 @@ const endOf = (p: PoolPosition): PoolDate => p.end_date ?? p.end ?? null;
 const positionsOf = (c: PoolCandidate): PoolPosition[] =>
   Array.isArray(c.work_experience) ? (c.work_experience as PoolPosition[]).filter((p) => p && typeof p === "object") : [];
 
+const dateLabel = (d: PoolDate): string | null => {
+  const y = yearNum(d?.year);
+  if (!y) return null;
+  const m = monthNum(d?.month);
+  return m ? `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1]} ${y}` : String(y);
+};
+
+/** The positions as a profile page shows them, newest first: title, company
+ *  and its page, the dates as text ("Aug 2022", "Present"), place, length and
+ *  description. The drawer's Profile tab reads these when no LinkedIn refresh
+ *  is stored, so it shows the same history the judge read. */
+export function poolDisplayPositions(c: PoolCandidate): {
+  title: string | null; company: string | null; companyLinkedinUrl: string | null;
+  from: string | null; to: string | null; location: string | null; duration: string | null; description: string | null;
+}[] {
+  return positionsOf(c)
+    .slice(0, 25)
+    .map((p, i) => {
+      const endYear = yearNum(endOf(p)?.year);
+      const current = p.is_current === true || (endYear === null && (i === 0 || p.end?.year === 0));
+      return {
+        title: str(p.title),
+        company: companyOf(p),
+        companyLinkedinUrl: str(p.company_linkedin_url),
+        from: dateLabel(startOf(p)),
+        to: current ? "Present" : dateLabel(endOf(p)),
+        location: str(p.location),
+        duration: str(p.duration),
+        description: str(p.description),
+      };
+    });
+}
+
 /** The dated positions in the shape the facts code reads. */
 export function poolExperiences(c: PoolCandidate): ExperienceRow[] {
   return positionsOf(c)

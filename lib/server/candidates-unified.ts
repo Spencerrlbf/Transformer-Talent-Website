@@ -20,6 +20,7 @@ import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
+import { poolDisplayPositions, poolEducation } from "./pool/profile";
 import type { Scorecard } from "./scorecard";
 import {
   ROLE_FOCUS_OPTIONS,
@@ -269,6 +270,9 @@ export type UnifiedDetail = {
     stageReason?: string | null;
   }[];
   experience: ExperienceGroup[];
+  /** Where the Profile tab's history comes from and when it was fetched
+   *  ("Refreshed from LinkedIn, Sep 24, 2026"); null when there is none. */
+  profileSource?: string | null;
   education: {
     school: string;
     logoUrl: string | null;
@@ -591,6 +595,8 @@ type ExpEntry = {
   location?: string;
   employmentType?: string;
   description?: string;
+  /** The dates as a line, when they are already written ("Aug 2022 – Present"). */
+  datesText?: string | null;
 };
 
 const dateText = (v: ExpEntry["startDate"]): string | null =>
@@ -1234,8 +1240,9 @@ function groupExperience(exp: ExpEntry[]): ExperienceGroup[] {
     const role = {
       title: str(e.position) || "—",
       dates:
-        [dateText(e.startDate), dateText(e.endDate) || "Present"].filter(Boolean).join(" – ") ||
-        null,
+        e.datesText !== undefined
+          ? e.datesText
+          : [dateText(e.startDate), dateText(e.endDate) || "Present"].filter(Boolean).join(" – ") || null,
       duration: str(e.duration),
       location: str(e.location),
       employmentType: str(e.employmentType),
@@ -1431,20 +1438,23 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     const id = key.slice(4);
     const res = await sbRest(
       `candidates?id=eq.${id}&select=id,full_name,headline,location,linkedin_url,linkedin_username,` +
-        `email,phone,contact,profile_picture_url,current_title,current_company,created_at&limit=1`
+        `email,phone,contact,profile_picture_url,current_title,current_company,created_at,` +
+        `work_experience,education,profile_summary,top_skills,source,linkedin_enrichment_date&limit=1`
     );
     const [p] = (res.ok ? await res.json() : []) as {
       id: string; full_name: string | null; headline: string | null; location: string | null;
       linkedin_url: string | null; linkedin_username: string | null; email: string | null;
       phone: string | null; contact: UnifiedContact | null; profile_picture_url: string | null;
       current_title: string | null; current_company: string | null; created_at: string;
+      work_experience: unknown; education: string | null; profile_summary: string | null;
+      top_skills: string[] | null; source: string | null; linkedin_enrichment_date: string | null;
     }[];
     if (!p) return null;
 
     const [enrRes, vRes, emailMap] = await Promise.all([
       sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
-          `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
+          `&raw_payload=not.is.null&select=raw_payload,created_at&order=created_at.desc&limit=1`
       ),
       sbRest(
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
@@ -1452,7 +1462,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       ),
       poolEmails([id], new Map([[id, p.contact?.email ?? p.email]])),
     ]);
-    const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null }[];
+    const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
       verdict: { scorecard?: Scorecard; v2?: VerdictView } | null;
@@ -1483,7 +1493,41 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       });
     }
 
-    const bits = profileBits(enr?.raw_payload ?? null);
+    // The Profile tab shows the newest history there is: a LinkedIn refresh
+    // when one is stored, else the history on the person's record (the
+    // original import, or the directory's own LinkedIn fetch), which is what
+    // the judge read. Either way it says where it came from and when.
+    const monthDay = (iso: string | null | undefined) =>
+      iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
+    let bits = profileBits(enr?.raw_payload ?? null);
+    let profileSource: string | null = enr?.raw_payload ? `Refreshed from LinkedIn, ${monthDay(enr.created_at)}` : null;
+    if (!enr?.raw_payload) {
+      const positions = poolDisplayPositions(p);
+      const education = poolEducation(p);
+      bits = {
+        photoUrl: null,
+        about: str(p.profile_summary),
+        experience: groupExperience(
+          positions.map((x) => ({
+            position: x.title ?? undefined,
+            companyName: x.company ?? undefined,
+            companyLinkedinUrl: x.companyLinkedinUrl ?? undefined,
+            duration: x.duration ?? undefined,
+            location: x.location ?? undefined,
+            description: x.description ?? undefined,
+            datesText: [x.from, x.to].filter(Boolean).join(" – ") || null,
+          }))
+        ),
+        education: education.map((e) => ({ school: e.schoolName, logoUrl: null, linkedinUrl: null, degree: e.degree, field: e.fieldOfStudy, period: null })),
+        skills: (p.top_skills || []).filter((x): x is string => typeof x === "string" && !!x.trim()),
+      };
+      const fetched = monthDay(p.linkedin_enrichment_date || p.created_at);
+      if (positions.length || education.length || bits.about)
+        profileSource =
+          p.source === "directory"
+            ? `From the LinkedIn profile the directory fetched${fetched ? `, ${fetched}` : ""}`
+            : `From the LinkedIn profile on record${fetched ? `, fetched ${fetched}` : ""}`;
+    }
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
     return {
       key,
@@ -1524,6 +1568,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       noReply: await noReplyMarkFor(orgId, key),
       pipeline,
       experience: bits.experience,
+      profileSource,
       education: bits.education,
       skills: bits.skills,
       resumeUrl: null,

@@ -76,6 +76,8 @@ type Detail = {
   } | null;
   noReply?: { markedAt: string; checkBackAt: string | null; jobId: string | null } | null;
   pipeline: PipelineEntry[];
+  /** Where the Profile tab's history comes from and when it was fetched. */
+  profileSource?: string | null;
   experience: {
     company: string;
     logoUrl: string | null;
@@ -1395,6 +1397,7 @@ export default function CandidateDrawer({
                     </>
                   )}
                   <h4 className="cv2d-sec">Experience</h4>
+                  {detail.profileSource && <p className="cv2d-dim">{detail.profileSource}</p>}
                   {detail.experience.length === 0 && (
                     <p className="cv2d-dim">
                       No LinkedIn work history on file{detail.hasResume ? " — see the Resume tab." : "."}
