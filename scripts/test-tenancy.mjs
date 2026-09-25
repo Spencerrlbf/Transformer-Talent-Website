@@ -110,7 +110,7 @@ async function snapshotClient(C, ownKeys) {
   return {
     org: await q(`organizations?id=eq.${C.org.id}&select=slug,name,website,referral_amount,interview_stages,company_profile,company_page_published,logo_path,email_visibility,attention_rules`),
     members: await q(`org_members?${o}&select=user_id,email,member_role&order=email`),
-    role: await q(`org_roles?id=eq.${C.role.id}&select=title,description,status,salary,scorecard,target_companies,company_name,linked_org_role,interview_stages,sourcing_requested,skills`),
+    role: await q(`org_roles?id=eq.${C.role.id}&select=title,description,status,salary,scorecard,target_companies,company_name,linked_org_role,interview_stages,sourcing_requested,skills,notify_user_ids`),
     roles: await q(`org_roles?${o}&select=external_id,title&order=external_id`),
     apps: await q(`website_applications?${o}&select=id,name,email,contact,resume_path,follow_up_at,role_ids,status&order=id`),
     statuses: await q(`candidate_role_statuses?${o}&${k}&select=candidate_key,job_id,status,interview_stage,reason&order=candidate_key,job_id`),
@@ -411,6 +411,15 @@ try {
     await call(XT, "POST", "/api/dashboard/client-requests", { orgId: B.org.id, jobId: "9002" }, g);
     const copies = await q(`org_roles?organization_id=eq.${TT.tt.id}&title=like.*${run.tokens.u}*&select=id`);
     if (copies?.length) findings.push({ kind: "WRITE LEAK", actor: "TT", what: "copy of B's unrequested job", detail: "TT copied a job B never asked for help with" });
+  }
+
+  // A job's lead emails: its own teammates only, listed and chosen.
+  for (const [X, C, Y] of [[XA, A, B], [XB, B, A]]) {
+    const j = await call(X, "GET", "/api/dashboard/jobs/9001", undefined, { group: "lead emails" });
+    const team = (j.json?.job?.leadEmails?.team || []).map((t) => t.email);
+    if (team.some((e) => e !== C.login.email))
+      findings.push({ kind: "READ LEAK", actor: X.name, what: "job lead-email teammates", detail: "listed someone outside the company" });
+    await call(X, "PATCH", "/api/dashboard/jobs/9001", { notifyUserIds: [Y.login.userId] }, { group: "lead emails", deny: true });
   }
 
   // TT has no job 9001: asking for it must not return a client's job 9001.

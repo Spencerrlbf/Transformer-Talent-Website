@@ -124,15 +124,17 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-real-ip") ||
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
     "unknown";
+  // Limits are per person (this address, this connection). There is no
+  // shared cap across companies: every application is kept, and each
+  // company's own daily review allowance decides when it is reviewed
+  // (lib/server/review-budget.ts). A client company's board never names us.
   if (!(await allow(`apply:email:${email}`, 4, 24)) || !(await allow(`apply:ip:${ip}`, 8, 24))) {
     return NextResponse.json(
-      { error: "Too many applications today — email spencer@transformertalent.com directly." },
-      { status: 429 }
-    );
-  }
-  if (!(await allow("apply:global", 100, 24))) {
-    return NextResponse.json(
-      { error: "We're at capacity today — email spencer@transformertalent.com with your resume and we'll take it from there." },
+      {
+        error: boardOrg
+          ? "Too many applications from you today. Please try again tomorrow."
+          : "Too many applications today. Email spencer@transformertalent.com directly.",
+      },
       { status: 429 }
     );
   }

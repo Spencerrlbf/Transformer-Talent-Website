@@ -4,6 +4,7 @@ import { sbRest } from "@/lib/server/supabase";
 import { publishOrgRole, sanitizeSkills } from "@/lib/server/publish-role";
 import { roleInputFromBody } from "@/lib/server/job-body";
 import { sendEmail } from "@/lib/server/email";
+import { escapeHtml, plainLine } from "@/lib/server/html";
 import { cardChanges, isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { saveRoleCard } from "@/lib/server/rolecard/store";
 import { relabelRole } from "@/lib/server/rolecard/feedback";
@@ -15,7 +16,7 @@ type Params = { params: Promise<{ id: string }> };
 async function loadJob(orgId: string, externalId: string) {
   const res = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(externalId)}` +
-      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role,sourcing_requested,scorecard&limit=1`
+      `&select=id,external_id,title,status,salary,locations,workplace,visa,yoe,role_type,tech_stack,jd,skills,source,updated_at,target_companies,company_name,linked_org_role,sourcing_requested,scorecard,created_by,notify_user_ids&limit=1`
   );
   if (!res.ok) return null;
   const [row] = await res.json();
@@ -33,6 +34,21 @@ export async function GET(req: NextRequest, { params }: Params) {
     `website_applications?organization_id=eq.${member.org.id}&role_ids=cs.{"${job.external_id}"}&select=id`
   );
   const applicants = appsRes.ok ? ((await appsRes.json()) as unknown[]).length : 0;
+
+  // Lead emails: who hears about a new applicant for this job (the job's
+  // recruiter by default), and the teammates who could.
+  const [membersRes, profilesRes] = await Promise.all([
+    sbRest(`org_members?organization_id=eq.${member.org.id}&select=user_id,email,member_role&order=created_at.asc`),
+    sbRest(`recruiter_profiles?organization_id=eq.${member.org.id}&select=user_id,display_name`),
+  ]);
+  const members = membersRes.ok ? ((await membersRes.json()) as { user_id: string; email: string; member_role: string }[]) : [];
+  const names = new Map(
+    (profilesRes.ok ? ((await profilesRes.json()) as { user_id: string; display_name: string | null }[]) : []).map((p) => [p.user_id, p.display_name])
+  );
+  const team = members.map((m) => ({ userId: m.user_id, email: m.email, name: names.get(m.user_id) || null, owner: m.member_role === "owner" }));
+  const chosen = ((job.notify_user_ids as string[] | null) ?? (job.created_by ? [job.created_by as string] : [])).filter((u) =>
+    team.some((t) => t.userId === u)
+  );
 
   return NextResponse.json({
     job: {
@@ -54,6 +70,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       companyName: job.company_name || "",
       linkedOrgRole: job.linked_org_role || null,
       sourcingRequested: !!job.sourcing_requested,
+      leadEmails: { userIds: chosen, team },
     },
   });
 }
@@ -100,7 +117,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     body.targetCompanies !== undefined ||
     body.companyName !== undefined ||
     body.linkedOrgRole !== undefined ||
-    body.sourcingRequested !== undefined
+    body.sourcingRequested !== undefined ||
+    body.notifyUserIds !== undefined
   ) {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.sourcingRequested !== undefined) {
@@ -113,9 +131,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         after(async () => {
           await sendEmail({
             to: "spencer@transformertalent.com",
-            subject: `${member.org.name} asked for help: ${job.title} (#${job.external_id})`,
-            html: `<p style="margin:0 0 14px;"><b>${member.org.name}</b> switched on sourcing help for
-              <b>${job.title}</b> (#${job.external_id}).</p>
+            // The company name and job title are the client's own text.
+            subject: plainLine(`${member.org.name} asked for help: ${job.title} (#${job.external_id})`),
+            html: `<p style="margin:0 0 14px;"><b>${escapeHtml(member.org.name)}</b> switched on sourcing help for
+              <b>${escapeHtml(job.title)}</b> (#${escapeHtml(job.external_id)}).</p>
               <p style="margin:0;">Open your <a href="https://www.transformertalent.com/dashboard" style="color:#2a5bd7;">Jobs page</a>
               to copy it into your jobs and link it.</p>`,
           });
@@ -154,6 +173,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "bad_company_name" }, { status: 400 });
       patch.company_name = body.companyName.trim() || null;
     }
+    if (body.notifyUserIds !== undefined) {
+      // Who gets this job's lead emails: teammates only, every one a current
+      // member of this company. null = back to the job's recruiter.
+      if (body.notifyUserIds === null) {
+        patch.notify_user_ids = null;
+      } else {
+        const raw = Array.isArray(body.notifyUserIds) ? body.notifyUserIds : null;
+        const ids = raw ? [...new Set(raw.filter((x): x is string => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)))] : null;
+        if (!ids || ids.length !== raw!.length || ids.length > 10)
+          return NextResponse.json({ error: "bad_notify" }, { status: 400 });
+        if (ids.length) {
+          const mres = await sbRest(
+            `org_members?organization_id=eq.${member.org.id}&user_id=in.(${ids.join(",")})&select=user_id`
+          );
+          const found = new Set(mres.ok ? ((await mres.json()) as { user_id: string }[]).map((m) => m.user_id) : []);
+          if (ids.some((u) => !found.has(u))) return NextResponse.json({ error: "not_a_teammate" }, { status: 400 });
+        }
+        patch.notify_user_ids = ids;
+      }
+    }
     const up = await sbRest(`org_roles?id=eq.${job.id}`, {
       method: "PATCH",
       prefer: "return=minimal",
@@ -187,8 +226,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "at_least_one_skill" }, { status: 400 });
 
   const role = { ...parsed.role, jobId: job.external_id };
+  // An edit saves the changes and refreshes the job's search data; it keeps
+  // the job open or closed as it was (only Open/Close changes that).
+  const status: "open" | "closed" =
+    body.status === "open" || body.status === "closed" ? body.status : job.status === "closed" ? "closed" : "open";
   try {
-    await publishOrgRole(member.org.id, role, skills, "dashboard");
+    await publishOrgRole(member.org.id, role, skills, "dashboard", undefined, status);
   } catch (e) {
     console.error("republish role failed", e);
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });

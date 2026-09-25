@@ -42,7 +42,10 @@ export async function publishOrgRole(
   role: RoleInput,
   skills: SkillSpec[],
   source: string,
-  createdBy?: string
+  createdBy?: string,
+  /** The status to keep. A new job opens; an edit passes the job's current
+   *  status, so saving a change never reopens a closed job. */
+  status: "open" | "closed" = "open"
 ): Promise<{ orgRoleId: string; profile: MatchingProfile }> {
   const profile = await generateMatchingProfile(role);
 
@@ -50,6 +53,7 @@ export async function publishOrgRole(
   // keeps the original creator on upsert.
   const row = {
     ...orgRoleRow(organizationId, role, profile, source),
+    status,
     skills,
     ...(createdBy ? { created_by: createdBy } : {}),
   };

@@ -53,3 +53,7 @@ export { expandLocations } from "./matcher";
 export { shortlistRoleContext, judgePoolCandidate, roleHashOf, SHORTLIST_ROLE_COLS } from "./shortlist/judge";
 export type { ShortlistRoleRow, ShortlistRoleContext, PoolJudgement } from "./shortlist/judge";
 export { JEV_MODEL } from "./rolecard/jev";
+
+// Applications over their company's daily review allowance, reviewed
+// nightly (scripts/review-queue.mjs).
+export { reviewQueued, queuedCount } from "./review-queue";

@@ -3,6 +3,7 @@ import { Instrument_Sans, Instrument_Serif } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
+import { jsonForScript } from "@/lib/server/html";
 
 const sans = Instrument_Sans({
   subsets: ["latin"],
@@ -50,7 +51,7 @@ export default function RootLayout({
       <body>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_LD) }}
+          dangerouslySetInnerHTML={{ __html: jsonForScript(ORG_LD) }}
         />
         <div className="topbar-outer">
           <div className="wrap">

@@ -97,13 +97,18 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-real-ip") ||
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
     "unknown";
+  // Per person only; no cap shared across companies (see /api/apply).
   if (
     !(await allow(`referral:email:${referrerEmail}`, 5, 24)) ||
-    !(await allow(`referral:ip:${ip}`, 10, 24)) ||
-    !(await allow("referral:global", 100, 24))
+    !(await allow(`referral:ip:${ip}`, 10, 24))
   ) {
+    const ours = orgId === (await getOrgId());
     return NextResponse.json(
-      { error: "Too many referrals today — email spencer@transformertalent.com directly." },
+      {
+        error: ours
+          ? "Too many referrals today. Email spencer@transformertalent.com directly."
+          : "Too many referrals from you today. Please try again tomorrow.",
+      },
       { status: 429 }
     );
   }
