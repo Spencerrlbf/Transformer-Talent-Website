@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Nightly Harvest refresh worker. Drains refresh_queue (priority asc — 10 =
 // matched in a JD search, 50 = engaged backfill) up to REFRESH_DAILY_CAP paid
-// Harvest calls per UTC day, counted from the candidate_enrichments ledger so
-// website applications share the same budget. Tops the queue up with engaged
-// candidates when it has spare capacity.
+// Harvest calls per UTC day. The cap is Transformer Talent's own daily
+// Harvest budget: counted from TT's rows in the candidate_enrichments ledger,
+// so TT's site applicants and this worker share it. Client companies'
+// applicant reviews are metered by their own allowance
+// (lib/server/review-budget.ts) and never use it up. Tops the queue up with
+// engaged candidates when it has spare capacity.
 //
 // All shared logic (facts, spine writes) comes from
 // the compiled website library — run `node scripts/build-worker-lib.mjs`
@@ -60,10 +63,12 @@ async function rest(path, init = {}) {
 const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("organization not found");
 
-// Budget: paid Harvest calls already made today (site + worker share the cap).
+// Budget: TT's paid Harvest calls already made today (TT site + worker share
+// the cap). Client companies' reviews are stamped with their own organization
+// and counted against their own allowance, not here.
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
 const spentRes = await fetch(
-  `${SUPABASE_URL}/rest/v1/candidate_enrichments?provider=eq.harvest&cache_status=eq.miss&created_at=gte.${todayStart}&select=id`,
+  `${SUPABASE_URL}/rest/v1/candidate_enrichments?organization_id=eq.${org.id}&provider=eq.harvest&cache_status=eq.miss&created_at=gte.${todayStart}&select=id`,
   { headers: { ...headers, Prefer: "count=exact", Range: "0-0" } }
 );
 const spent = parseInt((spentRes.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
@@ -81,11 +86,13 @@ if (!remaining && !process.env.PRECOMPUTE_BACKFILL) process.exit(0);
 // ---- Nightly drain ----
 
 const queued = await rest(
-  `refresh_queue?status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
+  `refresh_queue?organization_id=eq.${org.id}&status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
 );
 if (queued.length < remaining && !process.env.NO_TOPUP) {
   const needed = remaining - queued.length;
-  const everQueued = new Set((await rest("refresh_queue?select=candidate_id")).map((r) => r.candidate_id));
+  const everQueued = new Set(
+    (await rest(`refresh_queue?organization_id=eq.${org.id}&select=candidate_id`)).map((r) => r.candidate_id)
+  );
   // Queue slots go to people who actually need refreshing — recently
   // enriched candidates (e.g. fresh website applicants) are excluded.
   const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
@@ -135,7 +142,7 @@ if (queued.length < remaining && !process.env.NO_TOPUP) {
     queued.push(
       ...(
         await rest(
-          `refresh_queue?status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
+          `refresh_queue?organization_id=eq.${org.id}&status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
         )
       ).filter((q) => !queued.some((x) => x.id === q.id))
     );
@@ -144,7 +151,8 @@ if (queued.length < remaining && !process.env.NO_TOPUP) {
 console.log(`processing ${Math.min(queued.length, remaining)} of ${queued.length} queued`);
 
 async function finishQueueRow(row, status) {
-  // unique(candidate_id, status): clear any previous terminal row first.
+  // unique(candidate_id, status): clear any previous terminal row first. The
+  // constraint spans every organization, so this is not scoped to TT's rows.
   await rest(`refresh_queue?candidate_id=eq.${row.candidate_id}&status=eq.${status}`, {
     method: "DELETE",
     headers: { Prefer: "return=minimal" },

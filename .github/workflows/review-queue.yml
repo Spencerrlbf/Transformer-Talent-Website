@@ -1,7 +1,8 @@
 name: Review queued applications
 
 # Applications over their company's daily review allowance wait as "queued";
-# this reviews them each night within each company's allowance.
+# this reviews them each night within each company's allowance. Companies
+# take turns, oldest first within each company.
 on:
   schedule:
     - cron: "30 6 * * *"

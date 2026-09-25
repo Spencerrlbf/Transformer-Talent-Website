@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Nightly review queue (GitHub Actions). Applications that arrived after
 // their company's daily review allowance was used up wait as "queued"; this
-// reviews them oldest first, each company within its own allowance, with the
-// same pipeline the apply routes use (lib/server/review-queue.ts).
+// reviews them with the same pipeline the apply routes use
+// (lib/server/review-queue.ts). Companies take turns, oldest first within
+// each company, each within its own allowance.
 //
 //   node scripts/build-worker-lib.mjs && node scripts/review-queue.mjs
-//   DRY_RUN=1 node scripts/review-queue.mjs     (count only, spends nothing)
+//   DRY_RUN=1 node scripts/review-queue.mjs     (count what each company has room for, spend nothing)
 //   MAX=50 node scripts/review-queue.mjs        (stop after 50 reviews)
 import fs from "node:fs";
 
