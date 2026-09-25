@@ -7,6 +7,7 @@ export type { CandidateFacts, ExperienceRow } from "./facts";
 export {
   getOrgId,
   harvestToExperiences,
+  harvestToPoolRecord,
   linkedinProfileText,
   recordEnrichment,
   syncExperiences,

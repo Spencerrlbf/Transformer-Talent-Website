@@ -4,10 +4,22 @@ on:
   schedule:
     - cron: "0 8 * * *"
   workflow_dispatch:
+    inputs:
+      cap:
+        description: "Paid Harvest calls allowed today (blank = the nightly cap)"
+        required: false
+      concurrency:
+        description: "Profiles in flight (blank = 1)"
+        required: false
+      no_topup:
+        description: "Drain only what is queued; add no engaged backfill"
+        type: boolean
+        default: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,4 +32,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HARVEST_API_KEY: ${{ secrets.HARVEST_API_KEY }}
-          REFRESH_DAILY_CAP: ${{ vars.REFRESH_DAILY_CAP || 50 }}
+          REFRESH_DAILY_CAP: ${{ inputs.cap || vars.REFRESH_DAILY_CAP || 50 }}
+          CONCURRENCY: ${{ inputs.concurrency || '1' }}
+          NO_TOPUP: ${{ inputs.no_topup && '1' || '' }}
