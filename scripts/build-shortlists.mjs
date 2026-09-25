@@ -68,32 +68,39 @@ for (const role of roles) {
     // takes the nearest few hundred overall and only then applies the
     // location, so a located role is asked twice: nearby people first, then
     // anyone, and nearby people rank first in the list.
-    const near = new Map();
-    const nearby = new Set();
-    const match = async (embedding, loc) => {
-      const body = JSON.stringify({ query_embedding: embedding, match_count: PER_FACET, min_years: null, location_patterns: loc });
-      for (let attempt = 1; ; attempt++) {
-        try {
-          return await rest("rpc/match_candidates_v2", { method: "POST", body });
-        } catch (err) {
-          if (attempt >= 3 || !/57014|statement timeout/.test(String(err))) throw err;
-          await new Promise((r) => setTimeout(r, 3000 * attempt));
+    const poolFrom = async (fn) => {
+      const near = new Map();
+      const nearby = new Set();
+      const match = async (embedding, loc) => {
+        const body = JSON.stringify({ query_embedding: embedding, match_count: PER_FACET, min_years: null, location_patterns: loc });
+        for (let attempt = 1; ; attempt++) {
+          try {
+            return await rest(`rpc/${fn}`, { method: "POST", body });
+          } catch (err) {
+            if (attempt >= 3 || !/57014|statement timeout/.test(String(err))) throw err;
+            await new Promise((r) => setTimeout(r, 3000 * attempt));
+          }
         }
-      }
-    };
-    const gather = async (loc) => {
-      for (const f of facets) {
-        for (const r of await match(f.embedding, loc)) {
-          const prev = near.get(r.id);
-          if (!prev || r.similarity > prev.similarity) near.set(r.id, { id: r.id, similarity: r.similarity, source: r.source, top_skills: r.top_skills || [], headline: r.headline || "" });
-          if (loc) nearby.add(r.id);
+      };
+      const gather = async (loc) => {
+        for (const f of facets) {
+          for (const r of await match(f.embedding, loc)) {
+            const prev = near.get(r.id);
+            if (!prev || r.similarity > prev.similarity) near.set(r.id, { id: r.id, similarity: r.similarity, source: r.source, top_skills: r.top_skills || [], headline: r.headline || "" });
+            if (loc) nearby.add(r.id);
+          }
         }
-      }
+      };
+      if (patterns) await gather(patterns);
+      await gather(null);
+      return { near, nearby };
     };
-    if (patterns) await gather(patterns);
-    await gather(null);
-    const ids = [...near.keys()];
-    tally.considered += ids.length;
+    const pool = await poolFrom("match_candidates_v2");
+    // The preview also asks the wider search (migration 067), at most 1,000
+    // a call against match_candidates_v2's 100.
+    const widePool = COMPARE ? await poolFrom("match_candidates_wide") : null;
+    const ids = [...new Set([...pool.near.keys(), ...(widePool ? widePool.near.keys() : [])])];
+    tally.considered += pool.near.size;
 
     // Their signals and the text the keywords are looked for in.
     const signals = new Map();
@@ -110,12 +117,12 @@ for (const role of roles) {
       const t = texts.get(n.id) || { text: n.headline };
       return { years: s.years, engineering_years: s.engineering_years, title_family: s.title_family || [], top_university_tier: s.top_university_tier, top_university: s.top_university, top_employer_tier: s.top_employer_tier, top_employer: s.top_employer, status: t.status, source: t.source ?? n.source, text: t.text || "" };
     };
-    const shortlistUnder = (weights) => {
+    const shortlistUnder = (from, weights) => {
       const scored = [];
-      for (const n of near.values()) {
+      for (const n of from.near.values()) {
         const a = assess(rules, personOf(n), n.similarity, weights);
         if (!a.keep) continue;
-        const local = patterns ? nearby.has(n.id) : null;
+        const local = patterns ? from.nearby.has(n.id) : null;
         a.checks.location = local;
         if (local) a.reasons.unshift("nearby");
         scored.push({ id: n.id, similarity: n.similarity, local, ...a });
@@ -124,18 +131,16 @@ for (const role of roles) {
       scored.sort((x, y) => Number(!!y.local) - Number(!!x.local) || y.score - x.score);
       return scored;
     };
-    const scored = shortlistUnder(QUALITY_WEIGHTS.today);
+    const scored = shortlistUnder(pool, QUALITY_WEIGHTS.today);
     const top = scored.slice(0, SIZE);
     if (COMPARE) {
-      // The same people scored under each preset: the top ten, how many of
-      // the kept list change against today's, and what the list looks like.
+      // Today's shortlist against the wider search under each preset: the
+      // top ten, how many people enter the kept list, and what it looks like.
       const todayIds = new Set(top.map((x) => x.id));
-      const presets = {};
-      for (const [name, weights] of Object.entries(QUALITY_WEIGHTS)) {
-        const list = (name === "today" ? scored : shortlistUnder(weights)).slice(0, SIZE);
+      const describe = (list) => {
         const keptIds = new Set(list.map((x) => x.id));
         const share = (f) => Math.round((100 * list.filter(f).length) / Math.max(1, list.length));
-        presets[name] = {
+        return {
           top: list.slice(0, 10).map((x) => ({ id: x.id, score: x.score, similarity: Math.round(x.similarity * 1000) / 1000, hits: x.keyword_hits, emp: signals.get(x.id)?.top_employer_tier ?? null, uni: signals.get(x.id)?.top_university_tier ?? null, local: x.local })),
           kept: list.length,
           entered: [...keptIds].filter((id) => !todayIds.has(id)).length,
@@ -143,8 +148,10 @@ for (const role of roles) {
           t1_university_pct: share((x) => signals.get(x.id)?.top_university_tier === 1),
           avg_similarity: Math.round((1000 * list.reduce((a, x) => a + x.similarity, 0)) / Math.max(1, list.length)) / 1000,
         };
-      }
-      console.log(`QUALITY_PREVIEW ${JSON.stringify({ role: role.external_id, title: role.title, considered: ids.length, presets })}`);
+      };
+      const presets = { today: describe(top) };
+      for (const [name, weights] of Object.entries(QUALITY_WEIGHTS)) presets[`wide_${name}`] = describe(shortlistUnder(widePool, weights).slice(0, SIZE));
+      console.log(`QUALITY_PREVIEW ${JSON.stringify({ role: role.external_id, title: role.title, considered: pool.near.size, considered_wide: widePool.near.size, presets })}`);
     }
     tally.kept += scored.length;
     const rows = top.map((x, i) => ({ org_role_id: role.id, candidate_id: x.id, rank: i + 1, score: x.score, similarity: Math.round(x.similarity * 10000) / 10000, keyword_hits: x.keyword_hits, checks: x.checks, reasons: x.reasons, built_at: new Date().toISOString() }));
@@ -156,7 +163,7 @@ for (const role of roles) {
     tally.roles++;
     const yrs = rules.yearsRequired != null ? `${rules.yearsRequired}+ ${rules.engineeringYears ? "engineering " : ""}years` : "no years rule";
     const nearbyKept = scored.filter((x) => x.local).length;
-    console.log(`  #${role.external_id} ${role.title}: ${ids.length} considered, ${scored.length} kept${patterns ? ` (${nearbyKept} nearby)` : ""}, ${DRY_RUN ? "would save" : "saved"} ${rows.length} (top score ${top[0]?.score ?? "-"}); ${yrs}, ${rules.families ? rules.families.join("/") + " titles" : "any title"}, ${rules.tech.length} tech row(s)${rules.topRow ? `, top ${rules.topRow.kind}${rules.topRow.required ? " required" : ""}` : ""}${patterns ? `, ${patterns.length} location pattern(s)` : ", remote"}`);
+    console.log(`  #${role.external_id} ${role.title}: ${pool.near.size} considered, ${scored.length} kept${patterns ? ` (${nearbyKept} nearby)` : ""}, ${DRY_RUN ? "would save" : "saved"} ${rows.length} (top score ${top[0]?.score ?? "-"}); ${yrs}, ${rules.families ? rules.families.join("/") + " titles" : "any title"}, ${rules.tech.length} tech row(s)${rules.topRow ? `, top ${rules.topRow.kind}${rules.topRow.required ? " required" : ""}` : ""}${patterns ? `, ${patterns.length} location pattern(s)` : ", remote"}`);
   } catch (err) {
     tally.failed++;
     console.log(`  #${role.external_id} ${role.title}: FAILED ${err instanceof Error ? err.message : err}`);

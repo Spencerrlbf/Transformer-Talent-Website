@@ -19,7 +19,7 @@ on:
         type: boolean
         default: false
       compare_quality:
-        description: "Print each role's top ten under every quality preset; writes nothing"
+        description: "Preview: today's shortlist vs the wider search under every quality preset; writes nothing"
         type: boolean
         default: false
 
