@@ -125,14 +125,14 @@ export function harvestToExperiences(harvest: Record<string, unknown> | null) {
 // ---------- The candidates row from a Harvest profile ----------
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const cleanText = (s: unknown): string | null =>
+export const cleanText = (s: unknown): string | null =>
   typeof s === "string" ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim() || null : null;
 
 /** A "position" that is a membership or side role, not the job: a council
  *  membership, an advisory seat, a board, mentoring, volunteering, angel
  *  investing. "Member of Technical Staff", "Member Software Engineer" and
  *  "Founding Member" are jobs, not memberships. */
-const SIDE_ROLE = /\b((?<!founding\s)member(?!\s+(of\s+(the\s+)?(technical|engineering|research|professional)\s+staff|software|technical|engineering))|membership|advisor|advisory|board|mentor|mentoring|volunteer|ambassador|investor|council)\b/i;
+export const SIDE_ROLE = /\b((?<!founding\s)member(?!\s+(of\s+(the\s+)?(technical|engineering|research|professional)\s+staff|software|technical|engineering))|membership|advisor|advisory|board|mentor|mentoring|volunteer|ambassador|investor|council)\b/i;
 
 interface HarvestEducation {
   schoolName?: string;
