@@ -12,7 +12,14 @@ export async function GET(req: NextRequest) {
   if (member.org.slug !== TT_ORG_SLUG)
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const jobId = req.nextUrl.searchParams.get("job") || undefined;
-  const list = await listNetworkMatches(member.org.id, jobId);
+  const q = req.nextUrl.searchParams;
+  const list = await listNetworkMatches(member.org.id, {
+    job: q.get("job") || undefined,
+    label: q.get("label") || undefined,
+    company: q.get("company") || undefined,
+    q: q.get("q") || undefined,
+    newDays: q.get("new") ? Math.max(1, parseInt(q.get("new") || "7", 10) || 7) : undefined,
+    page: Math.max(1, parseInt(q.get("page") || "1", 10) || 1),
+  });
   return NextResponse.json(list);
 }

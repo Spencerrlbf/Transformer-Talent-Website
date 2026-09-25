@@ -21,6 +21,8 @@ export type NetMatch = {
   sendsTo: string | null;
 };
 
+export type NetRoleFacet = { jobId: string; title: string; company: string | null; contact: number; message: number };
+
 export type NetPerson = {
   candidateId: string;
   name: string;
@@ -43,8 +45,8 @@ const TAG_CLASS: Record<string, string> = {
 };
 const DOT_CLASS: Record<string, string> = { strong: "g", possible: "b", stretch: "a" };
 const FIT_LABEL: Record<string, string> = {
-  strong: "Strong fit",
-  possible: "Worth a look",
+  strong: "Contact now",
+  possible: "Worth a message",
   stretch: "Likely a stretch",
 };
 
@@ -98,7 +100,10 @@ export default function NetworkTable({
   onKeys?: (keys: string[]) => void;
 }) {
   const { token } = useDash();
+  // The server pages and filters (fifty people a page); this holds one page
+  // and the counts and role facets that came with it.
   const [people, setPeople] = useState<NetPerson[] | null>(null);
+  const [meta, setMeta] = useState<{ total: number; totalMatches: number; newSinceYesterday: number; pages: number; roles: NetRoleFacet[] } | null>(null);
   const [error, setError] = useState(false);
 
   const [q, setQ] = useState("");
@@ -133,58 +138,61 @@ export default function NetworkTable({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [menuOpen]);
 
+  // The search box waits for a pause in typing before asking the server.
+  const [qLive, setQLive] = useState("");
   useEffect(() => {
-    fetch("/api/dashboard/network", { headers: { Authorization: `Bearer ${token}` } })
+    const t = setTimeout(() => setQLive(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    let live = true;
+    const params = new URLSearchParams();
+    if (role) params.set("job", role);
+    if (fit === "strong") params.set("label", "contact");
+    if (fit === "possible") params.set("label", "message");
+    if (company) params.set("company", company);
+    if (qLive) params.set("q", qLive);
+    if (newOnly) params.set("new", "7");
+    params.set("page", String(page));
+    fetch(`/api/dashboard/network?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
-        return r.json() as Promise<{ people: NetPerson[] }>;
+        return r.json() as Promise<{ people: NetPerson[]; total: number; totalMatches: number; newSinceYesterday: number; pages: number; roles: NetRoleFacet[] }>;
       })
-      .then((d) => setPeople(d.people))
-      .catch(() => setError(true));
-  }, [token]);
+      .then((d) => {
+        if (!live) return;
+        setPeople(d.people);
+        setMeta({ total: d.total, totalMatches: d.totalMatches, newSinceYesterday: d.newSinceYesterday, pages: d.pages, roles: d.roles });
+      })
+      .catch(() => live && setError(true));
+    return () => {
+      live = false;
+    };
+  }, [token, role, fit, company, qLive, newOnly, page]);
 
-  const roleOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const p of people || [])
-      for (const m of p.matches) if (!map.has(m.jobId)) map.set(m.jobId, m.title);
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [people]);
+  const roleOptions = useMemo<[string, string][]>(
+    () => (meta?.roles || []).map((r) => [r.jobId, r.title] as [string, string]).sort((a, b) => a[1].localeCompare(b[1])),
+    [meta]
+  );
 
   const companyOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const p of people || []) for (const m of p.matches) if (m.company) set.add(m.company);
+    for (const r of meta?.roles || []) if (r.company) set.add(r.company);
     return [...set].sort();
-  }, [people]);
+  }, [meta]);
 
-  const weekAgo = Date.now() - 7 * DAY;
   const dayAgo = Date.now() - DAY;
-
-  const matchPasses = (m: NetMatch) =>
-    (!role || m.jobId === role) &&
-    (!company || m.company === company) &&
-    (!fit || m.tag === fit);
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (people || []).filter((p) => {
-      if (
-        needle &&
-        ![p.name, p.currentTitle, p.currentCompany]
-          .some((v) => (v || "").toLowerCase().includes(needle))
-      )
-        return false;
-      if (newOnly && new Date(p.latestMatchAt).getTime() < weekAgo) return false;
-      return p.matches.some(matchPasses);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, q, role, company, fit, newOnly]);
 
   useEffect(() => {
     setPage(1);
-  }, [q, role, company, fit, newOnly]);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
+  }, [qLive, role, company, fit, newOnly]);
+  const pages = meta?.pages || 1;
   const current = Math.min(page, pages);
-  const visible = useMemo(() => filtered.slice((current - 1) * PAGE, current * PAGE), [filtered, current]);
+  const visible = people || [];
+  const total = meta?.total || 0;
+  const totalMatches = meta?.totalMatches || 0;
+  const newSinceYesterday = meta?.newSinceYesterday || 0;
   const turnTo = (n: number) => {
     setPage(n);
     tableTop.current?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -194,16 +202,6 @@ export default function NetworkTable({
     onKeys?.(visible.map((p) => `net_${p.candidateId}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
-
-  const newSinceYesterday = (people || []).filter(
-    (p) => new Date(p.latestMatchAt).getTime() >= dayAgo
-  ).length;
-
-  const visibleMatches = useMemo(
-    () => filtered.reduce((s, p) => s + p.matches.filter(matchPasses).length, 0),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filtered, role, company, fit]
-  );
 
   const roleTitle = roleOptions.find(([id]) => id === role)?.[1] || "";
   const activeCount = [role, company, fit, newOnly].filter(Boolean).length;
@@ -337,7 +335,7 @@ export default function NetworkTable({
                     setFit("");
                     setMenuOpen(false);
                   })}
-                  {(["strong", "possible", "stretch"] as const).map((v) =>
+                  {(["strong", "possible"] as const).map((v) =>
                     paneOption(FIT_LABEL[v], fit === v, () => {
                       setFit(v);
                       setMenuOpen(false);
@@ -360,7 +358,7 @@ export default function NetworkTable({
             <i className="nw-newdot" /> {newSinceYesterday} new since yesterday
           </span>
         )}
-        <span className="dash-sortnote">Newest match first</span>
+        <span className="dash-sortnote">Contact first, then newest</span>
       </div>
 
       <div className="dash-chips nw-countrow">
@@ -412,19 +410,19 @@ export default function NetworkTable({
         )}
         <span className="u-spacer" />
         <span className="nw-count" title="The list is one row per person. A person can match several open roles, so the matches outnumber the people.">
-          {filtered.length.toLocaleString()} {filtered.length === 1 ? "person" : "people"} · {visibleMatches.toLocaleString()} role{" "}
-          {visibleMatches === 1 ? "match" : "matches"} between them
+          {total.toLocaleString()} {total === 1 ? "person" : "people"} · {totalMatches.toLocaleString()} role{" "}
+          {totalMatches === 1 ? "match" : "matches"} between them
         </span>
       </div>
 
-      {filtered.length === 0 && (
+      {people !== null && total === 0 && (
         <div className="dash-empty">
           No matches{q || role || company || fit || newOnly ? " for these filters" : " yet"} — the
           nightly runs add new people as they qualify.
         </div>
       )}
 
-      {filtered.length > 0 && (
+      {total > 0 && (
         <div className="cv2-scroll" ref={tableTop}>
           <table className="cv2-table nw-tight">
             <thead>
@@ -462,10 +460,10 @@ export default function NetworkTable({
         </div>
       )}
 
-      {filtered.length > PAGE && (
+      {total > PAGE && (
         <div className="dash-src-tfoot">
           <span>
-            Showing {((current - 1) * PAGE + 1).toLocaleString()} to {Math.min(current * PAGE, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} people · best fit first, newest match next
+            Showing {((current - 1) * PAGE + 1).toLocaleString()} to {Math.min(current * PAGE, total).toLocaleString()} of {total.toLocaleString()} people · best fit first, newest match next
           </span>
           <span className="dash-src-pager">
             {current > 1 && (
