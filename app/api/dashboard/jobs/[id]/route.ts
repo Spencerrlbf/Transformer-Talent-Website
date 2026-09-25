@@ -187,8 +187,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "at_least_one_skill" }, { status: 400 });
 
   const role = { ...parsed.role, jobId: job.external_id };
+  // An edit saves the changes and refreshes the job's search data; it keeps
+  // the job open or closed as it was (only Open/Close changes that).
+  const status: "open" | "closed" =
+    body.status === "open" || body.status === "closed" ? body.status : job.status === "closed" ? "closed" : "open";
   try {
-    await publishOrgRole(member.org.id, role, skills, "dashboard");
+    await publishOrgRole(member.org.id, role, skills, "dashboard", undefined, status);
   } catch (e) {
     console.error("republish role failed", e);
     return NextResponse.json({ error: "publish_failed" }, { status: 502 });
