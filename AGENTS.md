@@ -64,9 +64,10 @@ every merge as a production release.
     keys them by the company's own application. Client actions never write
     to it either.
   - The only thing that crosses from TT to a client is a Send
-    (`lib/server/network.ts`). It carries the person's profile and email, and
-    only `clientSafeVerdict` of TT's verdict (the tag and reason). TT-only
-    routes return 404 to every other organization, on the server.
+    (`lib/server/network.ts`). It carries the person's profile, email and
+    phone (Spencer's rule), and only `clientSafeVerdict` of TT's verdict (the
+    tag and reason). TT-only routes return 404 to every other organization,
+    on the server.
   - One organization per login. `requireMember` refuses a login that has
     two memberships.
   - Before merging anything that touches data access, run
@@ -87,6 +88,13 @@ every merge as a production release.
   and its sync scripts are gone; rows with source `airtable_sync` are the
   same people before the move and stay engaged.
 - **Cost discipline:** anything that fans out LLM calls (screening,
-  enrichment, sourcing) must have an explicit cap or budget in code.
+  enrichment, sourcing) must have an explicit cap or budget in code. Public
+  forms have no shared cap: every application is kept and the paid review
+  comes out of the company's own daily allowance
+  (`lib/server/review-budget.ts`, `organizations.daily_review_limit`, 300 by
+  default); over it, applications are queued and reviewed nightly.
+- **Email built from outside text** (form fields, company names, job titles)
+  goes through `lib/server/html.ts` (`escapeHtml`, rebuilt links). Run
+  `node scripts/test-email-escaping.mjs` after touching any email.
 - **Secrets** stay server-side (env vars). Never in client bundles, never
   committed. Browser code may read only `NEXT_PUBLIC_*` values.
