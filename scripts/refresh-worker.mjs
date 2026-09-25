@@ -5,7 +5,7 @@
 // website applications share the same budget. Tops the queue up with engaged
 // candidates when it has spare capacity.
 //
-// All shared logic (facts, screening + verdict cache, spine writes) comes from
+// All shared logic (facts, spine writes) comes from
 // the compiled website library — run `node scripts/build-worker-lib.mjs`
 // first (the GitHub Action does). This file is orchestration only.
 //
@@ -31,14 +31,7 @@ const {
   recordEnrichment,
   syncExperiences,
   syncCandidateEmbeddings,
-  screenRolesWithCache,
-  findStretchRoles,
-  roleLocationCompatible,
 } = await import("./dist/worker-lib.mjs");
-
-// Internal experiment: retrieval by inferred capability. Verdicts land with
-// source='stretch' and are never user-facing. Kill switch: STRETCH_CHANNEL=0.
-const STRETCH = process.env.STRETCH_CHANNEL !== "0";
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -72,179 +65,9 @@ if (!remaining && !process.env.PRECOMPUTE_BACKFILL) process.exit(0);
 // ---- Verdict precompute: retrieval is worker-specific, everything after ----
 // ---- (facts, evidence, LLM, cache) is the shared library.               ----
 
-async function precomputeVerdicts(candidateId, h, vector, username) {
-  const skills = (h.skills || []).map((s) => s?.name).filter(Boolean);
-  const logErr = (ch) => (e) => {
-    console.error(`  precompute ${username} ${ch} channel failed: ${e.message}`);
-    return [];
-  };
-  // Website applicants: their strongest evidence (resume) and the roles they
-  // applied to / were suggested live on their application — use both. Only
-  // an application made to TT: a client company's application (or TT's own
-  // send into a client's pipeline) is theirs, and their job numbers are not ours.
-  let resumeText = "";
-  let appRoleIds = [];
-  let preferredLocations = [];
-  try {
-    const [appRow] = await rest(
-      `website_applications?candidate_id=eq.${candidateId}&organization_id=eq.${org.id}&select=resume_text,role_ids,matched_role_ids,preferred_locations&order=created_at.desc&limit=1`
-    );
-    if (appRow) {
-      resumeText = appRow.resume_text || "";
-      appRoleIds = [...new Set([...(appRow.role_ids || []), ...(appRow.matched_role_ids || [])])];
-      preferredLocations = appRow.preferred_locations || [];
-    }
-  } catch {}
-  // LinkedIn location is the gating fallback when no preferences were stated.
-  let candidateLocation = null;
-  try {
-    const [cand] = await rest(`candidates?id=eq.${candidateId}&select=location`);
-    candidateLocation = cand?.location || null;
-  } catch {}
-
-  // Tenant scoping: this worker serves the transformer-talent org only —
-  // retrieval, role lookups, and screening all filter to org.id so tenant
-  // roles (colliding external ids!) can never enter a TT candidate's run.
-  const [vec, kw] = await Promise.all([
-    vector
-      ? rest("rpc/match_org_roles", { method: "POST", body: JSON.stringify({ query_embedding: vector, match_count: 5, org_filter: org.id }) }).catch(logErr("vector"))
-      : [],
-    skills.length
-      ? rest("rpc/match_roles_keyword", { method: "POST", body: JSON.stringify({ skills: skills.slice(0, 40), match_count: 5, org_filter: org.id }) }).catch(logErr("keyword"))
-      : [],
-  ]);
-  // Applied/suggested roles are known-relevant — they take shortlist priority
-  // over fresh retrieval (screening caps at 5 roles per candidate).
-  const candidateIds = [
-    ...new Set([...appRoleIds, ...vec.map((r) => r.external_id), ...kw.map((r) => r.job_id)]),
-  ];
-  if (!candidateIds.length) {
-    console.log(`  precompute ${username}: no roles matched (vec ${vec.length}, kw ${kw.length})`);
-    return 0;
-  }
-  const allRoleRows = await rest(
-    `org_roles?organization_id=eq.${org.id}&external_id=in.(${candidateIds.map((i) => `"${i}"`).join(",")})&select=external_id,tech_stack,locations,workplace`
-  );
-  // Location gate: on-site/hybrid roles must match preferences or LinkedIn
-  // location. Roles they APPLIED to always bypass — they chose them.
-  const compatible = new Set(
-    allRoleRows
-      .filter((r) => appRoleIds.includes(r.external_id) || roleLocationCompatible(r, preferredLocations, candidateLocation))
-      .map((r) => r.external_id)
-  );
-  const dropped = candidateIds.filter((i) => !compatible.has(i));
-  if (dropped.length) console.log(`  precompute ${username}: location-gated out #${dropped.join(", #")}`);
-  const ids = candidateIds.filter((i) => compatible.has(i)).slice(0, 5);
-  if (!ids.length) return 0;
-  const roleRows = allRoleRows.filter((r) => ids.includes(r.external_id));
-  const stackTerms = [
-    ...new Set(
-      roleRows.flatMap((t) => (t.tech_stack || "").split(/[,/•]/).map((s) => s.trim()).filter((s) => s.length >= 2))
-    ),
-  ].slice(0, 20);
-
-  const expRows = harvestToExperiences(h);
-  const facts = computeFacts(expRows, stackTerms, skills, h.education);
-  const evidence = [
-    linkedinProfileText(h).slice(0, 4000),
-    `FACTS (computed from dated position history):\n${formatFacts(facts)}`,
-    resumeText ? `RESUME EXCERPT:\n${resumeText.slice(0, 3000)}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  const verdicts = await screenRolesWithCache({
-    candidateId,
-    evidence,
-    // Same key format as the website apply path — verdicts are interchangeable.
-    cacheKeyText: [resumeText || "", JSON.stringify(h)].join("|"),
-    jobIds: ids,
-    facts,
-    source: "precompute",
-    resumeText,
-    profileSkills: skills,
-    organizationId: org.id,
-  });
-  const fresh = verdicts.filter((v) => !v.cached).length;
-  console.log(`  precompute ${username}: ${verdicts.length} verdicts (${fresh} fresh, ${verdicts.length - fresh} cached)`);
-
-  // Stretch channel: signals from the evidence verdicts become search
-  // queries; only NEW roles count, capped, same strict screener.
-  if (STRETCH) {
-    try {
-      const signals = [];
-      const seenSignal = new Set();
-      for (const v of verdicts) {
-        for (const s of v.inferred_signals || []) {
-          if (!seenSignal.has(s.signal)) {
-            seenSignal.add(s.signal);
-            signals.push(s);
-          }
-        }
-      }
-      if (signals.length) {
-        let stretchRoles = await findStretchRoles(signals, candidateIds, 2, org.id);
-        // Same location gate for speculative pairings.
-        if (stretchRoles.length) {
-          const rows = await rest(
-            `org_roles?organization_id=eq.${org.id}&external_id=in.(${stretchRoles.map((r) => `"${r.jobId}"`).join(",")})&select=external_id,locations,workplace`
-          );
-          stretchRoles = stretchRoles.filter((sr) => {
-            const row = rows.find((r) => r.external_id === sr.jobId);
-            return !row || roleLocationCompatible(row, preferredLocations, candidateLocation);
-          });
-        }
-        if (stretchRoles.length) {
-          const stretchVerdicts = await screenRolesWithCache({
-            candidateId,
-            evidence,
-            cacheKeyText: [resumeText || "", JSON.stringify(h)].join("|"),
-            jobIds: stretchRoles.map((r) => r.jobId),
-            facts,
-            source: "stretch",
-            originByJobId: Object.fromEntries(stretchRoles.map((r) => [r.jobId, r.fromSignal])),
-            resumeText,
-            profileSkills: skills,
-            organizationId: org.id,
-          });
-          const q = stretchVerdicts.filter((v) => v.qualified).length;
-          console.log(
-            `  stretch ${username}: ${stretchRoles.map((r) => "#" + r.jobId).join(",")} via signals -> ${q}/${stretchVerdicts.length} qualified`
-          );
-        }
-      }
-    } catch (err) {
-      console.error(`  stretch channel failed for ${username}: ${err.message}`);
-    }
-  }
-  return fresh;
-}
-
-async function chunk0Vector(candidateId) {
-  const [ex] = await rest(
-    `candidate_embeddings?candidate_id=eq.${candidateId}&source_type=eq.linkedin_profile&chunk_index=eq.0&select=embedding&limit=1`
-  );
-  return ex?.embedding ? JSON.parse(ex.embedding) : null;
-}
-
-// PRECOMPUTE_BACKFILL=N: no Harvest spend — precompute verdicts for the N
-// most recently enriched candidates from their stored payloads, then exit.
-if (process.env.PRECOMPUTE_BACKFILL) {
-  const n = parseInt(process.env.PRECOMPUTE_BACKFILL, 10) || 5;
-  const enr = await rest(
-    `candidate_enrichments?provider=eq.harvest&status=eq.ok&raw_payload=not.is.null&candidate_id=not.is.null&select=candidate_id,linkedin_username,raw_payload&order=created_at.desc&limit=${n * 3}`
-  );
-  const seen = new Set();
-  let stored = 0, processed = 0;
-  for (const e of enr) {
-    if (seen.has(e.candidate_id) || processed >= n) continue;
-    seen.add(e.candidate_id);
-    processed++;
-    stored += await precomputeVerdicts(e.candidate_id, e.raw_payload, await chunk0Vector(e.candidate_id), e.linkedin_username);
-  }
-  console.log(`backfill done: ${stored} fresh verdicts across ${processed} candidates`);
-  process.exit(0);
-}
+// Verdicts are no longer computed here: the nightly shortlist judge
+// (scripts/judge-shortlists.mjs) reads every open role's shortlist against
+// its scorecard, and the report card fills in quotes and review on open.
 
 // ---- Nightly drain ----
 
@@ -324,7 +147,7 @@ async function finishQueueRow(row, status) {
   });
 }
 
-let refreshed = 0, failed = 0, skipped = 0, verdictsStored = 0, reused = 0;
+let refreshed = 0, failed = 0, skipped = 0, reused = 0;
 for (const row of queued.slice(0, remaining)) {
   try {
     let { linkedin_url: url, linkedin_username: username } = row;
@@ -399,14 +222,6 @@ for (const row of queued.slice(0, remaining)) {
       }).catch((e) => console.error(`candidate patch failed for ${row.candidate_id}:`, e.message));
     }
 
-    // Precompute cached verdicts against their closest roles — JD searches
-    // then return pre-screened, evidence-backed candidates instantly.
-    try {
-      verdictsStored += await precomputeVerdicts(row.candidate_id, h, await chunk0Vector(row.candidate_id), username);
-    } catch (err) {
-      console.error(`precompute failed for ${row.candidate_id}:`, err.message);
-    }
-
     await finishQueueRow(row, "done");
     refreshed++;
     console.log(`refreshed ${username || row.candidate_id} (priority ${row.priority})`);
@@ -425,4 +240,4 @@ for (const row of queued.slice(0, remaining)) {
     await finishQueueRow(row, "failed").catch(() => {});
   }
 }
-console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed, ${skipped} skipped, ${verdictsStored} verdicts precomputed`);
+console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed, ${skipped} skipped`);

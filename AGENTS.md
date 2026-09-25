@@ -75,10 +75,12 @@ every merge as a production release.
   facet texts) are generated only via `lib/server/roles-pipeline.ts`. Scripts
   and dashboard share it. If it changes, rebuild the worker bundle with
   `scripts/build-worker-lib.mjs`.
-- **Verdict cache:** cache keys are prefixed `factsv6`. Changing screening
-  prompts/logic without bumping the prefix serves stale verdicts; bumping it
-  invalidates the cache and re-screening costs real money. Change it
-  deliberately and tell the user.
+- **Verdicts:** the nightly chain (directory sync → signals → shortlists →
+  the light judge, `scripts/judge-shortlists.mjs`) writes `match_verdicts`
+  rows as `{v2}` from the role's scorecard; the Network tab and the report
+  card read those. The old question-sheet screening (`factsv6` cache keys)
+  is retired from the nightly refresh; its rows only remain for applicants.
+  Re-judging costs real money only when a profile or a card changes.
 - **The directory is the source of engaged people.** The communications
   Supabase project (the reply-ops repo) holds the engaged directory;
   `scripts/sync-directory.mjs` copies it nightly into `candidates` (source

@@ -1,5 +1,5 @@
 // Network matches: the internal-only surface over the nightly pool matcher.
-// match_verdicts (pool candidate × org role, scorecard-shaped verdicts) is
+// match_verdicts (pool candidate × org role, scorecard verdicts as v2) is
 // aggregated person-first: one entry per pool person with all their matched
 // roles. STRICTLY Transformer Talent's own view — the API layer refuses any
 // other org, and nothing here is ever exposed on client dashboards. The
@@ -7,8 +7,7 @@
 // normal website_applications row marked source=transformer_talent, which
 // renders in the job's pipeline as an applicant with the Via-TT badge.
 import { sbRest, sbInsert } from "./supabase";
-import { clientTag, clientReason, clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
-import type { Scorecard } from "./scorecard";
+import { clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
 
 export const TT_ORG_SLUG = "transformer-talent";
 
@@ -46,15 +45,7 @@ export type NetworkPerson = {
 const str = (v: unknown): string | null =>
   typeof v === "string" && v.trim() ? v.trim() : null;
 
-const TAG_RANK: Record<ClientTag, number> = { strong: 0, possible: 1, stretch: 2 };
 
-type VerdictRow = {
-  candidate_id: string;
-  org_role_id: string;
-  source: string;
-  created_at: string;
-  verdict: { qualified?: boolean; scorecard?: Scorecard } | null;
-};
 
 type PoolRow = {
   id: string;
@@ -217,89 +208,115 @@ async function sentIndex(): Promise<Map<string, string>> {
   return map;
 }
 
-export async function listNetworkMatches(
-  orgId: string,
-  jobId?: string
-): Promise<{ people: NetworkPerson[]; total: number }> {
-  const [verdicts, roles, sent] = await Promise.all([
-    fetchAll<VerdictRow>(
-      (limit, offset) =>
-        `match_verdicts?organization_id=eq.${orgId}` +
-        `&select=candidate_id,org_role_id,source,created_at,verdict` +
-        `&order=created_at.desc&limit=${limit}&offset=${offset}`
-    ),
-    roleIndex(orgId),
+export interface NetworkListOptions {
+  job?: string;
+  /** "contact" | "message" */
+  label?: string;
+  company?: string;
+  q?: string;
+  newDays?: number;
+  page?: number;
+  perPage?: number;
+}
+
+export interface NetworkRoleFacet {
+  jobId: string;
+  title: string;
+  company: string | null;
+  contact: number;
+  message: number;
+}
+
+export interface NetworkList {
+  people: NetworkPerson[];
+  total: number;
+  totalMatches: number;
+  newSinceYesterday: number;
+  page: number;
+  pages: number;
+  roles: NetworkRoleFacet[];
+}
+
+type RpcMatch = {
+  jobId: string; title: string; company: string | null; salary: string | null;
+  locations: string[] | null; workplace: string | null; linked: unknown;
+  label: "contact" | "message"; reason: string | null; addedAt: string;
+};
+type RpcPerson = {
+  candidate_id: string; latest_match_at: string; matches: RpcMatch[];
+  total_people: number; total_matches: number; new_since_yesterday: number;
+};
+
+const TAG_OF: Record<"contact" | "message", ClientTag> = { contact: "strong", message: "possible" };
+
+/** The Network tab's page: people with a scorecard verdict (verdict.v2) on
+ *  an open role, contact-first, newest first, fifty a page. The verdicts
+ *  come from the nightly shortlist judge and from applicants' report cards;
+ *  the database does the grouping and the paging (network_people). */
+export async function listNetworkMatches(orgId: string, opts: NetworkListOptions = {}): Promise<NetworkList> {
+  const perPage = Math.min(200, Math.max(10, opts.perPage ?? 50));
+  const page = Math.max(1, opts.page ?? 1);
+  const body = {
+    p_org: orgId,
+    p_job: opts.job || null,
+    p_label: opts.label === "contact" || opts.label === "message" ? opts.label : null,
+    p_company: opts.company || null,
+    p_q: (opts.q || "").trim().slice(0, 80) || null,
+    p_new_days: opts.newDays ?? null,
+    p_limit: perPage,
+    p_offset: (page - 1) * perPage,
+  };
+  const [rowsRes, rolesRes, sent] = await Promise.all([
+    sbRest("rpc/network_people", { method: "POST", body: JSON.stringify(body) }),
+    sbRest("rpc/network_roles", { method: "POST", body: JSON.stringify({ p_org: orgId }) }),
     sentIndex(),
   ]);
+  const rows = (rowsRes.ok ? await rowsRes.json() : []) as RpcPerson[];
+  const roleRows = (rolesRes.ok ? await rolesRes.json() : []) as { job_id: string; title: string; company_name: string | null; contact_count: number; message_count: number }[];
+  const roles: NetworkRoleFacet[] = roleRows.map((r) => ({ jobId: r.job_id, title: r.title, company: str(r.company_name), contact: Number(r.contact_count), message: Number(r.message_count) }));
 
-  // Linked roles deliver to a client org — resolve names for the UI.
+  // Linked roles deliver to a client org: resolve names for the UI.
   const orgNames = new Map<string, string>();
-  {
+  if (rows.some((r) => r.matches.some((m) => parseLinked(m.linked)))) {
     const res = await sbRest(`organizations?select=id,name`);
-    for (const o of (res.ok ? await res.json() : []) as { id: string; name: string }[])
-      orgNames.set(o.id, o.name);
+    for (const o of (res.ok ? await res.json() : []) as { id: string; name: string }[]) orgNames.set(o.id, o.name);
   }
 
-  // Newest verdict per (person, role); only scorecard-bearing rows render.
-  const seen = new Set<string>();
-  const byPerson = new Map<string, NetworkMatch[]>();
-  const latest = new Map<string, string>();
-  for (const v of verdicts) {
-    const role = roles.get(v.org_role_id);
-    const sc = v.verdict?.scorecard;
-    if (!role || !v.candidate_id || !sc) continue;
-    const key = `${v.candidate_id}|${role.jobId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const tag = clientTag(sc);
-    const list = byPerson.get(v.candidate_id) || [];
-    // Sent detection follows the link: a linked role's application lives in
-    // the client org under the client's job id.
-    const target = role.linked ?? { orgId, jobId: role.jobId };
-    list.push({
-      jobId: role.jobId,
-      title: role.title,
-      company: role.company,
-      salary: role.salary,
-      location: role.location,
-      tag,
-      tagLabel: TAG_LABEL[tag],
-      reason: clientReason(sc),
-      addedAt: v.created_at,
-      sentAt: sent.get(`${v.candidate_id}|${target.orgId}|${target.jobId}`) ?? null,
-      sendsTo: role.linked ? orgNames.get(role.linked.orgId) || "the client" : null,
-    });
-    byPerson.set(v.candidate_id, list);
-    if (!latest.has(v.candidate_id) || v.created_at > latest.get(v.candidate_id)!)
-      latest.set(v.candidate_id, v.created_at);
-  }
-
-  // Pool details, chunked (PostgREST in-list limits).
-  const ids = [...byPerson.keys()];
+  // Pool details and usable emails for this page only.
+  const ids = rows.map((r) => r.candidate_id);
   const pool = new Map<string, PoolRow>();
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100);
-    const res = await sbRest(
-      `candidates?id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=${POOL_COLS}`
-    );
+    const res = await sbRest(`candidates?id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=${POOL_COLS}`);
     for (const r of (res.ok ? await res.json() : []) as PoolRow[]) pool.set(r.id, r);
   }
+  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])));
 
-  const emailMap = await poolEmails(
-    ids,
-    new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null]))
-  );
-
-  let people: NetworkPerson[] = [];
-  for (const [candidateId, matches] of byPerson) {
-    const p = pool.get(candidateId);
+  const people: NetworkPerson[] = [];
+  for (const r of rows) {
+    const p = pool.get(r.candidate_id);
     if (!p) continue;
-    const emails = emailMap.get(candidateId) || [];
-    matches.sort(
-      (a, b) => TAG_RANK[a.tag] - TAG_RANK[b.tag] || b.addedAt.localeCompare(a.addedAt)
-    );
+    const emails = emailMap.get(r.candidate_id) || [];
+    const matches: NetworkMatch[] = r.matches.map((m) => {
+      const linked = parseLinked(m.linked);
+      const target = linked ?? { orgId, jobId: m.jobId };
+      const tag = TAG_OF[m.label] ?? "possible";
+      return {
+        jobId: m.jobId,
+        title: m.title,
+        company: str(m.company),
+        salary: str(m.salary),
+        location: [(m.locations || []).join(", ") || null, str(m.workplace)].filter(Boolean).join(" · ") || null,
+        tag,
+        tagLabel: TAG_LABEL[tag],
+        reason: str(m.reason) || "",
+        addedAt: m.addedAt,
+        sentAt: sent.get(`${r.candidate_id}|${target.orgId}|${target.jobId}`) ?? null,
+        sendsTo: linked ? orgNames.get(linked.orgId) || "the client" : null,
+      };
+    });
     people.push({
-      candidateId,
+      candidateId: r.candidate_id,
       name: p.full_name || "Candidate",
       photoUrl: str(p.profile_picture_url),
       currentTitle: str(p.current_title) || str(p.headline),
@@ -310,19 +327,20 @@ export async function listNetworkMatches(
       emails,
       phone: str(p.contact?.phone) ?? str(p.phone),
       years: p.calculated_experience_years ?? p.total_experience_years ?? null,
-      latestMatchAt: latest.get(candidateId) || matches[0].addedAt,
+      latestMatchAt: r.latest_match_at,
       matches,
     });
   }
-
-  if (jobId) people = people.filter((p) => p.matches.some((m) => m.jobId === jobId));
-
-  people.sort(
-    (a, b) =>
-      TAG_RANK[a.matches[0].tag] - TAG_RANK[b.matches[0].tag] ||
-      b.latestMatchAt.localeCompare(a.latestMatchAt)
-  );
-  return { people, total: people.length };
+  const total = rows[0] ? Number(rows[0].total_people) : 0;
+  return {
+    people,
+    total,
+    totalMatches: rows[0] ? Number(rows[0].total_matches) : 0,
+    newSinceYesterday: rows[0] ? Number(rows[0].new_since_yesterday) : 0,
+    page,
+    pages: Math.max(1, Math.ceil(total / perPage)),
+    roles,
+  };
 }
 
 export async function sendNetworkCandidate(
