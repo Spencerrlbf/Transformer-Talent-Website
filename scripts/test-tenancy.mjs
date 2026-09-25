@@ -16,7 +16,7 @@
 //
 // Needs .env.scripts with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
 // SUPABASE_ANON_KEY. Response bodies are scanned in memory and never printed.
-import { newRun, setup, teardown, leftovers, svc } from "./tenancy/fixture.mjs";
+import { newRun, setup, teardown, leftovers, svc, EMAIL_PREFIX } from "./tenancy/fixture.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -141,7 +141,9 @@ async function snapshotTT(W) {
     role: await q(`org_roles?id=in.(${W.TT.role.id},${W.TT.role2.id})&select=id,title,description,status,scorecard,linked_org_role,target_companies&order=id`),
     pool: await q(`candidates?id=in.(${W.TT.sent.id},${W.TT.unsent.id},${W.TT.second.id})&select=id,full_name,email,contact,notes,follow_up_at&order=id`),
     verdicts: await q(`match_verdicts?${o}&org_role_id=in.(${W.TT.role.id},${W.TT.role2.id})&select=candidate_id,verdict,outcome&order=candidate_id`),
-    members: await q(`org_members?${o}&select=user_id,member_role&order=user_id`),
+    // Another run's test login joins and leaves TT while this one runs: compare
+    // TT's real members and this run's own logins only.
+    members: await q(`org_members?${o}&or=(email.not.like.${encodeURIComponent(`${EMAIL_PREFIX}*`)},email.like.${encodeURIComponent(`${EMAIL_PREFIX}${run.id}-*`)})&select=user_id,member_role&order=user_id`),
   };
 }
 function diff(before, after, who) {
