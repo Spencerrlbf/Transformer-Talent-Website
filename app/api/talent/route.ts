@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   extractJD,
   embed,
+  fitProfileText,
   matchCandidates,
   rankAndAnonymize,
 } from "@/lib/server/matcher";
@@ -154,15 +155,14 @@ export async function POST(req: NextRequest) {
   try {
     const jd = await extractJD(jdText);
     const vector = await embed(jd.embedding_summary);
+    // Already without anyone marked Do Not Contact or not interested, so
+    // they are never shown, queued for a paid refresh or saved below.
     const rows = await matchCandidates(vector, jd);
-    const matches = rankAndAnonymize(rows, jd, 5);
+    const { matches, inNetwork } = rankAndAnonymize(rows, jd, 5);
     const fits = await screenAgainstJD(
       jd.embedding_summary,
       jd.skills.slice(0, 6),
-      matches.map((m) => ({
-        ref: m.ref,
-        profileText: `${m.title}. ${m.yearsExperience ?? "?"} yrs. ${m.location ?? ""}. Prev: ${m.previousCompanies.join(", ")}. Education: ${m.education.join("; ")}. Skills: ${m.skills.join(", ")}`,
-      }))
+      matches.map((m) => ({ ref: m.ref, profileText: fitProfileText(m) }))
     );
     const withFit = matches.map((m) => ({
       ...m,
@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       roleTitle: jd.title,
       matches: withFit,
+      inNetwork,
       lowConfidence: matches.length === 0 || matches[0].score < 0.45,
     });
   } catch (err) {

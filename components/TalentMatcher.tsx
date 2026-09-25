@@ -3,7 +3,8 @@
 // names, the 200-char validation, /api/talent wiring, and the states (idle /
 // sending / done / error, with lowConfidence swapping only the closing line)
 // carry over from the pre-redesign component untouched. The numeric score the
-// API returns is never rendered — plain-English fit reads only.
+// API returns is never rendered — plain-English fit reads only. Cards carry no
+// per-person flags: who is in our network shows only as a count under the list.
 
 import { useState } from "react";
 import Turnstile, { resetTurnstile } from "@/components/Turnstile";
@@ -16,8 +17,6 @@ interface Match {
   previousCompanies: string[];
   education: string[];
   skills: string[];
-  engaged: boolean;
-  applied?: boolean;
   score: number;
   fit?: { strengths: string; verify: string } | null;
 }
@@ -25,6 +24,7 @@ interface Match {
 interface Result {
   roleTitle: string;
   matches: Match[];
+  inNetwork?: number;
   lowConfidence: boolean;
 }
 
@@ -72,6 +72,7 @@ export default function TalentMatcher() {
 
   if (status.kind === "done") {
     const { roleTitle, matches, lowConfidence } = status.result;
+    const inNetwork = status.result.inNetwork ?? 0;
     return (
       <div className="tal-results">
         <p className="tal-out">
@@ -113,17 +114,18 @@ export default function TalentMatcher() {
                     </div>
                   )}
                 </div>
-                {m.applied ? (
-                  <span className="tal-badge applied">
-                    <i />applied to us directly
-                  </span>
-                ) : m.engaged ? (
-                  <span className="tal-badge engaged">
-                    <i />in conversation with us
-                  </span>
-                ) : null}
               </div>
             ))}
+          </div>
+        )}
+        {matches.length > 0 && inNetwork > 0 && (
+          <div className="tal-tags">
+            <span className="tal-badge engaged">
+              <i />
+              {inNetwork === 1
+                ? "1 of these is already in our network."
+                : `${inNetwork} of these are already in our network.`}
+            </span>
           </div>
         )}
         <p className="tal-after">
