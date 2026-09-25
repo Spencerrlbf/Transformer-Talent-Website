@@ -120,3 +120,55 @@ export async function jevJudgeLadders(input: { candidate: JevCandidate; criteria
     return { error: "failed", status: 0, code: "unreadable" };
   }
 }
+
+/** One answer to a Choice question: the probability of each option by its key. */
+export interface JevChoice {
+  probabilities: Record<string, number>;
+  confidence: number;
+}
+
+/** Choice questions over one state, all in one request (the person's
+ *  positions, read one by one: role-type.ts). Same key, errors and pacing as
+ *  the scorecard rows. */
+export async function jevChoose(input: {
+  state: Record<string, unknown>;
+  questions: Record<string, { instructions: string; criteria: Record<string, string> }>;
+  timeoutMs?: number;
+}): Promise<{ answers: Record<string, JevChoice | null>; ms: number; inputTokens: number; model: string } | JevError> {
+  const key = process.env.TYPESAFE_API_KEY;
+  if (!key) return { error: "no_key", status: 401, code: "typesafe_key" };
+  const ids = Object.keys(input.questions);
+  if (!ids.length) return { answers: {}, ms: 0, inputTokens: 0, model: JEV_MODEL };
+  const questions = Object.fromEntries(ids.map((id) => [id, { type: "choice", ...input.questions[id] }]));
+  const started = Date.now();
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(input.timeoutMs ?? 20_000),
+    body: JSON.stringify({ model: JEV_MODEL, state: input.state, questions }),
+  }).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))));
+  if (res instanceof Error) return { error: "failed", status: 0, code: res.name || "fetch_failed", detail: res.message.slice(0, 200) };
+  if (res.status === 401 || res.status === 403) return { error: "key_rejected", status: 401, code: "typesafe_key", detail: String(res.status) };
+  if (res.status === 429 || res.status === 529) return { error: "rate_limited", status: 429, code: `typesafe_${res.status}`, retryAfter: res.headers.get("retry-after") ?? undefined };
+  if (!res.ok) return { error: "failed", status: 0, code: `typesafe_${res.status}`, detail: (await res.text().catch(() => "")).slice(0, 200) };
+  try {
+    const data = (await res.json()) as {
+      model?: string;
+      answers?: Record<string, { probabilities?: Record<string, number>; confidence?: number }>;
+      usage?: { input_tokens?: number };
+    };
+    const answers: Record<string, JevChoice | null> = {};
+    for (const id of ids) {
+      const a = data.answers?.[id];
+      if (!a || typeof a !== "object" || !a.probabilities) { answers[id] = null; continue; }
+      const opts = Object.keys(input.questions[id].criteria);
+      answers[id] = {
+        probabilities: Object.fromEntries(opts.map((o) => [o, round2(Number(a.probabilities?.[o] ?? 0) || 0)])),
+        confidence: round2(Number(a.confidence ?? 0) || 0),
+      };
+    }
+    return { answers, ms: Date.now() - started, inputTokens: data.usage?.input_tokens ?? 0, model: data.model || JEV_MODEL };
+  } catch {
+    return { error: "failed", status: 0, code: "unreadable" };
+  }
+}

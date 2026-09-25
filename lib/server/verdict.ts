@@ -9,7 +9,8 @@
 import type { CandidateFacts, JobText } from "./facts";
 import { SCORECARD_JUDGE_VERSION, judgeWithScorecard, type Memory, type MemoryWrite } from "./rolecard/scorecard-judge";
 import { VERDICT_LABEL, shortRequirement, skillIn, type ChipStatus, type RequirementRead, type TechChip, type VerdictLabel, type VerdictView } from "@/lib/verdict-view";
-import { cardStrength, chipLabel, toConfirm, type CardRow, type Criterion, type ProfileFacts, type Review } from "@/lib/rolecard";
+import { cardStrength, chipLabel, toConfirm, type CardRow, type Criterion, type Hold, type ProfileFacts, type Review } from "@/lib/rolecard";
+import type { RoleType } from "./rolecard/role-type";
 
 export { VERDICT_LABEL };
 export type { VerdictLabel };
@@ -61,6 +62,9 @@ export interface VerdictInput {
   roleWords?: { about?: string; needs?: string[]; doing?: string[]; techStack?: string | null };
   model: string;
   timeoutMs?: number;
+  /** What kind of job the person does now (role-type.ts), read once per
+   *  person; the judge's holds use it. */
+  roleType?: RoleType | null;
   /** Rows only: no reference quotes and no written review. The nightly
    *  shortlist judge runs this way; the rows are remembered, the review is
    *  not, so opening the report card later fills in quotes and review. */
@@ -86,6 +90,8 @@ export interface Verdict {
   aiLabel: VerdictLabel;
   /** Set when the years rail held the label below what the rows alone give. */
   railNote: string | null;
+  /** Holds on the person (role type, level): lib/rolecard.ts Hold. */
+  holds?: Hold[];
   /** Scorecard rows the model returned no answer for. A verdict with any is
    *  shown but never saved for reuse. */
   unassessed: number;
@@ -365,7 +371,7 @@ export function buildVerdictView(v: Verdict, factsFor: (terms: string[]) => Cand
     card: v.rows.length
       ? (() => {
           const rows: CardRow[] = v.rows.map((r) => ({ ...r, short: chipLabel(r.label, roleSkills) }));
-          return { rows, aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, wrongRole: null, strength: cardStrength(rows), confirm: v.label === "contact" ? toConfirm(rows) : [], facts: v.facts, ...(v.profile ? { profile: v.profile } : {}), ...(v.review ? { review: v.review } : {}) };
+          return { rows, aiLabel: v.aiLabel, aiGaps: gaps, railNote: v.railNote, holds: v.holds ?? [], wrongRole: null, strength: cardStrength(rows), confirm: v.label === "contact" ? toConfirm(rows) : [], facts: v.facts, ...(v.profile ? { profile: v.profile } : {}), ...(v.review ? { review: v.review } : {}) };
         })()
       : null,
     model: v.model,

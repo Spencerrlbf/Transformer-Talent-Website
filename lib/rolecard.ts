@@ -260,6 +260,10 @@ export interface VerdictCardData {
   aiGaps?: string[];
   /** Why the label is held below what the rows alone would give (the years rail). */
   railNote?: string | null;
+  /** Holds on the person, not on a row: what kind of job they do now
+   *  (someone managing engineers, on a hands-on role) and whether their level
+   *  fits the role's. Written by the judge; overruling rows never lifts them. */
+  holds?: Hold[];
   /** How strongly the rows are met, for ordering people inside one label. */
   strength?: number;
   /** Required rows still to confirm on a call, as chips, when that is all that stands between the person and the label. */
@@ -270,6 +274,22 @@ export interface VerdictCardData {
   /** The bulleted review, written from the rows and the role's own words. */
   review?: Review;
   wrongRole?: { by: string; at: string } | null;
+}
+
+/** A hold on the label for a reason about the person rather than a row
+ *  (lib/server/rolecard/role-type.ts): "message" keeps a Contact now at Worth
+ *  a message, "pass" makes the person a Pass on this role. */
+export interface Hold {
+  kind: "manager" | "level";
+  label: "message" | "pass";
+  note: string;
+}
+
+/** The label after the holds: a pass hold wins, a message hold only lowers a contact. */
+export function holdLabel(label: VerdictLabel, holds: Hold[] | null | undefined): VerdictLabel {
+  if (!holds?.length) return label;
+  if (holds.some((h) => h.label === "pass")) return "pass";
+  return label === "contact" ? "message" : label;
 }
 
 /** What a recruiter said about one row of one person's card. */
@@ -739,9 +759,10 @@ export function applyOverrides(
   const railed = !!card.railNote;
   const rail = (l: VerdictLabel, confirmedYears: boolean) => (railed && l === "contact" && !confirmedYears ? "message" : l);
   const aiRows = rows.map((r) => ({ tier: r.tier, status: r.ai, call: r.call, label: r.label }));
-  const aiLabel = rail(labelFromRows(aiRows, card.aiLabel), false);
+  const aiLabel = holdLabel(rail(labelFromRows(aiRows, card.aiLabel), false), card.holds);
   const yearsConfirmed = rows.some((r) => r.confirmed && met(r.status) && isCareerYearsRow(r.label));
-  const label = rail(labelFromRows(rows, card.aiLabel), yearsConfirmed);
+  // Holds are about the person, not a row: no overrule lifts them.
+  const label = holdLabel(rail(labelFromRows(rows, card.aiLabel), yearsConfirmed), card.holds);
   const baseGaps = card.aiGaps ?? judged.tech.gaps;
   const chipOf = (r: CardRow) => r.short || chipLabel(r.label);
   const closed = new Set(rows.filter((r) => r.confirmed && met(r.status)).map((r) => chipOf(r).toLowerCase()));

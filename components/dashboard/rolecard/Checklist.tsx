@@ -216,6 +216,11 @@ export default function Checklist({ view, feedback, anchorScope }: { view: Verdi
             : "Add a years row to the scorecard if you want to confirm it."}
         </p>
       )}
+      {(card.holds || []).map((h) => (
+        <p className="ck-held" key={`${h.kind}-${h.note}`}>
+          {h.label === "pass" ? "Pass on this role" : "Held at Worth a message"}: {h.note}
+        </p>
+      ))}
       {TIERS.map((tier) => {
         const rows = card.rows.filter((r) => r.tier === tier);
         if (!rows.length) return null;
