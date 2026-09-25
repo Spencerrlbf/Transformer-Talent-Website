@@ -10,6 +10,8 @@
 //   zzlk<run>t-*  TT's private data       zzlk<run>s-*  the person TT sends to A
 //   zzlk<run>r-*  the person TT sends to B (and the names of the requirements
 //                 TT's report card finds missing, which B's reason may name)
+//   zzlk<run>u-*  B's open job that never asked TT for help: public on B's
+//                 board, but never in TT's dashboard (link picker, copies)
 //   zzlk<run>p-*  public LinkedIn data both clients hold (shared by design)
 //
 // Nothing here touches real records: the only writes to shared tables are two
@@ -104,7 +106,7 @@ export function newRun() {
   // TT job numbers run to the low hundreds; 99xxx cannot collide with a real one.
   const ttJob = String(99000 + crypto.randomInt(500));
   const ttJob2 = String(99500 + crypto.randomInt(500));
-  return { id, T, ttJob, ttJob2, tokens: { a: T("a"), b: T("b"), c: T("c"), d: T("d"), t: T("t"), s: T("s"), r: T("r"), p: T("p") } };
+  return { id, T, ttJob, ttJob2, tokens: { a: T("a"), b: T("b"), c: T("c"), d: T("d"), t: T("t"), s: T("s"), r: T("r"), u: T("u"), p: T("p") } };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -142,8 +144,16 @@ async function seedClient(run, x /* "a" | "b" */) {
         criteria: [{ id: "r1", tier: "required", label: `${priv}-cardrow`, good: `${priv}-cardgood` }],
       },
       interview_stages: [{ id: "s1", label: `${priv}-stage` }],
+      sourcing_requested: true,
+      sourcing_requested_at: new Date().toISOString(),
     },
   ]);
+  // B also has an open job that never asked TT for help: public on B's
+  // board, never listed, linked or copied by TT.
+  if (x === "b")
+    await insert("org_roles", [
+      { organization_id: org.id, external_id: "9002", title: `Engineer ${run.T("u")}-unrequested`, description: `${run.T("u")}-jd`, status: "open", source: "dashboard", sourcing_requested: false },
+    ]);
 
   const resumePath = `leaktest/${run.id}/${x}-applicant.pdf`;
   await uploadResume(resumePath);
@@ -447,7 +457,8 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
   const orgFilter = sweep ? `slug=like.${SLUG_PREFIX}*` : `slug=like.${SLUG_PREFIX}${runId}-*`;
   const orgs = (await svc(`organizations?${orgFilter}&select=id,slug`, {}, { soft: true })) || [];
   const [tt] = (await svc(`organizations?slug=eq.${TT_SLUG}&select=id`, {}, { soft: true })) || [];
-  const emailLike = sweep ? `${EMAIL_PREFIX}*` : `${EMAIL_PREFIX}${runId}-*`;
+  // Encoded: a bare "+" in a query string reads as a space and matches nothing.
+  const emailLike = encodeURIComponent(sweep ? `${EMAIL_PREFIX}*` : `${EMAIL_PREFIX}${runId}-*`);
   const tokenLike = sweep ? "zzlk*" : `zzlk${runId}*`;
 
   // Fake pool people (and everything keyed to them).
@@ -461,7 +472,7 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
 
   // The fake TT job and the TT test login's own traces.
   if (tt) {
-    const roles = (await svc(`org_roles?organization_id=eq.${tt.id}&title=like.TT%20job%20${tokenLike}&select=id`, {}, { soft: true })) || [];
+    const roles = (await svc(`org_roles?organization_id=eq.${tt.id}&title=like.*${tokenLike}&select=id`, {}, { soft: true })) || [];
     for (const { id } of roles) {
       await del(`match_verdicts?org_role_id=eq.${id}`);
       await del(`org_roles?id=eq.${id}`);
@@ -558,7 +569,7 @@ export async function leftovers(runId) {
     ["referrals", `referrer_name=like.${like}`],
     ["match_verdicts", `role_hash=like.${like}`],
     ["candidate_enrichments", `linkedin_username=like.${like}`],
-    ["org_members", `email=like.${EMAIL_PREFIX}${runId}-*`],
+    ["org_members", `email=like.${encodeURIComponent(`${EMAIL_PREFIX}${runId}-*`)}`],
   ];
   const out = [];
   for (const [t, f] of checks) {
