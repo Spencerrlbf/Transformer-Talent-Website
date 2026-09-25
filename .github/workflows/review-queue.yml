@@ -16,6 +16,14 @@ on:
         description: "Stop after this many reviews"
         default: "2000"
 
+# Never two runs at once. A run reads the queued rows without claiming them,
+# so an overlapping run (a manual one during the nightly one) would charge
+# the company twice and review the same applications twice. A second run
+# waits for the first to finish instead.
+concurrency:
+  group: review-queue
+  cancel-in-progress: false
+
 jobs:
   review:
     runs-on: ubuntu-latest
