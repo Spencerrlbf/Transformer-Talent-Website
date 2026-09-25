@@ -395,31 +395,10 @@ export async function sendNetworkCandidate(
       await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]))
     ).get(candidateId)?.[0]?.email ?? null;
 
-  // One send per (person, target job) — pipelines never grow duplicates. A
-  // lookup that fails sends nothing: better a retry than a second copy in a
-  // client's pipeline. Two sends at the same moment can both pass this
-  // check; the unique index from migration 070 stops the second insert.
-  const dupRes = await sbRest(
-    `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
-      `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
-  );
-  if (!dupRes.ok) {
-    console.error("network send: duplicate check failed", dupRes.status, (await dupRes.text().catch(() => "")).slice(0, 200));
-    return { ok: false, error: "insert_failed" };
-  }
-  if (((await dupRes.json()) as unknown[]).length > 0) return { ok: false, error: "already_sent" };
-
-  // Richest stored profile: the newest raw Harvest full_profile from the
-  // enrichment ledger — powers the drawer (photo, experience, education).
-  const enrRes = await sbRest(
-    `candidate_enrichments?candidate_id=eq.${candidateId}&operation=eq.full_profile` +
-      `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
-  );
-  const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
-
   // Their verdict for the MATCHED role rides along in the apply-flow
   // screening shape, so the pipeline's fit tag + review render exactly like
-  // an applicant's.
+  // an applicant's. Read before the duplicate check: a repeat send uses it
+  // to put back a lost mirror (below).
   const vRes = await sbRest(
     `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${candidateId}` +
       `&org_role_id=eq.${role.id}&select=verdict,candidate_hash,role_hash,model&order=created_at.desc&limit=1`
@@ -435,7 +414,55 @@ export async function sendNetworkCandidate(
   const crossOrg = target.orgId !== orgId;
   const carried = crossOrg ? clientSafeVerdict(v?.verdict) : v?.verdict ?? null;
 
-  // Always one job in role_ids: migration 070's unique index reads the first.
+  // Cross-org send: mirror the client-safe verdict onto the client's role so
+  // their pipeline (which reads org-scoped match_verdicts) shows the fit tag
+  // and reason immediately — not "Screening…" forever. Also run when the
+  // person is already in the client's pipeline from an earlier send: if that
+  // send's mirror was lost, sending again puts it back. It writes nothing
+  // when the client's role already has a verdict for them.
+  const mirror = async () => {
+    if (crossOrg && v && carried)
+      await mirrorVerdict({
+        organization_id: target.orgId,
+        candidate_id: candidateId,
+        org_role_id: target.roleUuid,
+        candidate_hash: v.candidate_hash,
+        role_hash: v.role_hash,
+        verdict: { ...carried, job_id: target.jobId },
+        model: null,
+        source: "referral",
+      });
+  };
+
+  // One send per (person, target job) — pipelines never grow duplicates. A
+  // lookup that fails sends nothing: better a retry than a second copy in a
+  // client's pipeline. Two sends at the same moment can both pass this
+  // check; the unique index from migration 071 stops the second insert.
+  const dupRes = await sbRest(
+    `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
+      `&role_ids=cs.{"${target.jobId}"}&select=id,source&limit=1`
+  );
+  if (!dupRes.ok) {
+    console.error("network send: duplicate check failed", dupRes.status, (await dupRes.text().catch(() => "")).slice(0, 200));
+    return { ok: false, error: "insert_failed" };
+  }
+  const [dup] = (await dupRes.json()) as { id: string; source: string | null }[];
+  if (dup) {
+    // Only our own earlier send is repaired. Any other application for this
+    // person and job is the client's, and TT's verdict is not added to it.
+    if (dup.source === "transformer_talent") await mirror();
+    return { ok: false, error: "already_sent" };
+  }
+
+  // Richest stored profile: the newest raw Harvest full_profile from the
+  // enrichment ledger — powers the drawer (photo, experience, education).
+  const enrRes = await sbRest(
+    `candidate_enrichments?candidate_id=eq.${candidateId}&operation=eq.full_profile` +
+      `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
+  );
+  const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
+
+  // Always one job in role_ids: migration 071's unique index reads the first.
   const insRes = await sbRest("website_applications", {
     method: "POST",
     prefer: "return=representation",
@@ -470,45 +497,36 @@ export async function sendNetworkCandidate(
   if (!insRes.ok) {
     const text = await insRes.text().catch(() => "");
     // 23505 is the unique index: another send of this person to this job got
-    // in first (a double click, a second tab). Same answer as the lookup.
-    // PostgREST also answers 409 for a missing parent row, so the code is
-    // checked, not just the status.
+    // in first (a double click, a second tab). Same answer as the lookup,
+    // mirror included. PostgREST also answers 409 for a missing parent row,
+    // so the code is checked, not just the status.
     let code: unknown = null;
     try {
       code = (JSON.parse(text) as { code?: unknown }).code;
     } catch {}
-    if (insRes.status === 409 && code === "23505") return { ok: false, error: "already_sent" };
+    if (insRes.status === 409 && code === "23505") {
+      await mirror();
+      return { ok: false, error: "already_sent" };
+    }
     console.error("network send insert failed", insRes.status, text.slice(0, 200));
     return { ok: false, error: "insert_failed" };
   }
   const [inserted] = (await insRes.json().catch(() => [])) as { id: string }[];
   if (!inserted?.id) return { ok: false, error: "insert_failed" };
 
-  // Cross-org send: mirror the client-safe verdict onto the client's role so
-  // their pipeline (which reads org-scoped match_verdicts) shows the fit tag
-  // and reason immediately — not "Screening…" forever.
-  if (crossOrg && v && carried)
-    await mirrorVerdict({
-      organization_id: target.orgId,
-      candidate_id: candidateId,
-      org_role_id: target.roleUuid,
-      candidate_hash: v.candidate_hash,
-      role_hash: v.role_hash,
-      verdict: { ...carried, job_id: target.jobId },
-      model: null,
-      source: "referral",
-    });
+  await mirror();
   return { ok: true, applicationId: inserted.id };
 }
 
-/** Write the client's copy of TT's verdict for a person just sent. The
+/** Write the client's copy of TT's verdict for a person sent to them. The
  *  application already exists, so a lost mirror would leave the client
- *  looking at "Screening…" with nothing to fix it: the write is tried twice,
- *  and it is safe to repeat because a row with the same person, role and
- *  hashes is left alone (the table's unique key, migration 008). A person
- *  who already has a verdict on the client's role keeps it and gets no
- *  copy. If that check fails the copy is written anyway: a missing tag is
- *  worse than a second row, and the same row is never written twice. */
+ *  looking at "Screening…" until the person is sent again: the write is
+ *  tried twice, and it is safe to repeat because a row with the same
+ *  person, role and hashes is left alone (the table's unique key, migration
+ *  008). A person who already has a verdict on the client's role keeps it
+ *  and gets no copy. If that check fails the copy is written anyway: a
+ *  missing tag is worse than a second row, and the same row is never
+ *  written twice. */
 async function mirrorVerdict(row: {
   organization_id: string; candidate_id: string; org_role_id: string;
   candidate_hash: string; role_hash: string; verdict: Record<string, unknown>;

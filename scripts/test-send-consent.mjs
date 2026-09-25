@@ -8,13 +8,14 @@
 //
 //   1. a send works (200): one application in A, TT's tag and reason mirrored
 //      onto A's job and nothing of TT's own notes with it
-//   2. the same person again is "already sent" (409), still one application
+//   2. the same person again is "already sent" (409), still one application;
+//      if A's copy of the tag and reason went missing, that repeat puts it back
 //   3. A switches off help: a send of another pool person is refused (422)
 //      and writes nothing
 //   4. help back on but A closed the job: still refused (422), nothing written
 //   5. A reopens the job: the send works (200)
 //   6. several sends of one person at the same moment make one application,
-//      and the database itself refuses a second copy (migration 070)
+//      and the database itself refuses a second copy (migration 071)
 //   7. the link between TT's job and A's job is still there
 //
 // Everything it created is deleted at the end, pass or fail.
@@ -22,7 +23,7 @@
 //   node scripts/test-send-consent.mjs --base https://transformer-talent-preview.vercel.app
 //
 // Needs .env.scripts with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
-// SUPABASE_ANON_KEY, and migration 070 applied (check 6 fails without it).
+// SUPABASE_ANON_KEY, and migration 071 applied (check 6 fails without it).
 // Leftovers of a crashed run: node scripts/test-tenancy.mjs --cleanup
 import { newRun, setup, teardown, leftovers, svc } from "./tenancy/fixture.mjs";
 
@@ -93,6 +94,16 @@ try {
   const n2 = await appsIn(A.org, TT.sent.id);
   check("2. still one application", n2 === 1, `${n2} applications`);
 
+  // 2b. A mirror lost after the application was written: the repeat send
+  // is still "already sent", and it puts the tag and reason back.
+  const mirrorOnA = `match_verdicts?organization_id=eq.${A.org.id}&candidate_id=eq.${TT.sent.id}&org_role_id=eq.${A.role.id}`;
+  await svc(mirrorOnA, { method: "DELETE", prefer: "return=minimal" });
+  const heal = await send(TT.sent.id, run.ttJob);
+  check("2b. a send after the mirror was lost is still already sent (409)", heal.status === 409 && heal.json?.error === "already_sent", said(heal));
+  const healed = await svc(`${mirrorOnA}&select=model,source,verdict`);
+  check("2b. the lost mirror is put back, once", healed.length === 1 && healed[0].model === null && healed[0].source === "referral", `${healed.length} mirror rows`);
+  check("2b. the put-back mirror carries nothing of TT's own", healed.length > 0 && healed.every((m) => !JSON.stringify(m.verdict).includes(run.tokens.t)), "a TT-private marker crossed to A");
+
   // 3. A switches off help on its job screen.
   const off = await api(A.login, "PATCH", "/api/dashboard/jobs/9001", { sourcingRequested: false });
   const offState = await aJob();
@@ -155,7 +166,7 @@ try {
   } catch (e) {
     dup = /\b409\b/.test(e.message) && e.message.includes("23505") ? "refused" : `failed otherwise: ${e.message.slice(0, 120)}`;
   }
-  check("6. the database refuses a second copy (migration 070)", dup === "refused", dup === "written" ? "a duplicate row was written: is migration 070 applied?" : dup);
+  check("6. the database refuses a second copy (migration 071)", dup === "refused", dup === "written" ? "a duplicate row was written: is migration 071 applied?" : dup);
 
   // 7. A refusal never unlinks: the link is TT's wiring, the client's switch is consent.
   const [ttRole] = await svc(`org_roles?id=eq.${TT.role.id}&select=linked_org_role`);
