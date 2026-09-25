@@ -128,6 +128,12 @@ const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 const cleanText = (s: unknown): string | null =>
   typeof s === "string" ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim() || null : null;
 
+/** A "position" that is a membership or side role, not the job: a council
+ *  membership, an advisory seat, a board, mentoring, volunteering, angel
+ *  investing. "Member of Technical Staff", "Member Software Engineer" and
+ *  "Founding Member" are jobs, not memberships. */
+const SIDE_ROLE = /\b((?<!founding\s)member(?!\s+(of\s+(the\s+)?(technical|engineering|research|professional)\s+staff|software|technical|engineering))|membership|advisor|advisory|board|mentor|mentoring|volunteer|ambassador|investor|council)\b/i;
+
 interface HarvestEducation {
   schoolName?: string;
   title?: string;
@@ -157,6 +163,16 @@ export function harvestToPoolRecord(harvest: Record<string, unknown> | null): Re
     description: cleanText(e.description),
     company_linkedin_url: cleanText(e.company_linkedin_url),
   })).filter((p) => p.title || p.company);
+  // LinkedIn can list side roles above the job ("Official Member, Forbes
+  // Technology Council" above "Principal Engineer, CrowdStrike"). Everything
+  // that reads the first position as the person's job (the current title,
+  // the role type, the level) should see the job, so it goes first: the
+  // current one, else the latest (someone between jobs keeps their last
+  // real title, never a membership). Its dates still say when it ended.
+  const side = (p: { title: string | null; company: string | null }) => SIDE_ROLE.test(`${p.title ?? ""} ${p.company ?? ""}`);
+  let job = positions.findIndex((p) => p.is_current && !side(p));
+  if (job < 0) job = positions.findIndex((p) => !side(p));
+  if (job > 0) positions.unshift(...positions.splice(job, 1));
   if (positions.length) out.work_experience = positions;
 
   const edus = (Array.isArray(harvest.education) ? (harvest.education as HarvestEducation[]) : [])
@@ -185,7 +201,7 @@ export function harvestToPoolRecord(harvest: Record<string, unknown> | null): Re
     out.top_skills = skills;
     out.all_skills_text = skills.join(", ");
   }
-  const current = positions.find((p) => p.is_current) ?? positions[0];
+  const current = positions.find((p) => p.is_current && !side(p)) ?? positions[0];
   if (current?.title) out.current_title = current.title;
   if (current?.company) out.current_company = current.company;
   return out;
@@ -200,7 +216,11 @@ export async function syncExperiences(
     const mapped = harvestToExperiences(harvest);
     if (!orgId || !mapped.length) return;
 
-    const rows = mapped.map((m) => ({
+    // A profile can list the same position twice (same company, title and
+    // start); one upsert may not touch a key twice, so keep the first.
+    const seen = new Set<string>();
+    const unique = mapped.filter((m) => !seen.has(m.provider_experience_key) && !!seen.add(m.provider_experience_key));
+    const rows = unique.map((m) => ({
       organization_id: orgId,
       candidate_id: candidateId,
       source: "harvest",
