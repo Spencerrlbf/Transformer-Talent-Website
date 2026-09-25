@@ -1,7 +1,8 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
-import { linkedinUsername } from "@/lib/server/applicants";
+import { canonicalLinkedin, fillPoolFollowUp, recentSameSubmitter } from "@/lib/server/applicants";
+import { poolPersonHasEmail } from "@/lib/server/pool-emails";
 import { loadOrgBySlug } from "@/lib/server/org-board";
 import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
   }
 
   const email = clean(form.get("email"), 254).toLowerCase();
-  const linkedin = clean(form.get("linkedin"), 300);
+  const linkedinRaw = clean(form.get("linkedin"), 300);
   const monthsRaw = clean(form.get("months"), 3);
   // Structured preferences: role focus / workplace / salary come from fixed
   // vocabularies (anything else is dropped); locations echo the live board's
@@ -114,12 +115,15 @@ export async function POST(req: NextRequest) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide a valid email." }, { status: 400 });
   }
-  if (!linkedin || !linkedinUsername(linkedin)) {
+  // Stored and looked up only in its one canonical form (see canonicalLinkedin).
+  const canon = canonicalLinkedin(linkedinRaw);
+  if (!canon) {
     return NextResponse.json(
       { error: "Please provide your LinkedIn profile URL (linkedin.com/in/…)." },
       { status: 400 }
     );
   }
+  const linkedin = canon.url;
   if (!MONTHS.has(monthsRaw)) {
     return NextResponse.json({ error: "Please pick when to get back to you." }, { status: 400 });
   }
@@ -134,26 +138,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests from you today. Please try again tomorrow." }, { status: 429 });
   }
 
-  // Same person recently in this org's pipeline: update their existing entry
-  // with the new date and preferences instead of creating a duplicate. The
-  // "we'll be in touch later" ask is meaningful even from a recent applicant.
+  // Resume is optional here — the whole point is catching people who aren't
+  // ready to formally apply yet. Checked before any lookup (uploaded after),
+  // so the answer never depends on whether someone applied before.
+  const file = form.get("resume");
+  const hasFile = file instanceof File && file.size > 0;
+  if (hasFile && (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf"))) {
+    return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
+  }
+
+  // The same person (same email AND same LinkedIn) asked to hear back from
+  // this org in the last 14 days: update that ask with the new date and
+  // preferences instead of creating a duplicate. Only their earlier ask is
+  // theirs to change. A job application, resume drop, referral or TT send
+  // stays as it is, and this ask becomes its own entry below. One identifier
+  // alone is a new entry: anyone can type someone else's email or LinkedIn.
   const orgId = boardOrg?.id ?? (await getOrgId());
-  const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
-  const dupUsername = linkedinUsername(linkedin) || "";
-  const [dupByEmail, dupByLinkedin] = await Promise.all([
-    sbRest(
-      `website_applications?organization_id=eq.${orgId}&email=eq.${encodeURIComponent(email)}&created_at=gte.${dupSince}&select=id,candidate_id&limit=1`
-    ),
-    sbRest(
-      `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(dupUsername)}&created_at=gte.${dupSince}&select=id,candidate_id&limit=1`
-    ),
-  ]);
-  const dupRows = [
-    ...(dupByEmail.ok ? ((await dupByEmail.json()) as { id: string; candidate_id: string | null }[]) : []),
-    ...(dupByLinkedin.ok ? ((await dupByLinkedin.json()) as { id: string; candidate_id: string | null }[]) : []),
-  ];
-  if (dupRows.length > 0) {
-    const dup = dupRows[0];
+  const dupRows = await recentSameSubmitter<{ id: string; candidate_id: string | null; source: string | null }>(
+    orgId, email, canon.username, "id,candidate_id,source"
+  );
+  const dup = dupRows.find((r) => r.source === "future");
+  if (dup) {
     const prefs = {
       follow_up_at: followUpAt,
       preferred_roles: preferredRoles,
@@ -167,36 +172,34 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(prefs),
       prefer: "return=minimal",
     }).catch(() => {});
-    // TT's pool record is TT's: a client board's entry never rewrites it.
-    if (dup.candidate_id && !boardOrg) {
-      await sbRest(`candidates?id=eq.${dup.candidate_id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          follow_up_at: followUpAt,
-          role_preferences: {
-            roles: preferredRoles,
-            locations: preferredLocations,
-            workplace: preferredWorkplace,
-            salary: salaryFloor,
-          },
-          ...(visaStatus ? { visa_status: visaStatus } : {}),
-        }),
-        prefer: "return=minimal",
+    // TT's pool record is TT's: a client board's entry never touches it, and
+    // this one only fills what the record lacks, when the email is one TT
+    // already has for the person (an entry that stood on its own is keyed
+    // by itself and has no pool record).
+    if (
+      dup.candidate_id &&
+      dup.candidate_id !== dup.id &&
+      !boardOrg &&
+      (await poolPersonHasEmail(dup.candidate_id, email).catch(() => false))
+    ) {
+      await fillPoolFollowUp(dup.candidate_id, {
+        followUpAt,
+        rolePreferences: {
+          roles: preferredRoles,
+          locations: preferredLocations,
+          workplace: preferredWorkplace,
+          salary: salaryFloor,
+        },
+        visa: visaStatus,
       }).catch(() => {});
     }
     return NextResponse.json({ ok: true, followUpAt });
   }
 
-  // Resume is optional here — the whole point is catching people who aren't
-  // ready to formally apply yet.
-  const file = form.get("resume");
   let resumePath: string | null = null;
   let resumeBuf: Buffer | null = null;
   let resumeSafeName = "resume.pdf";
-  if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf")) {
-      return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
-    }
+  if (hasFile) {
     resumeBuf = Buffer.from(await file.arrayBuffer());
     resumeSafeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
     const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${resumeSafeName}`;
@@ -226,7 +229,7 @@ export async function POST(req: NextRequest) {
       name: "",
       email,
       linkedin_url: linkedin,
-      linkedin_username: linkedinUsername(linkedin),
+      linkedin_username: canon.username,
       visa_status: visaStatus,
       follow_up_at: followUpAt,
       preferred_roles: preferredRoles,

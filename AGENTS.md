@@ -72,6 +72,13 @@ every merge as a production release.
     two memberships.
   - Before merging anything that touches data access, run
     `node scripts/test-tenancy.mjs --base <preview url>`. It must print PASS.
+  - Public forms (apply, referral, future interest) can't prove who is
+    typing. A submission links to an existing pool person only when its
+    email is one TT already has for them (`lib/server/pool-emails.ts`);
+    otherwise it stands on its own, keyed by the application like a client
+    company's applicant, and writes nothing to that person. A duplicate
+    needs both the same email and the same LinkedIn. Run
+    `node scripts/test-public-forms.mjs` after touching them.
 - **Single-source pipeline:** role artifacts (matching profiles, embeddings,
   facet texts) are generated only via `lib/server/roles-pipeline.ts`. Scripts
   and dashboard share it. If it changes, rebuild the worker bundle with

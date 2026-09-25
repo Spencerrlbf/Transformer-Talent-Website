@@ -13,7 +13,9 @@ import {
   matchRolesForApplicant,
   mirrorToAirtable,
   mirrorApplicationToAirtable,
-  linkedinUsername,
+  canonicalLinkedin,
+  harvestIsFor,
+  fillPoolFollowUp,
 } from "./applicants";
 import { getRoles } from "@/lib/roles";
 import { passesHardGates, passesProfileGates, screenRolesWithCache } from "./screening";
@@ -145,8 +147,10 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   // money per person, so each company has a daily allowance. Over it, nobody
   // is turned away: the application is kept as "queued", the recruiter hears
   // about it now, and the nightly queue reviews it once there is room.
+  // A failed check (network error) counts as over the allowance: the row is
+  // queued for the nightly run instead of being left "processing".
   const budgetOrg = tenantOrgId ?? orgId;
-  if (!p.fromQueue && budgetOrg && !(await takeReview(budgetOrg))) {
+  if (!p.fromQueue && budgetOrg && !(await takeReview(budgetOrg).catch(() => false))) {
     await sbRest(`website_applications?id=eq.${submissionId}`, {
       method: "PATCH",
       body: JSON.stringify({ status: "queued" }),
@@ -180,21 +184,31 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   let screenedSummary: string | undefined;
   let applicationFit: string | undefined;
   try {
-    const username = linkedinUsername(linkedin);
+    // The profile key and the profile fetched come from one parse of the
+    // address, so a crafted URL can't file one person's profile under
+    // another's name. No real LinkedIn profile, no lookup.
+    const canon = canonicalLinkedin(linkedin);
+    const username = canon?.username ?? null;
     let harvest: unknown | null = null;
     let harvestCache: "hit" | "miss" = "miss";
-    const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-    const prior = await sbRest(
-      `website_applications?linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
-    );
-    if (prior.ok) {
-      const rows = await prior.json();
-      if (rows.length) {
-        harvest = rows[0].harvest_profile;
-        harvestCache = "hit";
+    if (username) {
+      // Public LinkedIn profiles may be shared across companies (Spencer's
+      // rule), so this cache reads every company's recent applications. Only
+      // harvest_profile may ever be selected from another company's row. A
+      // cached profile counts only when it is itself this person's profile.
+      const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+      const prior = await sbRest(
+        `website_applications?linkedin_username=eq.${encodeURIComponent(username)}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
+      );
+      if (prior.ok) {
+        const rows = (await prior.json()) as { harvest_profile: unknown }[];
+        if (rows.length && harvestIsFor(rows[0].harvest_profile, username)) {
+          harvest = rows[0].harvest_profile;
+          harvestCache = "hit";
+        }
       }
     }
-    if (!harvest) harvest = await harvestProfile(linkedin);
+    if (!harvest && canon) harvest = await harvestProfile(canon.url);
     const parsed = await parseProfile(resumeText || "", harvest);
 
     // Referrals arrive with no name — take it from the profile.
@@ -216,13 +230,18 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     // A client company's applicant stays inside that company: no pool row,
     // no pool enrichment, experiences or embeddings, no TT Airtable. They
     // are judged under the company's own person key; the ledger keeps only
-    // the spend, under the company.
-    const { candidateId, vector } = tenantOrgId
+    // the spend, under the company. A TT applicant who matches a pool person
+    // without proving it (standalone) is kept apart the same way, under the
+    // application's own id and TT's ledger.
+    const { candidateId, vector, standalone, resumeIsTheirs } = tenantOrgId
       ? {
-          candidateId: await tenantPersonId(tenantOrgId, username, submissionId),
+          candidateId: await tenantPersonId(tenantOrgId, username, email, submissionId),
           vector: username ? await applicantVector(parsed, resumeText) : null,
+          standalone: false,
+          resumeIsTheirs: false,
         }
       : await promoteToCandidatePool({
+          submissionId,
           name,
           email,
           linkedinUrl: linkedin,
@@ -230,12 +249,15 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
           parsed,
           allSkills: harvestSkills,
         });
+    // The TT pool record this submission may write to, if any.
+    const poolId = !tenantOrgId && !standalone ? candidateId : null;
+    const spendOnly = Boolean(tenantOrgId) || standalone;
 
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
     if (harvest) {
       await recordEnrichment(
-        tenantOrgId
-          ? { orgId: tenantOrgId, candidateId: null, linkedinUsername: username, provider: "harvest", operation: "full_profile", cacheStatus: harvestCache, costCredits: harvestCache === "miss" ? 1 : 0 }
+        spendOnly
+          ? { ...(tenantOrgId ? { orgId: tenantOrgId } : {}), candidateId: null, linkedinUsername: username, provider: "harvest", operation: "full_profile", cacheStatus: harvestCache, costCredits: harvestCache === "miss" ? 1 : 0 }
           : {
               candidateId,
               linkedinUsername: username,
@@ -250,19 +272,24 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     }
     if (resumeParser) {
       await recordEnrichment({
-        ...(tenantOrgId ? { orgId: tenantOrgId, candidateId: null } : { candidateId }),
+        ...(tenantOrgId ? { orgId: tenantOrgId } : {}),
+        candidateId: spendOnly ? null : candidateId,
         linkedinUsername: username,
         provider: resumeParser,
         operation: "resume_parse",
         cacheStatus: "miss",
       });
     }
-    if (candidateId && !tenantOrgId) {
-      await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
-      await syncCandidateEmbeddings(candidateId, {
+    if (poolId) {
+      await syncExperiences(poolId, harvest as Record<string, unknown> | null);
+      // The LinkedIn profile is the person's own public one. Resume and
+      // summary are what this submission typed, so they replace the
+      // person's only when they are new or had no resume yet.
+      await syncCandidateEmbeddings(poolId, {
         linkedin_profile: linkedinProfileText(harvest as Record<string, unknown> | null),
-        resume: resumeText || undefined,
-        summary: parsed?.profile_summary || undefined,
+        ...(resumeIsTheirs
+          ? { resume: resumeText || undefined, summary: parsed?.profile_summary || undefined }
+          : {}),
       });
     }
 
@@ -442,27 +469,25 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
 
 
     // Future interest travels with the person, not just the application —
-    // the pool record carries the date and what to come back with. (Only
-    // TT's own applicants have a pool record.)
-    if (p.followUpAt && candidateId && !tenantOrgId) {
-      await sbRest(`candidates?id=eq.${candidateId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          follow_up_at: p.followUpAt,
-          role_preferences: {
-            roles: p.preferredRoles || [],
-            locations: preferredLocations,
-            workplace: p.preferredWorkplace || [],
-            salary: p.salaryFloor || null,
-          },
-          ...(visa ? { visa_status: visa } : {}),
-        }),
-        prefer: "return=minimal",
+    // the pool record carries the date and what to come back with, where it
+    // has none yet. (Only TT's own applicants have a pool record.)
+    if (p.followUpAt && poolId) {
+      await fillPoolFollowUp(poolId, {
+        followUpAt: p.followUpAt,
+        rolePreferences: {
+          roles: p.preferredRoles || [],
+          locations: preferredLocations,
+          workplace: p.preferredWorkplace || [],
+          salary: p.salaryFloor || null,
+        },
+        visa: visa || null,
       }).catch(() => {});
     }
 
-    // TT's own Airtable: TT's own applicants only.
-    if (!tenantOrgId) {
+    // TT's own Airtable: TT's own applicants only, and never a Candidates
+    // record for a standalone submission (it would carry a stranger's email
+    // against the pool person's LinkedIn).
+    if (!tenantOrgId && !standalone) {
       await mirrorToAirtable({
         name,
         email,

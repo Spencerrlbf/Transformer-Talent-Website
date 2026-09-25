@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
-import { linkedinUsername } from "@/lib/server/applicants";
+import { canonicalLinkedin, recentSameSubmitter } from "@/lib/server/applicants";
 import { getRoles } from "@/lib/roles";
 import { loadOrgBySlug, loadOrgRoles, type BoardRole } from "@/lib/server/org-board";
 import { getOrgId } from "@/lib/server/spine";
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
 
   const name = clean(form.get("name"), 120);
   const email = clean(form.get("email"), 254).toLowerCase();
-  const linkedin = clean(form.get("linkedin"), 300);
+  const linkedinRaw = clean(form.get("linkedin"), 300);
   const visa = clean(form.get("visa"), 150);
   const note = clean(form.get("note"), 2000);
   const speculative = clean(form.get("speculative"), 5) === "1";
@@ -89,36 +89,15 @@ export async function POST(req: NextRequest) {
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide your name and a valid email." }, { status: 400 });
   }
-  if (!linkedin || !linkedinUsername(linkedin)) {
+  // Stored and looked up only in its one canonical form (see canonicalLinkedin).
+  const canon = canonicalLinkedin(linkedinRaw);
+  if (!canon) {
     return NextResponse.json(
       { error: "Please provide your LinkedIn profile URL (linkedin.com/in/…)." },
       { status: 400 }
     );
   }
-
-  // Same person again within 14 days (same org, matched by email OR LinkedIn
-  // username): no duplicate row, no pipeline — their existing application is
-  // already being reviewed against every role. The answer is the same as for
-  // a fresh application: anything else would let a stranger type in someone's
-  // LinkedIn and learn whether they applied to this company.
-  const orgId = boardOrg?.id ?? (await getOrgId());
-  const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
-  const dupUsername = linkedinUsername(linkedin) || "";
-  const [dupByEmail, dupByLinkedin] = await Promise.all([
-    sbRest(
-      `website_applications?organization_id=eq.${orgId}&email=eq.${encodeURIComponent(email)}&created_at=gte.${dupSince}&select=id&limit=1`
-    ),
-    sbRest(
-      `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(dupUsername)}&created_at=gte.${dupSince}&select=id&limit=1`
-    ),
-  ]);
-  const dupRows = [
-    ...(dupByEmail.ok ? ((await dupByEmail.json()) as { id: string }[]) : []),
-    ...(dupByLinkedin.ok ? ((await dupByLinkedin.json()) as { id: string }[]) : []),
-  ];
-  if (dupRows.length > 0) {
-    return NextResponse.json({ ok: true });
-  }
+  const linkedin = canon.url;
 
   const ip =
     req.headers.get("x-real-ip") ||
@@ -128,6 +107,8 @@ export async function POST(req: NextRequest) {
   // shared cap across companies: every application is kept, and each
   // company's own daily review allowance decides when it is reviewed
   // (lib/server/review-budget.ts). A client company's board never names us.
+  // They come before any lookup by email or LinkedIn, as does the resume
+  // check below, so no answer depends on whether someone applied before.
   if (!(await allow(`apply:email:${email}`, 4, 24)) || !(await allow(`apply:ip:${ip}`, 8, 24))) {
     return NextResponse.json(
       {
@@ -142,16 +123,31 @@ export async function POST(req: NextRequest) {
   // Resume (optional; required for speculative — it's what we match with —
   // and always required on recruiter pages)
   const file = form.get("resume");
-  if ((speculative || recruiterId) && !(file instanceof File && file.size > 0)) {
+  const hasFile = file instanceof File && file.size > 0;
+  if ((speculative || recruiterId) && !hasFile) {
     return NextResponse.json({ error: "A resume is required." }, { status: 400 });
   }
+  if (hasFile && (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf"))) {
+    return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
+  }
+
+  // Same person again within 14 days (same org, same email AND same
+  // LinkedIn): no duplicate row, no pipeline — their existing application is
+  // already being reviewed against every role. One identifier alone is a new
+  // application: anyone can type someone else's LinkedIn or email, and that
+  // must not swallow the real person's application. The answer is the same
+  // as for a fresh application: anything else would let a stranger learn
+  // whether someone applied to this company.
+  const orgId = boardOrg?.id ?? (await getOrgId());
+  const dupRows = await recentSameSubmitter<{ id: string }>(orgId, email, canon.username, "id");
+  if (dupRows.length > 0) {
+    return NextResponse.json({ ok: true });
+  }
+
   let resumePath: string | null = null;
   let resumeBuf: Buffer | null = null;
   let resumeSafeName = "resume.pdf";
-  if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf")) {
-      return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
-    }
+  if (hasFile) {
     resumeBuf = Buffer.from(await file.arrayBuffer());
     resumeSafeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
     const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${resumeSafeName}`;
@@ -186,7 +182,7 @@ export async function POST(req: NextRequest) {
       name,
       email,
       linkedin_url: linkedin,
-      linkedin_username: linkedinUsername(linkedin),
+      linkedin_username: canon.username,
       visa_status: visa || null,
       preferred_locations: preferredLocations,
       role_ids: applied.map((r) => r.jobId),

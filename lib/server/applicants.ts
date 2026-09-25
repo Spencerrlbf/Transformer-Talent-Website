@@ -1,5 +1,6 @@
 import { sbRest, sbRpc } from "./supabase";
 import { embed } from "./matcher";
+import { normalEmail, poolPersonHasEmail } from "./pool-emails";
 
 // ---------- Harvest enrichment (LinkedIn full profile; costs credits — one
 // call per applicant, and failure never blocks the application) ----------
@@ -119,10 +120,114 @@ export async function parseProfile(
 
 // ---------- Candidate pool promotion ----------
 
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/** The profile name after the first "/in/" in any string. Loose on purpose
+ *  (older rows were keyed with it); the public forms use canonicalLinkedin. */
 export function linkedinUsername(url: string): string | null {
   const m = url.toLowerCase().match(/\/in\/([^/?#]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  // A malformed escape ("%E0%A4%A") keeps the name as typed instead of throwing.
+  return m ? safeDecode(m[1]) : null;
 }
+
+// Letters and digits in any script, plus the - _ . LinkedIn's own profile
+// names use. Anything else (spaces, slashes, quotes, a stray %) is not a
+// profile name someone copied from their browser.
+const PROFILE_NAME = /^[\p{L}\p{M}\p{N}_.-]+$/u;
+
+/** The one form of a LinkedIn profile address this site keeps: the profile
+ *  name (decoded, lowercased) and the address rebuilt from it. Null unless
+ *  the address really is linkedin.com/in/<name>: the host must be
+ *  linkedin.com or a subdomain of it (www, uk, de, m...), and the path must
+ *  start with /in/. A "/in/" in a query string or on another site is not a
+ *  profile. The key stored with an application and the profile looked up for
+ *  it both come from this one parse, so they can never be two people. */
+export function canonicalLinkedin(raw: string): { username: string; url: string } | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const scheme = s.match(/^([a-z][a-z0-9+.-]*):\/\//i);
+  if (scheme && !/^https?$/i.test(scheme[1])) return null;
+  let u: URL;
+  try {
+    u = new URL(scheme ? s : `https://${s}`);
+  } catch {
+    return null;
+  }
+  // "linkedin.com@elsewhere" and "mailto:x@linkedin.com/in/..." tricks.
+  if (u.username || u.password) return null;
+  const host = u.hostname.toLowerCase().replace(/\.$/, "");
+  if (host !== "linkedin.com" && !host.endsWith(".linkedin.com")) return null;
+  const m = u.pathname.match(/^\/in\/([^/]+)/i);
+  if (!m) return null;
+  let username: string;
+  try {
+    username = decodeURIComponent(m[1]).toLowerCase();
+  } catch {
+    return null;
+  }
+  if (!PROFILE_NAME.test(username) || /^\.+$/.test(username) || [...username].length > 200) return null;
+  return { username, url: `https://www.linkedin.com/in/${encodeURIComponent(username)}` };
+}
+
+/** Whether a stored Harvest profile is the profile of `username`: its own
+ *  publicIdentifier, else the name in its linkedinUrl or url, compared
+ *  decoded and lowercased. Anything unreadable is a no, never an error. */
+export function harvestIsFor(payload: unknown, username: string | null): boolean {
+  try {
+    if (!username || !payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+    const h = payload as Record<string, unknown>;
+    const pid = typeof h.publicIdentifier === "string" ? h.publicIdentifier.trim() : "";
+    const own = pid
+      ? safeDecode(pid).toLowerCase()
+      : [h.linkedinUrl, h.url]
+          .map((v) => (typeof v === "string" ? canonicalLinkedin(v)?.username : null))
+          .find(Boolean) || "";
+    return Boolean(own) && own === safeDecode(username).toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+/** The same submitter on a public form: the same email (any case) AND the
+ *  same LinkedIn profile. Either one alone can be typed by anyone. */
+export function sameSubmitter(
+  row: { email?: string | null; linkedin_username?: string | null },
+  email: string,
+  username: string
+): boolean {
+  const e = normalEmail(email);
+  return Boolean(e && username) && normalEmail(row.email) === e && row.linkedin_username === username;
+}
+
+/** This org's rows from the last 14 days sent by the same submitter (see
+ *  sameSubmitter), newest first, with the columns asked for. */
+export async function recentSameSubmitter<T extends { id: string }>(
+  orgId: string | null,
+  email: string,
+  username: string,
+  cols: string
+): Promise<T[]> {
+  if (!orgId || !username) return [];
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+  const res = await sbRest(
+    `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(username)}` +
+      `&created_at=gte.${since}&select=email,linkedin_username,${cols}&order=created_at.desc&limit=100`
+  );
+  const rows = res.ok ? ((await res.json()) as (T & { email: string | null; linkedin_username: string | null })[]) : [];
+  return rows.filter((r) => sameSubmitter(r, email, username));
+}
+
+const isEmpty = (v: unknown): boolean =>
+  v == null ||
+  v === "" ||
+  (Array.isArray(v) && v.length === 0) ||
+  (typeof v === "object" && !Array.isArray(v) && Object.values(v as object).every(isEmpty));
 
 async function patchCandidate(id: string, payload: Record<string, unknown>) {
   let res = await sbRest(`candidates?id=eq.${id}`, {
@@ -162,34 +267,79 @@ export async function applicantVector(
 
 /** The person key a client company's applicant is judged under. They never
  *  enter Transformer Talent's pool, so their verdicts hang off the company's
- *  own first application from this LinkedIn profile: the same person applying
- *  twice keeps one set of verdicts and confirmed rows, and no two companies
- *  ever share a key. (People TT sent keep TT's pool id and are skipped.) */
+ *  own first application from this person: the same person applying twice
+ *  keeps one set of verdicts and confirmed rows, and no two companies ever
+ *  share a key. "This person" means the same LinkedIn profile AND the same
+ *  email, since either alone can be typed by a stranger. (People TT sent
+ *  keep TT's pool id and are skipped.) */
 export async function tenantPersonId(
   orgId: string,
   username: string | null,
+  email: string,
   submissionId: string
 ): Promise<string> {
   if (!username) return submissionId;
   const res = await sbRest(
     `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(username)}` +
-      `&or=(source.is.null,source.neq.transformer_talent)&select=id&order=created_at.asc&limit=1`
+      `&or=(source.is.null,source.neq.transformer_talent)&select=id,email,linkedin_username&order=created_at.asc&limit=100`
   );
-  const [first] = res.ok ? ((await res.json()) as { id: string }[]) : [];
-  return first?.id ?? submissionId;
+  const rows = res.ok
+    ? ((await res.json()) as { id: string; email: string | null; linkedin_username: string | null }[])
+    : [];
+  return rows.find((r) => sameSubmitter(r, email, username))?.id ?? submissionId;
 }
 
+/** A "hear from me later" ask on a pool record. Fills only what the record
+ *  lacks (the date, what to come back with, visa): what TT already has for
+ *  the person is never replaced from a public form. */
+export async function fillPoolFollowUp(
+  candidateId: string,
+  ask: { followUpAt: string; rolePreferences: Record<string, unknown>; visa: string | null }
+): Promise<void> {
+  const res = await sbRest(`candidates?id=eq.${candidateId}&select=follow_up_at,role_preferences,visa_status`);
+  const [row] = res.ok
+    ? ((await res.json()) as { follow_up_at: unknown; role_preferences: unknown; visa_status: unknown }[])
+    : [];
+  if (!row) return;
+  const patch: Record<string, unknown> = {};
+  if (isEmpty(row.follow_up_at)) patch.follow_up_at = ask.followUpAt;
+  if (isEmpty(row.role_preferences)) patch.role_preferences = ask.rolePreferences;
+  if (ask.visa && isEmpty(row.visa_status)) patch.visa_status = ask.visa;
+  if (!Object.keys(patch).length) return;
+  await sbRest(`candidates?id=eq.${candidateId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+    prefer: "return=minimal",
+  });
+}
+
+/** Where a TT applicant's verdicts and screening hang, and what the
+ *  submission may write to Transformer Talent's pool. */
+export type PoolLink = {
+  /** A pool id, or the submission's own id when it stands alone. */
+  candidateId: string | null;
+  vector: number[] | null;
+  /** The submission matched a pool person it could not prove to be: it is
+   *  keyed by itself and writes nothing to that person. */
+  standalone: boolean;
+  /** The person is new, or this submission gave them their first resume:
+   *  its resume and summary may become the person's embeddings. */
+  resumeIsTheirs: boolean;
+};
+
 export async function promoteToCandidatePool(args: {
+  submissionId: string;
   name: string;
   email: string;
   linkedinUrl: string | null;
   resumeText: string | null;
   parsed: ParsedProfile | null;
   allSkills?: string[]; // full uncapped skill list (Harvest), preferred over parsed top 12
-}): Promise<{ candidateId: string | null; vector: number[] | null }> {
-  const { name, email, linkedinUrl, resumeText, parsed, allSkills } = args;
-  const username = linkedinUrl ? linkedinUsername(linkedinUrl) : null;
-  if (!username) return { candidateId: null, vector: null };
+}): Promise<PoolLink> {
+  const { submissionId, name, email, linkedinUrl, resumeText, parsed, allSkills } = args;
+  const canon = linkedinUrl ? canonicalLinkedin(linkedinUrl) : null;
+  if (!canon) return { candidateId: null, vector: null, standalone: false, resumeIsTheirs: false };
+  const username = canon.username;
 
   const vector = await applicantVector(parsed, resumeText);
 
@@ -225,24 +375,29 @@ export async function promoteToCandidatePool(args: {
 
   const cols = Object.keys(fields).filter((k) => k !== "matching_embedding" && k !== "embedding_type");
   const existing = await sbRest(
-    `candidates?linkedin_username=eq.${encodeURIComponent(username)}&select=id,matching_embedding,${cols.join(",")}`
+    `candidates?linkedin_username=eq.${encodeURIComponent(username)}&select=id,matching_embedding,contact,${cols.join(",")}`
   );
   const rows = (existing.ok ? await existing.json() : []) as Record<string, unknown>[];
   if (rows.length > 0) {
-    // A public form can't prove who is typing: someone else's LinkedIn in the
-    // form must never rewrite that person's pool record (their email above
-    // all). So an existing record only gains what it lacks; everything the
-    // person typed stays on their application.
+    // A public form can't prove who is typing: anyone can type someone
+    // else's LinkedIn. The submission joins this person only when its email
+    // is one TT already has for them. Otherwise it stands on its own, keyed
+    // by the application itself like a client company's applicant, and
+    // writes nothing to the person.
     const row = rows[0];
-    const empty = (v: unknown) => v == null || v === "" || (Array.isArray(v) && v.length === 0);
+    if (!(await poolPersonHasEmail(row.id as string, email, row))) {
+      return { candidateId: submissionId, vector, standalone: true, resumeIsTheirs: false };
+    }
+    // Even then an existing record only gains what it lacks; everything the
+    // person typed stays on their application.
     const keep: Record<string, unknown> = {};
-    for (const k of cols) if (empty(row[k])) keep[k] = fields[k];
+    for (const k of cols) if (isEmpty(row[k])) keep[k] = fields[k];
     if (!row.matching_embedding && fields.matching_embedding) {
       keep.matching_embedding = fields.matching_embedding;
       keep.embedding_type = fields.embedding_type;
     }
     if (Object.keys(keep).length) await patchCandidate(row.id as string, keep);
-    return { candidateId: row.id as string, vector };
+    return { candidateId: row.id as string, vector, standalone: false, resumeIsTheirs: "resume_text" in keep };
   }
 
   const [first, ...restName] = name.split(/\s+/);
@@ -252,7 +407,7 @@ export async function promoteToCandidatePool(args: {
       full_name: name,
       first_name: first,
       last_name: restName.join(" ") || null,
-      linkedin_url: linkedinUrl,
+      linkedin_url: canon.url,
       linkedin_username: username,
       ...fields,
     }),
@@ -260,10 +415,10 @@ export async function promoteToCandidatePool(args: {
   });
   if (!insert.ok) {
     console.error("candidate insert failed", await insert.text());
-    return { candidateId: null, vector };
+    return { candidateId: null, vector, standalone: false, resumeIsTheirs: false };
   }
   const [row] = await insert.json();
-  return { candidateId: row.id, vector };
+  return { candidateId: row.id, vector, standalone: false, resumeIsTheirs: true };
 }
 
 // ---------- Reverse role matching (hybrid: embedding ∪ keyword) ----------
@@ -483,34 +638,5 @@ export async function mirrorApplicationToAirtable(args: {
     });
   } catch {
     // Mirroring must never fail an application.
-  }
-}
-
-// add-role updates the review row so Airtable matches Supabase.
-export async function updateAirtableApplicationRoles(
-  applicationId: string,
-  roleTitles: string[]
-): Promise<void> {
-  const token = process.env.AIRTABLE_API_TOKEN;
-  const base = process.env.AIRTABLE_BASE_ID;
-  if (!token || !base) return;
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-  try {
-    const formula = encodeURIComponent(`{Application ID}="${applicationId}"`);
-    const found = await fetch(
-      `https://api.airtable.com/v0/${base}/Website%20Applications?maxRecords=1&filterByFormula=${formula}`,
-      { headers, signal: AbortSignal.timeout(10000) }
-    );
-    if (!found.ok) return;
-    const rec = (await found.json()).records?.[0];
-    if (!rec) return;
-    await fetch(`https://api.airtable.com/v0/${base}/Website%20Applications/${rec.id}`, {
-      method: "PATCH",
-      headers,
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({ fields: { "Roles Applied": roleTitles.join("\n") } }),
-    });
-  } catch {
-    // Best-effort.
   }
 }

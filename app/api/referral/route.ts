@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
-import { linkedinUsername } from "@/lib/server/applicants";
+import { canonicalLinkedin } from "@/lib/server/applicants";
 import { getOrgId } from "@/lib/server/spine";
 import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
 import { sendReferralConfirmation } from "@/lib/server/email";
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   const orgSlug = clean(body.org, 60).toLowerCase();
   const referrerName = clean(body.referrerName, 120);
   const referrerEmail = clean(body.referrerEmail, 254).toLowerCase();
-  const candidateLinkedin = clean(body.candidateLinkedin, 300);
+  const candidateLinkedinRaw = clean(body.candidateLinkedin, 300);
   const candidateEmail = clean(body.candidateEmail, 254).toLowerCase();
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -59,12 +59,15 @@ export async function POST(req: NextRequest) {
       { error: "Please provide your name and a valid email." },
       { status: 400 }
     );
-  const username = linkedinUsername(candidateLinkedin);
-  if (!candidateLinkedin || !username)
+  // Stored and looked up only in its one canonical form (see canonicalLinkedin).
+  const canon = canonicalLinkedin(candidateLinkedinRaw);
+  if (!canon)
     return NextResponse.json(
       { error: "Please provide their LinkedIn profile URL (linkedin.com/in/…)." },
       { status: 400 }
     );
+  const candidateLinkedin = canon.url;
+  const username = canon.username;
   if (!emailRe.test(candidateEmail))
     return NextResponse.json(
       { error: "Please provide a valid email for them." },
