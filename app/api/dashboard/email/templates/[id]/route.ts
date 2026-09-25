@@ -19,14 +19,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const name = String(body.name || "").trim();
   if (!name) return NextResponse.json({ error: "bad_name" }, { status: 400 });
 
-  const ok = await updateTemplate({
+  const res = await updateTemplate({
     orgId: member.org.id,
     id,
     name,
     subject: String(body.subject || ""),
     bodyHtml: String(body.bodyHtml || ""),
   });
-  return ok
+  if (res === "not_found") return NextResponse.json({ error: "not_found" }, { status: 404 });
+  return res === "ok"
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "update_failed" }, { status: 400 });
 }
@@ -36,8 +37,9 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const ok = await deleteTemplate(member.org.id, id);
-  return ok
+  const res = await deleteTemplate(member.org.id, id);
+  if (res === "not_found") return NextResponse.json({ error: "not_found" }, { status: 404 });
+  return res === "ok"
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "delete_failed" }, { status: 400 });
 }

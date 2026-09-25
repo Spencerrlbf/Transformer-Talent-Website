@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireMember } from "@/lib/server/dashboard-auth";
+import { jobInOrg, requireMember } from "@/lib/server/dashboard-auth";
 import { listUnifiedCandidates } from "@/lib/server/candidates-unified";
 
 export const maxDuration = 60;
@@ -11,12 +11,16 @@ export async function GET(req: NextRequest) {
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
   const q = req.nextUrl.searchParams;
+  const job = q.get("job") || undefined;
+  if (job && !(await jobInOrg(member.org.id, job))) {
+    return NextResponse.json({ error: "job_not_found" }, { status: 404 });
+  }
   const source = q.get("source");
   const sort = q.get("sort");
   const list = await listUnifiedCandidates({
     orgId: member.org.id,
     source: source === "applied" || source === "sourced" ? source : undefined,
-    jobId: q.get("job") || undefined,
+    jobId: job,
     fit: q.get("fit") || undefined,
     q: q.get("q") || undefined,
     hideNotNow: q.get("hideNotNow") === "1",

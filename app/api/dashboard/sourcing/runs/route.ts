@@ -1,6 +1,6 @@
 // Sourcing runs: list per job (the tab's home screen) and create.
 import { NextRequest, NextResponse } from "next/server";
-import { requireMember } from "@/lib/server/dashboard-auth";
+import { jobInOrg, requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
 import { sanitizeLeadQuery, providerMode } from "@/lib/server/sourcing/harvest";
 import { MAX_IMPORT } from "@/lib/server/sourcing/run";
@@ -14,11 +14,8 @@ export async function GET(req: NextRequest) {
   const jobId = req.nextUrl.searchParams.get("jobId") || "";
   let roleFilter = "";
   if (jobId) {
-    const roleRes = await sbRest(
-      `org_roles?organization_id=eq.${member.org.id}&external_id=eq.${encodeURIComponent(jobId)}&select=id&limit=1`
-    );
-    const [role] = roleRes.ok ? await roleRes.json() : [];
-    if (!role) return NextResponse.json({ runs: [] });
+    const role = await jobInOrg(member.org.id, jobId);
+    if (!role) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
     roleFilter = `&org_role_id=eq.${role.id}`;
   }
   const res = await sbRest(

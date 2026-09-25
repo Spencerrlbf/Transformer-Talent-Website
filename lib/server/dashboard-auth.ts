@@ -49,3 +49,18 @@ export async function requireMember(req: Request): Promise<DashMember | null> {
     org: row.organizations,
   };
 }
+
+/**
+ * The org's job with this number, or null. Job numbers repeat across
+ * organizations, so a job-scoped route answers 404 when this is null rather
+ * than an empty "OK" for another company's number.
+ */
+export async function jobInOrg(orgId: string, externalId: string): Promise<{ id: string } | null> {
+  if (!externalId) return null;
+  const res = await sbRest(
+    `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(externalId)}&select=id&limit=1`
+  );
+  if (!res.ok) return null;
+  const [row] = (await res.json()) as { id: string }[];
+  return row ?? null;
+}

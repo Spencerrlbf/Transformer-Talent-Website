@@ -148,8 +148,8 @@ export async function updateTemplate(args: {
   name: string;
   subject: string;
   bodyHtml: string;
-}): Promise<boolean> {
-  const res = await sbRest(`email_templates?id=eq.${args.id}&organization_id=eq.${args.orgId}`, {
+}): Promise<"ok" | "not_found" | "failed"> {
+  const res = await sbRest(`email_templates?id=eq.${args.id}&organization_id=eq.${args.orgId}&select=id`, {
     method: "PATCH",
     body: JSON.stringify({
       name: args.name.trim().slice(0, 80),
@@ -157,15 +157,20 @@ export async function updateTemplate(args: {
       body_html: sanitizeEmailHtml(args.bodyHtml),
       updated_at: new Date().toISOString(),
     }),
+    prefer: "return=representation",
   });
-  return res.ok;
+  if (!res.ok) return "failed";
+  return ((await res.json()) as unknown[]).length ? "ok" : "not_found";
 }
 
-export async function deleteTemplate(orgId: string, id: string): Promise<boolean> {
-  const res = await sbRest(`email_templates?id=eq.${id}&organization_id=eq.${orgId}`, {
+/** Another org's template (or one already gone) matches no row: not_found. */
+export async function deleteTemplate(orgId: string, id: string): Promise<"ok" | "not_found" | "failed"> {
+  const res = await sbRest(`email_templates?id=eq.${id}&organization_id=eq.${orgId}&select=id`, {
     method: "DELETE",
+    prefer: "return=representation",
   });
-  return res.ok;
+  if (!res.ok) return "failed";
+  return ((await res.json()) as unknown[]).length ? "ok" : "not_found";
 }
 
 // ---- candidate contact ------------------------------------------------

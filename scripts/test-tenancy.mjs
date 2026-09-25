@@ -172,8 +172,8 @@ async function ownViews(X, C, extra = {}) {
     "/api/dashboard/candidates",
     "/api/dashboard/candidates/v2?pageSize=100",
     "/api/dashboard/candidates/v2?pageSize=100&past=1",
-    `/api/dashboard/candidates/v2?pageSize=100&jobId=${job}`,
-    `/api/dashboard/candidates/v2?pageSize=100&jobId=${job}&past=1`,
+    `/api/dashboard/candidates/v2?pageSize=100&job=${job}`,
+    `/api/dashboard/candidates/v2?pageSize=100&job=${job}&past=1`,
     `/api/dashboard/candidates/v2?pageSize=100&q=zzlk${run.id}`,
     `/api/dashboard/candidates/v2?pageSize=100&q=Applicant`,
     `/api/dashboard/candidates/v2?pageSize=100&q=Shared`,
@@ -268,9 +268,10 @@ async function crossRecords(X, Y, xTok) {
     await call(X, "GET", `/api/dashboard/jobs/${Y.jobId}/stages`, undefined, jg);
     await call(X, "GET", `/api/dashboard/rolecard/${Y.jobId}`, undefined, jg);
     await call(X, "GET", `/api/dashboard/jobs/${Y.jobId}/candidates`, undefined, jg);
-    await call(X, "GET", `/api/dashboard/candidates/v2?pageSize=100&jobId=${Y.jobId}`, undefined, jg);
+    await call(X, "GET", `/api/dashboard/candidates/v2?pageSize=100&job=${Y.jobId}`, undefined, jg);
     await call(X, "GET", `/api/dashboard/sourcing/runs?jobId=${Y.jobId}`, undefined, jg);
     await call(X, "PATCH", `/api/dashboard/jobs/${Y.jobId}`, { title: `${xTok}-hijackjob` }, jg);
+    await call(X, "PUT", `/api/dashboard/jobs/${Y.jobId}/stages`, { stages: null }, jg);
   }
 }
 
@@ -423,8 +424,9 @@ try {
   }
 
   // TT has no job 9001: asking for it must not return a client's job 9001.
-  for (const p of ["/api/dashboard/jobs/9001", "/api/dashboard/jobs/9001/stages", "/api/dashboard/rolecard/9001", "/api/dashboard/jobs/9001/candidates", "/api/dashboard/candidates/v2?pageSize=100&jobId=9001", "/api/dashboard/sourcing/runs?jobId=9001"])
+  for (const p of ["/api/dashboard/jobs/9001", "/api/dashboard/jobs/9001/stages", "/api/dashboard/rolecard/9001", "/api/dashboard/jobs/9001/candidates", "/api/dashboard/candidates/v2?pageSize=100&job=9001", "/api/dashboard/sourcing/runs?jobId=9001"])
     await call(XT, "GET", p, undefined, { group: "TT -> client job numbers", deny: true });
+  await call(XT, "PUT", "/api/dashboard/jobs/9001/stages", { stages: null }, { group: "TT -> client job numbers", deny: true });
 
   // 5. Records opened and edited across companies.
   await crossRecords(XA, XB, run.tokens.a);

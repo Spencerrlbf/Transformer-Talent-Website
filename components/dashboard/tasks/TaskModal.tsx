@@ -150,7 +150,8 @@ export default function TaskModal({
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => null);
     setSaving(false);
-    if (res?.ok) {
+    // 404: a teammate already deleted it; either way it's gone.
+    if (res?.ok || res?.status === 404) {
       onChanged();
       onClose();
     } else {

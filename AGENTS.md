@@ -57,8 +57,10 @@ every merge as a production release.
     `member.org.id`. Any id, job number or candidate key that comes from a
     request is proven to be the caller's before it is read or written
     (`candidateInOrg` in `lib/server/tasks.ts`, `keysInOrg` in
-    `lib/server/lists.ts`, or the organization filter on the lookup). Job
-    numbers repeat across organizations.
+    `lib/server/lists.ts`, `jobInOrg` in `lib/server/dashboard-auth.ts`, or
+    the organization filter on the lookup). Job numbers repeat across
+    organizations. Another organization's id or job number gets a 404, not
+    an empty 200: an edit or delete that matched no row says `not_found`.
   - Transformer Talent's pool (`candidates` and everything keyed to it) is
     TT's. A client company's applicants never enter it: the apply pipeline
     keys them by the company's own application. Client actions never write
