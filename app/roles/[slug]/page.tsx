@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRoles, getRoleBySlug, roleSlug, parseSalary } from "@/lib/roles";
+import { jsonForScript } from "@/lib/server/html";
 
 export const revalidate = 3600;
 
@@ -101,7 +102,7 @@ export default async function RolePage({
       <div className="wrap">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+          dangerouslySetInnerHTML={{ __html: jsonForScript(ld) }}
         />
         <p className="rd-crumb">
           <Link href="/roles">/roles</Link> <b>— ROLE_{role.jobId}</b>

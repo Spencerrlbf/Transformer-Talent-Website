@@ -4,6 +4,7 @@ import { sbRest } from "@/lib/server/supabase";
 import { publishOrgRole, sanitizeSkills } from "@/lib/server/publish-role";
 import { roleInputFromBody } from "@/lib/server/job-body";
 import { sendEmail } from "@/lib/server/email";
+import { escapeHtml, plainLine } from "@/lib/server/html";
 import { cardChanges, isScorecard, sanitizeScorecard } from "@/lib/rolecard";
 import { saveRoleCard } from "@/lib/server/rolecard/store";
 import { relabelRole } from "@/lib/server/rolecard/feedback";
@@ -113,9 +114,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         after(async () => {
           await sendEmail({
             to: "spencer@transformertalent.com",
-            subject: `${member.org.name} asked for help: ${job.title} (#${job.external_id})`,
-            html: `<p style="margin:0 0 14px;"><b>${member.org.name}</b> switched on sourcing help for
-              <b>${job.title}</b> (#${job.external_id}).</p>
+            // The company name and job title are the client's own text.
+            subject: plainLine(`${member.org.name} asked for help: ${job.title} (#${job.external_id})`),
+            html: `<p style="margin:0 0 14px;"><b>${escapeHtml(member.org.name)}</b> switched on sourcing help for
+              <b>${escapeHtml(job.title)}</b> (#${escapeHtml(job.external_id)}).</p>
               <p style="margin:0;">Open your <a href="https://www.transformertalent.com/dashboard" style="color:#2a5bd7;">Jobs page</a>
               to copy it into your jobs and link it.</p>`,
           });

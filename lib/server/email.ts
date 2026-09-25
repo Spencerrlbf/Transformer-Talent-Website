@@ -7,6 +7,8 @@
 //   signin@       — reserved for Supabase auth SMTP (configured in the
 //                   Supabase dashboard, not here)
 
+import { escapeHtml, linkedinHref, plainLine } from "./html";
+
 const FROM_NOTIFICATIONS = "Transformer Talent <notifications@mail.transformertalent.com>";
 const REPLY_TO = "spencer@transformertalent.com";
 
@@ -61,37 +63,84 @@ export async function sendEmail(args: {
 }
 
 /** Team invitation: a branded email carrying the sign-in link. Used for the
- *  first invite and for resends alike. */
-export async function sendTeamInvite(args: {
-  to: string;
+ *  first invite and for resends alike. The company name and the inviter's
+ *  address are shown as text. */
+export function composeTeamInvite(args: {
   orgName: string;
   inviterEmail: string;
   actionLink: string;
-}): Promise<boolean> {
-  return sendEmail({
-    to: args.to,
-    subject: `You have been invited to ${args.orgName} on Transformer Talent`,
+}): { subject: string; html: string; text: string } {
+  const org = escapeHtml(args.orgName);
+  const inviter = escapeHtml(args.inviterEmail);
+  // The sign-in link comes from Supabase Auth; only an https link is used.
+  const link = /^https:\/\//i.test(args.actionLink) ? escapeHtml(args.actionLink) : "";
+  return {
+    subject: plainLine(`You have been invited to ${args.orgName} on Transformer Talent`),
     html: `
-      <p style="margin:0 0 14px;"><b>${args.inviterEmail}</b> invited you to join
-      <b>${args.orgName}</b> on Transformer Talent.</p>
+      <p style="margin:0 0 14px;"><b>${inviter}</b> invited you to join
+      <b>${org}</b> on Transformer Talent.</p>
       <p style="margin:0 0 18px;">You get a dashboard for your roles and candidates, plus your own
       public recruiter page: one link with your face, your bio, and the roles you are hiring for,
       made for sharing in outreach.</p>
       <p style="margin:0 0 18px;">
-        <a href="${args.actionLink}"
+        <a href="${link}"
            style="display:inline-block;background:#111418;color:#ffffff;text-decoration:none;
                   font-weight:700;font-size:14px;border-radius:8px;padding:12px 22px;">
           Accept invitation &amp; sign in
         </a>
       </p>
       <p style="margin:0;color:#8a919c;font-size:12px;">The link signs you in directly, no password
-      needed. If it has expired, ask ${args.inviterEmail} to resend the invitation.</p>`,
+      needed. If it has expired, ask ${inviter} to resend the invitation.</p>`,
     text: `${args.inviterEmail} invited you to join ${args.orgName} on Transformer Talent.\n\nAccept and sign in: ${args.actionLink}\n\nThe link signs you in directly, no password needed. If it has expired, ask ${args.inviterEmail} to resend the invitation.`,
-  });
+  };
+}
+
+export async function sendTeamInvite(args: {
+  to: string;
+  orgName: string;
+  inviterEmail: string;
+  actionLink: string;
+}): Promise<boolean> {
+  return sendEmail({ to: args.to, ...composeTeamInvite(args) });
 }
 
 /** Referral confirmation to the referrer (identical for duplicates — the
- *  response never reveals whether we already knew the person). */
+ *  response never reveals whether we already knew the person). The name and
+ *  profile come from a public form: shown as text, and the profile link is
+ *  rebuilt from the LinkedIn name. */
+export function composeReferralConfirmation(args: {
+  referrerName: string;
+  candidateLinkedin: string;
+  /** null = no bounty was offered (org-board referrals) — say nothing about money. */
+  amount: number | null;
+}): { subject: string; html: string; text: string } {
+  const first = plainLine(args.referrerName.split(/\s+/)[0] || args.referrerName, 60);
+  const profile = linkedinHref(args.candidateLinkedin);
+  const amount = args.amount != null && Number.isFinite(args.amount) ? Math.round(args.amount) : null;
+  const moneyHtml =
+    amount != null
+      ? `
+      <p style="margin:0 0 14px;">If your referral leads to a placement, you receive
+      <b style="color:#067647;">$${amount.toLocaleString()}</b>, paid when the placement completes.</p>`
+      : "";
+  const moneyText =
+    amount != null
+      ? `\n\nIf your referral leads to a placement, you receive $${amount.toLocaleString()}, paid when the placement completes.`
+      : "";
+  const profileHtml = profile
+    ? ` (<a href="${escapeHtml(profile)}" style="color:#2a5bd7;">${escapeHtml(profile)}</a>)`
+    : "";
+  return {
+    subject: "We received your referral",
+    html: `
+      <p style="margin:0 0 14px;">Hi ${escapeHtml(first)},</p>
+      <p style="margin:0 0 14px;">Thank you for your referral. Our team will review their profile${profileHtml}
+      and reach out to them if there is a fit.</p>${moneyHtml}
+      <p style="margin:0;">Spencer<br>Transformer Talent</p>`,
+    text: `Hi ${first},\n\nThank you for your referral. Our team will review their profile${profile ? ` (${profile})` : ""} and reach out to them if there is a fit.${moneyText}\n\nSpencer\nTransformer Talent`,
+  };
+}
+
 export async function sendReferralConfirmation(args: {
   to: string;
   referrerName: string;
@@ -99,26 +148,5 @@ export async function sendReferralConfirmation(args: {
   /** null = no bounty was offered (org-board referrals) — say nothing about money. */
   amount: number | null;
 }): Promise<void> {
-  const first = args.referrerName.split(/\s+/)[0] || args.referrerName;
-  const moneyHtml =
-    args.amount != null
-      ? `
-      <p style="margin:0 0 14px;">If your referral leads to a placement, you receive
-      <b style="color:#067647;">$${args.amount.toLocaleString()}</b>, paid when the placement completes.</p>`
-      : "";
-  const moneyText =
-    args.amount != null
-      ? `\n\nIf your referral leads to a placement, you receive $${args.amount.toLocaleString()}, paid when the placement completes.`
-      : "";
-  await sendEmail({
-    to: args.to,
-    subject: "We received your referral",
-    html: `
-      <p style="margin:0 0 14px;">Hi ${first},</p>
-      <p style="margin:0 0 14px;">Thank you for your referral. Our team will review their profile
-      (<a href="${args.candidateLinkedin}" style="color:#2a5bd7;">${args.candidateLinkedin}</a>)
-      and reach out to them if there is a fit.</p>${moneyHtml}
-      <p style="margin:0;">Spencer<br>Transformer Talent</p>`,
-    text: `Hi ${first},\n\nThank you for your referral. Our team will review their profile (${args.candidateLinkedin}) and reach out to them if there is a fit.${moneyText}\n\nSpencer\nTransformer Talent`,
-  });
+  await sendEmail({ to: args.to, ...composeReferralConfirmation(args) });
 }

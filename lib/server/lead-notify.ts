@@ -4,6 +4,7 @@
 // notification must never break the entry that triggered it.
 import { sbRest } from "./supabase";
 import { sendEmail } from "./email";
+import { escapeHtml, linkedinHref, mailtoHref, plainLine } from "./html";
 
 const CANDIDATES_URL = "https://www.transformertalent.com/dashboard/candidates";
 
@@ -54,7 +55,7 @@ export async function leadRecipients(args: {
   }
 }
 
-export async function sendLeadNotification(args: {
+export type LeadNotification = {
   to: string[];
   kind: "application" | "speculative" | "referral" | "future";
   /** Candidate name; falls back to their email/LinkedIn when unresolved. */
@@ -74,9 +75,14 @@ export async function sendLeadNotification(args: {
   visaStatus?: string | null;
   /** True when the entry came through a recruiter page. */
   viaPage: boolean;
-}): Promise<void> {
-  if (args.to.length === 0) return;
+};
+
+/** The email itself. Everything in it that a visitor typed (name, email,
+ *  LinkedIn, preferences, a referrer's details, role titles) is shown as
+ *  text; the links are rebuilt from checked values. */
+export function composeLeadNotification(args: LeadNotification): { subject: string; html: string } {
   const who = args.name || args.email;
+  const whoHtml = escapeHtml(who);
   const surface = args.viaPage ? "your page" : "your job board";
 
   let subject: string;
@@ -98,33 +104,40 @@ export async function sendLeadNotification(args: {
     ].filter(Boolean);
     subject = `Future interest: ${who} (reach out ${month})`;
     lead =
-      `<b>${who}</b> asked on ${surface} to hear from you around <b>${month}</b>.` +
-      (wants.length ? `<br>They want: ${wants.join(" · ")}.` : "");
+      `<b>${whoHtml}</b> asked on ${surface} to hear from you around <b>${escapeHtml(month)}</b>.` +
+      (wants.length ? `<br>They want: ${wants.map(escapeHtml).join(" · ")}.` : "");
   } else if (args.kind === "referral") {
     subject = `New referral: ${who}`;
-    lead = `<b>${args.referrerName || "Someone"}</b> (${args.referrerEmail || "no email"})
-      referred <b>${who}</b> through ${surface}.`;
+    lead = `<b>${escapeHtml(args.referrerName || "Someone")}</b> (${escapeHtml(args.referrerEmail || "no email")})
+      referred <b>${whoHtml}</b> through ${surface}.`;
   } else if (args.kind === "speculative") {
     subject = `New resume in your network: ${who}`;
-    lead = `<b>${who}</b> uploaded their resume on ${surface}.`;
+    lead = `<b>${whoHtml}</b> uploaded their resume on ${surface}.`;
   } else {
     const first = args.roleTitles[0] || "a role";
     const more = args.roleTitles.length > 1 ? ` and ${args.roleTitles.length - 1} more` : "";
     subject = `New applicant: ${who} — ${first}${more}`;
-    lead = `<b>${who}</b> applied on ${surface} to ${args.roleTitles
-      .map((t) => `<b>${t}</b>`)
+    lead = `<b>${whoHtml}</b> applied on ${surface} to ${args.roleTitles
+      .map((t) => `<b>${escapeHtml(t)}</b>`)
       .join(", ")}.`;
   }
 
+  const mailto = mailtoHref(args.email);
+  const linkedin = linkedinHref(args.linkedin);
   const html = `
     <p style="margin:0 0 14px;">${lead}</p>
     <p style="margin:0 0 14px;">
-      Email: <a href="mailto:${args.email}" style="color:#2a5bd7;">${args.email}</a><br>
-      ${args.linkedin ? `LinkedIn: <a href="${args.linkedin}" style="color:#2a5bd7;">${args.linkedin}</a>` : ""}
+      Email: ${mailto ? `<a href="${escapeHtml(mailto)}" style="color:#2a5bd7;">${escapeHtml(args.email)}</a>` : escapeHtml(args.email)}<br>
+      ${linkedin ? `LinkedIn: <a href="${escapeHtml(linkedin)}" style="color:#2a5bd7;">${escapeHtml(linkedin)}</a>` : ""}
     </p>
     <p style="margin:0;">
       <a href="${CANDIDATES_URL}" style="color:#2a5bd7;">Review them in your dashboard →</a>
     </p>`;
+  return { subject: plainLine(subject), html };
+}
 
+export async function sendLeadNotification(args: LeadNotification): Promise<void> {
+  if (args.to.length === 0) return;
+  const { subject, html } = composeLeadNotification(args);
   await Promise.all(args.to.map((to) => sendEmail({ to, subject, html })));
 }
