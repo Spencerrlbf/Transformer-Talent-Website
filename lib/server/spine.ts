@@ -122,6 +122,91 @@ export function harvestToExperiences(harvest: Record<string, unknown> | null) {
   });
 }
 
+// ---------- The candidates row from a Harvest profile ----------
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const cleanText = (s: unknown): string | null =>
+  typeof s === "string" ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim() || null : null;
+
+/** A "position" that is a membership or side role, not the job: a council
+ *  membership, an advisory seat, a board, mentoring, volunteering, angel
+ *  investing. "Member of Technical Staff", "Member Software Engineer" and
+ *  "Founding Member" are jobs, not memberships. */
+const SIDE_ROLE = /\b((?<!founding\s)member(?!\s+(of\s+(the\s+)?(technical|engineering|research|professional)\s+staff|software|technical|engineering))|membership|advisor|advisory|board|mentor|mentoring|volunteer|ambassador|investor|council)\b/i;
+
+interface HarvestEducation {
+  schoolName?: string;
+  title?: string;
+  degree?: string;
+  fieldOfStudy?: string;
+}
+
+/** The candidates columns a refreshed LinkedIn profile replaces, in the
+ *  shapes the pool already stores (the same as scripts/sync-directory.mjs
+ *  writes for directory people): positions newest first with month-name
+ *  dates, "School - Degree in Field" education lines, the summary and every
+ *  skill. The judge, the signals and the Profile tab all read these, so a
+ *  refresh that wrote only the title and company left them judging the old
+ *  history (2026-09-25: 5,310 Network people on history up to a year old).
+ *  Columns the profile has nothing for are left out, never blanked. */
+export function harvestToPoolRecord(harvest: Record<string, unknown> | null): Record<string, unknown> {
+  if (!harvest) return {};
+  const out: Record<string, unknown> = {};
+  const positions = harvestToExperiences(harvest).map((e) => ({
+    title: cleanText(e.title),
+    company: cleanText(e.company_name),
+    duration: cleanText(e.duration_text),
+    location: cleanText(e.location),
+    is_current: e.is_current === true,
+    start_date: e.start_year ? { year: e.start_year, month: e.start_month ? MONTH_NAMES[e.start_month - 1] : null } : null,
+    end_date: e.end_year && !e.is_current ? { year: e.end_year, month: e.end_month ? MONTH_NAMES[e.end_month - 1] : null } : null,
+    description: cleanText(e.description),
+    company_linkedin_url: cleanText(e.company_linkedin_url),
+  })).filter((p) => p.title || p.company);
+  // LinkedIn can list side roles above the job ("Official Member, Forbes
+  // Technology Council" above "Principal Engineer, CrowdStrike"). Everything
+  // that reads the first position as the person's job (the current title,
+  // the role type, the level) should see the job, so it goes first: the
+  // current one, else the latest (someone between jobs keeps their last
+  // real title, never a membership). Its dates still say when it ended.
+  const side = (p: { title: string | null; company: string | null }) => SIDE_ROLE.test(`${p.title ?? ""} ${p.company ?? ""}`);
+  let job = positions.findIndex((p) => p.is_current && !side(p));
+  if (job < 0) job = positions.findIndex((p) => !side(p));
+  if (job > 0) positions.unshift(...positions.splice(job, 1));
+  if (positions.length) out.work_experience = positions;
+
+  const edus = (Array.isArray(harvest.education) ? (harvest.education as HarvestEducation[]) : [])
+    .map((e) => ({ school: cleanText(e?.schoolName ?? e?.title), degree: cleanText(e?.degree), field: cleanText(e?.fieldOfStudy) }))
+    .filter((e) => e.school);
+  if (edus.length) {
+    out.education = edus
+      .map((e) => (e.degree && e.field ? `${e.school} - ${e.degree} in ${e.field}` : e.degree ? `${e.school} - ${e.degree}` : e.field ? `${e.school} - ${e.field}` : e.school))
+      .join("\n");
+    out.education_schools = edus.map((e) => e.school);
+    out.education_degrees = edus.map((e) => e.degree).filter(Boolean);
+    out.education_fields = edus.map((e) => e.field).filter(Boolean);
+  }
+
+  const about = cleanText(harvest.about);
+  if (about) out.profile_summary = about.slice(0, 5000);
+  const headline = cleanText(harvest.headline);
+  if (headline) out.headline = headline.slice(0, 500);
+  const loc = harvest.location as { linkedinText?: string; parsed?: { text?: string } } | string | null | undefined;
+  const locationText = cleanText(typeof loc === "string" ? loc : loc?.linkedinText || loc?.parsed?.text);
+  if (locationText) out.location = locationText.slice(0, 200);
+  const skills = (Array.isArray(harvest.skills) ? (harvest.skills as ({ name?: string } | string)[]) : [])
+    .map((s) => cleanText(typeof s === "string" ? s : s?.name))
+    .filter((s): s is string => !!s);
+  if (skills.length) {
+    out.top_skills = skills;
+    out.all_skills_text = skills.join(", ");
+  }
+  const current = positions.find((p) => p.is_current && !side(p)) ?? positions[0];
+  if (current?.title) out.current_title = current.title;
+  if (current?.company) out.current_company = current.company;
+  return out;
+}
+
 export async function syncExperiences(
   candidateId: string,
   harvest: Record<string, unknown> | null
@@ -131,7 +216,11 @@ export async function syncExperiences(
     const mapped = harvestToExperiences(harvest);
     if (!orgId || !mapped.length) return;
 
-    const rows = mapped.map((m) => ({
+    // A profile can list the same position twice (same company, title and
+    // start); one upsert may not touch a key twice, so keep the first.
+    const seen = new Set<string>();
+    const unique = mapped.filter((m) => !seen.has(m.provider_experience_key) && !!seen.add(m.provider_experience_key));
+    const rows = unique.map((m) => ({
       organization_id: orgId,
       candidate_id: candidateId,
       source: "harvest",

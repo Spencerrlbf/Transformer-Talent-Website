@@ -13,6 +13,13 @@
 //   node scripts/refresh-worker.mjs                      nightly drain
 //   PRECOMPUTE_BACKFILL=N node scripts/refresh-worker.mjs  re-screen stored
 //     payloads against roles with no Harvest spend.
+//   NO_TOPUP=1            drain only what is queued (a one-off batch)
+//   CONCURRENCY=4         profiles in flight (default 1, the nightly pace)
+//
+// A refresh rewrites the person's whole record from the profile (jobs,
+// education, summary, skills, years), so the judge, the signals and the
+// Profile tab read the fresh history; before 2026-09-25 it wrote only the
+// headline, title, company, location and skills.
 import fs from "node:fs";
 
 try {
@@ -26,8 +33,9 @@ try {
 const {
   computeFacts,
   formatFacts,
-  harvestToExperiences,
+  harvestToPoolRecord,
   linkedinProfileText,
+  poolSignals,
   recordEnrichment,
   syncExperiences,
   syncCandidateEmbeddings,
@@ -37,6 +45,7 @@ const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const HARVEST = process.env.HARVEST_API_KEY;
 const CAP = Math.max(0, parseInt(process.env.REFRESH_DAILY_CAP || "50", 10) || 0);
+const CONCURRENCY = Math.min(8, Math.max(1, parseInt(process.env.CONCURRENCY || "1", 10) || 1));
 if (!SUPABASE_URL || !KEY) throw new Error("Supabase creds required");
 if (!HARVEST && !process.env.PRECOMPUTE_BACKFILL) throw new Error("HARVEST_API_KEY required");
 
@@ -74,7 +83,7 @@ if (!remaining && !process.env.PRECOMPUTE_BACKFILL) process.exit(0);
 const queued = await rest(
   `refresh_queue?status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
 );
-if (queued.length < remaining) {
+if (queued.length < remaining && !process.env.NO_TOPUP) {
   const needed = remaining - queued.length;
   const everQueued = new Set((await rest("refresh_queue?select=candidate_id")).map((r) => r.candidate_id));
   // Queue slots go to people who actually need refreshing — recently
@@ -147,8 +156,26 @@ async function finishQueueRow(row, status) {
   });
 }
 
+// Harvest answers a burst with 429 and has the odd 5xx: wait and ask again
+// (at most three tries) rather than failing the person for the night.
+async function harvestProfile(url) {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
+      headers: { "X-API-Key": HARVEST },
+      signal: AbortSignal.timeout(25000),
+    });
+    if (res.ok) return res.json();
+    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+      await new Promise((r) => setTimeout(r, attempt * 10_000));
+      continue;
+    }
+    throw new Error(`harvest ${res.status}`);
+  }
+}
+
 let refreshed = 0, failed = 0, skipped = 0, reused = 0;
-for (const row of queued.slice(0, remaining)) {
+const work = queued.slice(0, remaining);
+async function refreshOne(row) {
   try {
     let { linkedin_url: url, linkedin_username: username } = row;
     if (!url || !username) {
@@ -160,7 +187,7 @@ for (const row of queued.slice(0, remaining)) {
     if (!url) {
       await finishQueueRow(row, "skipped");
       skipped++;
-      continue;
+      return;
     }
 
     // NEVER pay twice within 30 days: if the ledger has a recent successful
@@ -168,7 +195,7 @@ for (const row of queued.slice(0, remaining)) {
     // spine writes and verdict precompute still run, the credit doesn't.
     const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
     const [recent] = await rest(
-      `candidate_enrichments?candidate_id=eq.${row.candidate_id}&provider=eq.harvest&status=eq.ok&raw_payload=not.is.null&created_at=gte.${since30}&select=raw_payload&order=created_at.desc&limit=1`
+      `candidate_enrichments?candidate_id=eq.${row.candidate_id}&provider=eq.harvest&status=eq.ok&raw_payload=not.is.null&created_at=gte.${since30}&select=raw_payload,created_at&order=created_at.desc&limit=1`
     );
 
     let h;
@@ -177,12 +204,7 @@ for (const row of queued.slice(0, remaining)) {
       reused++;
       console.log(`  reusing ledgered profile for ${username || row.candidate_id} (no Harvest spend)`);
     } else {
-      const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
-        headers: { "X-API-Key": HARVEST },
-        signal: AbortSignal.timeout(25000),
-      });
-      if (!res.ok) throw new Error(`harvest ${res.status}`);
-      const data = await res.json();
+      const data = await harvestProfile(url);
       h = data.element; // Harvest wraps errors in 200s — element only
     }
     if (!h || typeof h !== "object" || (!h.experience && !h.headline)) throw new Error("harvest empty profile");
@@ -200,20 +222,15 @@ for (const row of queued.slice(0, remaining)) {
     await syncExperiences(row.candidate_id, h);
     await syncCandidateEmbeddings(row.candidate_id, { linkedin_profile: linkedinProfileText(h) });
 
-    // Candidates-row freshness: full skills + headline + current position.
-    const allSkills = (h.skills || []).map((s) => s?.name).filter(Boolean);
-    const expList = Array.isArray(h.experience) ? h.experience : [];
-    const current = expList.find((e) => /present/i.test(e.endDate?.text || "")) || expList[0];
-    const locationText =
-      typeof h.location === "string" ? h.location : h.location?.linkedinText || h.location?.parsed?.text || null;
-    const clean = (s) => String(s ?? "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").trim();
-    const patch = {
-      ...(allSkills.length ? { top_skills: allSkills } : {}),
-      ...(h.headline ? { headline: clean(h.headline).slice(0, 500) } : {}),
-      ...(locationText ? { location: clean(locationText).slice(0, 200) } : {}),
-      ...(current?.position || current?.title ? { current_title: current.position || current.title } : {}),
-      ...(current?.companyName || current?.company ? { current_company: current.companyName || current.company } : {}),
-    };
+    // The whole candidates row from the profile: jobs, education, summary,
+    // skills, headline, place, current job, and the years the Network tab
+    // shows, worked out from the new history the way the signals do.
+    const patch = harvestToPoolRecord(h);
+    if (patch.work_experience) {
+      const years = poolSignals({ ...patch, calculated_experience_years: null, total_experience_years: null }).years;
+      if (Number.isFinite(years)) patch.calculated_experience_years = Math.round(years);
+    }
+    if (Object.keys(patch).length) patch.linkedin_enrichment_date = recent?.created_at || new Date().toISOString();
     if (Object.keys(patch).length) {
       await rest(`candidates?id=eq.${row.candidate_id}`, {
         method: "PATCH",
@@ -224,7 +241,7 @@ for (const row of queued.slice(0, remaining)) {
 
     await finishQueueRow(row, "done");
     refreshed++;
-    console.log(`refreshed ${username || row.candidate_id} (priority ${row.priority})`);
+    if (refreshed % 100 === 0 || CONCURRENCY === 1) console.log(`refreshed ${username || row.candidate_id} (priority ${row.priority}); ${refreshed} done, ${failed} failed`);
   } catch (err) {
     failed++;
     console.error(`refresh failed for ${row.candidate_id}:`, err.message);
@@ -240,4 +257,7 @@ for (const row of queued.slice(0, remaining)) {
     await finishQueueRow(row, "failed").catch(() => {});
   }
 }
+await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
+  while (work.length) await refreshOne(work.shift());
+}));
 console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed, ${skipped} skipped`);
