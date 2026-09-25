@@ -897,7 +897,7 @@ async function main() {
       const inp = before.inputs.get(id);
       const saved = results.get(id) ?? [];
       const check = stored ? checkStored(tally, id, inp, p.docs, stored, lib) : null;
-      const docsOut = p.docs.map((d, i) => ({ source: d.source.source, fetched_at: String(d.source.fetched_at).slice(0, 10), mode: d.mode, ...docCounts(d), status: saved[i]?.status ?? (DRY_RUN ? "dry_run" : null) }));
+      const docsOut = p.docs.map((d, i) => ({ source: d.source.source, fetched_at: String(d.source.fetched_at).slice(0, 10), mode: d.mode, ...docCounts(d), status: saved[i]?.status ?? (DRY_RUN ? "dry_run" : null), saved: saved[i]?.counts ?? null }));
       const errors = [...p.buildErrors, ...saved.filter((r) => r.status === "error").map((r) => ({ where: r.label, error: r.error }))];
       const person = { id, inputs: p.inputs, docs: docsOut, doc_check: p.docCheck, errors };
       if (check) {
@@ -989,7 +989,16 @@ async function writeDetail(site, file, ids, before, docsBy, results, stored, pro
       inputs: { candidate_emails: inp.legacy, candidate_emails_v2: inp.v2, ledger: inp.ledger.map(({ raw_payload, ...l }) => l), applications: inp.apps.map((a) => ({ id: a.id, created_at: a.created_at, source: a.source, email: a.email, contact: a.contact })), directory: inp.dir ? { board: inp.dir.board, emails: inp.dir.emails, phones: inp.dir.phones, harvest_fetched_at: inp.dir.harvest?.fetched_at ?? null } : null },
       docs: docsBy.get(id) ?? [],
       results: results.get(id) ?? [],
-      tables: t ? { ...t, summary: stored.summary.get(id) ?? null, conflicts: stored.conflicts.filter((c) => arr(c.candidate_ids).includes(id)) } : null,
+      tables: t
+        ? {
+            ...t,
+            // Rows a newer list source no longer lists (kept with removed_at, never deleted).
+            removed_jobs: (stored.jobs.get(id) ?? []).filter((r) => r.removed_at),
+            removed_educations: (stored.educations.get(id) ?? []).filter((r) => r.removed_at).map((e) => ({ ...e, school: stored.schoolById.get(e.school_id) ?? null })),
+            summary: stored.summary.get(id) ?? null,
+            conflicts: stored.conflicts.filter((c) => arr(c.candidate_ids).includes(id)),
+          }
+        : null,
       projection: proj.get(id) ?? null,
     };
   });
