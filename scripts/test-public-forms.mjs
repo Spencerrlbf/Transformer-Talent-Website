@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Public forms can't prove who is typing. Checks the rules that follow from
 // that, with no database and no network (every request goes to a stub):
-// the one canonical form of a LinkedIn address, a cached LinkedIn profile
-// used only for the person it belongs to, a duplicate needing both email and
-// LinkedIn, and a submission joining a pool person only when its email is one
-// TT already has for them (otherwise it stands on its own and writes nothing).
+// the one canonical form of a LinkedIn address, a LinkedIn profile used for
+// a pool person only when it is that person's own, a duplicate needing both
+// email and LinkedIn, and a submission joining a pool person only when its
+// email is one TT already has for them (otherwise it stands on its own, writes
+// nothing to them, and its Airtable review row is linked to no one).
 //
 //   node scripts/test-public-forms.mjs
 import { execFileSync } from "node:child_process";
@@ -18,10 +19,11 @@ fs.mkdirSync(path.dirname(entry), { recursive: true });
 fs.writeFileSync(
   entry,
   `export {
-  canonicalLinkedin, linkedinUsername, harvestIsFor, sameSubmitter, recentSameSubmitter,
-  tenantPersonId, fillPoolFollowUp, promoteToCandidatePool,
+  canonicalLinkedin, linkedinUsername, harvestIdentity, harvestIsFor, usernameForms, formulaText,
+  sameSubmitter, recentSameSubmitter, tenantPersonId, fillPoolFollowUp, promoteToCandidatePool,
 } from "@/lib/server/applicants";
 export { normalEmail, contactEmails, emailIsKnown, poolPersonHasEmail } from "@/lib/server/pool-emails";
+export { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
 `
 );
 execFileSync("npx", ["--yes", "esbuild@0.28.2", entry, "--bundle", "--platform=node", "--format=esm",
@@ -95,6 +97,20 @@ for (const raw of bad) {
   const r = noThrow(() => m.canonicalLinkedin(raw));
   check(`canonical rejects ${JSON.stringify(raw.length > 60 ? raw.slice(0, 60) + "..." : raw)}`, r.ok && r.value === null, JSON.stringify(r.value));
 }
+// Member-id links are case-sensitive at LinkedIn: the key is lowercased like
+// any name, the address keeps the case typed so the lookup still finds them.
+const memberIds = [
+  ["https://www.linkedin.com/in/ACoAAB1cdEfGhIjKlMnOp", "acoaab1cdefghijklmnop", "https://www.linkedin.com/in/ACoAAB1cdEfGhIjKlMnOp"],
+  ["linkedin.com/in/ACwAAB1cdEfGhIjKlMnOp/?miniProfileUrn=x", "acwaab1cdefghijklmnop", "https://www.linkedin.com/in/ACwAAB1cdEfGhIjKlMnOp"],
+  ["https://www.linkedin.com/in/acoaab1cdefghijklmnop", "acoaab1cdefghijklmnop", "https://www.linkedin.com/in/acoaab1cdefghijklmnop"],
+  ["https://www.linkedin.com/in/ACoAAB-short", "acoaab-short", "https://www.linkedin.com/in/acoaab-short"],
+  ["https://www.linkedin.com/in/Acme-Engineering-Lead-1234567", "acme-engineering-lead-1234567", "https://www.linkedin.com/in/acme-engineering-lead-1234567"],
+];
+for (const [raw, username, url] of memberIds) {
+  const r = noThrow(() => m.canonicalLinkedin(raw));
+  check(`canonical member id: ${JSON.stringify(raw)} -> key ${username}, address ${url}`,
+    r.ok && r.value?.username === username && r.value?.url === url, JSON.stringify(r.value));
+}
 
 // ---------- linkedinUsername: never throws, same answer as before for valid input ----------
 const oldLinkedinUsername = (url) => {
@@ -132,11 +148,38 @@ const harvestCases = [
   ["string payload", "jane-doe", "jane-doe", false],
   ["array payload", ["jane-doe"], "jane-doe", false],
   ["no username", { publicIdentifier: "jane-doe" }, null, false],
+  ["the same name in another Unicode spelling", { publicIdentifier: "jo\u0308rg" }, "j\u00f6rg", true],
+  ["a look-alike in full-width letters", { publicIdentifier: "jane" }, "\uff4a\uff41\uff4e\uff45", false],
+  ["a member id answered with the person's name", { publicIdentifier: "jane-doe" }, "acoaab1cdefghijklmnop", false],
 ];
 for (const [label, payload, username, want] of harvestCases) {
   const r = noThrow(() => m.harvestIsFor(payload, username));
   check(`harvestIsFor: ${label}`, r.ok && r.value === want, String(r.value));
 }
+// harvestIdentity: what a profile says its own name is (null when it names none)
+for (const [label, payload, want] of [
+  ["publicIdentifier", { publicIdentifier: " Jane-Doe " }, "jane-doe"],
+  ["linkedinUrl", { linkedinUrl: "https://uk.linkedin.com/in/Jane-Doe/" }, "jane-doe"],
+  ["url on another site", { url: "https://evil.com/in/jane-doe" }, null],
+  ["nothing", { firstName: "Jane" }, null],
+  ["a getter that throws", throwing, null],
+  ["null", null, null],
+]) {
+  const r = noThrow(() => m.harvestIdentity(payload));
+  check(`harvestIdentity: ${label}`, r.ok && r.value === want, JSON.stringify(r.value));
+}
+
+// ---------- usernameForms: the spellings older pool records may carry ----------
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+check("forms: a plain name is only itself", sameSet(m.usernameForms("jane-doe"), ["jane-doe"]));
+check("forms: an escaped capital is looked up too", sameSet(m.usernameForms("\u00f6laf"), ["\u00f6laf", "\u00d6laf"]));
+check("forms: letters without case add nothing", sameSet(m.usernameForms("\u738b\u4f1f"), ["\u738b\u4f1f"]));
+check("forms: a letter whose capital is two letters adds nothing", sameSet(m.usernameForms("stra\u00dfe"), ["stra\u00dfe"]));
+check("forms: at most 16", m.usernameForms("\u00e4\u00f6\u00fc\u00e9\u00e8\u00ea").length === 16);
+
+// ---------- formulaText: typed text stays text inside an Airtable formula ----------
+check("formula: quotes and backslashes escaped", m.formulaText('a"),TRUE(),("\\x@y.co') === '"a\\"),TRUE(),(\\"\\\\x@y.co"');
+check("formula: plain text untouched", m.formulaText("jane@example.com") === '"jane@example.com"');
 
 // ---------- the duplicate rule: both identifiers ----------
 const row = { email: "Jane@Example.com", linkedin_username: "jane-doe" };
@@ -236,6 +279,32 @@ stub([]);
   const r = await m.promoteToCandidatePool({ ...promoteArgs("jane@example.com"), linkedinUrl: "https://evil.com/in/jane-doe" });
   check("not a LinkedIn profile: no pool lookup at all", r.candidateId === null && calls.length === 0, JSON.stringify(r));
 }
+stub([get("candidates?linkedin_username=eq.jane-doe", { message: "timeout" }, 503)]);
+{
+  const r = await m.promoteToCandidatePool(promoteArgs("jane@example.com"));
+  check("pool read fails: stands on its own, creates no record", r.candidateId === "sub-1" && r.standalone && writes().length === 0,
+    JSON.stringify({ r, writes: writes() }));
+}
+// An older record keyed with the escaped capital (\u00d6laf) is still found.
+const olafRow = { ...poolRow, id: "pool-olaf" };
+stub([[(meth, u) => meth === "GET" && u.startsWith('candidates?linkedin_username=in.("\u00f6laf","\u00d6laf")'), () => json([olafRow])],
+  get("candidate_emails?", []), get("candidate_emails_v2?", [])]);
+{
+  const r = await m.promoteToCandidatePool({ ...promoteArgs("stranger@example.com"), linkedinUrl: "https://www.linkedin.com/in/%C3%B6laf" });
+  check("older spelling found: a stranger stands on its own", r.candidateId === "sub-1" && r.standalone && writes().length === 0,
+    JSON.stringify({ r, calls: calls.map((c) => c.path) }));
+  check("older spelling found: its emails were checked", calls.some((c) => c.path.startsWith("candidate_emails?candidate_id=eq.pool-olaf")),
+    JSON.stringify(calls.map((c) => c.path)));
+}
+// Two records for one name: the one whose email was typed is the person.
+stub([[(meth, u) => meth === "GET" && u.startsWith("candidates?linkedin_username=in."), () => json([olafRow, { ...poolRow, id: "pool-olaf-2", email: "olaf@example.com" }])],
+  get("candidate_emails?", []), get("candidate_emails_v2?", []), [(meth) => meth === "PATCH", () => new Response(null, { status: 204 })]]);
+{
+  const r = await m.promoteToCandidatePool({ ...promoteArgs("olaf@example.com"), linkedinUrl: "https://www.linkedin.com/in/%C3%B6laf" });
+  check("two records: linked to the one that has the email", r.candidateId === "pool-olaf-2" && !r.standalone,
+    JSON.stringify({ r, writes: writes().map((w) => w.path) }));
+  check("two records: only that one is written", writes().every((w) => w.path.startsWith("candidates?id=eq.pool-olaf-2")), JSON.stringify(writes().map((w) => w.path)));
+}
 
 // tenantPersonId and recentSameSubmitter: both identifiers
 const appRows = [
@@ -266,6 +335,82 @@ await m.fillPoolFollowUp("p1", { followUpAt: "2027-03-01", rolePreferences: { ro
 stub([get("candidates?id=eq.p1", [{ follow_up_at: "2026-01-01", role_preferences: { roles: ["ML"] }, visa_status: "Needs sponsorship" }])]);
 await m.fillPoolFollowUp("p1", { followUpAt: "2027-03-01", rolePreferences: { roles: ["Backend"] }, visa: "Citizen" });
 check("follow-up: nothing written when the record has it all", writes().length === 0, JSON.stringify(writes()));
+
+// ---------- the pipeline, end to end against the stub ----------
+// A TT applicant (no resume, no model key: no screening), reviewed as if from
+// the nightly queue so no allowance or lead email is involved. Harvest and
+// Airtable answer from the stub too.
+process.env.HARVEST_API_KEY = "stub";
+process.env.AIRTABLE_API_TOKEN = "stub";
+process.env.AIRTABLE_BASE_ID = "appStub";
+for (const k of ["NOTION_TOKEN", "NOTION_DATABASE_ID", "LLAMA_CLOUD_API_KEY", "RESEND_API_KEY"]) delete process.env[k];
+const HARVEST = "https://api.harvestapi.io/";
+const AIRTABLE = "https://api.airtable.com/v0/appStub/";
+const pipelineStub = (extra, profile) => stub([
+  get("organizations?slug=eq.transformer-talent", [{ id: "tt-org" }]),
+  ...extra,
+  [(meth, u) => u.startsWith(HARVEST), () => json({ element: profile })],
+  [(meth, u) => meth === "GET" && u.startsWith(`${AIRTABLE}Candidates?`), () => json({ records: [{ id: "recRealPerson" }] })],
+  [(meth, u) => u.startsWith(AIRTABLE), () => json({ records: [{ id: "recNew" }] })],
+  [(meth) => meth === "GET", () => json([])],
+  [() => true, () => json([], 201)],
+]);
+const runPipeline = (email, linkedin) => m.runApplicantPipeline({
+  submissionId: "sub-1", name: "Jane Doe", email, linkedin, visa: "", preferredLocations: [], roleIds: [],
+  speculative: true, resumeBuf: null, resumeSafeName: "resume.pdf", resumePath: null, boardOrg: null,
+  orgId: "tt-org", applicationType: "Speculative", fromQueue: true,
+});
+const poolTouches = () => calls.filter((c) => c.path.startsWith("candidates") || c.path.startsWith("candidate_experiences") || c.path.startsWith("candidate_embeddings"));
+const appPatch = () => calls.filter((c) => c.method === "PATCH" && c.path.startsWith("website_applications?id=eq.sub-1")).map((c) => c.body).find((b) => b && "candidate_id" in b) || {};
+const reviewRow = () => calls.find((c) => c.method === "POST" && c.path.startsWith(`${AIRTABLE}Website Applications`))?.body?.records?.[0]?.fields || null;
+const candidateLookups = () => calls.filter((c) => c.path.startsWith(`${AIRTABLE}Candidates`));
+const ledger = () => calls.filter((c) => c.method === "POST" && c.path === "candidate_enrichments").map((c) => c.body);
+const janeUrl = m.canonicalLinkedin("linkedin.com/in/jane-doe").url;
+
+// LinkedIn answers the address with another person's profile.
+pipelineStub([], { publicIdentifier: "someone-else", firstName: "Someone", experience: [{ position: "CTO", companyName: "Acme" }] });
+await runPipeline("jane@example.com", janeUrl);
+check("pipeline, profile is another person's: nothing read or written in the pool", poolTouches().length === 0, JSON.stringify(poolTouches().map((c) => c.method + " " + c.path)));
+check("pipeline, profile is another person's: the application stands on its own", appPatch().candidate_id === "sub-1", JSON.stringify(appPatch()));
+check("pipeline, profile is another person's: the spend is kept, under no one", ledger().length === 1 && ledger()[0].candidate_id === null && ledger()[0].cost_credits === 1, JSON.stringify(ledger()));
+check("pipeline, profile is another person's: review row kept, linked to no one",
+  reviewRow() && !("Candidate" in reviewRow()) && candidateLookups().length === 0, JSON.stringify({ row: reviewRow(), lookups: candidateLookups().length }));
+
+// A member-id link is fetched as typed and answered with the person's name.
+const memberUrl = m.canonicalLinkedin("https://www.linkedin.com/in/ACoAAB1cdEfGhIjKlMnOp").url;
+pipelineStub([], { publicIdentifier: "jane-doe", firstName: "Jane" });
+await runPipeline("jane@example.com", memberUrl);
+check("pipeline, member id: LinkedIn is asked with the case kept",
+  calls.some((c) => c.path.startsWith(HARVEST) && c.path.endsWith("/in/ACoAAB1cdEfGhIjKlMnOp")), JSON.stringify(calls.filter((c) => c.path.startsWith(HARVEST)).map((c) => c.path)));
+check("pipeline, member id: stands on its own, pool untouched", appPatch().candidate_id === "sub-1" && poolTouches().length === 0,
+  JSON.stringify({ patch: appPatch(), pool: poolTouches().map((c) => c.path) }));
+
+// A pool person under this name, and an email TT doesn't have for them.
+pipelineStub([get("candidates?linkedin_username=eq.jane-doe", [poolRow])], { publicIdentifier: "jane-doe", firstName: "Jane" });
+await runPipeline("stranger@example.com", janeUrl);
+check("pipeline, unknown email: nothing written to the pool person", poolTouches().every((c) => c.method === "GET"), JSON.stringify(poolTouches().map((c) => c.method + " " + c.path)));
+check("pipeline, unknown email: stands on its own", appPatch().candidate_id === "sub-1", JSON.stringify(appPatch()));
+check("pipeline, unknown email: review row linked to no one, no Candidates record made",
+  reviewRow() && !("Candidate" in reviewRow()) && candidateLookups().length === 0, JSON.stringify({ row: reviewRow(), lookups: candidateLookups().length }));
+
+// A new person whose profile is their own: joins the pool as before.
+pipelineStub([get("candidates?linkedin_username=eq.jane-doe", []), [(meth, u) => meth === "POST" && u === "candidates", () => json([{ id: "new-1" }], 201)]],
+  { publicIdentifier: "jane-doe", firstName: "Jane" });
+await runPipeline("jane@example.com", janeUrl);
+check("pipeline, new person: joins the pool", appPatch().candidate_id === "new-1" && calls.some((c) => c.method === "POST" && c.path === "candidates"), JSON.stringify(appPatch()));
+check("pipeline, new person: review row linked to their Candidates record", reviewRow()?.Candidate?.[0] === "recRealPerson", JSON.stringify(reviewRow()));
+
+// The pipeline fails before it knows who this is: the review row stays unlinked.
+pipelineStub([[(meth, u) => u.startsWith("website_applications?linkedin_username="), () => { throw new Error("network"); }]], { publicIdentifier: "jane-doe" });
+{
+  const logError = console.error;
+  console.error = () => {}; // the pipeline logs the failure this case sets up
+  await runPipeline("jane@example.com", janeUrl);
+  console.error = logError;
+}
+check("pipeline fails early: review row kept, linked to no one",
+  reviewRow() && !("Candidate" in reviewRow()) && candidateLookups().length === 0 && poolTouches().length === 0,
+  JSON.stringify({ row: reviewRow(), lookups: candidateLookups().length }));
 
 fs.rmSync(entry, { force: true });
 console.log(fails.length ? `\n${fails.length} FAILED` : "\nALL PASS");

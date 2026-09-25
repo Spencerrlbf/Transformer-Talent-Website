@@ -141,13 +141,21 @@ export function linkedinUsername(url: string): string | null {
 // profile name someone copied from their browser.
 const PROFILE_NAME = /^[\p{L}\p{M}\p{N}_.-]+$/u;
 
+// LinkedIn's member-id links (/in/ACoAAB..., what search results and Sales
+// Navigator hand out) are case-sensitive, unlike profile names: lowercased,
+// they point nowhere. Their address keeps the case typed; the key is still
+// the lowercased name, like every other.
+const MEMBER_ID = /^AC[ow]AA[A-Za-z0-9_-]{10,}$/;
+
 /** The one form of a LinkedIn profile address this site keeps: the profile
  *  name (decoded, lowercased) and the address rebuilt from it. Null unless
  *  the address really is linkedin.com/in/<name>: the host must be
  *  linkedin.com or a subdomain of it (www, uk, de, m...), and the path must
  *  start with /in/. A "/in/" in a query string or on another site is not a
  *  profile. The key stored with an application and the profile looked up for
- *  it both come from this one parse, so they can never be two people. */
+ *  it both come from this one parse, so they can never be two people.
+ *  (LinkedIn can still answer an address with another profile, e.g. an old
+ *  name that now redirects: the pipeline checks what comes back.) */
 export function canonicalLinkedin(raw: string): { username: string; url: string } | null {
   const s = String(raw ?? "").trim();
   if (!s) return null;
@@ -165,22 +173,24 @@ export function canonicalLinkedin(raw: string): { username: string; url: string 
   if (host !== "linkedin.com" && !host.endsWith(".linkedin.com")) return null;
   const m = u.pathname.match(/^\/in\/([^/]+)/i);
   if (!m) return null;
-  let username: string;
+  let slug: string;
   try {
-    username = decodeURIComponent(m[1]).toLowerCase();
+    slug = decodeURIComponent(m[1]);
   } catch {
     return null;
   }
+  const username = slug.toLowerCase();
   if (!PROFILE_NAME.test(username) || /^\.+$/.test(username) || [...username].length > 200) return null;
-  return { username, url: `https://www.linkedin.com/in/${encodeURIComponent(username)}` };
+  const path = MEMBER_ID.test(slug) ? slug : username;
+  return { username, url: `https://www.linkedin.com/in/${encodeURIComponent(path)}` };
 }
 
-/** Whether a stored Harvest profile is the profile of `username`: its own
- *  publicIdentifier, else the name in its linkedinUrl or url, compared
- *  decoded and lowercased. Anything unreadable is a no, never an error. */
-export function harvestIsFor(payload: unknown, username: string | null): boolean {
+/** The profile name a Harvest profile says is its own: its publicIdentifier,
+ *  else the name in its linkedinUrl or url, decoded and lowercased. Null
+ *  when it names none or can't be read; never throws. */
+export function harvestIdentity(payload: unknown): string | null {
   try {
-    if (!username || !payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
     const h = payload as Record<string, unknown>;
     const pid = typeof h.publicIdentifier === "string" ? h.publicIdentifier.trim() : "";
     const own = pid
@@ -188,10 +198,49 @@ export function harvestIsFor(payload: unknown, username: string | null): boolean
       : [h.linkedinUrl, h.url]
           .map((v) => (typeof v === "string" ? canonicalLinkedin(v)?.username : null))
           .find(Boolean) || "";
-    return Boolean(own) && own === safeDecode(username).toLowerCase();
+    // One spelling for letters that can be written two ways (ö as one
+    // character or as o plus a mark), so the same name always compares equal.
+    return own ? own.normalize("NFC") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a Harvest profile is the profile of `username` (see
+ *  harvestIdentity). Anything unreadable is a no, never an error. */
+export function harvestIsFor(payload: unknown, username: string | null): boolean {
+  try {
+    const own = harvestIdentity(payload);
+    return Boolean(own && username) && own === safeDecode(username!).toLowerCase().normalize("NFC");
   } catch {
     return false;
   }
+}
+
+/** The spellings a pool record may carry for this profile name. Every
+ *  writer (linkedinUsername above, the Airtable and directory syncs)
+ *  lowercased the address before decoding it, so a letter typed as an
+ *  escape (Ö as %C3%96) kept its capital while everything else was
+ *  lowercased. So: the name itself, plus the forms with those letters
+ *  capitalized (up to four). */
+export function usernameForms(username: string): string[] {
+  const chars = [...username];
+  const spots = chars
+    .map((c, i) => (c.codePointAt(0)! > 0x7f && c.toUpperCase() !== c && [...c.toUpperCase()].length === 1 ? i : -1))
+    .filter((i) => i >= 0)
+    .slice(0, 4);
+  const forms = new Set<string>();
+  for (let mask = 0; mask < 1 << spots.length; mask++) {
+    forms.add(
+      chars
+        .map((c, i) => {
+          const k = spots.indexOf(i);
+          return k >= 0 && mask & (1 << k) ? c.toUpperCase() : c;
+        })
+        .join("")
+    );
+  }
+  return [...forms];
 }
 
 /** The same submitter on a public form: the same email (any case) AND the
@@ -374,20 +423,33 @@ export async function promoteToCandidatePool(args: {
   };
 
   const cols = Object.keys(fields).filter((k) => k !== "matching_embedding" && k !== "embedding_type");
+  const standalone: PoolLink = { candidateId: submissionId, vector, standalone: true, resumeIsTheirs: false };
+  const forms = usernameForms(username);
   const existing = await sbRest(
-    `candidates?linkedin_username=eq.${encodeURIComponent(username)}&select=id,matching_embedding,contact,${cols.join(",")}`
+    `candidates?linkedin_username=${
+      forms.length > 1
+        ? `in.(${forms.map((f) => encodeURIComponent(`"${f}"`)).join(",")})`
+        : `eq.${encodeURIComponent(username)}`
+    }&select=id,matching_embedding,contact,${cols.join(",")}`
   );
-  const rows = (existing.ok ? await existing.json() : []) as Record<string, unknown>[];
+  // A failed read is not "nobody": creating a record then could copy a
+  // person TT already has under a stranger's email.
+  if (!existing.ok) return standalone;
+  const rows = (await existing.json()) as Record<string, unknown>[];
   if (rows.length > 0) {
     // A public form can't prove who is typing: anyone can type someone
     // else's LinkedIn. The submission joins this person only when its email
     // is one TT already has for them. Otherwise it stands on its own, keyed
     // by the application itself like a client company's applicant, and
     // writes nothing to the person.
-    const row = rows[0];
-    if (!(await poolPersonHasEmail(row.id as string, email, row))) {
-      return { candidateId: submissionId, vector, standalone: true, resumeIsTheirs: false };
+    let row: Record<string, unknown> | undefined;
+    for (const r of rows) {
+      if (await poolPersonHasEmail(r.id as string, email, r)) {
+        row = r;
+        break;
+      }
     }
+    if (!row) return standalone;
     // Even then an existing record only gains what it lacks; everything the
     // person typed stays on their application.
     const keep: Record<string, unknown> = {};
@@ -463,6 +525,10 @@ export async function matchRolesForApplicant(
 
 // ---------- Reply-ops Airtable mirror (create-only, deduped) ----------
 
+/** Typed text as a string inside an Airtable formula. The email check lets a
+ *  quote through, and an unescaped one would rewrite the formula. */
+export const formulaText = (s: string): string => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
 export async function mirrorToAirtable(args: {
   name: string;
   email: string;
@@ -478,7 +544,7 @@ export async function mirrorToAirtable(args: {
   try {
     // Dedupe by email or LinkedIn URL — never touch existing records.
     const formula = encodeURIComponent(
-      `OR({Primary Email}="${args.email}",{LinkedIn URL}="${args.linkedinUrl || ""}")`
+      `OR({Primary Email}=${formulaText(args.email)},{LinkedIn URL}=${formulaText(args.linkedinUrl || "")})`
     );
     const check = await fetch(
       `https://api.airtable.com/v0/${base}/Candidates?maxRecords=1&filterByFormula=${formula}`,
@@ -572,6 +638,10 @@ export async function mirrorApplicationToAirtable(args: {
   screenedSummary?: string; // e.g. "5 screened (1 qualified)"
   preferredLocations?: string[];
   applicationFit?: string; // rendered scorecards for the APPLIED roles
+  /** The entry is tied to a TT pool person (new, or matched by a known
+   *  email). Otherwise the row is kept but linked to no Candidates record:
+   *  the LinkedIn typed would link a stranger's entry to the real person. */
+  linkCandidate: boolean;
 }): Promise<void> {
   const token = process.env.AIRTABLE_API_TOKEN;
   const base = process.env.AIRTABLE_BASE_ID;
@@ -580,14 +650,16 @@ export async function mirrorApplicationToAirtable(args: {
   try {
     // Link to the Candidates record when one exists.
     let candidateRecordId: string | null = null;
-    const formula = encodeURIComponent(
-      `OR({Primary Email}="${args.email}",{LinkedIn URL}="${args.linkedinUrl || ""}")`
-    );
-    const found = await fetch(
-      `https://api.airtable.com/v0/${base}/Candidates?maxRecords=1&filterByFormula=${formula}`,
-      { headers, signal: AbortSignal.timeout(10000) }
-    );
-    if (found.ok) candidateRecordId = (await found.json()).records?.[0]?.id ?? null;
+    if (args.linkCandidate) {
+      const formula = encodeURIComponent(
+        `OR({Primary Email}=${formulaText(args.email)},{LinkedIn URL}=${formulaText(args.linkedinUrl || "")})`
+      );
+      const found = await fetch(
+        `https://api.airtable.com/v0/${base}/Candidates?maxRecords=1&filterByFormula=${formula}`,
+        { headers, signal: AbortSignal.timeout(10000) }
+      );
+      if (found.ok) candidateRecordId = (await found.json()).records?.[0]?.id ?? null;
+    }
 
     const resumeUrl = args.resumePath ? await signResumeUrl(args.resumePath) : null;
     const resumeFilename = args.resumePath

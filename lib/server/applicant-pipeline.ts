@@ -14,6 +14,7 @@ import {
   mirrorToAirtable,
   mirrorApplicationToAirtable,
   canonicalLinkedin,
+  harvestIdentity,
   harvestIsFor,
   fillPoolFollowUp,
 } from "./applicants";
@@ -183,6 +184,10 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   let matches: { jobId: string; title: string; salary: string }[] = [];
   let screenedSummary: string | undefined;
   let applicationFit: string | undefined;
+  // Set once this entry is known to be tied to a TT pool person (new, or
+  // matched by a known email). Until then, including when the pipeline fails
+  // first, TT's Airtable review row links it to no Candidates record.
+  let poolLinked = false;
   try {
     // The profile key and the profile fetched come from one parse of the
     // address, so a crafted URL can't file one person's profile under
@@ -209,6 +214,13 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       }
     }
     if (!harvest && canon) harvest = await harvestProfile(canon.url);
+    // LinkedIn can answer an address with another profile: an old profile
+    // name that now redirects, a member-id link, a look-alike spelling. It is
+    // still what the address shows, so this application keeps it, but it is
+    // not the profile of the name typed: such an entry stands on its own and
+    // never joins or creates a pool record with it. (A cached profile has
+    // passed this check already.)
+    const otherProfile = Boolean(harvestIdentity(harvest)) && !harvestIsFor(harvest, username);
     const parsed = await parseProfile(resumeText || "", harvest);
 
     // Referrals arrive with no name — take it from the profile.
@@ -231,8 +243,9 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     // no pool enrichment, experiences or embeddings, no TT Airtable. They
     // are judged under the company's own person key; the ledger keeps only
     // the spend, under the company. A TT applicant who matches a pool person
-    // without proving it (standalone) is kept apart the same way, under the
-    // application's own id and TT's ledger.
+    // without proving it, or whose LinkedIn profile came back as another
+    // (standalone), is kept apart the same way, under the application's own
+    // id and TT's ledger.
     const { candidateId, vector, standalone, resumeIsTheirs } = tenantOrgId
       ? {
           candidateId: await tenantPersonId(tenantOrgId, username, email, submissionId),
@@ -240,17 +253,25 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
           standalone: false,
           resumeIsTheirs: false,
         }
-      : await promoteToCandidatePool({
-          submissionId,
-          name,
-          email,
-          linkedinUrl: linkedin,
-          resumeText,
-          parsed,
-          allSkills: harvestSkills,
-        });
+      : otherProfile
+        ? {
+            candidateId: submissionId,
+            vector: await applicantVector(parsed, resumeText),
+            standalone: true,
+            resumeIsTheirs: false,
+          }
+        : await promoteToCandidatePool({
+            submissionId,
+            name,
+            email,
+            linkedinUrl: linkedin,
+            resumeText,
+            parsed,
+            allSkills: harvestSkills,
+          });
     // The TT pool record this submission may write to, if any.
     const poolId = !tenantOrgId && !standalone ? candidateId : null;
+    poolLinked = Boolean(poolId);
     const spendOnly = Boolean(tenantOrgId) || standalone;
 
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
@@ -515,7 +536,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   }
 
   // Review row for EVERY entry of TT's own — even when enrichment failed
-  // above. A client company's applicants never reach TT's Airtable.
+  // above. A client company's applicants never reach TT's Airtable. Linked
+  // to a Candidates record only when tied to a pool person (see poolLinked).
   if (!tenantOrgId) await mirrorApplicationToAirtable({
     applicationId: submissionId,
     name: name || email,
@@ -538,6 +560,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     screenedSummary,
     preferredLocations,
     applicationFit,
+    linkCandidate: poolLinked,
   });
 
   // The queue already told them when the application arrived.
