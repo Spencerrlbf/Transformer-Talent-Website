@@ -151,7 +151,25 @@ for (const role of roles) {
       };
       const presets = { today: describe(top) };
       for (const [name, weights] of Object.entries(QUALITY_WEIGHTS)) presets[`wide_${name}`] = describe(shortlistUnder(widePool, weights).slice(0, SIZE));
-      console.log(`QUALITY_PREVIEW ${JSON.stringify({ role: role.external_id, title: role.title, considered: pool.near.size, considered_wide: widePool.near.size, presets })}`);
+      // Short profiles of everyone in a top ten, for the blind comparison
+      // page: no names or links, the latest four jobs by title, company and
+      // years.
+      const topIds = [...new Set(Object.values(presets).flatMap((x) => x.top.map((t) => t.id)))];
+      const yearOf = (d) => (d && typeof d === "object" && /^\d{4}$/.test(String(d.year)) ? String(d.year) : null);
+      const people = {};
+      for (const part of chunk(topIds, 50)) {
+        for (const c of await rest(`candidates?id=in.${inList(part)}&select=id,current_title,current_company,headline,education,work_experience`)) {
+          const s = signals.get(c.id) || {};
+          const jobs = (Array.isArray(c.work_experience) ? c.work_experience : []).slice(0, 4).map((e) => ({
+            t: String(e?.title || "").slice(0, 80),
+            c: String(e?.company || "").slice(0, 60),
+            d: [yearOf(e?.start_date), e?.is_current || !yearOf(e?.end_date) ? "now" : yearOf(e?.end_date)].filter(Boolean).join("–"),
+          }));
+          people[c.id] = { h: String(c.headline || "").slice(0, 110), y: s.years ?? null, ey: s.engineering_years ?? null, ed: String(c.education || "").replace(/\s+/g, " ").slice(0, 150), j: jobs };
+        }
+      }
+      const card = (role.scorecard?.criteria || []).map((c) => ({ tier: c.tier, l: c.label }));
+      console.log(`QUALITY_PREVIEW ${JSON.stringify({ role: role.external_id, title: role.title, workplace: role.workplace, locations: role.locations, card, considered: pool.near.size, considered_wide: widePool.near.size, presets, people })}`);
     }
     tally.kept += scored.length;
     const rows = top.map((x, i) => ({ org_role_id: role.id, candidate_id: x.id, rank: i + 1, score: x.score, similarity: Math.round(x.similarity * 10000) / 10000, keyword_hits: x.keyword_hits, checks: x.checks, reasons: x.reasons, built_at: new Date().toISOString() }));
