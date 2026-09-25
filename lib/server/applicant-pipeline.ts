@@ -473,6 +473,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       const to = await leadRecipients({
         recruiterProfileId: row?.recruiter_profile_id ?? null,
         orgId,
+        jobIds: roleIds,
       });
       await sendLeadNotification({
         to,
