@@ -6,7 +6,7 @@
 // "send" path is the only bridge to a client-visible surface: it creates a
 // normal website_applications row marked source=transformer_talent, which
 // renders in the job's pipeline as an applicant with the Via-TT badge.
-import { sbRest, sbInsert } from "./supabase";
+import { sbRest } from "./supabase";
 import { clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
 
 export const TT_ORG_SLUG = "transformer-talent";
@@ -371,10 +371,19 @@ export async function sendNetworkCandidate(
   if (linked) {
     const clientRes = await sbRest(
       `org_roles?organization_id=eq.${linked.orgId}&external_id=eq.${encodeURIComponent(linked.jobId)}` +
-        `&select=id,title&limit=1`
+        `&select=id,title,status,sourcing_requested&limit=1`
     );
-    const [client] = (clientRes.ok ? await clientRes.json() : []) as { id: string; title: string }[];
+    const [client] = (clientRes.ok ? await clientRes.json() : []) as {
+      id: string; title: string; status: string | null; sourcing_requested: boolean | null;
+    }[];
     if (!client) return { ok: false, error: "linked_role_missing" };
+    // The client's say-so, checked on every send: their screen promises
+    // "Switch off any time to stop", so once they switch help off or close
+    // the job nothing more arrives. The link stays, and sends work again
+    // when the job is open with help switched on. TT's own role may be
+    // closed; only the client's job decides.
+    if (client.status !== "open" || client.sourcing_requested !== true)
+      return { ok: false, error: "client_not_requesting" };
     target = { orgId: linked.orgId, jobId: linked.jobId, title: client.title, roleUuid: client.id };
   }
 
@@ -386,13 +395,19 @@ export async function sendNetworkCandidate(
       await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]))
     ).get(candidateId)?.[0]?.email ?? null;
 
-  // One send per (person, target job) — pipelines never grow duplicates.
+  // One send per (person, target job) — pipelines never grow duplicates. A
+  // lookup that fails sends nothing: better a retry than a second copy in a
+  // client's pipeline. Two sends at the same moment can both pass this
+  // check; the unique index from migration 070 stops the second insert.
   const dupRes = await sbRest(
     `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
       `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
   );
-  if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
-    return { ok: false, error: "already_sent" };
+  if (!dupRes.ok) {
+    console.error("network send: duplicate check failed", dupRes.status, (await dupRes.text().catch(() => "")).slice(0, 200));
+    return { ok: false, error: "insert_failed" };
+  }
+  if (((await dupRes.json()) as unknown[]).length > 0) return { ok: false, error: "already_sent" };
 
   // Richest stored profile: the newest raw Harvest full_profile from the
   // enrichment ledger — powers the drawer (photo, experience, education).
@@ -420,9 +435,11 @@ export async function sendNetworkCandidate(
   const crossOrg = target.orgId !== orgId;
   const carried = crossOrg ? clientSafeVerdict(v?.verdict) : v?.verdict ?? null;
 
-  const inserted = await sbInsert<{ id: string }>(
-    "website_applications",
-    {
+  // Always one job in role_ids: migration 070's unique index reads the first.
+  const insRes = await sbRest("website_applications", {
+    method: "POST",
+    prefer: "return=representation",
+    body: JSON.stringify({
       organization_id: target.orgId,
       name: cand.full_name || "Candidate",
       email: bestEmail || "",
@@ -444,37 +461,74 @@ export async function sendNetworkCandidate(
         bestEmail || str(cand.contact?.phone) || str(cand.phone)
           ? { email: bestEmail, phone: str(cand.contact?.phone) ?? str(cand.phone) }
           : null,
-    },
-    true
-  ).catch((e) => {
+    }),
+  }).catch((e) => {
     console.error("network send insert failed", e);
     return null;
   });
+  if (!insRes) return { ok: false, error: "insert_failed" };
+  if (!insRes.ok) {
+    const text = await insRes.text().catch(() => "");
+    // 23505 is the unique index: another send of this person to this job got
+    // in first (a double click, a second tab). Same answer as the lookup.
+    // PostgREST also answers 409 for a missing parent row, so the code is
+    // checked, not just the status.
+    let code: unknown = null;
+    try {
+      code = (JSON.parse(text) as { code?: unknown }).code;
+    } catch {}
+    if (insRes.status === 409 && code === "23505") return { ok: false, error: "already_sent" };
+    console.error("network send insert failed", insRes.status, text.slice(0, 200));
+    return { ok: false, error: "insert_failed" };
+  }
+  const [inserted] = (await insRes.json().catch(() => [])) as { id: string }[];
   if (!inserted?.id) return { ok: false, error: "insert_failed" };
 
   // Cross-org send: mirror the client-safe verdict onto the client's role so
   // their pipeline (which reads org-scoped match_verdicts) shows the fit tag
   // and reason immediately — not "Screening…" forever.
-  if (crossOrg && v && carried) {
-    const existing = await sbRest(
-      `match_verdicts?candidate_id=eq.${candidateId}&org_role_id=eq.${target.roleUuid}&select=id&limit=1`
-    );
-    if (existing.ok && ((await existing.json()) as unknown[]).length === 0) {
-      await sbInsert(
-        "match_verdicts",
-        {
-          organization_id: target.orgId,
-          candidate_id: candidateId,
-          org_role_id: target.roleUuid,
-          candidate_hash: v.candidate_hash,
-          role_hash: v.role_hash,
-          verdict: { ...carried, job_id: target.jobId },
-          model: null,
-          source: "referral",
-        },
-        false
-      ).catch((e) => console.error("verdict mirror failed", e));
-    }
-  }
+  if (crossOrg && v && carried)
+    await mirrorVerdict({
+      organization_id: target.orgId,
+      candidate_id: candidateId,
+      org_role_id: target.roleUuid,
+      candidate_hash: v.candidate_hash,
+      role_hash: v.role_hash,
+      verdict: { ...carried, job_id: target.jobId },
+      model: null,
+      source: "referral",
+    });
   return { ok: true, applicationId: inserted.id };
+}
+
+/** Write the client's copy of TT's verdict for a person just sent. The
+ *  application already exists, so a lost mirror would leave the client
+ *  looking at "Screening…" with nothing to fix it: the write is tried twice,
+ *  and it is safe to repeat because a row with the same person, role and
+ *  hashes is left alone (the table's unique key, migration 008). A person
+ *  who already has a verdict on the client's role keeps it and gets no
+ *  copy. If that check fails the copy is written anyway: a missing tag is
+ *  worse than a second row, and the same row is never written twice. */
+async function mirrorVerdict(row: {
+  organization_id: string; candidate_id: string; org_role_id: string;
+  candidate_hash: string; role_hash: string; verdict: Record<string, unknown>;
+  model: null; source: "referral";
+}): Promise<void> {
+  const existing = await sbRest(
+    `match_verdicts?candidate_id=eq.${row.candidate_id}&org_role_id=eq.${row.org_role_id}&select=id&limit=1`
+  ).catch(() => null);
+  if (existing?.ok && ((await existing.json().catch(() => [])) as unknown[]).length > 0) return;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const res = await sbRest("match_verdicts?on_conflict=candidate_id,org_role_id,candidate_hash,role_hash", {
+      method: "POST",
+      prefer: "resolution=ignore-duplicates,return=minimal",
+      body: JSON.stringify(row),
+    }).catch((e) => {
+      console.error(`verdict mirror failed (attempt ${attempt})`, e);
+      return null;
+    });
+    if (res?.ok) return;
+    if (res) console.error(`verdict mirror failed (attempt ${attempt})`, res.status, (await res.text().catch(() => "")).slice(0, 200));
+  }
 }

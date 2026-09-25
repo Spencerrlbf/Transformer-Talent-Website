@@ -28,9 +28,12 @@ export async function POST(req: NextRequest) {
 
   const result = await sendNetworkCandidate(member.org.id, body.candidateId, body.jobId);
   if (!result.ok) {
+    // 422: the link is fine, but the client closed the job or switched off
+    // help, so nothing is sent until the job is open with help on again.
     const code =
       result.error === "insert_failed" ? 502 :
-      result.error === "already_sent" ? 409 : 404;
+      result.error === "already_sent" ? 409 :
+      result.error === "client_not_requesting" ? 422 : 404;
     return NextResponse.json({ error: result.error }, { status: code });
   }
   return NextResponse.json({ ok: true, applicationId: result.applicationId });

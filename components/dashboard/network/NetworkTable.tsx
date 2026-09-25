@@ -266,6 +266,15 @@ export default function NetworkTable({
       body: JSON.stringify({ candidateId: confirm.person.candidateId, jobId: confirm.match.jobId }),
     }).catch(() => null);
     setSending(false);
+    // 422 = the client closed the job or switched off help since the page
+    // loaded. Nothing was sent, so the row stays unsent.
+    if (res?.status === 422) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (body?.error === "client_not_requesting") {
+        setSendErr("This company closed the job or stopped asking for help.");
+        return;
+      }
+    }
     if (!res?.ok && res?.status !== 409) {
       setSendErr("Couldn't send — try again in a moment.");
       return;
