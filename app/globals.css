@@ -2796,6 +2796,12 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
    screen 9 — network matches (Network.dc.html 8a) + auth additions (8b)
    -------------------------------------------------------------------------- */
 .nw-count { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Network tab: a page on its way fades the one still on screen; a failed
+   page says so with a way to try again (never an empty table). */
+.nw-pagenote { margin: 8px 0 0; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nw-pagenote-err { color: var(--bad); font-weight: 600; }
+.cv2-scroll.nw-loading { opacity: .45; pointer-events: none; transition: opacity .15s; }
+@media (prefers-reduced-motion: reduce) { .cv2-scroll.nw-loading { transition: none; } }
 .nw-th-latest, td.nw-latest { text-align: right; }
 
 /* Fixed layout, 8 columns: Candidate · Current role · Company · Location ·
