@@ -4,6 +4,7 @@
 // send-to-job flow. Person-first by design — filters replace clicking
 // through 96 jobs. Rendered only for the Transformer Talent org.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useDash } from "@/components/dashboard/DashShell";
 import JobDrawer from "@/components/dashboard/jobs/JobDrawer";
 
@@ -100,21 +101,52 @@ export default function NetworkTable({
   onKeys?: (keys: string[]) => void;
 }) {
   const { token } = useDash();
-  // The server pages and filters (fifty people a page); this holds one page
-  // and the counts and role facets that came with it.
+  // The address is the tab's state: ?page=, and the filters ?job= ?fit=
+  // (contact | message) ?company= ?new=1 ?q=. Refresh keeps the page, Back
+  // returns to the page before, and a link opens the same view. Turning a
+  // page adds a history entry; changing a filter replaces it and goes back to
+  // page 1. The browser's own history calls keep Next's router in step.
+  const search = useSearchParams();
+  const page = Math.max(1, parseInt(search.get("page") || "1", 10) || 1);
+  const role = search.get("job") || jobId || "";
+  const fitParam = search.get("fit");
+  const fit = fitParam === "contact" ? "strong" : fitParam === "message" ? "possible" : "";
+  const company = search.get("company") || "";
+  const newOnly = search.get("new") === "1";
+  const qParam = search.get("q") || "";
+  // "page" adds a history entry; "filter" replaces it and starts again at
+  // page 1; "fix" replaces it and keeps the page (a page past the end).
+  const writeUrl = (changes: Record<string, string | null>, how: "page" | "filter" | "fix") => {
+    const params = new URLSearchParams(window.location.search);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) params.set(k, v);
+      else params.delete(k);
+    }
+    if (how === "filter") params.delete("page");
+    if (params.get("page") === "1") params.delete("page");
+    const next = params.toString();
+    if (next === window.location.search.replace(/^\?/, "")) return;
+    const url = `${window.location.pathname}${next ? `?${next}` : ""}`;
+    if (how === "page") window.history.pushState(null, "", url);
+    else window.history.replaceState(null, "", url);
+  };
+  const setRole = (v: string) => writeUrl({ job: v || null }, "filter");
+  const setFit = (v: string) => writeUrl({ fit: v === "strong" ? "contact" : v === "possible" ? "message" : null }, "filter");
+  const setCompany = (v: string) => writeUrl({ company: v || null }, "filter");
+  const setNewOnly = (v: boolean) => writeUrl({ new: v ? "1" : null }, "filter");
+
+  // The server pages and filters (fifty people a page); this holds the page
+  // on screen, the counts and role facets that came with it, and which
+  // request it answered, so a page still on its way shows as loading.
   const [people, setPeople] = useState<NetPerson[] | null>(null);
   const [meta, setMeta] = useState<{ total: number; totalMatches: number; newSinceYesterday: number; pages: number; roles: NetRoleFacet[] } | null>(null);
-  const [error, setError] = useState(false);
+  const [shownKey, setShownKey] = useState<string | null>(null);
+  const [shownPage, setShownPage] = useState(1);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
-  const [q, setQ] = useState("");
-  const [role, setRole] = useState(jobId || "");
-  const [company, setCompany] = useState("");
-  const [fit, setFit] = useState("");
-  const [newOnly, setNewOnly] = useState(false);
+  const [q, setQ] = useState(qParam);
   const [expanded, setExpanded] = useState<string | null>(null);
-  // Fifty people a page: the list is person-first, and one person can match
-  // several roles, so the count of matches runs well past the count of rows.
-  const [page, setPage] = useState(1);
   const tableTop = useRef<HTMLDivElement>(null);
   const [confirm, setConfirm] = useState<{ person: NetPerson; match: NetMatch } | null>(null);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
@@ -138,38 +170,53 @@ export default function NetworkTable({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [menuOpen]);
 
-  // The search box waits for a pause in typing before asking the server.
-  const [qLive, setQLive] = useState("");
+  // The search box waits for a pause in typing before it goes into the
+  // address; Back or a link puts the address's search back into the box.
+  const typing = useRef(false);
   useEffect(() => {
-    const t = setTimeout(() => setQLive(q.trim()), 300);
+    if (!typing.current) return;
+    const t = setTimeout(() => {
+      typing.current = false;
+      writeUrl({ q: q.trim() || null }, "filter");
+    }, 300);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
+  useEffect(() => {
+    if (!typing.current && q.trim() !== qParam) setQ(qParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qParam]);
+
+  const request = new URLSearchParams();
+  if (role) request.set("job", role);
+  if (fit === "strong") request.set("label", "contact");
+  if (fit === "possible") request.set("label", "message");
+  if (company) request.set("company", company);
+  if (qParam) request.set("q", qParam);
+  if (newOnly) request.set("new", "7");
+  request.set("page", String(page));
+  const requestKey = request.toString();
 
   useEffect(() => {
     let live = true;
-    const params = new URLSearchParams();
-    if (role) params.set("job", role);
-    if (fit === "strong") params.set("label", "contact");
-    if (fit === "possible") params.set("label", "message");
-    if (company) params.set("company", company);
-    if (qLive) params.set("q", qLive);
-    if (newOnly) params.set("new", "7");
-    params.set("page", String(page));
-    fetch(`/api/dashboard/network?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+    setFailedKey(null);
+    fetch(`/api/dashboard/network?${requestKey}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
-        return r.json() as Promise<{ people: NetPerson[]; total: number; totalMatches: number; newSinceYesterday: number; pages: number; roles: NetRoleFacet[] }>;
+        return r.json() as Promise<{ people: NetPerson[]; total: number; totalMatches: number; newSinceYesterday: number; page: number; pages: number; roles: NetRoleFacet[] }>;
       })
       .then((d) => {
         if (!live) return;
         setPeople(d.people);
         setMeta({ total: d.total, totalMatches: d.totalMatches, newSinceYesterday: d.newSinceYesterday, pages: d.pages, roles: d.roles });
+        setShownKey(requestKey);
+        setShownPage(d.page);
       })
-      .catch(() => live && setError(true));
+      .catch(() => live && setFailedKey(requestKey));
     return () => {
       live = false;
     };
-  }, [token, role, fit, company, qLive, newOnly, page]);
+  }, [token, requestKey, attempt]);
 
   const roleOptions = useMemo<[string, string][]>(
     () => (meta?.roles || []).map((r) => [r.jobId, r.title] as [string, string]).sort((a, b) => a[1].localeCompare(b[1])),
@@ -184,19 +231,22 @@ export default function NetworkTable({
 
   const dayAgo = Date.now() - DAY;
 
-  useEffect(() => {
-    setPage(1);
-  }, [qLive, role, company, fit, newOnly]);
+  const failed = failedKey === requestKey;
+  const loading = people !== null && shownKey !== requestKey && !failed;
   const pages = meta?.pages || 1;
-  const current = Math.min(page, pages);
-  const visible = people || [];
+  const visible = useMemo(() => people || [], [people]);
   const total = meta?.total || 0;
   const totalMatches = meta?.totalMatches || 0;
   const newSinceYesterday = meta?.newSinceYesterday || 0;
   const turnTo = (n: number) => {
-    setPage(n);
+    writeUrl({ page: String(n) }, "page");
     tableTop.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
+  // A page past the end (an old link, a list that shrank) goes to the last one.
+  useEffect(() => {
+    if (meta && shownKey === requestKey && page > meta.pages) writeUrl({ page: String(meta.pages) }, "fix");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta, shownKey, requestKey, page]);
 
   useEffect(() => {
     onKeys?.(visible.map((p) => `net_${p.candidateId}`));
@@ -252,8 +302,15 @@ export default function NetworkTable({
     </div>
   );
 
-  if (error)
-    return <div className="dash-empty">Couldn&apos;t load network matches — refresh to retry.</div>;
+  if (people === null && failed)
+    return (
+      <div className="dash-empty">
+        Couldn&apos;t load network matches.{" "}
+        <button type="button" className="dash-btn dash-btn-2" onClick={() => setAttempt((n) => n + 1)}>
+          Try again
+        </button>
+      </div>
+    );
   if (people === null) return <p className="dash-muted">Loading matches…</p>;
 
   return (
@@ -351,14 +408,17 @@ export default function NetworkTable({
           className="cv2-search"
           placeholder="Search name, title or company…"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            typing.current = true;
+            setQ(e.target.value);
+          }}
         />
         {newSinceYesterday > 0 && (
           <span className="nw-fresh">
             <i className="nw-newdot" /> {newSinceYesterday} new since yesterday
           </span>
         )}
-        <span className="dash-sortnote">Contact first, then newest</span>
+        <span className="dash-sortnote">Contact first, then best fit</span>
       </div>
 
       <div className="dash-chips nw-countrow">
@@ -422,8 +482,22 @@ export default function NetworkTable({
         </div>
       )}
 
+      {loading && (
+        <div className="nw-pagenote" role="status">
+          Loading page {page}…
+        </div>
+      )}
+      {failed && (
+        <div className="nw-pagenote nw-pagenote-err" role="alert">
+          Couldn&apos;t load page {page}.{" "}
+          <button type="button" className="dash-btn dash-btn-2" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </button>
+        </div>
+      )}
+
       {total > 0 && (
-        <div className="cv2-scroll" ref={tableTop}>
+        <div className={`cv2-scroll${loading ? " nw-loading" : ""}`} ref={tableTop} aria-busy={loading}>
           <table className="cv2-table nw-tight">
             <thead>
               <tr>
@@ -463,17 +537,19 @@ export default function NetworkTable({
       {total > PAGE && (
         <div className="dash-src-tfoot">
           <span>
-            Showing {((current - 1) * PAGE + 1).toLocaleString()} to {Math.min(current * PAGE, total).toLocaleString()} of {total.toLocaleString()} people · best fit first, newest match next
+            Showing {((shownPage - 1) * PAGE + 1).toLocaleString()} to {Math.min(shownPage * PAGE, total).toLocaleString()} of {total.toLocaleString()} people · Contact first, then best fit
           </span>
           <span className="dash-src-pager">
-            {current > 1 && (
-              <button type="button" className="dash-btn dash-btn-2" onClick={() => turnTo(current - 1)}>
+            {page > 1 && (
+              <button type="button" className="dash-btn dash-btn-2" onClick={() => turnTo(Math.min(page, pages) - 1)}>
                 ← Prev
               </button>
             )}
-            <span className="dash-muted">Page {current} of {pages}</span>
-            {current < pages && (
-              <button type="button" className="dash-btn dash-btn-2" onClick={() => turnTo(current + 1)}>
+            <span className="dash-muted">
+              {loading ? `Loading page ${page} of ${pages}…` : `Page ${Math.min(page, pages)} of ${pages}`}
+            </span>
+            {page < pages && (
+              <button type="button" className="dash-btn dash-btn-2" onClick={() => turnTo(page + 1)}>
                 Next →
               </button>
             )}

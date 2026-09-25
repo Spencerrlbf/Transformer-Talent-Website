@@ -111,3 +111,11 @@ for (const role of roles) {
 }
 const cost = (tally.judged * USD_PER_JUDGING).toFixed(2);
 console.log(`${DRY_RUN ? "dry run" : "done"}: ${tally.roles} roles, ${tally.shortlisted} shortlisted, ${tally.alreadyJudged} already judged, ${tally.judged} ${DRY_RUN ? "would be judged" : "judged"} (~$${cost}), ${tally.fromMemory} from memory, ${tally.written} written, ${tally.failed} failed${stopped ? `; STOPPED at the cap of ${MAX_JUDGINGS}` : ""}; labels ${JSON.stringify(tally.labels)}; ${Math.round((Date.now() - t0) / 1000)}s`);
+
+// The Network tab reads network_matches (migration 068). The verdicts written
+// above reach it through a trigger; the rebuild also picks up the day's new
+// shortlist ranks and person signals.
+if (!DRY_RUN) {
+  const rows = await rest("rpc/refresh_network_matches", { method: "POST", body: JSON.stringify({ p_org: org.id }) });
+  console.log(`network_matches rebuilt: ${rows} rows`);
+}

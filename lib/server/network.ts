@@ -250,9 +250,12 @@ type RpcPerson = {
 const TAG_OF: Record<"contact" | "message", ClientTag> = { contact: "strong", message: "possible" };
 
 /** The Network tab's page: people with a scorecard verdict (verdict.v2) on
- *  an open role, contact-first, newest first, fifty a page. The verdicts
- *  come from the nightly shortlist judge and from applicants' report cards;
- *  the database does the grouping and the paging (network_people). */
+ *  an open role, fifty a page, in fit order: Contact now first, then how
+ *  strongly the card is met, then a top employer or university as the
+ *  tie-break. The database orders and pages from network_matches, a small
+ *  table kept from the verdicts (migrations 066 and 068), so a page is one
+ *  quick read. A failed page is an error, never an empty list: the tab
+ *  shows "Couldn't load" with a way to try again. */
 export async function listNetworkMatches(orgId: string, opts: NetworkListOptions = {}): Promise<NetworkList> {
   const perPage = Math.min(200, Math.max(10, opts.perPage ?? 50));
   const page = Math.max(1, opts.page ?? 1);
@@ -267,11 +270,15 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
     p_offset: (page - 1) * perPage,
   };
   const [rowsRes, rolesRes, sent] = await Promise.all([
-    sbRest("rpc/network_people", { method: "POST", body: JSON.stringify(body) }),
-    sbRest("rpc/network_roles", { method: "POST", body: JSON.stringify({ p_org: orgId }) }),
+    sbRest("rpc/network_people_by_fit", { method: "POST", body: JSON.stringify(body) }),
+    sbRest("rpc/network_roles_by_fit", { method: "POST", body: JSON.stringify({ p_org: orgId }) }),
     sentIndex(),
   ]);
-  const rows = (rowsRes.ok ? await rowsRes.json() : []) as RpcPerson[];
+  if (!rowsRes.ok) {
+    console.error("network: page refused", rowsRes.status, (await rowsRes.text().catch(() => "")).slice(0, 200));
+    throw new Error(`network page failed: ${rowsRes.status}`);
+  }
+  const rows = (await rowsRes.json()) as RpcPerson[];
   const roleRows = (rolesRes.ok ? await rolesRes.json() : []) as { job_id: string; title: string; company_name: string | null; contact_count: number; message_count: number }[];
   const roles: NetworkRoleFacet[] = roleRows.map((r) => ({ jobId: r.job_id, title: r.title, company: str(r.company_name), contact: Number(r.contact_count), message: Number(r.message_count) }));
 
