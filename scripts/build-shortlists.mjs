@@ -142,6 +142,8 @@ for (const role of roles) {
         const share = (f) => Math.round((100 * list.filter(f).length) / Math.max(1, list.length));
         return {
           top: list.slice(0, 10).map((x) => ({ id: x.id, score: x.score, similarity: Math.round(x.similarity * 1000) / 1000, hits: x.keyword_hits, emp: signals.get(x.id)?.top_employer_tier ?? null, uni: signals.get(x.id)?.top_university_tier ?? null, local: x.local })),
+          // The whole kept list in order, so the preview can show who differs.
+          ids: list.map((x) => x.id),
           kept: list.length,
           entered: [...keptIds].filter((id) => !todayIds.has(id)).length,
           t1_employer_pct: share((x) => signals.get(x.id)?.top_employer_tier === 1),
