@@ -804,7 +804,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       stage: null,
       // "processing" = pipeline still running; anything else means screening
       // finished — no verdict then reads "Not screened", not "Screening…".
-      screeningPending: a.status === "processing",
+      screeningPending: a.status === "processing" || a.status === "queued",
       followUpAt: a.follow_up_at,
       skills: null,
       visa: str(a.visa_status),
@@ -1655,7 +1655,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       contact: { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
-      screeningPending: a.status === "processing",
+      screeningPending: a.status === "processing" || a.status === "queued",
       noReply: await noReplyMarkFor(orgId, key),
       followUp: await (async () => {
         if (!a.follow_up_at) return null;

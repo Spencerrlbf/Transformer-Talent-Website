@@ -129,11 +129,9 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-real-ip") ||
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
     "unknown";
+  // Per person only; no cap shared across companies (see /api/apply).
   if (!(await allow(`future:email:${email}`, 3, 24)) || !(await allow(`future:ip:${ip}`, 6, 24))) {
-    return NextResponse.json({ error: "Too many requests today — try again tomorrow." }, { status: 429 });
-  }
-  if (!(await allow("future:global", 50, 24))) {
-    return NextResponse.json({ error: "We're at capacity today — try again tomorrow." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests from you today. Please try again tomorrow." }, { status: 429 });
   }
 
   // Same person recently in this org's pipeline: update their existing entry

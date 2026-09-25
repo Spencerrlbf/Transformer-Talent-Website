@@ -19,6 +19,7 @@ import type { CandidateRow } from "@/components/dashboard/sourcing/types";
 import { CompanyNameField, IdealCompanies, type TargetCompany } from "@/components/dashboard/jobs/IdealCompanies";
 import InterviewStagesCard from "@/components/dashboard/jobs/InterviewStagesCard";
 import ClientLinkCard from "@/components/dashboard/jobs/ClientLinkCard";
+import LeadEmailsCard, { type Teammate } from "@/components/dashboard/jobs/LeadEmailsCard";
 import SourcingHelpCard from "@/components/dashboard/jobs/SourcingHelpCard";
 import ShortlistPanel from "@/components/dashboard/jobs/ShortlistPanel";
 import ScorecardCard from "@/components/dashboard/rolecard/ScorecardCard";
@@ -41,6 +42,7 @@ type Job = {
   companyName: string;
   linkedOrgRole: { orgId: string; jobId: string } | null;
   sourcingRequested: boolean;
+  leadEmails?: { userIds: string[]; team: Teammate[] };
 };
 
 const TABS = [
@@ -278,6 +280,11 @@ function JobWorkspace({ id }: { id: string }) {
             <div className="jw-card">
               <InterviewStagesCard jobId={job.id} />
             </div>
+            {job.leadEmails && (
+              <div className="jw-card">
+                <LeadEmailsCard jobId={job.id} initial={job.leadEmails} />
+              </div>
+            )}
             <div className="jw-card">
             {org.slug === "transformer-talent" ? (
               <ClientLinkCard

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getRoles, parseSalary } from "@/lib/roles";
 import RolesTable from "@/components/RolesTable";
+import { jsonForScript } from "@/lib/server/html";
 
 export const metadata: Metadata = {
   title: "Open Roles",
@@ -56,7 +57,7 @@ export default async function RolesPage() {
       <div className="wrap">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonForScript(jobPostingLd) }}
         />
         <h1 className="h-page b1">
           Open <span>roles</span>

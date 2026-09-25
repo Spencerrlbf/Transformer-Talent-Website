@@ -33,6 +33,7 @@ import { renderScorecard } from "./scorecard";
 import { APPLICANT_ROLE_COLS, judgeApplicantForRole, type ApplicantRole } from "./rolecard/applicant";
 import { attachVerdictToMatch } from "./verdict-store";
 import { getOrgId } from "./spine";
+import { takeReview } from "./review-budget";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
 
 export type ApplicantPipelineInput = {
@@ -61,6 +62,9 @@ export type ApplicantPipelineInput = {
   preferredRoles?: string[];
   preferredWorkplace?: string[];
   salaryFloor?: string | null;
+  /** Set by the nightly queue (lib/server/review-queue.ts): the allowance was
+   *  already taken and the lead email already went out on arrival. */
+  fromQueue?: boolean;
 };
 
 function clean(s: unknown, max: number): string {
@@ -90,6 +94,68 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   } = p;
   let name = p.name;
 
+  // Whose applicant this is: a client company's board or page, or the site's
+  // own (Transformer Talent). Decided on the organization, not the surface.
+  const ttOrgId = await getOrgId();
+  const tenantOrgId: string | null =
+    boardOrg?.id ?? (orgId && ttOrgId && orgId !== ttOrgId ? orgId : null);
+
+  const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
+  const roles = boardRoles ?? (await getRoles());
+  const applied = roles.filter((r) => roleIds.includes(r.jobId));
+  const roleTitles = applied.map((r) => `${r.title} (#${r.jobId})`);
+
+  // Tell the job's recruiter (and whoever the company chose) that this person
+  // arrived. Referrals notify from their own route, where the referrer is known.
+  async function notifyArrival() {
+    if (p.applicationType === "Referral") return;
+    try {
+      const res = await sbRest(
+        `website_applications?id=eq.${submissionId}&select=recruiter_profile_id`
+      );
+      const [row] = res.ok
+        ? ((await res.json()) as { recruiter_profile_id: string | null }[])
+        : [];
+      const to = await leadRecipients({
+        recruiterProfileId: row?.recruiter_profile_id ?? null,
+        orgId,
+        jobIds: roleIds,
+      });
+      await sendLeadNotification({
+        to,
+        kind: p.followUpAt ? "future" : speculative ? "speculative" : "application",
+        name,
+        email,
+        linkedin,
+        roleTitles,
+        followUpAt: p.followUpAt || undefined,
+        preferredRoles: p.preferredRoles,
+        preferredLocations: p.followUpAt ? preferredLocations : undefined,
+        preferredWorkplace: p.preferredWorkplace,
+        salaryFloor: p.salaryFloor,
+        visaStatus: p.followUpAt ? visa || null : null,
+        viaPage: Boolean(row?.recruiter_profile_id),
+      });
+    } catch (err) {
+      console.error("lead notification failed", err);
+    }
+  }
+
+  // The automatic review (resume reading, LinkedIn lookup, AI scoring) costs
+  // money per person, so each company has a daily allowance. Over it, nobody
+  // is turned away: the application is kept as "queued", the recruiter hears
+  // about it now, and the nightly queue reviews it once there is room.
+  const budgetOrg = tenantOrgId ?? orgId;
+  if (!p.fromQueue && budgetOrg && !(await takeReview(budgetOrg))) {
+    await sbRest(`website_applications?id=eq.${submissionId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "queued" }),
+      prefer: "return=minimal",
+    }).catch(() => {});
+    await notifyArrival();
+    return;
+  }
+
   // Resume text (when a resume exists).
   let resumeText: string | null = null;
   let resumeParser: "llamaparse" | "pdf-parse" | null = null;
@@ -109,17 +175,6 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       }).catch(() => {});
     }
   }
-
-  // Whose applicant this is: a client company's board or page, or the site's
-  // own (Transformer Talent). Decided on the organization, not the surface.
-  const ttOrgId = await getOrgId();
-  const tenantOrgId: string | null =
-    boardOrg?.id ?? (orgId && ttOrgId && orgId !== ttOrgId ? orgId : null);
-
-  const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
-  const roles = boardRoles ?? (await getRoles());
-  const applied = roles.filter((r) => roleIds.includes(r.jobId));
-  const roleTitles = applied.map((r) => `${r.title} (#${r.jobId})`);
 
   let matches: { jobId: string; title: string; salary: string }[] = [];
   let screenedSummary: string | undefined;
@@ -460,37 +515,6 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     applicationFit,
   });
 
-  // Tell the page's recruiter (or the org owners) this person arrived.
-  // Referrals notify from their own route, where the referrer is known.
-  if (p.applicationType !== "Referral") {
-    try {
-      const res = await sbRest(
-        `website_applications?id=eq.${submissionId}&select=recruiter_profile_id`
-      );
-      const [row] = res.ok
-        ? ((await res.json()) as { recruiter_profile_id: string | null }[])
-        : [];
-      const to = await leadRecipients({
-        recruiterProfileId: row?.recruiter_profile_id ?? null,
-        orgId,
-      });
-      await sendLeadNotification({
-        to,
-        kind: p.followUpAt ? "future" : speculative ? "speculative" : "application",
-        name,
-        email,
-        linkedin,
-        roleTitles,
-        followUpAt: p.followUpAt || undefined,
-        preferredRoles: p.preferredRoles,
-        preferredLocations: p.followUpAt ? preferredLocations : undefined,
-        preferredWorkplace: p.preferredWorkplace,
-        salaryFloor: p.salaryFloor,
-        visaStatus: p.followUpAt ? visa || null : null,
-        viaPage: Boolean(row?.recruiter_profile_id),
-      });
-    } catch (err) {
-      console.error("lead notification failed", err);
-    }
-  }
+  // The queue already told them when the application arrived.
+  if (!p.fromQueue) await notifyArrival();
 }

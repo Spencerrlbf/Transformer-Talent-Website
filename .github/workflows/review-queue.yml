@@ -1,0 +1,38 @@
+name: Review queued applications
+
+# Applications over their company's daily review allowance wait as "queued";
+# this reviews them each night within each company's allowance.
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Count only, spend nothing"
+        type: boolean
+        default: false
+      max:
+        description: "Stop after this many reviews"
+        default: "2000"
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Resumes are read with pdf-parse here (no LlamaParse key in Actions).
+      - run: npm ci --no-audit --no-fund
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/review-queue.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HARVEST_API_KEY: ${{ secrets.HARVEST_API_KEY }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MAX: ${{ inputs.max || '2000' }}
