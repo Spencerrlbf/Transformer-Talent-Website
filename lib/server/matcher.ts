@@ -252,10 +252,8 @@ const LEGAL_SUFFIXES = [
 ];
 const LEGAL_SUFFIX_WORDS = new Set(LEGAL_SUFFIXES);
 // Dotted spellings too: "S.A.", "L.L.C.".
-const LEGAL_SUFFIX_TAIL = new RegExp(
-  `[\\s,.&]+(?:${LEGAL_SUFFIXES.map((w) => w.split("").join("\\.?")).join("|")})\\.?$`,
-  "i"
-);
+const LEGAL_SUFFIX_ALT = LEGAL_SUFFIXES.map((w) => w.split("").join("\\.?")).join("|");
+const LEGAL_SUFFIX_TAIL = new RegExp(`[\\s,.&]+(?:${LEGAL_SUFFIX_ALT})\\.?$`, "i");
 
 /**
  * One spelling per employer for comparing names: lowercase, no punctuation or
@@ -302,6 +300,98 @@ export function employerSegment(text: string | null | undefined): string | null 
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const squash = (key: string) => key.replace(/ /g, "");
+
+// Words a company name often ends with that say what it does, not who it is:
+// "Scale AI" is "Scale" in a title, "Meta Platforms" is "Meta".
+const NAME_DESCRIPTORS = new Set([
+  "ai", "ml", "lab", "labs", "tech", "technology", "technologies", "payments", "platform", "platforms",
+  "systems", "software", "solutions", "services", "web", "cloud", "research", "robotics", "networks",
+  "security", "analytics", "digital", "group", "holdings", "global", "international", "ventures",
+  "capital", "studios", "games", "health", "therapeutics", "computing", "industries", "enterprise",
+  "enterprises",
+]);
+// Short names that are also everyday title words are never cut on their own:
+// "Open AI" on record must not turn "Open Source Engineer" into "Source Engineer".
+const TITLE_WORDS = new Set(["open", "applied", "general", "data", "deep", "machine", "physical", "product", "design"]);
+
+/**
+ * The spellings of one employer a title might use, as employer keys: the name,
+ * each half of "Amazon Web Services (AWS)", and the name without trailing
+ * descriptors ("scale" for "Scale AI"). A short name is kept only past the
+ * same four letters sameEmployer asks for.
+ */
+function employerAliases(company: string): string[] {
+  const inner = [...company.matchAll(/\(([^()]*)\)/g)].map((m) => m[1]);
+  const keys = [company, company.replace(/\([^()]*\)/g, " "), ...inner].map(employerKey).filter(Boolean);
+  for (const key of [...keys]) {
+    const words = key.split(" ");
+    while (words.length > 1 && NAME_DESCRIPTORS.has(words[words.length - 1])) words.pop();
+    const core = words.join(" ");
+    if (core !== key && squash(core).length >= 4 && !TITLE_WORDS.has(core)) keys.push(core);
+  }
+  return [...new Set(keys)];
+}
+
+// One word of a title, with the dots, apostrophes, hyphens and ampersands
+// names carry inside them ("C3.ai", "McDonald's", "Co-founder", "AT&T").
+const TITLE_WORD = /[\p{L}\p{N}]+(?:[.'’&-][\p{L}\p{N}]+)*\.?/gu;
+
+/**
+ * Cuts every run of whole words that spells one of the keys, compared with the
+ * spaces closed up: "Open AI" goes for "OpenAI", "Stripe, Inc." for "Stripe".
+ * Only whole runs match, so "Scaling" stays when the employer is "Scale".
+ */
+function cutEmployerRuns(title: string, keys: string[]): string {
+  const targets = new Set(keys.map(squash));
+  // Room for a spelling written with more spaces than the key, or a legal suffix.
+  const longest = Math.max(...keys.map((k) => k.split(" ").length)) + 2;
+  const words = [...title.matchAll(TITLE_WORD)];
+  const start = (i: number) => words[i].index ?? 0;
+  const end = (i: number) => start(i) + words[i][0].length;
+  let out = "";
+  let from = 0;
+  for (let i = 0; i < words.length; ) {
+    let n = Math.min(longest, words.length - i);
+    while (n > 0 && !targets.has(squash(employerKey(title.slice(start(i), end(i + n - 1)))))) n--;
+    if (!n) {
+      i++;
+      continue;
+    }
+    out += title.slice(from, start(i)) + " ";
+    from = end(i + n - 1);
+    i += n;
+  }
+  return out + title.slice(from);
+}
+
+/**
+ * Drops the parts of a title (between commas, slashes or spaced dashes, or in
+ * brackets) that name the employer under a looser spelling: "Engineer, Stripe"
+ * when the company is "Stripe Payments", "Research Scientist, Google" when it
+ * is "Google DeepMind". The first part is the role itself, so it goes only when
+ * it is nothing but a piece of the name.
+ */
+function dropEmployerParts(title: string, keys: string[]): string {
+  // A piece of the name ("google" of "google deepmind"); a short piece like
+  // "ai" of "scale ai" only when it is a spelling in its own right ("aws").
+  const pieceOf = (part: string) =>
+    !!part && keys.some((k) => squash(part) === squash(k) || (squash(part).length >= 4 && ` ${k} `.includes(` ${part} `)));
+  // Or the whole name with more around it ("stripe payments team").
+  const holds = (part: string) =>
+    !!part && keys.some((k) => ` ${part} `.includes(` ${k} `) || (squash(k).length >= 4 && squash(part).includes(squash(k))));
+  const t = title.replace(/\(([^()]*)\)/g, (all, inner: string) => {
+    const key = employerKey(inner);
+    return pieceOf(key) || holds(key) ? " " : all;
+  });
+  const parts = t.split(/(\s*[,;/]\s*|\s+[-\u2013\u2014]\s+)/);
+  let out = pieceOf(employerKey(parts[0])) ? "" : parts[0];
+  for (let i = 1; i < parts.length; i += 2) {
+    const key = employerKey(parts[i + 1]);
+    if (!pieceOf(key) && !holds(key)) out += parts[i] + parts[i + 1];
+  }
+  return out;
+}
 
 // Leftovers from cutting an employer out of a title: separators with nothing
 // after them, empty brackets, and connectors like "for" that now end the line.
@@ -326,22 +416,40 @@ function tidyTitle(t: string): string {
 /**
  * A job title safe to show a stranger. People write their employer into the
  * title ("ML Engineer @ OpenAI", "Head of AI | Anthropic", "Stripe Staff
- * Engineer"), so everything after the first " at ", "@", "|", "•" or "·" goes,
- * and the current company is cut wherever it appears as a whole word.
+ * Engineer", "Engineer, Stripe"), so everything after the first " at ", "@",
+ * "|", "•" or "·" goes, and then the current company goes under any spelling
+ * past employers are matched on: as written, spaced or squashed ("Open AI"),
+ * without descriptors ("Meta" of "Meta Platforms"), or as a part of the title
+ * that is a piece of the name ("Google" of "Google DeepMind").
  */
 export function publicTitle(
   currentTitle: string | null | undefined,
   currentCompany: string | null | undefined
 ): string {
   let t = (currentTitle || "").split(/(?:^|\s)at\s+|[@|•·]/i)[0];
-  const full = (currentCompany || "").trim();
+  // With no company on record, the one the title itself names after " at " or "@" stands in.
+  const full = (currentCompany || "").trim() || employerSegment(currentTitle) || "";
+  if (!full) {
+    // Nothing says who the employer is, so a part after a spaced dash or in
+    // brackets is taken to be it ("Engineer - Stripe"). That can cut a team
+    // ("Senior Engineer - Infrastructure" shows "Senior Engineer"), the safe
+    // way to be wrong. Commas and slashes stay: real titles lean on them
+    // ("Staff Engineer, Infrastructure", "ML / AI Engineer").
+    t = t.replace(/\([^)]*\)?/g, " ").split(/\s[-\u2013\u2014]\s/)[0];
+    return tidyTitle(t) || GENERIC_TITLE;
+  }
   let bare = full;
   while (LEGAL_SUFFIX_TAIL.test(bare)) bare = bare.replace(LEGAL_SUFFIX_TAIL, "").trim();
   // Longest spelling first, so "Stripe, Inc." goes whole before "Stripe" is tried.
+  // A legal suffix written after the name goes with it ("Stripe, Inc." when
+  // the company is "Stripe"), but not the "Co" of "Co-founder".
+  const suffix = `(?:[\\s,]+(?:${LEGAL_SUFFIX_ALT})\\.?(?![\\p{L}\\p{N}-]))?`;
   for (const name of [...new Set([full, bare])].filter(Boolean).sort((a, b) => b.length - a.length)) {
     const pattern = escapeRe(name).replace(/\s+/g, "\\s+");
-    t = t.replace(new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "giu"), " ");
+    t = t.replace(new RegExp(`(?<![\\p{L}\\p{N}])${pattern}${suffix}(?![\\p{L}\\p{N}])`, "giu"), " ");
   }
+  const keys = employerAliases(full);
+  if (keys.length) t = dropEmployerParts(cutEmployerRuns(t, keys), keys);
   return tidyTitle(t) || GENERIC_TITLE;
 }
 
@@ -393,7 +501,8 @@ export function rankAndAnonymize(
       .filter((e, idx, arr) => arr.indexOf(e) === idx)
       .slice(0, 2);
     // Never the headline: it is usually "Title at Employer". With no current
-    // company on record, the employer the headline names is cut instead.
+    // company on record, the employer the headline names is cut instead (or,
+    // failing that, the one the title names; publicTitle looks there itself).
     const company = row.current_company?.trim() || employerSegment(row.headline);
     return {
       ref: `TT-${String(i + 1).padStart(2, "0")}`,

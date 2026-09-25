@@ -59,6 +59,39 @@ const titles = [
   ["Stripe", "Stripe", "Software Engineer"],
   ["at Stripe", null, "Software Engineer"],
   ["", "Stripe", "Software Engineer"],
+  // The company on record spelled longer, shorter or squashed: the title must
+  // lose it under every spelling past employers are matched on.
+  ["Meta AI Research Engineer", "Meta Platforms, Inc.", "AI Research Engineer"],
+  ["Open AI Researcher", "OpenAI", "Researcher"],
+  ["OpenAI Researcher", "Open AI", "Researcher"],
+  ["SWE, AWS", "Amazon Web Services (AWS)", "SWE"],
+  ["Amazon Engineer", "Amazon Web Services (AWS)", "Engineer"],
+  ["ML Engineer, Scale", "Scale AI", "ML Engineer"],
+  ["ML Engineer - Scale", "Scale AI", "ML Engineer"],
+  ["Engineer, Stripe", "Stripe Payments", "Engineer"],
+  ["Research Scientist, Google", "Google DeepMind", "Research Scientist"],
+  ["Research Scientist (Google)", "Google DeepMind", "Research Scientist"],
+  ["Engineer, Stripe, Inc.", "Stripe", "Engineer"],
+  ["Hewlett-Packard Engineer", "Hewlett Packard Enterprise", "Engineer"],
+  ["C3.ai Engineer", "C3.ai, Inc.", "Engineer"],
+  // ...without eating the words a title is made of.
+  ["Open Source Engineer", "Open AI", "Open Source Engineer"],
+  ["Head of AI", "Scale AI", "Head of AI"],
+  ["AI / ML Engineer", "Scale AI", "AI / ML Engineer"],
+  ["Applied Scientist, Autonomy", "Applied Intuition", "Applied Scientist, Autonomy"],
+  ["Stripe Staff Engineer, Payments", "Stripe", "Staff Engineer, Payments"],
+  ["Stripe Co-founder", "Stripe", "Co-founder"],
+  // No company on record: the one the title names after " at " stands in...
+  ["Stripe Engineer at Stripe", null, "Engineer"],
+  ["Engineer - Payments at Stripe", null, "Engineer - Payments"],
+  // ...and with none named anywhere, a part after a spaced dash or in brackets
+  // goes, even when it is only a team. Commas and slashes stay (real titles
+  // use them: "Staff Engineer, Infrastructure", "ML / AI Engineer").
+  ["Engineer - Stripe", null, "Engineer"],
+  ["Engineer – Stripe", null, "Engineer"],
+  ["Engineer — Stripe", null, "Engineer"],
+  ["Engineer (Stripe)", null, "Engineer"],
+  ["Senior Engineer - Infrastructure", null, "Senior Engineer"],
 ];
 for (const [title, company, want] of titles) {
   const got = m.publicTitle(title, company);
