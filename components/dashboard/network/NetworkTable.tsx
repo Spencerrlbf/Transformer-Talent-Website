@@ -358,7 +358,7 @@ export default function NetworkTable({
             <i className="nw-newdot" /> {newSinceYesterday} new since yesterday
           </span>
         )}
-        <span className="dash-sortnote">Contact first, then newest</span>
+        <span className="dash-sortnote">Contact first, then best fit</span>
       </div>
 
       <div className="dash-chips nw-countrow">
@@ -463,7 +463,7 @@ export default function NetworkTable({
       {total > PAGE && (
         <div className="dash-src-tfoot">
           <span>
-            Showing {((current - 1) * PAGE + 1).toLocaleString()} to {Math.min(current * PAGE, total).toLocaleString()} of {total.toLocaleString()} people · best fit first, newest match next
+            Showing {((current - 1) * PAGE + 1).toLocaleString()} to {Math.min(current * PAGE, total).toLocaleString()} of {total.toLocaleString()} people · Contact first, then best fit
           </span>
           <span className="dash-src-pager">
             {current > 1 && (
