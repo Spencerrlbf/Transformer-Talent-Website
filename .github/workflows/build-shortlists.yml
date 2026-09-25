@@ -18,6 +18,10 @@ on:
         description: "Compute and print, write nothing"
         type: boolean
         default: false
+      compare_quality:
+        description: "Print each role's top ten under every quality preset; writes nothing"
+        type: boolean
+        default: false
 
 jobs:
   shortlists:
@@ -35,3 +39,4 @@ jobs:
           ROLE: ${{ inputs.role }}
           LIMIT: ${{ inputs.limit }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          COMPARE_QUALITY: ${{ inputs.compare_quality && '1' || '' }}

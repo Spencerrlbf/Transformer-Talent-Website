@@ -6,19 +6,27 @@
 // No model runs; a full pass over all open roles takes minutes.
 //
 //   ROLE=100 node scripts/build-shortlists.mjs    one role by its external id
+//   ROLE=67,60,8                                  several roles
 //   LIMIT=3  node scripts/build-shortlists.mjs    the first N roles
 //   DRY_RUN=1                                     compute and print, write nothing
 //   SHORTLIST_SIZE=300                            how many to keep per role
+//   COMPARE_QUALITY=1                             score everyone under each
+//     quality preset (lib/server/shortlist/rules.ts QUALITY_WEIGHTS) and print
+//     one "QUALITY_PREVIEW {json}" line per role; implies DRY_RUN
 //
 // Shared logic comes from the compiled website library: run
 // `node scripts/build-worker-lib.mjs` first (the GitHub Action does).
-const { rulesOf, assess, expandLocations } = await import("./dist/worker-lib.mjs");
+const { rulesOf, assess, expandLocations, QUALITY_WEIGHTS } = await import("./dist/worker-lib.mjs");
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !KEY) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required");
-const DRY_RUN = !!process.env.DRY_RUN;
+const COMPARE = !!process.env.COMPARE_QUALITY;
+const DRY_RUN = !!process.env.DRY_RUN || COMPARE;
 const ROLE = (process.env.ROLE || "").trim();
+const roleFilter = !ROLE ? "" : ROLE.includes(",")
+  ? `&external_id=in.(${ROLE.split(",").map((r) => encodeURIComponent(r.trim())).filter(Boolean).join(",")})`
+  : `&external_id=eq.${encodeURIComponent(ROLE)}`;
 const LIMIT = Math.max(0, parseInt(process.env.LIMIT || "0", 10) || 0);
 const SIZE = Math.max(10, parseInt(process.env.SHORTLIST_SIZE || "300", 10) || 300);
 const PER_FACET = 800;
@@ -41,7 +49,7 @@ const inList = (ids) => `(${ids.join(",")})`;
 const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("Transformer Talent organisation not found");
 let roles = await rest(
-  `org_roles?organization_id=eq.${org.id}&status=eq.open&scorecard=not.is.null${ROLE ? `&external_id=eq.${encodeURIComponent(ROLE)}` : ""}` +
+  `org_roles?organization_id=eq.${org.id}&status=eq.open&scorecard=not.is.null${roleFilter}` +
     `&select=id,external_id,title,locations,workplace,matching_profile,scorecard&order=external_id.asc${LIMIT ? `&limit=${LIMIT}` : ""}`
 );
 console.log(`${roles.length} open role(s) with a scorecard${DRY_RUN ? ", dry run" : ""}; keeping ${SIZE} per role`);
@@ -97,20 +105,47 @@ for (const role of roles) {
       }
     }
 
-    const scored = [];
-    for (const n of near.values()) {
+    const personOf = (n) => {
       const s = signals.get(n.id) || {};
       const t = texts.get(n.id) || { text: n.headline };
-      const a = assess(rules, { years: s.years, engineering_years: s.engineering_years, title_family: s.title_family || [], top_university_tier: s.top_university_tier, top_university: s.top_university, top_employer_tier: s.top_employer_tier, top_employer: s.top_employer, status: t.status, source: t.source ?? n.source, text: t.text || "" }, n.similarity);
-      if (!a.keep) continue;
-      const local = patterns ? nearby.has(n.id) : null;
-      a.checks.location = local;
-      if (local) a.reasons.unshift("nearby");
-      scored.push({ id: n.id, similarity: n.similarity, local, ...a });
-    }
-    // Nearby people first, then the best from anywhere.
-    scored.sort((x, y) => Number(!!y.local) - Number(!!x.local) || y.score - x.score);
+      return { years: s.years, engineering_years: s.engineering_years, title_family: s.title_family || [], top_university_tier: s.top_university_tier, top_university: s.top_university, top_employer_tier: s.top_employer_tier, top_employer: s.top_employer, status: t.status, source: t.source ?? n.source, text: t.text || "" };
+    };
+    const shortlistUnder = (weights) => {
+      const scored = [];
+      for (const n of near.values()) {
+        const a = assess(rules, personOf(n), n.similarity, weights);
+        if (!a.keep) continue;
+        const local = patterns ? nearby.has(n.id) : null;
+        a.checks.location = local;
+        if (local) a.reasons.unshift("nearby");
+        scored.push({ id: n.id, similarity: n.similarity, local, ...a });
+      }
+      // Nearby people first, then the best from anywhere.
+      scored.sort((x, y) => Number(!!y.local) - Number(!!x.local) || y.score - x.score);
+      return scored;
+    };
+    const scored = shortlistUnder(QUALITY_WEIGHTS.today);
     const top = scored.slice(0, SIZE);
+    if (COMPARE) {
+      // The same people scored under each preset: the top ten, how many of
+      // the kept list change against today's, and what the list looks like.
+      const todayIds = new Set(top.map((x) => x.id));
+      const presets = {};
+      for (const [name, weights] of Object.entries(QUALITY_WEIGHTS)) {
+        const list = (name === "today" ? scored : shortlistUnder(weights)).slice(0, SIZE);
+        const keptIds = new Set(list.map((x) => x.id));
+        const share = (f) => Math.round((100 * list.filter(f).length) / Math.max(1, list.length));
+        presets[name] = {
+          top: list.slice(0, 10).map((x) => ({ id: x.id, score: x.score, similarity: Math.round(x.similarity * 1000) / 1000, hits: x.keyword_hits, emp: signals.get(x.id)?.top_employer_tier ?? null, uni: signals.get(x.id)?.top_university_tier ?? null, local: x.local })),
+          kept: list.length,
+          entered: [...keptIds].filter((id) => !todayIds.has(id)).length,
+          t1_employer_pct: share((x) => signals.get(x.id)?.top_employer_tier === 1),
+          t1_university_pct: share((x) => signals.get(x.id)?.top_university_tier === 1),
+          avg_similarity: Math.round((1000 * list.reduce((a, x) => a + x.similarity, 0)) / Math.max(1, list.length)) / 1000,
+        };
+      }
+      console.log(`QUALITY_PREVIEW ${JSON.stringify({ role: role.external_id, title: role.title, considered: ids.length, presets })}`);
+    }
     tally.kept += scored.length;
     const rows = top.map((x, i) => ({ org_role_id: role.id, candidate_id: x.id, rank: i + 1, score: x.score, similarity: Math.round(x.similarity * 10000) / 10000, keyword_hits: x.keyword_hits, checks: x.checks, reasons: x.reasons, built_at: new Date().toISOString() }));
     if (!DRY_RUN) {

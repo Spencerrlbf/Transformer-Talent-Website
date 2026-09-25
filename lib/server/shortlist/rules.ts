@@ -79,8 +79,35 @@ export interface Assessment {
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ENGAGED = new Set(["directory", "airtable_sync", "website_applicant"]);
 
+/** What a top employer and a top university add to a person's score, as
+ *  [tier 1, tier 2]. With `bestOnly` only the better of the two counts.
+ *  Shortlist scores run about 0.64 to 0.76 from the 10th to the 90th
+ *  percentile of a role (median spread 0.12), and keyword hits can add up
+ *  to 0.20; the presets are sized against those. "today" is the weight in
+ *  use; "medium" and "strong" are what Spencer compares it with on the
+ *  blind preview (COMPARE_QUALITY=1 in scripts/build-shortlists.mjs). */
+export interface QualityWeights {
+  employer: [number, number];
+  university: [number, number];
+  bestOnly: boolean;
+}
+export const QUALITY_WEIGHTS: Record<"today" | "medium" | "strong", QualityWeights> = {
+  today: { employer: [0.03, 0.015], university: [0.03, 0.015], bestOnly: true },
+  medium: { employer: [0.08, 0.04], university: [0.05, 0.025], bestOnly: false },
+  strong: { employer: [0.16, 0.08], university: [0.1, 0.05], bestOnly: false },
+};
+
+const tierPoints = (tier: number | null | undefined, w: [number, number]) => (tier === 1 ? w[0] : tier === 2 ? w[1] : 0);
+
+/** The quality part of the score under the given weights. */
+export function qualityScore(p: Pick<PersonForShortlist, "top_employer_tier" | "top_university_tier">, w: QualityWeights = QUALITY_WEIGHTS.today): number {
+  const employer = tierPoints(p.top_employer_tier, w.employer);
+  const university = tierPoints(p.top_university_tier, w.university);
+  return w.bestOnly ? Math.max(employer, university) : employer + university;
+}
+
 /** How well one person fits a role's rules, on top of their embedding similarity. */
-export function assess(rules: RoleRules, p: PersonForShortlist, similarity: number): Assessment {
+export function assess(rules: RoleRules, p: PersonForShortlist, similarity: number, quality: QualityWeights = QUALITY_WEIGHTS.today): Assessment {
   const reasons: string[] = [];
   const checks: Assessment["checks"] = { years: null, family: null, top: null };
   let keep = true;
@@ -119,12 +146,11 @@ export function assess(rules: RoleRules, p: PersonForShortlist, similarity: numb
 
   const engaged = !!p.source && ENGAGED.has(p.source);
   if (engaged) reasons.push("engaged");
-  const bestTier = Math.min(p.top_university_tier || 9, p.top_employer_tier || 9);
   const score =
     similarity +
     Math.min(0.2, 0.04 * hit.length) +
     (engaged ? 0.05 : 0) +
-    (bestTier === 1 ? 0.03 : bestTier === 2 ? 0.015 : 0) +
+    qualityScore(p, quality) +
     (checks.years === true ? 0.02 : 0);
   return { keep, score: Math.round(score * 10000) / 10000, keyword_hits: hit.length, checks, reasons };
 }

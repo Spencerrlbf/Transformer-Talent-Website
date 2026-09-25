@@ -45,8 +45,8 @@ export { TOP_EMPLOYERS, TOP_UNIVERSITIES } from "./signals/lists";
 export type { AdvanceResult } from "./sourcing/run";
 
 // Phase 2: who is worth judging for a role (scripts/build-shortlists.mjs).
-export { rulesOf, assess } from "./shortlist/rules";
-export type { RoleRules, PersonForShortlist, Assessment } from "./shortlist/rules";
+export { rulesOf, assess, qualityScore, QUALITY_WEIGHTS } from "./shortlist/rules";
+export type { RoleRules, PersonForShortlist, Assessment, QualityWeights } from "./shortlist/rules";
 export { expandLocations } from "./matcher";
 
 // Phase 3: the light judge over the shortlists (scripts/judge-shortlists.mjs).
