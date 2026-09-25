@@ -27,7 +27,7 @@ import crypto from "node:crypto";
 import { sbRest } from "../supabase";
 import { workKind, type CandidateFacts, type JobText } from "../facts";
 import { titleFamilyOf } from "../signals/match";
-import { JEV_MODEL, jevChoose, jevConfigured } from "./jev";
+import { JEV_MODEL, jevChoose, jevConfigured, type JevError } from "./jev";
 import type { Hold } from "@/lib/rolecard";
 
 export type JobRole = "builder" | "tech_lead" | "manager" | "org_leader" | "other";
@@ -99,7 +99,7 @@ export function roleTypeHash(jobs: JobText[], headline: string | null | undefine
 }
 
 /** Jev reads each position; code turns the answers into the role type. */
-async function byJev(jobs: JobText[], headline: string | null | undefined): Promise<RoleType | null> {
+async function byJev(jobs: JobText[], headline: string | null | undefined): Promise<RoleType | JevError> {
   const read = positionsOf(jobs);
   const questions: Record<string, { instructions: string; criteria: Record<string, string> }> = {};
   read.forEach((j, i) => {
@@ -118,7 +118,7 @@ async function byJev(jobs: JobText[], headline: string | null | undefined): Prom
     },
   };
   const res = await jevChoose({ state, questions, timeoutMs: 20_000 });
-  if ("error" in res) return null;
+  if ("error" in res) return res;
   const positions = read.map((j, i) => {
     const a = res.answers[`p${i}`];
     const ranked = a ? (Object.entries(a.probabilities) as [JobRole, number][]).sort((x, y) => y[1] - x[1]) : [];
@@ -128,8 +128,11 @@ async function byJev(jobs: JobText[], headline: string | null | undefined): Prom
   return withDates(positions, read, positions[0]?.role ?? "other", positions[0]?.p ?? 0, "jev");
 }
 
-/** The role type, remembered per person under a hash of what was read. */
-export async function roleTypeFor(personKey: string, jobs: JobText[], headline: string | null | undefined): Promise<{ roleType: RoleType | null; called: boolean }> {
+/** The role type, remembered per person under a hash of what was read.
+ *  `error` is set when a title needed reading and Jev could not read it: the
+ *  caller writes no verdict then, because one written without the reading
+ *  would skip the manager check until the person or the card changes. */
+export async function roleTypeFor(personKey: string, jobs: JobText[], headline: string | null | undefined): Promise<{ roleType: RoleType | null; called: boolean; error?: JevError }> {
   if (!positionsOf(jobs).length) return { roleType: null, called: false };
   if (!needsReading(jobs) || !jevConfigured()) return { roleType: byCode(jobs), called: false };
   const hash = roleTypeHash(jobs, headline);
@@ -138,7 +141,7 @@ export async function roleTypeFor(personKey: string, jobs: JobText[], headline: 
     .catch(() => []);
   if (known[0]?.result?.v === 1) return { roleType: known[0].result, called: false };
   const read = await byJev(jobs, headline);
-  if (!read) return { roleType: null, called: true };
+  if ("error" in read) return { roleType: null, called: true, error: read };
   await sbRest("person_role_types?on_conflict=candidate_key,input_hash", {
     method: "POST",
     prefer: "resolution=ignore-duplicates,return=minimal",

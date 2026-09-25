@@ -127,7 +127,15 @@ export async function judgeForRole(a: JudgeForRoleArgs): Promise<JudgedForRole> 
   const memory = await readMemory(a, input);
   // What kind of job the person does now: read once per person, not per
   // role (role-type.ts), and only when a recent title could mean either.
-  const { roleType, called } = a.criteria.length ? await roleTypeFor(a.personKey, a.input.jobs ?? [], null) : { roleType: null, called: false };
+  const { roleType, called, error } = a.criteria.length ? await roleTypeFor(a.personKey, a.input.jobs ?? [], null) : { roleType: null, called: false, error: undefined };
+  // A title that needed reading and could not be read: no verdict, so the
+  // next run asks again. One written without it would skip the manager check
+  // until the person or the card changes (on 2026-09-25 Jev ran out of
+  // credits and 1,089 verdicts were written that way).
+  if (error) {
+    a.input.onError?.({ status: error.status, code: error.code ?? error.error, retryAfter: error.retryAfter });
+    return { view: null, saved: false };
+  }
 
   const judged = await judgeVerdict({ ...input, memory, roleType });
   if (!judged) return { view: null, saved: false };

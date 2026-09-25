@@ -56,7 +56,9 @@ import { askOpenAI, findReferences, jobSource, quoteCheck, REF_MODEL } from "./r
 
 // v16 (2026-09-25): holds for the kind of job a person does now and for
 // level (role-type.ts); management titles no longer count as engineering years.
-export const SCORECARD_JUDGE_VERSION = "v16";
+// v17 (2026-09-25): no verdict when a needed role-type reading fails. Bumped
+// so the verdicts v16 wrote without the reading are judged again.
+export const SCORECARD_JUDGE_VERSION = "v17";
 /** The review is versioned on its own: a change to how it is written goes
  *  into the note hash, so every remembered note is written once more, and
  *  no row is touched (rows, Jev and the row hashes stay v14). */

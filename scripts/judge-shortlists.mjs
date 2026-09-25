@@ -52,6 +52,8 @@ console.log(`${roles.length} open role(s) with a scorecard${DRY_RUN ? ", dry run
 const t0 = Date.now();
 const tally = { roles: 0, shortlisted: 0, alreadyJudged: 0, judged: 0, fromMemory: 0, written: 0, failed: 0, labels: {} };
 let stopped = false;
+let halted = null; // why the run stopped before the cap, when it did
+let refreshed = 0, refreshFailed = 0;
 for (const role of roles) {
   if (stopped) break;
   const ctx = shortlistRoleContext(role);
@@ -87,6 +89,9 @@ for (const role of roles) {
         if (!r.view) {
           roleFailed++;
           if (r.error && (r.error.status === 401 || r.error.status === 403)) throw new Error(`judge key rejected (${r.error.status} ${r.error.code || ""})`);
+          // Out of TypeSafe credits: every later judging fails the same way,
+          // so stop and say so (2026-09-25: 12,193 failures in 19 minutes).
+          if (r.error?.code === "typesafe_402") { halted = "TypeSafe credits ran out (402): add credits, then run again"; stopped = true; }
           continue;
         }
         if (r.saved) roleMemory++; else { roleJudged++; tally.judged++; }
@@ -108,14 +113,21 @@ for (const role of roles) {
   tally.alreadyJudged += roleSkipped; tally.fromMemory += roleMemory; tally.failed += roleFailed;
   for (const [k, v] of Object.entries(roleLabels)) tally.labels[k] = (tally.labels[k] || 0) + v;
   console.log(`  #${role.external_id} ${role.title}: ${list.length} shortlisted, ${roleSkipped} already judged, ${DRY_RUN ? "would judge" : "judged"} ${roleJudged}${roleMemory ? ` (+${roleMemory} from memory)` : ""}${roleFailed ? `, ${roleFailed} failed` : ""}${Object.keys(roleLabels).length ? `; ${Object.entries(roleLabels).map(([k, v]) => `${k} ${v}`).join(", ")}` : ""}`);
+
+  // The Network tab reads network_matches (migration 068). Verdicts reach it
+  // through a trigger; this rebuild also picks up the day's new shortlist
+  // ranks and person signals. One role at a time: the whole organisation at
+  // once outran the API's statement timeout (2026-09-25).
+  if (!DRY_RUN) {
+    try {
+      refreshed += await rest("rpc/refresh_network_matches_role", { method: "POST", body: JSON.stringify({ p_org: org.id, p_role: role.id }) });
+    } catch (err) {
+      refreshFailed++;
+      console.log(`    network_matches refresh failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 }
 const cost = (tally.judged * USD_PER_JUDGING).toFixed(2);
-console.log(`${DRY_RUN ? "dry run" : "done"}: ${tally.roles} roles, ${tally.shortlisted} shortlisted, ${tally.alreadyJudged} already judged, ${tally.judged} ${DRY_RUN ? "would be judged" : "judged"} (~$${cost}), ${tally.fromMemory} from memory, ${tally.written} written, ${tally.failed} failed${stopped ? `; STOPPED at the cap of ${MAX_JUDGINGS}` : ""}; labels ${JSON.stringify(tally.labels)}; ${Math.round((Date.now() - t0) / 1000)}s`);
-
-// The Network tab reads network_matches (migration 068). The verdicts written
-// above reach it through a trigger; the rebuild also picks up the day's new
-// shortlist ranks and person signals.
-if (!DRY_RUN) {
-  const rows = await rest("rpc/refresh_network_matches", { method: "POST", body: JSON.stringify({ p_org: org.id }) });
-  console.log(`network_matches rebuilt: ${rows} rows`);
-}
+console.log(`${DRY_RUN ? "dry run" : "done"}: ${tally.roles} roles, ${tally.shortlisted} shortlisted, ${tally.alreadyJudged} already judged, ${tally.judged} ${DRY_RUN ? "would be judged" : "judged"} (~$${cost}), ${tally.fromMemory} from memory, ${tally.written} written, ${tally.failed} failed${halted ? `; HALTED: ${halted}` : stopped ? `; STOPPED at the cap of ${MAX_JUDGINGS}` : ""}; labels ${JSON.stringify(tally.labels)}; ${Math.round((Date.now() - t0) / 1000)}s`);
+if (!DRY_RUN) console.log(`network_matches rebuilt: ${refreshed} rows${refreshFailed ? `, ${refreshFailed} role(s) failed` : ""}`);
+if (halted) process.exitCode = 1;
