@@ -13,7 +13,7 @@
 //
 // Shared logic comes from the compiled website library: run
 // `node scripts/build-worker-lib.mjs` first (the GitHub Action does).
-const { shortlistRoleContext, judgePoolCandidate, JEV_MODEL, SHORTLIST_ROLE_COLS } = await import("./dist/worker-lib.mjs");
+const { shortlistRoleContext, judgePoolCandidate, JEV_MODEL, SHORTLIST_ROLE_COLS, poolSourceHash } = await import("./dist/worker-lib.mjs");
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -78,10 +78,9 @@ for (const role of roles) {
   const worker = async () => {
     while (queue.length && !stopped) {
       const c = queue.shift();
-      const { poolSourceHash } = await import("./dist/worker-lib.mjs");
       const hash = poolSourceHash(c);
       if (have.get(c.id) === hash) { roleSkipped++; continue; }
-      if (DRY_RUN) { roleJudged++; continue; }
+      if (DRY_RUN) { roleJudged++; tally.judged++; continue; }
       if (tally.judged >= MAX_JUDGINGS) { stopped = true; break; }
       try {
         const r = await judgePoolCandidate(ctx, c);
