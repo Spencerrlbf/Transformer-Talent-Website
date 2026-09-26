@@ -10,6 +10,8 @@ q -d person_refresh_test -c 'create table refresh_queue(id uuid primary key defa
 for migration in 072_person_tables 20260926025355_person_writer_corrections 20260926031057_person_backfill_capture 20260926032752_person_missing_employer_review 20260926033900_person_atomic_projection 20260926040300_person_backfill_bulk 20260926042200_person_reconcile 20260926050355_person_source_date_holds 20260926054500_person_refresh_intake;do
  q -d person_refresh_test -1 -f "supabase/migrations/$migration.sql"
 done
+q -d person_refresh_test -f scripts/person-derivatives/local-embeddings.sql
+q -d person_refresh_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_refresh_test" node --test scripts/person-refresh/test-refresh.mjs
 node --test scripts/person-refresh/test-worker.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_refresh_test" node --test scripts/person-refresh/test-cli.mjs

@@ -12,6 +12,8 @@ done
 if test -f supabase/migrations/20260926061600_person_directory_intake.sql; then
  q -d person_directory_test -1 -f supabase/migrations/20260926061600_person_directory_intake.sql
 fi
+q -d person_directory_test -f scripts/person-derivatives/local-embeddings.sql
+q -d person_directory_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_directory_test" node --test scripts/person-directory/test-directory.mjs
 node --test scripts/person-directory/test-sources.mjs
 node --test scripts/person-directory/test-worker.mjs

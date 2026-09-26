@@ -19,6 +19,7 @@ import {
 } from "./save";
 import type { PersonDoc } from "./types";
 import { poolProfileText, poolSignals } from "../pool/profile";
+import { enqueuePersonDerivativesLocked } from './derivatives';
 const matchingText = (row: any) =>
   (poolProfileText(row) + ". actively engaged software candidate").slice(
     0,
@@ -548,6 +549,8 @@ export async function saveDirectoryOnConnection(
         ],
       );
     }
+    if(a.mode === 'live')
+      await enqueuePersonDerivativesLocked(c,{organizationId:TT_ORG_ID,candidateId:id,receiptRef:`directory:${r.id}`});
     const canonical = (
       await c.query("select * from public.candidates where id=$1", [id])
     ).rows[0];
