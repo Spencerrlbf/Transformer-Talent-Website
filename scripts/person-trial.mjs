@@ -98,11 +98,21 @@ export function normEmail(v) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
 }
 
-/** A phone's last ten digits (enough to recognise the same number in any format); null for junk. */
+/** Use the writer's canonical complete number, not a suffix that can conflate
+ * countries or turn invalid structured text into a supposed missing phone.
+ * Source enumeration and stored-row comparison remain separate from translation. */
 export function phoneKey(v) {
   if (typeof v !== "string" && typeof v !== "number") return null;
-  const d = String(v).replace(/\D/g, "");
-  return d.length >= 7 ? d.slice(-10) : null;
+  let s = String(v).trim().replace(/\s*(ext\.?|extension|x|#)\s*\d+\s*$/i, "");
+  s = s.replace(/^(\+?\d{7,})\.\d+$/, "$1");
+  const plus = s.startsWith("+") || s.startsWith("00");
+  if (s.startsWith("00")) s = s.slice(2);
+  const digits = s.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) return null;
+  if (plus) return `+${digits}`;
+  if (digits.length === 10 && /^[2-9]\d{2}[2-9]/.test(digits)) return `+1${digits}`;
+  if (digits.length === 11 && /^1[2-9]\d{2}[2-9]/.test(digits)) return `+${digits}`;
+  return digits;
 }
 
 /** Error text safe for a public log: addresses and long digit runs are masked. */
@@ -503,7 +513,7 @@ export function knownEmails({ row, legacy, v2, ledger, apps, dir }) {
   return out;
 }
 
-/** Every phone number any source holds (junk with fewer than 7 digits is not a phone). */
+/** Every valid phone number any source holds, using the writer's canonical form. */
 export function knownPhones({ row, apps, dir }) {
   const out = new Set();
   const add = (v) => { const k = phoneKey(v); if (k) out.add(k); };

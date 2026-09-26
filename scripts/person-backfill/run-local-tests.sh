@@ -15,6 +15,6 @@ q -d person_backfill_test -f scripts/person-backfill/test-bulk.sql
 q -d person_backfill_test -f scripts/person-backfill/test-missing-employer.sql
 q -d person_backfill_test -f scripts/person-backfill/test-capture.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_backfill_test" node scripts/person-backfill/test-local.mjs
-node --test scripts/person-backfill/test-engine.mjs scripts/person-backfill/test-io.mjs scripts/person-backfill/test-retry.mjs
+node --test scripts/person-backfill/test-engine.mjs scripts/person-backfill/test-io.mjs scripts/person-backfill/test-retry.mjs scripts/person-backfill/test-phone-audit.mjs
 PSQL="$PSQL" bash scripts/person-backfill/test-capture-concurrency.sh "$PORT"
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_backfill_test" node scripts/person-backfill/test-bulk-concurrency.mjs
