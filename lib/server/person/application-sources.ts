@@ -16,7 +16,7 @@ export async function cachedApplicationHarvest(
 ): Promise<{ id: string; raw_payload: unknown } | null> {
   if (org !== TT_ORG_ID) throw Error("person_intake_tenant");
   const result = await sbRest(
-    `candidate_enrichments?organization_id=eq.${org}&linkedin_username=eq.${encodeURIComponent(username)}&provider=eq.harvest&status=eq.ok&raw_payload=not.is.null${ledgerId ? `&id=eq.${encodeURIComponent(ledgerId)}` : `&created_at=gte.${encodeURIComponent(since)}`}&select=id,raw_payload&order=created_at.desc,id.desc&limit=1`,
+    `candidate_enrichments?organization_id=eq.${org}&linkedin_username=eq.${encodeURIComponent(username)}&provider=eq.harvest&status=eq.ok&cache_status=eq.miss&raw_payload=not.is.null${ledgerId ? `&id=eq.${encodeURIComponent(ledgerId)}` : `&created_at=gte.${encodeURIComponent(since)}`}&select=id,raw_payload&order=created_at.desc,id.desc&limit=1`,
   );
   if (!result.ok) throw Error("person_intake_cache_read");
   return (await result.json())[0] ?? null;
@@ -52,9 +52,7 @@ export async function applicationIntakeReceipt(
   org: string,
   applicationId: string,
 ): Promise<{
-  application_snapshot: {
-    parsed_profile: import("../applicants").ParsedProfile | null;
-  };
+  application_snapshot: import("./intake").ApplicationSnapshot;
   harvest_ledger_id: string | null;
 } | null> {
   if (org !== TT_ORG_ID) throw Error("person_intake_tenant");

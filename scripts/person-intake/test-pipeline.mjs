@@ -12,6 +12,12 @@ const TT = "801865a7-6533-41d2-9c45-e4a90e6ad51a",
   CLIENT = "f0000000-0000-4000-8000-000000000099";
 const uuid = (n) => `f0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const unexpected = [];
+let pdfHook = null;
+let failOrg = false,
+  parseHook = null,
+  finalizeHook = null,
+  pdfCalls = 0;
+const embeddingInputs = [];
 let failCache = false,
   denyBudget = false;
 for (const key of [
@@ -39,22 +45,46 @@ globalThis.fetch = async (input, init = {}) => {
   const u = new URL(typeof input === "string" ? input : input.url),
     table = u.pathname.split("/").at(-1),
     method = init.method ?? "GET";
+  if (u.origin === "https://api.openai.com") {
+    const body = JSON.parse(init.body);
+    if (table === "completions" && parseHook)
+      return json({
+        choices: [{ message: { content: JSON.stringify(await parseHook()) } }],
+      });
+    if (table === "embeddings") {
+      embeddingInputs.push(body.input);
+      return json({}, 503);
+    }
+  }
+  if (u.origin === "https://api.cloud.llamaindex.ai") {
+    pdfCalls++;
+    return pdfHook ? await pdfHook(u) : json({}, 503);
+  }
   if (u.origin !== "http://127.0.0.1:1") {
     unexpected.push(`external:${u.hostname}`);
     throw Error("EXTERNAL_FORBIDDEN");
   }
   const body = init.body ? JSON.parse(init.body) : null;
   if (table === "organizations")
-    return json([
-      {
-        id: u.searchParams.get("id")?.slice(3) ?? TT,
-        slug: "transformer-talent",
-        daily_review_limit: denyBudget ? 0 : 300,
-      },
-    ]);
+    return failOrg
+      ? json({}, 503)
+      : json([
+          {
+            id: u.searchParams.get("id")?.slice(3) ?? TT,
+            slug: "transformer-talent",
+            daily_review_limit: denyBudget ? 0 : 300,
+          },
+        ]);
   if (table === "rate_limit_events")
     return json([], 200, { "content-range": "0-0/0" });
-  if (["org_members", "org_roles", "sourced_candidates"].includes(table))
+  if (
+    [
+      "org_members",
+      "org_roles",
+      "sourced_candidates",
+      "candidate_embeddings",
+    ].includes(table)
+  )
     return json([]);
   if (
     ![
@@ -122,14 +152,19 @@ globalThis.fetch = async (input, init = {}) => {
       );
       assignments.push(`${key}=$${params.length}`);
     }
-    return json(
-      (
-        await db.query(
-          `update ${table} set ${assignments.join(",")}${predicate} returning *`,
-          params,
-        )
-      ).rows,
-    );
+    const rows = (
+      await db.query(
+        `update ${table} set ${assignments.join(",")}${predicate} returning *`,
+        params,
+      )
+    ).rows;
+    if (
+      table === "website_applications" &&
+      body.status === "processed" &&
+      finalizeHook
+    )
+      finalizeHook();
+    return json(rows);
   }
   if (method === "POST") {
     const keys = Object.keys(body);
@@ -151,7 +186,8 @@ globalThis.fetch = async (input, init = {}) => {
   }
   throw Error("UNEXPECTED_METHOD");
 };
-const { runApplicantPipeline } = await import("../dist/worker-lib.mjs");
+const { runApplicantPipeline, saveApplicationPersonOnConnection } =
+  await import("../dist/worker-lib.mjs");
 async function setup(n, { org = TT, source = null } = {}) {
   const username = `synthetic-pipeline-${n}`,
     id = uuid(n);
@@ -210,6 +246,24 @@ async function setup(n, { org = TT, source = null } = {}) {
     applicationType: "Applied",
   };
 }
+
+test("organization lookup failure queues the saved application", async () => {
+  const p = await setup(8);
+  failOrg = true;
+  try {
+    assert.equal(await runApplicantPipeline(p), "failed");
+  } finally {
+    failOrg = false;
+  }
+  assert.equal(
+    (
+      await db.query("select status from website_applications where id=$1", [
+        p.submissionId,
+      ])
+    ).rows[0].status,
+    "queued",
+  );
+});
 for (const [n, label, extra] of [
   [1, "job-board application", {}],
   [2, "referral", { applicationType: "Referral" }],
@@ -335,3 +389,174 @@ test("an exhausted application review budget retains the submission without pool
   assert.equal(app.candidate_id, null);
   assert.deepEqual(unexpected, []);
 });
+
+test("cache reuse records are not selected as fresh profile sources", async () => {
+  const p = await setup(9);
+  await db.query(
+    "insert into candidate_enrichments(id,organization_id,linkedin_username,cache_status,created_at,raw_payload) values($1,$2,$3,'hit',now()+interval '1second',$4)",
+    [uuid(900), TT, "synthetic-pipeline-9", { headline: "Stale cache copy" }],
+  );
+  assert.equal(await runApplicantPipeline(p), "processed");
+  const receipt = (
+    await db.query(
+      "select harvest_ledger_id from person_application_receipts where application_id=$1",
+      [p.submissionId],
+    )
+  ).rows[0];
+  assert.equal(receipt.harvest_ledger_id, uuid(109));
+});
+test("receipt retry reuses its original resume before extraction or embedding", async () => {
+  const p = await setup(10),
+    c = await db.connect();
+  try {
+    await saveApplicationPersonOnConnection(c, {
+      organizationId: TT,
+      applicationId: p.submissionId,
+      linkedinUsername: "synthetic-pipeline-10",
+      name: p.name,
+      parsed: null,
+      resumeText: "Original receipt resume",
+      mode: "live",
+    });
+  } finally {
+    c.release();
+  }
+  process.env.LLAMA_CLOUD_API_KEY = "synthetic-only";
+  process.env.OPENAI_API_KEY = "synthetic-only";
+  const initialCalls = pdfCalls;
+  embeddingInputs.length = 0;
+  try {
+    assert.equal(
+      await runApplicantPipeline({
+        ...p,
+        fromQueue: true,
+        resumeBuf: Buffer.from("synthetic PDF"),
+      }),
+      "processed",
+    );
+  } finally {
+    delete process.env.LLAMA_CLOUD_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  }
+  assert.equal(pdfCalls, initialCalls, "receipt replay must not extract again");
+  assert.ok(
+    embeddingInputs.flat().includes("Original receipt resume"),
+    "matching uses original resume even if retry supplied no usable PDF",
+  );
+});
+test(
+  "concurrent pipeline finalization retains the winning receipt parse",
+  { timeout: 15000 },
+  async () => {
+    const p = await setup(11);
+    let parses = 0,
+      releaseFirst,
+      releaseSecond;
+    const twoParses = new Promise((r) => (releaseFirst = r)),
+      firstFinal = new Promise((r) => (releaseSecond = r));
+    parseHook = async () => {
+      const n = ++parses;
+      if (n === 1) await twoParses;
+      else {
+        releaseFirst();
+        await firstFinal;
+      }
+      return {
+        profile_summary: "Canonical parse " + n,
+        current_title: "Parsed " + n,
+        top_skills: [],
+        education_schools: [],
+        education_degrees: [],
+        education_fields: [],
+      };
+    };
+    finalizeHook = () => releaseSecond();
+    process.env.OPENAI_API_KEY = "synthetic-only";
+    try {
+      assert.deepEqual(
+        await Promise.all([
+          runApplicantPipeline({ ...p, fromQueue: true }),
+          runApplicantPipeline({ ...p, fromQueue: true }),
+        ]),
+        ["processed", "processed"],
+      );
+      const row = (
+        await db.query(
+          "select a.parsed_profile app,r.application_snapshot->'parsed_profile' receipt from website_applications a join person_application_receipts r on r.application_id=a.id where a.id=$1",
+          [p.submissionId],
+        )
+      ).rows[0];
+      assert.equal(parses, 2);
+      assert.deepEqual(row.app, row.receipt);
+      assert.equal(row.app.profile_summary, "Canonical parse 1");
+    } finally {
+      parseHook = null;
+      finalizeHook = null;
+      delete process.env.OPENAI_API_KEY;
+      releaseFirst();
+      releaseSecond();
+    }
+  },
+);
+
+test(
+  "concurrent PDF extractions cannot replace the winning application resume",
+  { timeout: 15000 },
+  async () => {
+    const p = await setup(12);
+    let uploads = 0,
+      releaseUpload,
+      releaseSecond;
+    const bothUploads = new Promise((r) => (releaseUpload = r)),
+      firstFinal = new Promise((r) => (releaseSecond = r));
+    pdfHook = async (u) => {
+      if (u.pathname.endsWith("/upload")) {
+        const n = ++uploads;
+        if (n === 1) await bothUploads;
+        else releaseUpload();
+        return json({ id: String(n) });
+      }
+      if (u.pathname.endsWith("/markdown")) {
+        const n = u.pathname.includes("/job/2/") ? 2 : 1;
+        if (n === 2) await firstFinal;
+        return json({ markdown: "Canonical PDF " + n });
+      }
+      return json({ status: "SUCCESS" });
+    };
+    finalizeHook = () => releaseSecond();
+    process.env.LLAMA_CLOUD_API_KEY = "synthetic-only";
+    try {
+      const args = {
+        ...p,
+        fromQueue: true,
+        resumeBuf: Buffer.from("synthetic PDF"),
+      };
+      assert.deepEqual(
+        await Promise.all([
+          runApplicantPipeline(args),
+          runApplicantPipeline(args),
+        ]),
+        ["processed", "processed"],
+      );
+      const row = (
+        await db.query(
+          "select a.resume_text app,r.application_snapshot->>'resume_text' receipt,c.resume_text candidate from website_applications a join person_application_receipts r on r.application_id=a.id join candidates c on c.id=r.candidate_id where a.id=$1",
+          [p.submissionId],
+        )
+      ).rows[0];
+      assert.equal(uploads, 2);
+      assert.equal(row.receipt, "Canonical PDF 1");
+      assert.deepEqual(row, {
+        app: row.receipt,
+        receipt: row.receipt,
+        candidate: row.receipt,
+      });
+    } finally {
+      pdfHook = null;
+      finalizeHook = null;
+      delete process.env.LLAMA_CLOUD_API_KEY;
+      releaseUpload();
+      releaseSecond();
+    }
+  },
+);

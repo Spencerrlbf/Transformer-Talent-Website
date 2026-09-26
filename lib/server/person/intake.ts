@@ -21,6 +21,23 @@ import {
 import type { PersonDoc } from "./types";
 import type { ParsedProfile } from "../applicants";
 
+export function applicationMatchingText(
+  parsed: Partial<ParsedProfile> | null,
+  resumeText: string | null,
+): string {
+  return (
+    parsed?.profile_summary ||
+    [
+      parsed?.current_title,
+      parsed?.current_company && `at ${parsed.current_company}`,
+    ]
+      .filter(Boolean)
+      .join(" ") ||
+    resumeText?.slice(0, 2000) ||
+    ""
+  );
+}
+
 export function personWriteMode(
   env: Record<string, string | undefined> = process.env,
 ): "legacy" | "shadow" | "live" {
@@ -28,6 +45,12 @@ export function personWriteMode(
   if (value !== "legacy" && value !== "shadow" && value !== "live")
     throw Error("invalid_person_write_mode");
   return value;
+}
+export interface ApplicationSnapshot {
+  parsed_profile: ParsedProfile | null;
+  resume_text: string | null;
+  harvest_profile: Record<string, unknown> | null;
+  [key: string]: unknown;
 }
 export interface ApplicationPersonInput {
   organizationId: string;
@@ -111,7 +134,7 @@ export async function saveApplicationPersonOnConnection(
 ) {
   if (args.organizationId !== TT_ORG_ID) throw Error("person_intake_tenant");
   const username = args.linkedinUsername.trim().toLowerCase();
-  if (!/^[a-z0-9%._-]{1,200}$/.test(username))
+  if (!/^[\p{L}\p{N}\p{M}._-]{1,200}$/u.test(username))
     throw Error("person_intake_linkedin");
   try {
     await beginPersonTransaction(client);
@@ -165,7 +188,7 @@ export async function saveApplicationPersonOnConnection(
               .slice(1)
               .join(" ") || null,
             username,
-            `https://www.linkedin.com/in/${username}`,
+            `https://www.linkedin.com/in/${encodeURIComponent(username)}`,
           ],
         )
       ).rows[0];
@@ -194,6 +217,8 @@ export async function saveApplicationPersonOnConnection(
     )
       throw Error("person_intake_not_migrated");
     let docs: PersonDoc[] = receipt?.documents;
+    let applicationSnapshot: ApplicationSnapshot =
+      receipt?.application_snapshot;
     if (!docs) {
       const contact = { ...(application.contact ?? {}) };
       if (!contact.phone && args.resumeContacts?.phone)
@@ -204,20 +229,22 @@ export async function saveApplicationPersonOnConnection(
         ...(args.resumeContacts?.emails ?? []),
       ].filter(Boolean);
       if (extras.length) contact.otherEmails = [...new Set(extras)];
-      const app = {
+      const app: ApplicationSnapshot & ApplicationRow = {
         ...application,
         contact,
         created_at: new Date(application.created_at).toISOString(),
-        parsed_profile: args.parsed ?? application.parsed_profile,
+        parsed_profile: args.parsed ?? application.parsed_profile ?? null,
+        resume_text: args.resumeText ?? application.resume_text ?? null,
+        harvest_profile: null,
       };
       docs = [
         fromApplication(app, created, id),
-        applicationProfileDoc(app, id, args.parsed),
+        applicationProfileDoc(app, id, app.parsed_profile),
       ];
       if (args.harvestLedgerId) {
         const ledger = (
           await client.query(
-            `select * from public.candidate_enrichments where id=$1 and organization_id=$2 and provider='harvest' and status='ok' and lower(linkedin_username)=$3`,
+            `select * from public.candidate_enrichments where id=$1 and organization_id=$2 and provider='harvest' and status='ok' and cache_status='miss' and lower(linkedin_username)=$3 for share`,
             [args.harvestLedgerId, TT_ORG_ID, username],
           )
         ).rows[0];
@@ -226,6 +253,7 @@ export async function saveApplicationPersonOnConnection(
           (ledger.candidate_id && ledger.candidate_id !== id)
         )
           throw Error("person_intake_harvest_identity");
+        app.harvest_profile = ledger.raw_payload;
         docs.push(
           fromHarvest(
             ledger.raw_payload,
@@ -250,6 +278,7 @@ export async function saveApplicationPersonOnConnection(
           "update public.candidates set total_experience_years=$2 where id=$1",
           [id, args.parsed!.total_experience_years],
         );
+      applicationSnapshot = app;
       await client.query(
         "insert into public.person_application_receipts(application_id,candidate_id,created_person,documents,application_snapshot,harvest_ledger_id) values($1,$2,$3,$4,$5,$6)",
         [
@@ -273,12 +302,21 @@ export async function saveApplicationPersonOnConnection(
       before,
     );
     // Resume text and workflow labels are not normalized profile projection fields.
-    if (!receipt && args.resumeText && !before.resume_text)
+    if (!receipt && applicationSnapshot.resume_text && !before.resume_text)
       await client.query(
         "update public.candidates set resume_text=$2 where id=$1",
-        [id, args.resumeText.slice(0, 50000)],
+        [id, applicationSnapshot.resume_text.slice(0, 50000)],
       );
-    if (args.matchingVector && !before.matching_embedding) {
+    if (
+      !receipt &&
+      args.matchingVector &&
+      !before.matching_embedding &&
+      applicationMatchingText(args.parsed, args.resumeText) ===
+        applicationMatchingText(
+          applicationSnapshot.parsed_profile,
+          applicationSnapshot.resume_text,
+        )
+    ) {
       if (
         args.matchingVector.length !== 1536 ||
         args.matchingVector.some((v) => !Number.isFinite(v))
@@ -290,16 +328,17 @@ export async function saveApplicationPersonOnConnection(
       );
     }
     await client.query(
-      "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4 where id=$1",
+      "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4,resume_text=$5 where id=$1",
       [
         args.applicationId,
         id,
         created,
-        receipt ? receipt.application_snapshot.parsed_profile : args.parsed,
+        applicationSnapshot.parsed_profile,
+        applicationSnapshot.resume_text,
       ],
     );
     await client.query("commit");
-    return { ...result, created };
+    return { ...result, created, applicationSnapshot };
   } catch (error) {
     await client.query("rollback").catch(() => {});
     throw error;

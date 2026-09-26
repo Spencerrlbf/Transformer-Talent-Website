@@ -393,3 +393,88 @@ await test("receipt evidence is private", async () => {
   assert.equal(row.a, false);
   assert.equal(row.b, false);
 });
+
+await test("international LinkedIn usernames keep their exact decoded identity", async () => {
+  await application(20, "josé-martínez");
+  const result = await withClient((c) =>
+    lib.saveApplicationPersonOnConnection(c, input(20, "josé-martínez")),
+  );
+  const row = (
+    await db.query(
+      "select linkedin_username,linkedin_url from candidates where id=$1",
+      [result.candidateId],
+    )
+  ).rows[0];
+  assert.equal(row.linkedin_username, "josé-martínez");
+  assert.equal(
+    row.linkedin_url,
+    "https://www.linkedin.com/in/jos%C3%A9-mart%C3%ADnez",
+  );
+});
+await test("receipt returns the winning resume and parse without filling a later mismatched vector", async () => {
+  await application(21, "synthetic-canonical");
+  const original = {
+    ...input(21, "synthetic-canonical"),
+    resumeText: "Original canonical resume",
+  };
+  const first = await withClient((c) =>
+    lib.saveApplicationPersonOnConnection(c, original),
+  );
+  await db.query(
+    "update website_applications set resume_text='Out of date extraction' where id=$1",
+    [original.applicationId],
+  );
+  const replay = await withClient((c) =>
+    lib.saveApplicationPersonOnConnection(c, {
+      ...original,
+      parsed: { profile_summary: "Losing parse" },
+      resumeText: "Losing resume",
+      matchingVector: Array(1536).fill(0.1),
+    }),
+  );
+  assert.equal(replay.applicationSnapshot.resume_text, original.resumeText);
+  assert.deepEqual(replay.applicationSnapshot.parsed_profile, original.parsed);
+  assert.equal(
+    (
+      await db.query(
+        "select resume_text from website_applications where id=$1",
+        [original.applicationId],
+      )
+    ).rows[0].resume_text,
+    original.resumeText,
+  );
+  assert.equal(
+    (
+      await db.query("select matching_embedding from candidates where id=$1", [
+        first.candidateId,
+      ])
+    ).rows[0].matching_embedding,
+    null,
+  );
+});
+await test("a retained earlier parse never receives a vector from a failed replacement parse", async () => {
+  await application(22, "synthetic-parse-fallback");
+  await db.query(
+    "update website_applications set parsed_profile=$2 where id=$1",
+    [uuid(22), { profile_summary: "Retained parsed summary" }],
+  );
+  const result = await withClient((c) =>
+    lib.saveApplicationPersonOnConnection(c, {
+      ...input(22, "synthetic-parse-fallback"),
+      parsed: null,
+      matchingVector: Array(1536).fill(0.1),
+    }),
+  );
+  assert.equal(
+    result.applicationSnapshot.parsed_profile.profile_summary,
+    "Retained parsed summary",
+  );
+  assert.equal(
+    (
+      await db.query("select matching_embedding from candidates where id=$1", [
+        result.candidateId,
+      ])
+    ).rows[0].matching_embedding,
+    null,
+  );
+});

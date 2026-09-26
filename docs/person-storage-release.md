@@ -119,7 +119,11 @@ person receives its initial usable profile in the creation transaction.
 `person_application_receipts` keeps the creation decision, exact normalized
 documents, original application snapshot and Harvest ledger reference. Retries
 reuse those inputs. A new Harvest result is stored before later parsing;
-cached results retain their original source date. Failures queue the retained
+only original cache-miss ledger rows can supply a dated cached result. Retries
+read the receipt before extracting a PDF and reuse its immutable Harvest payload.
+Concurrent attempts use the transaction's winning resume and parse for later
+matching and application updates. A vector from a superseded parse is never
+stored as the winning person's embedding. Failures queue the retained
 application for the existing review worker. Existing application review budgets
 and paid service limits remain in force.
 

@@ -36,6 +36,7 @@ import { getOrgId } from "./spine";
 import { takeReview } from "./review-budget";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
 import { personWriteMode } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
 import { cachedApplicationHarvest, storeApplicationHarvest, applicationIntakeReceipt, applicationResumeContacts } from "./person/application-sources";
 
 export type ApplicantPipelineInput = {
@@ -90,6 +91,21 @@ function nameFromProfile(
 }
 
 export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"processed" | "queued" | "failed"> {
+  try {
+    return await runApplicantPipelineInternal(p);
+  } catch {
+    // Includes failures before enrichment starts (organization/roles/receipt).
+    // The already-saved application remains durably available to the queue.
+    const org = p.boardOrg?.id ?? p.orgId ?? TT_ORG_ID;
+    const status = process.env.PERSON_WRITE_MODE && process.env.PERSON_WRITE_MODE !== "legacy" ? "queued" : "received";
+    await sbRest(`website_applications?id=eq.${p.submissionId}&organization_id=eq.${org}`, {
+      method: "PATCH", body: JSON.stringify({ status }), prefer: "return=minimal",
+    }).catch(() => {});
+    console.error("applicant pipeline setup failed", "application_retry_required");
+    return "failed";
+  }
+}
+async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<"processed" | "queued" | "failed"> {
   const {
     submissionId, email, linkedin, visa, preferredLocations,
     roleIds, speculative, resumeBuf, resumeSafeName, resumePath, boardOrg, orgId,
@@ -152,7 +168,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
   // about it now, and the nightly queue reviews it once there is room.
   const budgetOrg = tenantOrgId ?? orgId;
   if (!p.fromQueue && budgetOrg && !(await takeReview(budgetOrg))) {
-    await sbRest(`website_applications?id=eq.${submissionId}`, {
+    await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
       method: "PATCH",
       body: JSON.stringify({ status: "queued" }),
       prefer: "return=minimal",
@@ -161,10 +177,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
     return "queued";
   }
 
-  // Resume text (when a resume exists).
-  let resumeText: string | null = null;
+  // Admission receipts fix the inputs for every retry, before any PDF/API call.
+  const intakeReceipt = normalizedIntake ? await applicationIntakeReceipt(effectiveOrgId, submissionId) : null;
+  let resumeText: string | null = intakeReceipt?.application_snapshot.resume_text ?? null;
   let resumeParser: "llamaparse" | "pdf-parse" | null = null;
-  if (resumeBuf) {
+  if (resumeBuf && !intakeReceipt) {
     resumeText = await llamaParsePdf(resumeBuf, resumeSafeName);
     if (resumeText) {
       resumeParser = "llamaparse";
@@ -172,8 +189,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
       resumeText = (await pdfText(resumeBuf)) || null;
       if (resumeText) resumeParser = "pdf-parse";
     }
-    if (resumeText) {
-      await sbRest(`website_applications?id=eq.${submissionId}`, {
+    if (resumeText && !normalizedIntake) {
+      await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({ resume_text: resumeText }),
         prefer: "return=minimal",
@@ -191,14 +208,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
     let harvestCache: "hit" | "miss" = "miss";
     const since = new Date(Date.now() - 30 * 86400_000).toISOString();
     let harvestLedgerId: string | null = null;
-    const intakeReceipt = normalizedIntake ? await applicationIntakeReceipt(effectiveOrgId, submissionId) : null;
     if (intakeReceipt) {
       harvestLedgerId = intakeReceipt.harvest_ledger_id;
-      if (harvestLedgerId) {
-        const cached = await cachedApplicationHarvest(effectiveOrgId, username || "", since, harvestLedgerId);
-        if (!cached) throw Error("person_intake_receipt_source_missing");
-        harvest = cached.raw_payload; harvestCache = "hit";
-      }
+      harvest = intakeReceipt.application_snapshot.harvest_profile;
+      if (harvestLedgerId && !harvest) throw Error("person_intake_receipt_source_missing");
+      harvestCache = "hit";
     } else if (normalizedIntake) {
       const cached = await cachedApplicationHarvest(effectiveOrgId, username || "", since);
       if (cached) { harvest = cached.raw_payload; harvestLedgerId = cached.id; harvestCache = "hit"; }
@@ -215,12 +229,12 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
       if (rows.length) { harvest = rows[0].harvest_profile; harvestCache = "hit"; }
       if (!harvest) harvest = await harvestProfile(linkedin);
     }
-    const parsed = intakeReceipt ? intakeReceipt.application_snapshot.parsed_profile : await parseProfile(resumeText || "", harvest);
+    let parsed = intakeReceipt ? intakeReceipt.application_snapshot.parsed_profile : await parseProfile(resumeText || "", harvest);
 
     // Referrals arrive with no name — take it from the profile.
     if (!name) {
       name = nameFromProfile(harvest as Record<string, unknown> | null, username || email);
-      await sbRest(`website_applications?id=eq.${submissionId}`, {
+      await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
         prefer: "return=minimal",
@@ -228,7 +242,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
     }
 
     // Full uncapped skill list from Harvest — richer than the parsed top 12.
-    const harvestSkills = (
+    let harvestSkills = (
       ((harvest as Record<string, unknown> | null)?.skills as { name?: string }[] | undefined) || []
     )
       .map((s) => s?.name || "")
@@ -237,7 +251,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
     // no pool enrichment, experiences or embeddings, no TT Airtable. They
     // are judged under the company's own person key; the ledger keeps only
     // the spend, under the company.
-    const { candidateId, vector } = tenantOrgId
+    const promotion = tenantOrgId
       ? {
           candidateId: await tenantPersonId(tenantOrgId, username, submissionId),
           vector: username ? await applicantVector(parsed, resumeText) : null,
@@ -254,6 +268,15 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
           parsed,
           allSkills: harvestSkills,
         });
+    const { candidateId, vector } = promotion;
+    // A concurrent first attempt may have committed after our initial lookup.
+    // Use the transaction's winning snapshot for every downstream write/call.
+    if (normalizedIntake && "applicationSnapshot" in promotion && promotion.applicationSnapshot) {
+      parsed = promotion.applicationSnapshot.parsed_profile;
+      resumeText = promotion.applicationSnapshot.resume_text;
+      harvest = promotion.applicationSnapshot.harvest_profile;
+      harvestSkills = (((harvest as Record<string, unknown> | null)?.skills as {name?:string}[] | undefined) || []).map(s=>s?.name||"").filter(Boolean);
+    }
 
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
     if (harvest && !normalizedIntake) {
@@ -432,6 +455,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
       body: JSON.stringify({
         harvest_profile: harvest,
         parsed_profile: parsed,
+        ...(normalizedIntake ? { resume_text: resumeText } : {}),
         candidate_id: candidateId,
         matched_role_ids: matchedIds,
         screening,
@@ -494,7 +518,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"
   } catch (err) {
     pipelineFailed = true;
     console.error("applicant pipeline failed", normalizedIntake ? "person_intake_retry_required" : err);
-    await sbRest(`website_applications?id=eq.${submissionId}`, {
+    await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
       method: "PATCH",
       body: JSON.stringify({ status: normalizedIntake ? "queued" : "received" }),
       prefer: "return=minimal",
