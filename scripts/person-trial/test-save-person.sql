@@ -788,7 +788,7 @@ begin
     'view is security_invoker';
   select count(*) into n from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
   where ns.nspname = 'public' and (p.proname in ('save_person', 'person_org_ident', 'person_org_lock_keys', 'person_company', 'person_school',
-      'person_rerank_contacts') or p.proname like 'tt\_%')
+      'person_rerank_contacts', 'person_contact_ranks', 'person_doc_beats') or p.proname like 'tt\_%')
     and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute')
          or coalesce(array_to_string(p.proacl, ','), '') like '%=X/%' and array_to_string(p.proacl, ',') ~ '(^|,)=X/');
   assert n = 0, format('%s new functions executable by public/anon/authenticated', n);
@@ -959,6 +959,163 @@ begin
   select count(*) into n from (select lower(c.linkedin_username) from public.companies c where c.linkedin_username is not null group by 1 having count(*) > 1) d;
   assert n = 0, 'no duplicate usernames';
   raise notice 'PASS 14 a writer-made company learns its LinkedIn id or username; pre-existing rows and values held elsewhere are left alone';
+end $$;
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- 15. Review fixes: recruiter picks, per-list owners, ties, schools that learn
+-- their id, the directory's newest primary, the old primary flag, tier fill
+-- only on the writer's rows, no search URL in companies.linkedin_url
+-- ---------------------------------------------------------------------------
+insert into public.candidates (id, full_name, linkedin_username)
+select t.p(3000 + n), 'Review Person ' || n, 'review-person-' || n from generate_series(1, 12) n;
+
+-- A doc with contacts only: (source, fetched_at, hash, contacts).
+create function t.contact_doc(p uuid, p_source text, p_fetched text, p_hash text, p_contacts jsonb) returns jsonb language sql as $$
+  select jsonb_build_object('candidate_id', p, 'mode', 'contacts_only',
+    'source', jsonb_build_object('source', p_source, 'fetched_at', p_fetched, 'payload_hash', p_hash, 'raw_in', 'inline', 'parser_version', 'test-1'),
+    'contacts', p_contacts)
+$$;
+-- A list doc: jobs/educations/skills given as jsonb (null = key absent).
+create function t.list_doc(p uuid, p_source text, p_fetched text, p_hash text, p_jobs jsonb, p_edus jsonb, p_skills jsonb) returns jsonb language sql as $$
+  select jsonb_strip_nulls(jsonb_build_object('candidate_id', p, 'mode', 'replace_lists',
+    'source', jsonb_build_object('source', p_source, 'fetched_at', p_fetched, 'payload_hash', p_hash, 'raw_in', 'inline', 'parser_version', 'test-1'),
+    'jobs', p_jobs, 'educations', p_edus, 'skills', p_skills))
+$$;
+create function t.job(p_key text, p_title text, p_company jsonb) returns jsonb language sql as $$
+  select jsonb_build_object('row_key', p_key, 'title', p_title, 'company', p_company)
+$$;
+create function t.live_jobs(p uuid) returns text language sql as $$
+  select coalesce(string_agg(e.row_key, ',' order by e.row_key), '') from public.candidate_experiences e
+  where e.candidate_id = p and e.source = 'person' and e.removed_at is null
+$$;
+create function t.live_skills(p uuid) returns text language sql as $$
+  select coalesce(string_agg(k.key, ',' order by k.key), '') from public.candidate_skills cs join public.skills k on k.id = cs.skill_id
+  where cs.candidate_id = p and cs.removed_at is null
+$$;
+create function t.rank_of(p uuid, v text) returns int language sql as $$
+  select cc.rank from public.candidate_contacts cc where cc.candidate_id = p and cc.value_normalized = v
+$$;
+grant execute on all functions in schema t to service_role;
+
+set role service_role;
+do $$
+declare r jsonb; n int; before_upd timestamptz;
+begin
+  -- 15a. Three recruiter picks, then an automated bounce of the middle one:
+  -- the picks keep their order by when they were chosen, no duplicate rank 1.
+  r := public.save_person(t.contact_doc(t.p(3001), 'recruiter', '2024-01-01T00:00:00Z', 'm1',
+    '[{"kind":"email","value_normalized":"mb@example.com","is_manual":true}]'));
+  r := public.save_person(t.contact_doc(t.p(3001), 'recruiter', '2024-02-01T00:00:00Z', 'm2',
+    '[{"kind":"email","value_normalized":"mx@example.com","is_manual":true}]'));
+  r := public.save_person(t.contact_doc(t.p(3001), 'recruiter', '2024-03-01T00:00:00Z', 'm3',
+    '[{"kind":"email","value_normalized":"ma@example.com","is_manual":true}]'));
+  assert t.rank_of(t.p(3001), 'ma@example.com') = 1 and t.rank_of(t.p(3001), 'mx@example.com') = 2
+     and t.rank_of(t.p(3001), 'mb@example.com') = 3, 'the latest pick leads';
+  r := public.save_person(t.contact_doc(t.p(3001), 'directory', '2024-04-01T00:00:00Z', 'm4',
+    '[{"kind":"email","value_normalized":"mx@example.com","status":"bounced","quality":"bad","result":"bounced"}]'));
+  assert r->>'status' = 'updated', format('bounce of a middle pick %s', r);
+  assert t.rank_of(t.p(3001), 'ma@example.com') = 1 and t.rank_of(t.p(3001), 'mb@example.com') = 2
+     and t.rank_of(t.p(3001), 'mx@example.com') is null, 'picks re-rank without a clash';
+  -- An automated sighting of an older pick does not move it ahead of the latest one.
+  r := public.save_person(t.contact_doc(t.p(3001), 'harvest', '2025-01-01T00:00:00Z', 'm5',
+    '[{"kind":"email","value_normalized":"mb@example.com","quality":"good","result":"ok","verified_at":"2025-01-01T00:00:00Z"}]'));
+  assert t.rank_of(t.p(3001), 'ma@example.com') = 1 and t.rank_of(t.p(3001), 'mb@example.com') = 2,
+    'a re-sighting leaves the recruiter''s latest pick first';
+  assert (select cc.manual_at = '2024-01-01T00:00:00Z' from public.candidate_contacts cc
+          where cc.candidate_id = t.p(3001) and cc.value_normalized = 'mb@example.com'), 'manual_at only moves on a manual doc';
+  raise notice 'PASS 15a recruiter picks ordered by manual_at; a bounce or an automated sighting re-ranks without a clash';
+
+  -- 15b. A newer doc that carries no jobs keeps the older doc's jobs, in either order.
+  r := public.save_person(t.list_doc(t.p(3002), 'legacy_import', '2024-01-01T00:00:00Z', 'l-old',
+    jsonb_build_array(t.job('rk-old', 'Engineer', '{"name":"Old Co"}')), null, '[{"name":"Go","key":"go"}]'));
+  r := public.save_person(t.list_doc(t.p(3002), 'harvest', '2025-01-01T00:00:00Z', 'l-new',
+    null, null, '[{"name":"Rust","key":"rust"}]'));
+  r := public.save_person(t.list_doc(t.p(3003), 'harvest', '2025-01-01T00:00:00Z', 'l-new',
+    null, null, '[{"name":"Rust","key":"rust"}]'));
+  r := public.save_person(t.list_doc(t.p(3003), 'legacy_import', '2024-01-01T00:00:00Z', 'l-old',
+    jsonb_build_array(t.job('rk-old', 'Engineer', '{"name":"Old Co"}')), null, '[{"name":"Go","key":"go"}]'));
+  assert (r->>'applied_lists')::boolean, format('an older doc still takes a list nobody owns %s', r);
+  assert t.live_jobs(t.p(3002)) = 'rk-old' and t.live_jobs(t.p(3003)) = 'rk-old', 'jobs from the older doc in both orders';
+  assert t.live_skills(t.p(3002)) = 'rust' and t.live_skills(t.p(3003)) = 'rust', 'skills from the newer doc in both orders';
+  assert (select s.jobs_source_id = (select cs.id from public.candidate_sources cs where cs.candidate_id = t.p(3003) and cs.payload_hash = 'l-old')
+            and s.skills_source_id = s.lists_source_id and s.lists_fetched_at = '2025-01-01T00:00:00Z'
+          from public.candidate_profile_state s where s.candidate_id = t.p(3003)), 'per-list owners; lists_source_id is the newest';
+  -- Repeats are unchanged.
+  r := public.save_person(t.list_doc(t.p(3003), 'legacy_import', '2024-01-01T00:00:00Z', 'l-old',
+    jsonb_build_array(t.job('rk-old', 'Engineer', '{"name":"Old Co"}')), null, '[{"name":"Go","key":"go"}]'));
+  assert r->>'status' = 'unchanged', format('repeat of a partly applied doc %s', r);
+  raise notice 'PASS 15b each list has its own owner: a newer doc without jobs leaves the older jobs, in any order';
+
+  -- 15c. Equal fetched_at: the same winner in both orders (harvest outranks the old import).
+  r := public.save_person(t.list_doc(t.p(3004), 'legacy_import', '2024-01-01T00:00:00Z', 'tie-l', jsonb_build_array(t.job('rk-a', 'A', '{"name":"A Co"}')), null, null));
+  r := public.save_person(t.list_doc(t.p(3004), 'harvest', '2024-01-01T00:00:00Z', 'tie-h', jsonb_build_array(t.job('rk-b', 'B', '{"name":"B Co"}')), null, null));
+  r := public.save_person(t.list_doc(t.p(3005), 'harvest', '2024-01-01T00:00:00Z', 'tie-h', jsonb_build_array(t.job('rk-b', 'B', '{"name":"B Co"}')), null, null));
+  r := public.save_person(t.list_doc(t.p(3005), 'legacy_import', '2024-01-01T00:00:00Z', 'tie-l', jsonb_build_array(t.job('rk-a', 'A', '{"name":"A Co"}')), null, null));
+  assert t.live_jobs(t.p(3004)) = 'rk-b' and t.live_jobs(t.p(3005)) = 'rk-b', 'a tie on fetched_at goes to the higher source in both orders';
+  raise notice 'PASS 15c ties on fetched_at break the same way in any order';
+
+  -- 15d. A replace_lists doc with no list at all: the second save is unchanged.
+  r := public.save_person(t.contact_doc(t.p(3006), 'directory', '2024-01-01T00:00:00Z', 'nolist',
+    '[{"kind":"email","value_normalized":"nolist@example.com"}]') || '{"mode":"replace_lists"}');
+  r := public.save_person(t.contact_doc(t.p(3006), 'directory', '2024-01-01T00:00:00Z', 'nolist',
+    '[{"kind":"email","value_normalized":"nolist@example.com"}]') || '{"mode":"replace_lists"}');
+  assert r->>'status' = 'unchanged' and (select rev from public.candidate_profile_state where candidate_id = t.p(3006)) = 1,
+    format('a list doc without lists is not re-applied %s', r);
+  raise notice 'PASS 15d a replace_lists doc that carries no list is unchanged on repeat';
+
+  -- 15e. A school made from its URL learns its LinkedIn id (and the reverse): one row.
+  r := public.save_person(t.list_doc(t.p(3007), 'harvest', '2024-01-01T00:00:00Z', 's1', null,
+    '[{"row_key":"e1","school":{"name":"Probe U","linkedin_url":"https://www.linkedin.com/school/probe-u/"}}]', null));
+  r := public.save_person(t.list_doc(t.p(3008), 'harvest', '2024-01-01T00:00:00Z', 's2', null,
+    '[{"row_key":"e1","school":{"name":"Probe U","linkedin_org_id":"55501","linkedin_url":"https://www.linkedin.com/school/probe-u/"}}]', null));
+  r := public.save_person(t.list_doc(t.p(3009), 'harvest', '2024-01-01T00:00:00Z', 's3', null,
+    '[{"row_key":"e1","school":{"name":"Probe U","linkedin_org_id":"55501"}}]', null));
+  assert (select count(*) from public.schools where normalized_name = 'probe u') = 1, 'one school row for one LinkedIn school';
+  assert (select linkedin_org_id = '55501' and identity_basis = 'linkedin_org_id' from public.schools where normalized_name = 'probe u'), 'learned its id';
+  r := public.save_person(t.list_doc(t.p(3007), 'harvest', '2024-02-01T00:00:00Z', 's4', null,
+    '[{"row_key":"e1","school":{"name":"Probe Two","linkedin_org_id":"55502"}}]', null));
+  r := public.save_person(t.list_doc(t.p(3008), 'harvest', '2024-02-01T00:00:00Z', 's5', null,
+    '[{"row_key":"e1","school":{"name":"Probe Two","linkedin_org_id":"55502","linkedin_url":"https://www.linkedin.com/school/probe-two/"}}]', null));
+  r := public.save_person(t.list_doc(t.p(3009), 'harvest', '2024-02-01T00:00:00Z', 's6', null,
+    '[{"row_key":"e1","school":{"name":"Probe Two","linkedin_url":"https://www.linkedin.com/school/probe-two/"}}]', null));
+  assert (select count(*) from public.schools where normalized_name = 'probe two') = 1, 'id first, then URL: one row';
+  raise notice 'PASS 15e a writer-made school learns its LinkedIn id or URL: one row per school in any order';
+
+  -- 15f. An older directory version arriving late does not take the primary back.
+  r := public.save_person(t.contact_doc(t.p(3010), 'directory', '2024-06-01T00:00:00Z', 'd-new',
+    '[{"kind":"email","value_normalized":"new@example.com","source_detail":"directory_primary"}]'));
+  r := public.save_person(t.contact_doc(t.p(3010), 'directory', '2023-06-01T00:00:00Z', 'd-old',
+    '[{"kind":"email","value_normalized":"old@example.com","source_detail":"directory_primary"}]'));
+  assert t.rank_of(t.p(3010), 'new@example.com') = 1, 'the newest directory primary stays first';
+  assert (select source_detail = 'directory' from public.candidate_contacts where candidate_id = t.p(3010) and value_normalized = 'old@example.com'),
+    'the older primary is a plain directory address';
+  raise notice 'PASS 15f only the newest directory version names the primary';
+
+  -- 15g. Ties inside a tier go to the address the old tables marked primary, then 'replied' is a good check.
+  r := public.save_person(t.contact_doc(t.p(3011), 'legacy_import', '2024-01-01T00:00:00Z', 'lp',
+    '[{"kind":"email","value_normalized":"aaa@example.com","label":"personal","quality":"good","result":"ok","verified_at":"2024-01-01T00:00:00Z"},
+      {"kind":"email","value_normalized":"zzz@example.com","label":"personal","quality":"good","result":"ok","verified_at":"2024-01-01T00:00:00Z","legacy_primary":true},
+      {"kind":"email","value_normalized":"rep@example.com","label":"business","quality":"good","result":"replied","verified_at":"2024-01-01T00:00:00Z"}]'));
+  assert t.rank_of(t.p(3011), 'zzz@example.com') = 1 and t.rank_of(t.p(3011), 'aaa@example.com') = 2, 'the old primary wins a tie';
+  assert t.rank_of(t.p(3011), 'rep@example.com') = 3 and public.tt_email_check_class('good', 'replied') = 'good', 'replied is a good check';
+  raise notice 'PASS 15g the old tables'' primary breaks ties within a tier; replied counts as verified';
+
+  -- 15h. Tier: filled on the writer's own rows, never on a pre-existing companies row.
+  select c.updated_at into before_upd from public.companies c where c.linkedin_id = '3003';
+  r := public.save_person(t.list_doc(t.p(3012), 'harvest', '2024-01-01T00:00:00Z', 'tier1',
+    jsonb_build_array(t.job('rk-i', 'Engineer', '{"name":"Initech","linkedin_id":"3003","tier":1}'),
+                      t.job('rk-s', 'Engineer', '{"name":"Search Co","linkedin_url":"https://www.linkedin.com/search/results/all/?keywords=search%20co"}'),
+                      t.job('rk-w', 'Engineer', '{"name":"Writer Co","linkedin_id":"98001"}')), null, null));
+  r := public.save_person(t.list_doc(t.p(3012), 'harvest', '2024-02-01T00:00:00Z', 'tier2',
+    jsonb_build_array(t.job('rk-i', 'Engineer', '{"name":"Initech","linkedin_id":"3003","tier":1}'),
+                      t.job('rk-w', 'Engineer', '{"name":"Writer Co","linkedin_id":"98001","tier":2}')), null, null));
+  assert (select c.tier is null and c.tier_list_version is null and c.updated_at = before_upd from public.companies c where c.linkedin_id = '3003'),
+    'a pre-existing row is not written';
+  assert (select c.tier = 2 from public.companies c where c.linkedin_id = '98001'), 'a writer-made row gets its missing tier';
+  assert (select c.linkedin_url is null and c.identity_basis = 'name' from public.companies c where c.created_from = 'person_writer' and c.name = 'Search Co'),
+    'a search URL is not stored as the company''s LinkedIn URL';
+  raise notice 'PASS 15h tier fill only on writer rows (pre-existing rows untouched); no search URL in companies.linkedin_url';
 end $$;
 reset role;
 

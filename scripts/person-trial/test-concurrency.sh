@@ -82,4 +82,20 @@ begin
   raise notice 'PASS concurrency: no errors, no deadlocks, no duplicates, every job linked';
 end $$;
 EOF
+# Two people who share an address, saved at the same time: the second must
+# wait for the first (the per-address lock) and log the shared address. The
+# first session holds its transaction open for 3 s; the second starts 1 s in.
+race_doc() {
+  echo "jsonb_build_object('candidate_id', '$1'::uuid, 'mode', 'contacts_only', 'source', jsonb_build_object('source', 'directory', 'fetched_at', '2025-01-01T00:00:00Z', 'payload_hash', 'race-$2', 'raw_in', 'directory', 'parser_version', 't'), 'contacts', jsonb_build_array(jsonb_build_object('kind', 'email', 'value_normalized', 'race@example.com')))"
+}
+RA=a0000000-0000-4000-8000-000000000901
+RB=a0000000-0000-4000-8000-000000000902
+q -d $DB -c "insert into public.candidates (id, full_name, linkedin_username) values ('$RA', 'Race A', 'race-a'), ('$RB', 'Race B', 'race-b')"
+( q -d $DB -c "begin" -c "select public.save_person($(race_doc $RA a))" -c "select pg_sleep(3)" -c "commit" > /dev/null ) &
+sleep 1
+conflicts=$(q -d $DB -t -A -c "select public.save_person($(race_doc $RB b))->'counts'->>'conflicts'")
+wait
+rows=$(q -d $DB -t -A -c "select count(*) from public.identity_conflicts where kind = 'email_owned_by_other' and incoming->>'value_normalized' = 'race@example.com'")
+[ "$conflicts" = "1" ] && [ "$rows" = "1" ] || { echo "FAIL: concurrent shared address: conflicts=$conflicts rows=$rows"; exit 1; }
+echo "PASS concurrent shared address: the second writer waited and logged the conflict"
 q -d postgres -c "drop database $DB"

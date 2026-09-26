@@ -6,9 +6,11 @@
 -- it in one transaction under a per-person lock:
 --   * the same doc twice changes nothing ("unchanged");
 --   * the newest LinkedIn-grade source, by when the source fetched it,
---     replaces the job, school and skill lists as a unit: kept rows keep their
---     ids, new rows are added, rows no longer listed get removed_at (never
---     deleted); an older doc arriving late is recorded and changes no list;
+--     replaces each list it carries (jobs, schools, skills) as a unit: kept
+--     rows keep their ids, new rows are added, rows no longer listed get
+--     removed_at (never deleted); an older doc arriving late is recorded and
+--     changes no list another source newer than it owns; ties on fetched_at
+--     break the same way in any order;
 --   * header fields: the newest non-empty value wins, an empty value never
 --     blanks one;
 --   * every job links to a company (LinkedIn id, then username, then URL; else
@@ -53,10 +55,17 @@ create table if not exists public.candidate_sources (
 
 -- Which source owns the lists and when that data was true, plus the header
 -- ({field: {value, source, at}}), so the trial never alters candidates.
+-- lists_source_id is the newest source that replaced any list; each list
+-- also records its own owner (jobs/educations/skills_source_id), because a
+-- source that lacks a list (a pull with no positions) leaves that list with
+-- the older source that had one, in whatever order the sources arrive.
 create table if not exists public.candidate_profile_state (
   candidate_id uuid primary key references public.candidates(id) on delete restrict,
   lists_source_id uuid references public.candidate_sources(id),
   lists_fetched_at timestamptz,
+  jobs_source_id uuid references public.candidate_sources(id),
+  educations_source_id uuid references public.candidate_sources(id),
+  skills_source_id uuid references public.candidate_sources(id),
   header jsonb not null default '{}'::jsonb,
   rev int not null default 0,
   updated_at timestamptz
@@ -173,7 +182,14 @@ create table if not exists public.candidate_contacts (
   source_detail text,
   source_id uuid references public.candidate_sources(id),
   is_manual boolean not null default false,
+  -- When a recruiter last chose it (the choosing doc's fetched_at): the
+  -- order among several manual picks. Only a manual doc sets it.
+  manual_at timestamptz,
   never_primary boolean not null default false,
+  -- The old tables marked it the person's primary (candidate_emails or _v2
+  -- is_primary, or email_source 'primary'): breaks ties within a tier, as
+  -- the Network's pick does today.
+  legacy_primary boolean not null default false,
   legacy_email_ids uuid[],
   first_seen_at timestamptz,
   last_seen_at timestamptz,
@@ -326,13 +342,14 @@ returns text language sql immutable set search_path = '' as $$
   end
 $$;
 
--- An email check result: bad | good | risky | none.
+-- An email check result: bad | good | risky | none. 'replied' (the person
+-- answered from the address) is the strongest good check there is.
 create or replace function public.tt_email_check_class(p_quality text, p_result text)
 returns text language sql immutable set search_path = '' as $$
   select case
-    when lower(p_quality) in ('bad', 'invalid') or lower(p_result) in ('invalid', 'bad') then 'bad'
-    when (lower(p_quality) in ('good', 'ok', 'valid') and (p_result is null or lower(p_result) in ('ok', 'valid', 'deliverable')))
-      or (p_quality is null and lower(p_result) in ('ok', 'valid', 'deliverable')) then 'good'
+    when lower(p_quality) in ('bad', 'invalid') or lower(p_result) in ('invalid', 'bad', 'bounced', 'disposable') then 'bad'
+    when (lower(p_quality) in ('good', 'ok', 'valid') and (p_result is null or lower(p_result) in ('ok', 'valid', 'deliverable', 'replied')))
+      or (p_quality is null and lower(p_result) in ('ok', 'valid', 'deliverable', 'replied')) then 'good'
     when lower(p_quality) in ('risky', 'unknown', 'catch_all', 'accept_all')
       or lower(p_result) in ('catch_all', 'unknown', 'risky', 'accept_all') then 'risky'
     else 'none'
@@ -353,6 +370,29 @@ $$;
 create or replace function public.tt_jtext(p jsonb)
 returns text language sql immutable set search_path = '' as $$
   select case when p is null or jsonb_typeof(p) = 'null' then null else nullif(btrim(p #>> '{}'), '') end
+$$;
+
+-- Which list source wins a tie on fetched_at: the paid LinkedIn pull, then
+-- the directory's copy of one, then the old import.
+create or replace function public.tt_source_rank(p_source text)
+returns int language sql immutable set search_path = '' as $$
+  select case p_source when 'legacy_import' then 0 when 'application' then 1 when 'directory' then 2
+    when 'harvest' then 3 when 'recruiter' then 4 else -1 end
+$$;
+
+-- Does a doc (fetched_at, source, payload_hash) outrank the source that owns
+-- a list now? Newer fetched_at wins; a tie goes to the higher source rank,
+-- then the higher payload hash, so the same docs end the same way in any
+-- order. No owner: the doc wins. The owner itself does not outrank itself.
+create or replace function public.person_doc_beats(p_fetched timestamptz, p_source text, p_hash text, p_owner uuid)
+returns boolean language sql stable set search_path = '' as $$
+  select case when p_owner is null then true else coalesce((
+    select p_fetched > cs.fetched_at
+        or (p_fetched = cs.fetched_at
+            and (public.tt_source_rank(p_source) > public.tt_source_rank(cs.source)
+                 or (public.tt_source_rank(p_source) = public.tt_source_rank(cs.source)
+                     and p_hash collate "C" > cs.payload_hash collate "C")))
+    from public.candidate_sources cs where cs.id = p_owner), true) end
 $$;
 
 -- A company or school object from a PersonDoc, normalised to the identity
@@ -499,10 +539,15 @@ begin
         end if;
       end if;
     end if;
-    -- Fill a missing tier on an existing row (never on a placeholder).
+    -- Fill a missing tier, only on a row this writer made (never on a
+    -- placeholder). Pre-existing companies rows are not written at all: an
+    -- update there would also bump their updated_at through the live
+    -- trigger, which no undo can put back. Tiering every company is
+    -- migration step 10's job.
     if v_row.tier is null and (i->>'tier') is not null and i->>'ph' is null then
       update public.companies c set tier = (i->>'tier')::smallint, tier_list_version = i->>'tlv'
-      where c.id = company_id and c.tier is null and not coalesce(c.is_placeholder, false);
+      where c.id = company_id and c.tier is null and not coalesce(c.is_placeholder, false)
+        and c.created_from = 'person_writer';
     end if;
     return;
   end if;
@@ -517,7 +562,9 @@ begin
     coalesce(v_display, i->>'name', i->>'user', 'LinkedIn company ' || (i->>'id'), i->>'url'),
     i->>'id',
     case when v_user_clash is null then i->>'user' end,
-    case when v_url_clash is null then coalesce(i->>'raw', i->>'url') end,
+    -- Only a company page URL: a search URL (no identity) is not stored in
+    -- companies.linkedin_url, which is unique on the live table.
+    case when v_url_clash is null and i->>'url' is not null then coalesce(i->>'raw', i->>'url') end,
     case when i->>'ph' is null then i->>'logo' end,
     coalesce(i->>'ph', i->>'norm'),
     case when v_url_clash is null then i->>'url' end,
@@ -552,6 +599,7 @@ create or replace function public.person_school(i jsonb, p_candidate uuid, p_sou
 language plpgsql set search_path = '' as $$
 declare
   v_row record;
+  v_own record;
   v_url_clash uuid;
 begin
   created := false; conflicts := 0;
@@ -574,6 +622,26 @@ begin
   end if;
 
   if school_id is not null then
+    -- As person_company: a row this writer made learns the LinkedIn school id
+    -- (matched by URL) or the page URL (matched by id) it lacks, when no
+    -- other row holds that value, so a later doc naming only one of them
+    -- finds this row whatever order the docs arrive in. The caller holds the
+    -- advisory locks for the li: and url: keys.
+    select s.created_from, s.linkedin_org_id, s.linkedin_url_normalized into v_own from public.schools s where s.id = school_id;
+    if v_own.created_from = 'person_writer' then
+      if i->>'id' is not null and v_own.linkedin_org_id is null
+         and not exists (select 1 from public.schools x where x.linkedin_org_id = i->>'id') then
+        update public.schools s set linkedin_org_id = i->>'id', identity_basis = 'linkedin_org_id',
+          company_id = coalesce(s.company_id, (select c.id from public.companies c where c.linkedin_id = i->>'id')),
+          updated_at = now()
+        where s.id = school_id;
+      end if;
+      if i->>'url' is not null and v_own.linkedin_url_normalized is null
+         and not exists (select 1 from public.schools x where x.linkedin_url_normalized = i->>'url') then
+        update public.schools s set linkedin_url_normalized = i->>'url', updated_at = now()
+        where s.id = school_id;
+      end if;
+    end if;
     if v_row.tier is null and (i->>'tier') is not null then
       update public.schools s set tier = (i->>'tier')::smallint, tier_list_version = i->>'tlv', updated_at = now()
       where s.id = school_id and s.tier is null;
@@ -607,71 +675,56 @@ begin
   end if;
 end $$;
 
--- Re-rank one person's contacts. Eligible = active and not never_primary;
--- everything else gets rank null. Emails: recruiter's choice, the directory's
--- primary, verified personal, verified business, other verified, risky,
--- unverified. Phones: recruiter, directory, mobile, other. GitHub/website:
--- recruiter, then oldest. Exactly one rank 1 per kind among eligible rows.
+-- The rank each of one person's contacts should hold. Eligible = active and
+-- not never_primary; everything else gets null. Emails: recruiter's choice
+-- (the latest pick first), the directory's primary, verified personal,
+-- verified business, other verified, risky, unverified. Phones: recruiter,
+-- directory, mobile, other. GitHub/website: recruiter, then oldest. Within a
+-- tier: a personal address, then the one the old tables marked primary (the
+-- Network's pick today), then the newest check, then the first seen. Every
+-- column it orders by is one the re-rank itself never writes, so both of
+-- its passes see the same order.
+create or replace function public.person_contact_ranks(p_candidate uuid)
+returns table (id uuid, new_rank bigint) language sql stable set search_path = '' as $$
+  select x.id, case when x.eligible then row_number() over (partition by x.kind, x.eligible order by
+      x.tier, x.manual_at desc nulls last, x.personal desc, x.legacy_primary desc, x.verified_at desc nulls last,
+      x.first_seen_at nulls last, x.value_normalized) end as new_rank
+  from (
+    select cc.id, cc.kind, cc.value_normalized, cc.verified_at, cc.first_seen_at, cc.legacy_primary,
+      (cc.status = 'active' and not cc.never_primary) as eligible,
+      case when cc.is_manual then coalesce(cc.manual_at, cc.first_seen_at) end as manual_at,
+      cc.label = 'personal' as personal,
+      case
+        when cc.is_manual then 0
+        when cc.kind = 'email' then case
+          when cc.source_detail = 'directory_primary' then 1
+          when public.tt_email_check_class(cc.quality, cc.result) = 'good' and cc.label = 'personal' then 2
+          when public.tt_email_check_class(cc.quality, cc.result) = 'good' and cc.label = 'business' then 3
+          when public.tt_email_check_class(cc.quality, cc.result) = 'good' then 4
+          when public.tt_email_check_class(cc.quality, cc.result) = 'risky' then 5
+          else 6 end
+        when cc.kind = 'phone' then case
+          when cc.source = 'directory' or cc.source_detail like 'directory%' then 1
+          when cc.label = 'mobile' then 2
+          else 3 end
+        else 1
+      end as tier
+    from public.candidate_contacts cc where cc.candidate_id = p_candidate
+  ) x
+$$;
+
+-- Re-rank one person's contacts: exactly one rank 1 per kind among eligible
+-- rows. Two passes, so the one-primary index never sees two rank-1 rows
+-- mid-way: rows whose rank changes lose it first, then take the new one.
 create or replace function public.person_rerank_contacts(p_candidate uuid)
 returns void language plpgsql set search_path = '' as $$
 begin
-  -- Two passes, so the one-primary index never sees two rank-1 rows mid-way.
   update public.candidate_contacts c set rank = null, updated_at = now()
-  from (
-    select x.id, case when x.eligible then row_number() over (partition by x.kind, x.eligible order by
-      x.tier, x.manual_at desc nulls last, x.personal desc, x.verified_at desc nulls last, x.first_seen_at nulls last, x.value_normalized) end as new_rank
-    from (
-      select cc.id, cc.kind, cc.value_normalized, cc.verified_at, cc.first_seen_at,
-        (cc.status = 'active' and not cc.never_primary) as eligible,
-        case when cc.is_manual then cc.updated_at end as manual_at,
-        cc.label = 'personal' as personal,
-        case
-          when cc.is_manual then 0
-          when cc.kind = 'email' then case
-            when cc.source_detail = 'directory_primary' then 1
-            when public.tt_email_check_class(cc.quality, cc.result) = 'good' and cc.label = 'personal' then 2
-            when public.tt_email_check_class(cc.quality, cc.result) = 'good' and cc.label = 'business' then 3
-            when public.tt_email_check_class(cc.quality, cc.result) = 'good' then 4
-            when public.tt_email_check_class(cc.quality, cc.result) = 'risky' then 5
-            else 6 end
-          when cc.kind = 'phone' then case
-            when cc.source = 'directory' or cc.source_detail like 'directory%' then 1
-            when cc.label = 'mobile' then 2
-            else 3 end
-          else 1
-        end as tier
-      from public.candidate_contacts cc where cc.candidate_id = p_candidate
-    ) x
-  ) r
+  from public.person_contact_ranks(p_candidate) r
   where c.id = r.id and c.rank is not null and c.rank is distinct from r.new_rank;
 
   update public.candidate_contacts c set rank = r.new_rank, updated_at = now()
-  from (
-    select x.id, case when x.eligible then row_number() over (partition by x.kind, x.eligible order by
-      x.tier, x.manual_at desc nulls last, x.personal desc, x.verified_at desc nulls last, x.first_seen_at nulls last, x.value_normalized) end as new_rank
-    from (
-      select cc.id, cc.kind, cc.value_normalized, cc.verified_at, cc.first_seen_at,
-        (cc.status = 'active' and not cc.never_primary) as eligible,
-        case when cc.is_manual then cc.updated_at end as manual_at,
-        cc.label = 'personal' as personal,
-        case
-          when cc.is_manual then 0
-          when cc.kind = 'email' then case
-            when cc.source_detail = 'directory_primary' then 1
-            when public.tt_email_check_class(cc.quality, cc.result) = 'good' and cc.label = 'personal' then 2
-            when public.tt_email_check_class(cc.quality, cc.result) = 'good' and cc.label = 'business' then 3
-            when public.tt_email_check_class(cc.quality, cc.result) = 'good' then 4
-            when public.tt_email_check_class(cc.quality, cc.result) = 'risky' then 5
-            else 6 end
-          when cc.kind = 'phone' then case
-            when cc.source = 'directory' or cc.source_detail like 'directory%' then 1
-            when cc.label = 'mobile' then 2
-            else 3 end
-          else 1
-        end as tier
-      from public.candidate_contacts cc where cc.candidate_id = p_candidate
-    ) x
-  ) r
+  from public.person_contact_ranks(p_candidate) r
   where c.id = r.id and c.rank is null and r.new_rank is not null;
 end $$;
 
@@ -727,7 +780,12 @@ declare
   c_kind text; c_vn text; c_vr text; c_label text; c_status text; c_manual boolean; c_never boolean;
   c_detail text; c_q text; c_r text; c_rc text; c_sr text; c_ver text; c_vat timestamptz; c_raw jsonb;
   c_legacy uuid; c_class text; c_newer boolean; c_new jsonb; n_status text; n_class text;
+  c_lp boolean; c_manual_at timestamptz;
   v_dir_primary text[] := '{}';
+  v_dir_newest boolean := false;
+  v_beats_jobs boolean;
+  v_beats_edus boolean;
+  v_beats_skills boolean;
   -- counts
   k_jobs_ins int := 0; k_jobs_upd int := 0; k_jobs_rem int := 0; k_jobs_dup int := 0;
   k_edu_ins int := 0; k_edu_upd int := 0; k_edu_rem int := 0; k_edu_dup int := 0; k_edu_skip int := 0;
@@ -776,16 +834,35 @@ begin
   select s.* into v_state from public.candidate_profile_state s where s.candidate_id = v_cid;
   v_state_existed := found;
 
+  -- ---- which lists this doc carries, and which it outranks --------------------
+  -- A list key that is absent (or null) is not asserted and is left alone; an
+  -- array, even an empty one, is the whole list. The translators leave a key
+  -- out when the source has nothing for that list, so an empty pull never
+  -- empties a list. Each list has its own owner: a replace_lists doc takes a
+  -- list it carries when it outranks that list's owner (newer fetched_at;
+  -- ties by source rank, then payload hash). So the same docs end the same
+  -- way whatever order they arrive in.
+  v_has_jobs := coalesce(jsonb_typeof(doc->'jobs') = 'array', false);
+  v_has_edus := coalesce(jsonb_typeof(doc->'educations') = 'array', false);
+  v_has_skills := coalesce(jsonb_typeof(doc->'skills') = 'array', false);
+  v_beats_jobs := v_mode = 'replace_lists' and v_has_jobs
+    and public.person_doc_beats(v_fetched, v_source, v_hash, case when v_state_existed then v_state.jobs_source_id end);
+  v_beats_edus := v_mode = 'replace_lists' and v_has_edus
+    and public.person_doc_beats(v_fetched, v_source, v_hash, case when v_state_existed then v_state.educations_source_id end);
+  v_beats_skills := v_mode = 'replace_lists' and v_has_skills
+    and public.person_doc_beats(v_fetched, v_source, v_hash, case when v_state_existed then v_state.skills_source_id end);
+
   -- ---- source record and idempotency --------------------------------------
   select cs.id, cs.applied_lists into v_existing
   from public.candidate_sources cs
   where cs.candidate_id = v_cid and cs.source = v_source and cs.payload_hash = v_hash;
   if found then
     -- Seen before. Its contacts and identities were merged then, and its lists
-    -- either applied or were older. Only a list-owning doc that is now the
-    -- newest and was never applied (its newer rival is gone) is re-applied.
+    -- either applied or were outranked. Only a list-owning doc that was never
+    -- applied and now outranks the owner of a list it carries (its rival is
+    -- gone) is re-applied. A doc that carries no list is never re-applied.
     if not (v_mode = 'replace_lists' and not v_existing.applied_lists
-            and (not v_state_existed or v_state.lists_fetched_at is null or v_fetched > v_state.lists_fetched_at)) then
+            and (v_beats_jobs or v_beats_edus or v_beats_skills)) then
       return jsonb_build_object('status', 'unchanged', 'candidate_id', v_cid, 'source_id', v_existing.id,
         'applied_lists', false, 'rev', coalesce(v_state.rev, 0),
         'counts', jsonb_build_object(
@@ -867,25 +944,17 @@ begin
     end loop;
   end if;
 
-  -- ---- which lists this doc may write ---------------------------------------
-  -- A list key that is absent (or null) is not asserted and is left alone; an
-  -- array, even an empty one, is the whole list. A doc that carries no list at
-  -- all never takes over the lists. fill_gaps writes a list only when the
-  -- person has none and never removes anything.
-  v_has_jobs := coalesce(jsonb_typeof(doc->'jobs') = 'array', false);
-  v_has_edus := coalesce(jsonb_typeof(doc->'educations') = 'array', false);
-  v_has_skills := coalesce(jsonb_typeof(doc->'skills') = 'array', false);
-  v_lists := case
-    when not (v_has_jobs or v_has_edus or v_has_skills) then 'none'
-    when v_mode = 'replace_lists'
-         and (not v_state_existed or v_state.lists_fetched_at is null or v_fetched > v_state.lists_fetched_at) then 'replace'
-    when v_mode = 'fill_gaps' then 'fill'
-    else 'none' end;
-  if v_lists = 'replace' then
-    v_do_jobs := v_has_jobs;
-    v_do_edus := v_has_edus;
-    v_do_skills := v_has_skills;
-  elsif v_lists = 'fill' then
+  -- ---- which lists this doc writes ----------------------------------------------
+  -- replace_lists: every list it carries and outranks the owner of. fill_gaps
+  -- writes a list only when the person has none, never removes anything and
+  -- never owns a list (any LinkedIn-grade doc replaces what it wrote).
+  if v_mode = 'replace_lists' then
+    v_do_jobs := v_beats_jobs;
+    v_do_edus := v_beats_edus;
+    v_do_skills := v_beats_skills;
+    v_lists := case when v_do_jobs or v_do_edus or v_do_skills then 'replace' else 'none' end;
+  elsif v_mode = 'fill_gaps' then
+    v_lists := 'fill';
     if v_has_jobs and jsonb_array_length(doc->'jobs') > 0 then
       v_do_jobs := not exists (select 1 from public.candidate_experiences e
                                where e.candidate_id = v_cid and e.source = 'person' and e.removed_at is null);
@@ -896,8 +965,10 @@ begin
     if v_has_skills and jsonb_array_length(doc->'skills') > 0 then
       v_do_skills := not exists (select 1 from public.candidate_skills s where s.candidate_id = v_cid and s.removed_at is null);
     end if;
+  else
+    v_lists := 'none';
   end if;
-  v_applied := v_lists = 'replace' or v_do_jobs or v_do_edus or v_do_skills;
+  v_applied := v_do_jobs or v_do_edus or v_do_skills;
 
   -- Lock every company/school identity key this doc may create, in one global
   -- order, so two writers never deadlock or create the same row twice.
@@ -1115,6 +1186,30 @@ begin
 
   -- ---- contacts: merge, never delete, newest check wins, then re-rank -----------
   if jsonb_typeof(doc->'contacts') = 'array' then
+    -- One writer per address at a time, across people: the check below for
+    -- other holders of the same address must see a concurrent writer's row,
+    -- or two people saved at once would both miss each other and log no
+    -- email_owned_by_other. Class 72003, after the person lock and the
+    -- 72001/72002 org locks, keys sorted: the global lock order holds.
+    for v_lock in
+      select distinct hashtext(x.vn) as h from (
+        select coalesce(public.tt_jtext(c.value->'value_normalized'),
+                 nullif(btrim(regexp_replace(lower(btrim(coalesce(c.value->>'value_raw', ''))), '^mailto:', '')), '')) as vn
+        from jsonb_array_elements(doc->'contacts') c
+        where lower(c.value->>'kind') = 'email') x
+      where x.vn is not null
+      order by 1
+    loop
+      perform pg_advisory_xact_lock(72003, v_lock.h);
+    end loop;
+    -- The directory names the primary; only its newest version may (an
+    -- older directory doc arriving late does not take the primary back).
+    if v_source = 'directory' then
+      v_dir_newest := not exists (
+        select 1 from public.candidate_sources cs
+        where cs.candidate_id = v_cid and cs.source = 'directory' and cs.id <> v_source_id
+          and (cs.fetched_at > v_fetched or (cs.fetched_at = v_fetched and cs.payload_hash collate "C" > v_hash collate "C")));
+    end if;
     for v_el in select value from jsonb_array_elements(doc->'contacts') loop
       c_kind := lower(v_el->>'kind');
       if c_kind is null or c_kind not in ('email', 'phone', 'github', 'website') then
@@ -1151,11 +1246,19 @@ begin
       c_vat := (public.tt_jtext(v_el->'verified_at'))::timestamptz;
       c_raw := case when jsonb_typeof(v_el->'verification_raw') in ('object', 'array') then v_el->'verification_raw' end;
       c_legacy := nullif(v_el->>'legacy_email_id', '')::uuid;
+      c_lp := coalesce((v_el->>'legacy_primary')::boolean, false);
+      c_manual_at := case when c_manual then v_fetched end;
       -- An incoming 'invalid' with no check of its own counts as a bad check.
       c_class := case when c_kind <> 'email' then 'none'
                       when c_q is null and c_r is null and c_status = 'invalid' then 'bad'
                       else public.tt_email_check_class(c_q, c_r) end;
-      if c_detail = 'directory_primary' then v_dir_primary := v_dir_primary || (c_kind || '|' || c_vn); end if;
+      if c_detail = 'directory_primary' then
+        if v_source = 'directory' and not v_dir_newest then
+          c_detail := 'directory';
+        else
+          v_dir_primary := v_dir_primary || (c_kind || '|' || c_vn);
+        end if;
+      end if;
 
       select cc.* into v_row from public.candidate_contacts cc
       where cc.candidate_id = v_cid and cc.kind = c_kind and cc.value_normalized = c_vn;
@@ -1166,10 +1269,10 @@ begin
           else c_status end;
         insert into public.candidate_contacts (candidate_id, kind, value_raw, value_normalized, label, rank, status,
           quality, result, resultcode, subresult, verifier, verified_at, verification_raw, source, source_detail,
-          source_id, is_manual, never_primary, legacy_email_ids, first_seen_at, last_seen_at)
+          source_id, is_manual, manual_at, never_primary, legacy_primary, legacy_email_ids, first_seen_at, last_seen_at)
         values (v_cid, c_kind, c_vr, c_vn, c_label, null, n_status,
           c_q, c_r, c_rc, c_sr, c_ver, c_vat, c_raw, v_source, c_detail,
-          v_source_id, c_manual, c_never, case when c_legacy is null then null else array[c_legacy] end, v_fetched, v_fetched);
+          v_source_id, c_manual, c_manual_at, c_never, c_lp, case when c_legacy is null then null else array[c_legacy] end, v_fetched, v_fetched);
         k_ct_ins := k_ct_ins + 1;
         -- The same address on other people: kept on all of them; one review
         -- row per address and arriving person, listing every holder.
@@ -1222,29 +1325,34 @@ begin
           'label', case when v_row.label = 'unknown' and c_label <> 'unknown' then c_label else v_row.label end,
           'status', n_status,
           'is_manual', v_row.is_manual or c_manual,
+          'manual_at', case when c_manual then greatest(coalesce(v_row.manual_at, c_manual_at), c_manual_at) else v_row.manual_at end,
           'never_primary', v_row.never_primary and c_never,
+          'legacy_primary', v_row.legacy_primary or c_lp,
           'source_detail', case when c_detail = 'directory_primary' then c_detail else coalesce(v_row.source_detail, c_detail) end,
           'legacy', (select coalesce(array_agg(distinct u order by u), '{}') from unnest(
                       coalesce(v_row.legacy_email_ids, '{}'::uuid[]) || case when c_legacy is null then '{}'::uuid[] else array[c_legacy] end) u));
         -- A material change counts as an update; a newer sighting only moves
-        -- last_seen_at (and a repeated recruiter choice refreshes its time).
+        -- last_seen_at (and a newer recruiter choice moves manual_at).
         c_material := c_newer
            or c_new->>'label' is distinct from v_row.label
            or c_new->>'status' is distinct from v_row.status
            or (c_new->>'is_manual')::boolean is distinct from v_row.is_manual
            or (c_new->>'never_primary')::boolean is distinct from v_row.never_primary
+           or (c_new->>'legacy_primary')::boolean is distinct from v_row.legacy_primary
            or c_new->>'source_detail' is distinct from v_row.source_detail
            or (select array_agg(x::uuid) from jsonb_array_elements_text(c_new->'legacy') x) is distinct from
               (select array_agg(u order by u) from unnest(v_row.legacy_email_ids) u);
         if c_material
            or v_row.last_seen_at is distinct from greatest(v_row.last_seen_at, v_fetched)
            or v_row.first_seen_at is distinct from least(v_row.first_seen_at, v_fetched)
-           or (c_manual and v_row.is_manual) then
+           or (c_new->>'manual_at')::timestamptz is distinct from v_row.manual_at then
           update public.candidate_contacts cc set
             label = c_new->>'label',
             status = c_new->>'status',
             is_manual = (c_new->>'is_manual')::boolean,
+            manual_at = (c_new->>'manual_at')::timestamptz,
             never_primary = (c_new->>'never_primary')::boolean,
+            legacy_primary = (c_new->>'legacy_primary')::boolean,
             source_detail = c_new->>'source_detail',
             legacy_email_ids = nullif((select array_agg(x::uuid) from jsonb_array_elements_text(c_new->'legacy') x), '{}'),
             quality = case when c_newer then c_q else cc.quality end,
@@ -1266,8 +1374,9 @@ begin
     end loop;
 
     -- The directory names one primary per kind; an older directory primary
-    -- for the same kind becomes a plain directory row.
-    if v_source = 'directory' and cardinality(v_dir_primary) > 0 then
+    -- for the same kind becomes a plain directory row (only the newest
+    -- directory version decides).
+    if v_source = 'directory' and v_dir_newest and cardinality(v_dir_primary) > 0 then
       update public.candidate_contacts cc set source_detail = 'directory', updated_at = now()
       where cc.candidate_id = v_cid and cc.source_detail = 'directory_primary'
         and not ((cc.kind || '|' || cc.value_normalized) = any (v_dir_primary))
@@ -1281,14 +1390,26 @@ begin
   if v_applied then
     update public.candidate_sources cs set applied_lists = true where cs.id = v_source_id and not cs.applied_lists;
   end if;
-  insert into public.candidate_profile_state as st (candidate_id, lists_source_id, lists_fetched_at, header, rev, updated_at)
+  -- lists_source_id: the newest source that replaced any list (it outranks the
+  -- one recorded); each list's own owner is whoever replaced it last.
+  v_lists := case when v_lists = 'replace'
+    and public.person_doc_beats(v_fetched, v_source, v_hash, case when v_state_existed then v_state.lists_source_id end)
+    then 'replace_newest' else v_lists end;
+  insert into public.candidate_profile_state as st (candidate_id, lists_source_id, lists_fetched_at,
+    jobs_source_id, educations_source_id, skills_source_id, header, rev, updated_at)
   values (v_cid,
-    case when v_lists = 'replace' then v_source_id end,
-    case when v_lists = 'replace' then v_fetched end,
+    case when v_lists = 'replace_newest' then v_source_id end,
+    case when v_lists = 'replace_newest' then v_fetched end,
+    case when v_mode = 'replace_lists' and v_do_jobs then v_source_id end,
+    case when v_mode = 'replace_lists' and v_do_edus then v_source_id end,
+    case when v_mode = 'replace_lists' and v_do_skills then v_source_id end,
     v_header, 1, now())
   on conflict (candidate_id) do update set
-    lists_source_id = case when v_lists = 'replace' then v_source_id else st.lists_source_id end,
-    lists_fetched_at = case when v_lists = 'replace' then v_fetched else st.lists_fetched_at end,
+    lists_source_id = case when v_lists = 'replace_newest' then v_source_id else st.lists_source_id end,
+    lists_fetched_at = case when v_lists = 'replace_newest' then v_fetched else st.lists_fetched_at end,
+    jobs_source_id = case when v_mode = 'replace_lists' and v_do_jobs then v_source_id else st.jobs_source_id end,
+    educations_source_id = case when v_mode = 'replace_lists' and v_do_edus then v_source_id else st.educations_source_id end,
+    skills_source_id = case when v_mode = 'replace_lists' and v_do_skills then v_source_id else st.skills_source_id end,
     header = v_header,
     rev = st.rev + 1,
     updated_at = now();
@@ -1362,10 +1483,13 @@ revoke execute on function
   public.tt_email_check_class(text, text),
   public.tt_jint(jsonb),
   public.tt_jtext(jsonb),
+  public.tt_source_rank(text),
+  public.person_doc_beats(timestamptz, text, text, uuid),
   public.person_org_ident(jsonb, boolean, text),
   public.person_org_lock_keys(jsonb, boolean),
   public.person_company(jsonb, uuid, uuid),
   public.person_school(jsonb, uuid, uuid),
+  public.person_contact_ranks(uuid),
   public.person_rerank_contacts(uuid),
   public.save_person(jsonb)
   from public, anon, authenticated;
@@ -1378,10 +1502,13 @@ grant execute on function
   public.tt_email_check_class(text, text),
   public.tt_jint(jsonb),
   public.tt_jtext(jsonb),
+  public.tt_source_rank(text),
+  public.person_doc_beats(timestamptz, text, text, uuid),
   public.person_org_ident(jsonb, boolean, text),
   public.person_org_lock_keys(jsonb, boolean),
   public.person_company(jsonb, uuid, uuid),
   public.person_school(jsonb, uuid, uuid),
+  public.person_contact_ranks(uuid),
   public.person_rerank_contacts(uuid),
   public.save_person(jsonb)
   to service_role;
