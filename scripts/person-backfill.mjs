@@ -39,7 +39,7 @@ export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
     if(built.docs.some(d=>sourceNeedsReview(existing.get(id)??[],d,false)))throw Error('source_snapshot_requires_review');
     by.set(id,built.docs);
    }
-   if(tally.fail.size)throw Error('pre_save_integrity');
+   if(tally.fail.size)throw Error(`pre_save_integrity:${JSON.stringify(Object.fromEntries([...tally.fail].map(([key,values])=>[key,[...values]])))}`);
    return by;
   },
   async save(id,docs){
