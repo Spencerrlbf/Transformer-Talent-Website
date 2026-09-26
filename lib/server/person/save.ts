@@ -1,9 +1,14 @@
 // Server/worker only. One checked-out PostgreSQL connection owns the complete
 // transaction, including the existing TypeScript projection and before-image.
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { project, type ProjectionInput } from "./project";
 import type { PersonDoc } from "./types";
 import { normalizeEmail, normalizePhone, checkClass } from "./normalize";
+import {
+  beginGuardedAuditOperationLocked,
+  attributeAuditMutation,
+  type AuditOperation,
+} from "./audit";
 
 export interface PersonConnection {
   query(
@@ -58,7 +63,8 @@ const hash = (value: unknown): string =>
 const profileOf = (row: Record<string, unknown>) =>
   Object.fromEntries(PROFILE_FIELDS.map((k) => [k, row[k] ?? null]));
 /** Exact compatibility hash used for published reads and write drift checks. */
-export const projectionProfileHash = (row: Record<string, unknown>): string => hash(profileOf(row));
+export const projectionProfileHash = (row: Record<string, unknown>): string =>
+  hash(profileOf(row));
 /** Used for observation only. This writer never calls paid enrichment or marks
  * matching/embedding work stale just because storage representation changed. */
 export function semanticProfileHash(row: Record<string, any>): string {
@@ -165,14 +171,21 @@ async function updateProfile(
   client: PersonConnection,
   id: string,
   profile: Record<string, any>,
+  audit: AuditOperation,
 ) {
   const keys = PROFILE_FIELDS.filter((k) => Object.hasOwn(profile, k));
   const values = keys.map((k) =>
     k === "work_experience" ? JSON.stringify(profile[k]) : profile[k],
   );
-  await client.query(
-    `update public.candidates set ${keys.map((k, i) => `"${k}"=$${i + 2}`).join(",")},updated_at=clock_timestamp() where id=$1`,
-    [id, ...values],
+  await attributeAuditMutation(
+    client,
+    audit,
+    { scope: "profile", table: "candidates", rowId: id },
+    () =>
+      client.query(
+        `update public.candidates set ${keys.map((k, i) => `"${k}"=$${i + 2}`).join(",")},updated_at=clock_timestamp() where id=$1 returning id`,
+        [id, ...values],
+      ),
   );
 }
 async function storeProjectionBaseline(
@@ -193,6 +206,7 @@ async function applyProjection(
   id: string,
   revision: string,
   before: Record<string, any>,
+  audit: AuditOperation,
 ) {
   const tables = await readPersonProjection(client, id);
   const projection = project(tables);
@@ -317,7 +331,7 @@ async function applyProjection(
       )
     ).rows.length
   ) {
-    after.email = invalidatedKinds.has("email") ? null : before.email ?? null;
+    after.email = invalidatedKinds.has("email") ? null : (before.email ?? null);
     await recordEmailCollision();
   }
   if (hash(original) === hash(after)) {
@@ -328,7 +342,7 @@ async function applyProjection(
   // rest of a good profile update. Preserve its current compatibility address.
   await client.query("savepoint person_email");
   try {
-    await updateProfile(client, id, after);
+    await updateProfile(client, id, after, audit);
   } catch (error) {
     if (
       (error as any).code !== "23505" ||
@@ -336,8 +350,8 @@ async function applyProjection(
     )
       throw error;
     await client.query("rollback to savepoint person_email");
-    after.email = invalidatedKinds.has("email") ? null : before.email ?? null;
-    await updateProfile(client, id, after);
+    after.email = invalidatedKinds.has("email") ? null : (before.email ?? null);
+    await updateProfile(client, id, after, audit);
     await recordEmailCollision();
   }
   await client.query("release savepoint person_email");
@@ -359,6 +373,29 @@ export async function savePersonLocked(
   docs: PersonDoc[],
   options: SavePersonOptions,
   before: Record<string, any>,
+  audit: AuditOperation,
+): Promise<SavePersonResult> {
+  if (
+    !audit?.id ||
+    audit.candidateId !== before.id ||
+    !(
+      await client.query(
+        "select 1 from public.person_audit_operations where id=$1 and candidate_id=$2 and transaction_id=pg_current_xact_id() and evidence->'guard'->>'anchor_hash'=$3",
+        [audit.id, before.id, audit.anchorHash],
+      )
+    ).rows.length
+  )
+    throw Error("audit_operation_required");
+  return saveDocumentsAndProjectLocked(client, docs, options, before, audit);
+}
+// Only the generic historical shadow entrypoint can admit sources before an
+// anchor exists. It cannot publish any candidate compatibility fields.
+async function saveDocumentsAndProjectLocked(
+  client: PersonConnection,
+  docs: PersonDoc[],
+  options: SavePersonOptions,
+  before: Record<string, any>,
+  audit?: AuditOperation,
 ): Promise<SavePersonResult> {
   if (
     !["shadow", "live"].includes(options.mode) ||
@@ -366,6 +403,8 @@ export async function savePersonLocked(
     docs.some((doc) => doc.candidate_id !== before.id)
   )
     throw Error("invalid_person_save");
+  if (options.mode === "live" && !audit)
+    throw Error("audit_operation_required");
   let changed = false,
     revision = "";
   for (const doc of docs) {
@@ -377,7 +416,7 @@ export async function savePersonLocked(
   }
   const projected =
     options.mode === "live"
-      ? await applyProjection(client, before.id, revision, before)
+      ? await applyProjection(client, before.id, revision, before, audit!)
       : { projected: false, semanticChanged: false };
   return {
     candidateId: before.id,
@@ -395,7 +434,24 @@ export async function savePersonOnConnection(
   try {
     await beginPersonTransaction(client);
     const before = await lockPerson(client, doc.candidate_id);
-    const result = await savePersonLocked(client, [doc], options, before);
+    const anchored =
+      (
+        await client.query(
+          "select 1 from public.person_audit_anchors where candidate_id=$1",
+          [before.id],
+        )
+      ).rows.length > 0;
+    const audit =
+      options.mode === "live" || anchored
+        ? await beginGuardedAuditOperationLocked(client, before, {
+            writer: "projection",
+            receiptRef: `projection:${randomUUID()}`,
+            evidence: { documents: [doc], mode: options.mode },
+          })
+        : undefined;
+    const result = audit
+      ? await savePersonLocked(client, [doc], options, before, audit)
+      : await saveDocumentsAndProjectLocked(client, [doc], options, before);
     await client.query("commit");
     return result;
   } catch (error) {
@@ -434,7 +490,12 @@ export async function undoPersonProjectionOnConnection(
       await client.query("rollback");
       return { status: "conflict" };
     }
-    await updateProfile(client, id, history.before_profile);
+    const audit = await beginGuardedAuditOperationLocked(client, current, {
+      writer: "undo",
+      receiptRef: `undo:${history.id}`,
+      evidence: { history_id: String(history.id), revision: String(revision) },
+    });
+    await updateProfile(client, id, history.before_profile, audit);
     await client.query(
       "update public.person_projection_history set restored_at=clock_timestamp() where id=$1",
       [history.id],
@@ -490,11 +551,19 @@ export async function withPersonConnection<T>(
     // Only exact, application-owned codes may escape. Driver details can
     // contain private candidate data and must remain redacted.
     const safeCodes = new Set([
-      "person_profile_unavailable", "person_profile_read_limit",
-      "invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable",
-      "person_not_found", "person_recruiter_not_migrated", "person_recruiter_source_hold",
+      "person_profile_unavailable",
+      "person_profile_read_limit",
+      "invalid_email",
+      "invalid_phone",
+      "invalid_github",
+      "email_unusable",
+      "phone_unusable",
+      "person_not_found",
+      "person_recruiter_not_migrated",
+      "person_recruiter_source_hold",
     ]);
-    if (safeCodes.has((error as Error)?.message)) throw Error((error as Error).message);
+    if (safeCodes.has((error as Error)?.message))
+      throw Error((error as Error).message);
     throw Error(`person_save_failed:${errorCode(error)}`);
   } finally {
     client?.release();

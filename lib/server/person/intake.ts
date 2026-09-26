@@ -1,3 +1,8 @@
+import {
+  beginGuardedAuditOperationLocked,
+  createReceiptAuditAnchorLocked,
+  attributeAuditMutation,
+} from "./audit";
 // Server-only entry point for TT's shared application/referral/future pipeline.
 import { randomUUID } from "node:crypto";
 import { fromApplication, type ApplicationRow } from "./fromApplication";
@@ -20,7 +25,7 @@ import {
 } from "./save";
 import type { PersonDoc } from "./types";
 import type { ParsedProfile } from "../applicants";
-import { enqueuePersonDerivativesLocked } from './derivatives';
+import { enqueuePersonDerivativesLocked } from "./derivatives";
 
 export function applicationMatchingText(
   parsed: Partial<ParsedProfile> | null,
@@ -173,6 +178,7 @@ export async function saveApplicationPersonOnConnection(
     if (receipt && ids.length && ids[0].id !== id)
       throw Error("person_intake_identity_conflict");
     let created = receipt?.created_person ?? false;
+    let insertedNow = false;
     if (!id) {
       id = randomUUID();
       await client.query("select pg_advisory_xact_lock(hashtext($1))", [id]);
@@ -193,8 +199,10 @@ export async function saveApplicationPersonOnConnection(
           ],
         )
       ).rows[0];
-      if (inserted) created = true;
-      else {
+      if (inserted) {
+        created = true;
+        insertedNow = true;
+      } else {
         id = (
           await client.query(
             "select id from public.candidates where linkedin_username=$1",
@@ -217,6 +225,12 @@ export async function saveApplicationPersonOnConnection(
       ).rows.length
     )
       throw Error("person_intake_not_migrated");
+    let audit = insertedNow
+      ? undefined
+      : await beginGuardedAuditOperationLocked(client, before, {
+          writer: "application",
+          receiptRef: `application:${args.applicationId}`,
+        });
     let docs: PersonDoc[] = receipt?.documents;
     let applicationSnapshot: ApplicationSnapshot =
       receipt?.application_snapshot;
@@ -232,6 +246,9 @@ export async function saveApplicationPersonOnConnection(
       if (extras.length) contact.otherEmails = [...new Set(extras)];
       const app: ApplicationSnapshot & ApplicationRow = {
         ...application,
+        // The same resolved name used by the seed INSERT must survive a retry,
+        // including referral/future applications whose earlier name patch failed.
+        name: application.name || args.name || username,
         contact,
         created_at: new Date(application.created_at).toISOString(),
         parsed_profile: args.parsed ?? application.parsed_profile ?? null,
@@ -292,6 +309,10 @@ export async function saveApplicationPersonOnConnection(
         ],
       );
     }
+    audit ??= await createReceiptAuditAnchorLocked(client, before, {
+      writer: "application",
+      receiptRef: `application:${args.applicationId}`,
+    });
     // A new candidate needs an initial compatibility profile even in shadow
     // mode. Shadow never republishes an existing candidate.
     // A receipt keeps the exact input stable even when a retry's resume parser
@@ -301,6 +322,7 @@ export async function saveApplicationPersonOnConnection(
       docs,
       { mode: created && !receipt ? "live" : args.mode },
       before,
+      audit,
     );
     // Resume text and workflow labels are not normalized profile projection fields.
     if (!receipt && applicationSnapshot.resume_text && !before.resume_text)
@@ -308,14 +330,22 @@ export async function saveApplicationPersonOnConnection(
         "update public.candidates set resume_text=$2 where id=$1",
         [id, applicationSnapshot.resume_text.slice(0, 50000)],
       );
-    const canonical = (await client.query('select * from public.candidates where id=$1',[id])).rows[0];
-    if (args.mode === 'live')
-      await enqueuePersonDerivativesLocked(client,{organizationId:TT_ORG_ID,candidateId:id,receiptRef:`application:${args.applicationId}`});
+    const canonical = (
+      await client.query("select * from public.candidates where id=$1", [id])
+    ).rows[0];
+    if (args.mode === "live")
+      await enqueuePersonDerivativesLocked(client, {
+        organizationId: TT_ORG_ID,
+        candidateId: id,
+        receiptRef: `application:${args.applicationId}`,
+      });
     if (
-      !receipt && (args.mode === 'live' || created) &&
+      !receipt &&
+      (args.mode === "live" || created) &&
       args.matchingVector &&
       !before.matching_embedding &&
-      applicationMatchingText(args.parsed,args.resumeText) === applicationMatchingText(canonical,canonical.resume_text) &&
+      applicationMatchingText(args.parsed, args.resumeText) ===
+        applicationMatchingText(canonical, canonical.resume_text) &&
       applicationMatchingText(args.parsed, args.resumeText) ===
         applicationMatchingText(
           applicationSnapshot.parsed_profile,
@@ -332,15 +362,25 @@ export async function saveApplicationPersonOnConnection(
         [id, JSON.stringify(args.matchingVector)],
       );
     }
-    await client.query(
-      "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4,resume_text=$5 where id=$1",
-      [
-        args.applicationId,
-        id,
-        created,
-        applicationSnapshot.parsed_profile,
-        applicationSnapshot.resume_text,
-      ],
+    await attributeAuditMutation(
+      client,
+      audit,
+      {
+        scope: "application_finalize",
+        table: "website_applications",
+        rowId: args.applicationId,
+      },
+      () =>
+        client.query(
+          "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4,resume_text=$5 where id=$1 returning id",
+          [
+            args.applicationId,
+            id,
+            created,
+            applicationSnapshot.parsed_profile,
+            applicationSnapshot.resume_text,
+          ],
+        ),
     );
     await client.query("commit");
     return { ...result, created, applicationSnapshot };

@@ -11,5 +11,6 @@ for migration in 072_person_tables 20260926025355_person_writer_corrections 2026
 done
 q -d person_intake_test -f scripts/person-derivatives/local-embeddings.sql
 q -d person_intake_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
+bash scripts/person-audit/install-local.sh "$PORT" person_intake_test
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_intake_test" node --test scripts/person-intake/test-applications.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_intake_test" node --test scripts/person-intake/test-pipeline.mjs

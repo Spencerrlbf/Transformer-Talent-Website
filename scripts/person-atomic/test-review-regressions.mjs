@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
@@ -22,6 +23,7 @@ async function person(n, extras = {}) {
     `insert into candidates(${keys.join(",")}) values(${keys.map((_, i) => `$${i + 1}`).join(",")})`,
     Object.values(row),
   );
+  await prepareAuditFixture(id);
   return row;
 }
 const read = async (id) =>
@@ -58,15 +60,28 @@ test("a first no-op projection establishes a drift baseline", async () => {
   );
   await assert.rejects(
     lib.savePersonOnConnection(db, doc, { mode: "live" }),
-    /legacy_projection_drift/,
+    /audit_unattributed_change/,
   );
 });
 test("undo keeps drift protection for the restored profile", async () => {
   const row = await person(3, { current_title: "Old title" });
-  const doc = lib.fromLegacyImport({
-    ...row,
-    current_title: "Corrected title",
-  });
+  const doc = lib.fromHarvest(
+    {
+      experience: [
+        {
+          position: "Corrected title",
+          companyName: "Synthetic Co",
+          startDate: { year: 2026, month: 1 },
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      created_at: "2026-09-01T00:00:00Z",
+      cache_status: "miss",
+    },
+    row.id,
+  );
   const save = await lib.savePersonOnConnection(db, doc, { mode: "live" });
   assert.equal(
     (await lib.undoPersonProjectionOnConnection(db, row.id, save.revision))
@@ -79,7 +94,7 @@ test("undo keeps drift protection for the restored profile", async () => {
   );
   await assert.rejects(
     lib.savePersonOnConnection(db, doc, { mode: "live" }),
-    /legacy_projection_drift/,
+    /audit_unattributed_change/,
   );
 });
 test("projection and undo stamp candidate updated_at", async () => {
@@ -87,10 +102,23 @@ test("projection and undo stamp candidate updated_at", async () => {
     current_title: "Old title",
     updated_at: "2025-01-01",
   });
-  const doc = lib.fromLegacyImport({
-    ...row,
-    current_title: "Corrected title",
-  });
+  const doc = lib.fromHarvest(
+    {
+      experience: [
+        {
+          position: "Corrected title",
+          companyName: "Synthetic Co",
+          startDate: { year: 2026, month: 1 },
+        },
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      created_at: "2026-09-01T00:00:00Z",
+      cache_status: "miss",
+    },
+    row.id,
+  );
   const save = await lib.savePersonOnConnection(db, doc, { mode: "live" });
   const projected = await read(row.id);
   assert.ok(new Date(projected.updated_at) > new Date("2026-01-01"));

@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import pg from "pg";
@@ -45,18 +46,14 @@ async function fixture(n, publish = true, extra = {}) {
     education: "Synthetic School - BSc in Engineering",
     ...extra,
   };
+  const keys = Object.keys(row);
   await db.query(
-    "insert into candidates(id,full_name,linkedin_username,email,current_title,created_at) values($1,$2,$3,$4,$5,$6)",
-    [
-      row.id,
-      row.full_name,
-      row.linkedin_username,
-      row.email,
-      row.current_title,
-      row.created_at,
-    ],
+    `insert into candidates(${keys.join(",")}) values(${keys.map((_, i) => `$${i + 1}`).join(",")})`,
+    keys.map((k) =>
+      k === "work_experience" ? JSON.stringify(row[k]) : row[k],
+    ),
   );
-  const doc = lib.fromLegacyImport(row);
+  const doc = await prepareAuditFixture(row.id);
   if (publish)
     await use((c) => lib.savePersonOnConnection(c, doc, { mode: "live" }));
   return doc;

@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import pg from "pg";
@@ -68,15 +69,7 @@ async function fixture(
     `insert into candidates(id,full_name,linkedin_username,linkedin_url,current_title,created_at) values($1,'Synthetic Refresh',$2,$3,'Old title','2020-01-01')`,
     [id(n), `refresh-${n}`, `https://www.linkedin.com/in/refresh-${n}`],
   );
-  await pool.query("select save_person($1)", [
-    lib.fromLegacyImport({
-      id: id(n),
-      full_name: "Synthetic Refresh",
-      linkedin_username: `refresh-${n}`,
-      created_at: "2020-01-01",
-      current_title: "Old title",
-    }),
-  ]);
+  await prepareAuditFixture(id(n));
   await pool.query(
     `insert into refresh_queue(id,organization_id,candidate_id,status,reason) values($1,$2,$3,$4,$5)`,
     [id(n + 1000), organization, id(n), status, reason],
@@ -174,7 +167,7 @@ await test("save failure cannot report done and free recovery stays bounded", as
   await pool.query(
     `create function public.refresh_test_fail() returns trigger language plpgsql as $$begin if new.id='${id(5)}' then raise exception 'synthetic failure';end if;return new;end$$;create trigger refresh_test_fail before update on candidates for each row execute function refresh_test_fail()`,
   );
-  await assert.rejects(save(5, c.token));
+  await assert.rejects(save(5, c.token), /synthetic failure/);
   assert.equal(
     (
       await pool.query("select status from refresh_queue where id=$1", [
@@ -334,11 +327,23 @@ await test("the immutable cache snapshot survives a later ledger edit and termin
     1,
   );
 });
-await test("live refresh queues canonical work once, shadow queues none",async()=>{
- const rows=(await pool.query('select candidate_id,status,attempts,sources from person_derivative_jobs where candidate_id=any($1::uuid[])',[[id(1),id(4)]])).rows;
- assert.equal(rows.length,1);assert.equal(rows[0].candidate_id,id(1));assert.equal(rows[0].status,'pending');assert.equal(rows[0].attempts,0);
- assert.match(rows[0].sources.linkedin_profile,/Staff Engineer/);
- assert.deepEqual(Object.keys(rows[0].sources).sort(),['linkedin_profile','resume','summary']);
+await test("live refresh queues canonical work once, shadow queues none", async () => {
+  const rows = (
+    await pool.query(
+      "select candidate_id,status,attempts,sources from person_derivative_jobs where candidate_id=any($1::uuid[])",
+      [[id(1), id(4)]],
+    )
+  ).rows;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].candidate_id, id(1));
+  assert.equal(rows[0].status, "pending");
+  assert.equal(rows[0].attempts, 0);
+  assert.match(rows[0].sources.linkedin_profile, /Staff Engineer/);
+  assert.deepEqual(Object.keys(rows[0].sources).sort(), [
+    "linkedin_profile",
+    "resume",
+    "summary",
+  ]);
 });
 await test("attempt evidence remains private to the service role", async () => {
   const r = (

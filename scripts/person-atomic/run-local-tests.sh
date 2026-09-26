@@ -12,6 +12,7 @@ q -d person_atomic_test -1 -f supabase/migrations/20260926031057_person_backfill
 q -d person_atomic_test -1 -f supabase/migrations/20260926032752_person_missing_employer_review.sql
 q -d person_atomic_test -1 -f supabase/migrations/20260926033900_person_atomic_projection.sql
 q -d person_atomic_test -1 -f supabase/migrations/20260926040300_person_backfill_bulk.sql
+bash scripts/person-audit/install-local.sh "$PORT" person_atomic_test
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_atomic_test" node scripts/person-atomic/test-atomic.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_atomic_test" node --test scripts/person-atomic/test-review-regressions.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_atomic_test" node scripts/person-atomic/test-pool.mjs

@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import pg from "pg";
@@ -89,13 +90,16 @@ async function fixture(n, resume = "Retained resume", extra = {}) {
     created_at: "2020-01-01",
     ...extra,
   };
+  const seeded = { ...row, resume_text: resume },
+    keys = Object.keys(seeded);
   await db.query(
-    "insert into candidates(id,full_name,linkedin_username,resume_text) values($1,$2,$3,$4)",
-    [row.id, row.full_name, row.linkedin_username, resume],
+    `insert into candidates(${keys.join(",")}) values(${keys.map((_, i) => `$${i + 1}`).join(",")})`,
+    keys.map((k) =>
+      k === "work_experience" ? JSON.stringify(seeded[k]) : seeded[k],
+    ),
   );
-  await use((c) =>
-    lib.savePersonOnConnection(c, lib.fromLegacyImport(row), { mode: "live" }),
-  );
+  const doc = await prepareAuditFixture(row.id);
+  await use((c) => lib.savePersonOnConnection(c, doc, { mode: "live" }));
   await enqueue(n);
 }
 await test("canonical derivative interface exists", () =>

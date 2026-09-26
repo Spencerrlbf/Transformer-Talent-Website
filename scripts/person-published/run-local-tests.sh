@@ -12,5 +12,6 @@ done
 if test -f supabase/migrations/20260926065300_person_recruiter_contacts.sql;then
  q -d person_published_test -1 -f supabase/migrations/20260926065300_person_recruiter_contacts.sql
 fi
+bash scripts/person-audit/install-local.sh "$PORT" person_published_test
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_published_test" node --test scripts/person-published/test-published.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_published_test" node --test scripts/person-published/test-server-paths.mjs

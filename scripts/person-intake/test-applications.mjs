@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import pg from "pg";
@@ -162,6 +163,7 @@ await test("candidate and normalized writes roll back together while the applica
     withClient((c) =>
       lib.saveApplicationPersonOnConnection(c, input(4, "synthetic-failure")),
     ),
+    /synthetic failure/,
   );
   assert.equal(
     (
@@ -237,20 +239,7 @@ await test("an existing person keeps incumbent name and contacts", async () => {
     "insert into candidates(id,full_name,linkedin_username,email,current_title,created_at) values($1,'Incumbent Name','synthetic-incumbent','synthetic-incumbent@example.com','Staff Engineer','2025-01-01')",
     [id],
   );
-  await withClient((c) =>
-    lib.savePersonOnConnection(
-      c,
-      lib.fromLegacyImport({
-        id,
-        full_name: "Incumbent Name",
-        linkedin_username: "synthetic-incumbent",
-        email: "synthetic-incumbent@example.com",
-        current_title: "Staff Engineer",
-        created_at: "2025-01-01",
-      }),
-      { mode: "shadow" },
-    ),
-  );
+  await prepareAuditFixture(id);
   await withClient((c) =>
     lib.saveApplicationPersonOnConnection(c, input(6, "synthetic-incumbent")),
   );
@@ -477,4 +466,31 @@ await test("a retained earlier parse never receives a vector from a failed repla
     ).rows[0].matching_embedding,
     null,
   );
+});
+await test("blank stored application name retains the resolved name in its immutable creation snapshot", async () => {
+  await application(60, "synthetic-name-fallback");
+  await db.query("update website_applications set name='' where id=$1", [
+    uuid(60),
+  ]);
+  const result = await withClient((c) =>
+    lib.saveApplicationPersonOnConnection(c, {
+      ...input(60, "synthetic-name-fallback"),
+      name: "Synthetic Resolved Name",
+    }),
+  );
+  const receipt = (
+    await db.query(
+      "select application_snapshot from person_application_receipts where application_id=$1",
+      [uuid(60)],
+    )
+  ).rows[0];
+  const anchor = (
+    await db.query(
+      "select before_image from person_audit_anchors where candidate_id=$1",
+      [result.candidateId],
+    )
+  ).rows[0];
+  assert.equal(result.created, true);
+  assert.equal(receipt.application_snapshot.name, "Synthetic Resolved Name");
+  assert.equal(anchor.before_image.full_name, "Synthetic Resolved Name");
 });

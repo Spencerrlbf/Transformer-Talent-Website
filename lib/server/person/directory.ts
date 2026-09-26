@@ -1,3 +1,8 @@
+import {
+  beginGuardedAuditOperationLocked,
+  createReceiptAuditAnchorLocked,
+  attributeAuditMutation,
+} from "./audit";
 // Website-only intake. External reads and paid work are outside transactions.
 import { randomUUID } from "node:crypto";
 import { TT_ORG_ID, isoOf } from "./normalize";
@@ -19,7 +24,7 @@ import {
 } from "./save";
 import type { PersonDoc } from "./types";
 import { poolProfileText, poolSignals } from "../pool/profile";
-import { enqueuePersonDerivativesLocked } from './derivatives';
+import { enqueuePersonDerivativesLocked } from "./derivatives";
 const matchingText = (row: any) =>
   (poolProfileText(row) + ". actively engaged software candidate").slice(
     0,
@@ -360,6 +365,7 @@ export async function saveDirectoryOnConnection(
       );
     let id = ownerIds[0],
       created = r.created_person;
+    let insertedNow = false;
     const suppressed =
       s.board.do_not_contact === true || s.board.status === "Do Not Contact";
     if (!id && suppressed)
@@ -389,6 +395,7 @@ export async function saveDirectoryOnConnection(
         ],
       );
       created = true;
+      insertedNow = true;
     }
     const before = await lockPerson(c, id);
     if (
@@ -450,8 +457,23 @@ export async function saveDirectoryOnConnection(
         { status: "review", candidateId: id, reason: "directory_source_hold" },
         "review",
       );
+    const audit = insertedNow
+      ? await createReceiptAuditAnchorLocked(c, before, {
+          writer: "directory",
+          receiptRef: `directory:${r.id}`,
+        })
+      : await beginGuardedAuditOperationLocked(c, before, {
+          writer: "directory",
+          receiptRef: `directory:${r.id}`,
+        });
     const { docs, reviews } = await admittedDocuments(c, r, id);
-    const saved = await savePersonLocked(c, docs, { mode: "shadow" }, before);
+    const saved = await savePersonLocked(
+      c,
+      docs,
+      { mode: "shadow" },
+      before,
+      audit,
+    );
     // Writers predating this intake do not all share the admission locks. The
     // unique identity constraint serializes their inserts; verify acquisition
     // after save_person, which intentionally reports identity_taken as review.
@@ -490,6 +512,7 @@ export async function saveDirectoryOnConnection(
       [docs[0]],
       { mode: created ? "live" : a.mode },
       before,
+      audit,
     );
     if (a.mode === "live" || created) {
       // Only a source actually saved with this exact content and original date
@@ -529,28 +552,44 @@ export async function saveDirectoryOnConnection(
       const calculatedYears = Number.isFinite(years)
         ? Math.round(years!)
         : null;
-      await c.query(
-        "update public.candidates set calculated_experience_years=$2::numeric where id=$1 and $2::numeric is not null and calculated_experience_years is distinct from $2::numeric",
-        [id, calculatedYears],
+      await attributeAuditMutation(
+        c,
+        audit,
+        { scope: "directory_metadata", table: "candidates", rowId: id },
+        () =>
+          c.query(
+            "update public.candidates set calculated_experience_years=$2::numeric where id=$1 and $2::numeric is not null and calculated_experience_years is distinct from $2::numeric returning id",
+            [id, calculatedYears],
+          ),
       );
       // Curated contact JSON and a recruiter-entered follow-up remain intact.
       // Suppression is sticky; ordinary directory status never reactivates it.
-      await c.query(
-        `update public.candidates set directory_contact_id=$2,directory_sync_hash=$3,source='directory',status=case when status='Do Not Contact' then status else $4 end,follow_up_at=coalesce(follow_up_at,$5::date),linkedin_enrichment_date=case when $6::timestamptz is null then linkedin_enrichment_date else greatest(linkedin_enrichment_date,$6::timestamptz) end,updated_at=clock_timestamp() where id=$1 and
+      await attributeAuditMutation(
+        c,
+        audit,
+        { scope: "directory_metadata", table: "candidates", rowId: id },
+        () =>
+          c.query(
+            `update public.candidates set directory_contact_id=$2,directory_sync_hash=$3,source='directory',status=case when status='Do Not Contact' then status else $4 end,follow_up_at=coalesce(follow_up_at,$5::date),linkedin_enrichment_date=case when $6::timestamptz is null then linkedin_enrichment_date else greatest(linkedin_enrichment_date,$6::timestamptz) end,updated_at=clock_timestamp() where id=$1 and
     (directory_contact_id,directory_sync_hash,source,status,follow_up_at,linkedin_enrichment_date) is distinct from
-    ($2::uuid,$3::text,'directory'::text,case when status='Do Not Contact' then status else $4::text end,coalesce(follow_up_at,$5::date),case when $6::timestamptz is null then linkedin_enrichment_date else greatest(linkedin_enrichment_date,$6::timestamptz) end)`,
-        [
-          id,
-          r.contact_id,
-          r.snapshot_hash,
-          s.board.status || "engaged",
-          isoOf(s.board.follow_up_date)?.slice(0, 10) ?? null,
-          admittedAt,
-        ],
+    ($2::uuid,$3::text,'directory'::text,case when status='Do Not Contact' then status else $4::text end,coalesce(follow_up_at,$5::date),case when $6::timestamptz is null then linkedin_enrichment_date else greatest(linkedin_enrichment_date,$6::timestamptz) end) returning id`,
+            [
+              id,
+              r.contact_id,
+              r.snapshot_hash,
+              s.board.status || "engaged",
+              isoOf(s.board.follow_up_date)?.slice(0, 10) ?? null,
+              admittedAt,
+            ],
+          ),
       );
     }
-    if(a.mode === 'live')
-      await enqueuePersonDerivativesLocked(c,{organizationId:TT_ORG_ID,candidateId:id,receiptRef:`directory:${r.id}`});
+    if (a.mode === "live")
+      await enqueuePersonDerivativesLocked(c, {
+        organizationId: TT_ORG_ID,
+        candidateId: id,
+        receiptRef: `directory:${r.id}`,
+      });
     const canonical = (
       await c.query("select * from public.candidates where id=$1", [id])
     ).rows[0];

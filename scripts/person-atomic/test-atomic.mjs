@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { pgSite, readNew, projectionInput } from "../person-trial.mjs";
@@ -69,20 +70,66 @@ try {
       row.created_at,
     ],
   );
+  await prepareAuditFixture(id);
   const original = await read();
   await db.query(`create function public.synthetic_projection_failure() returns trigger language plpgsql as $$ begin if current_setting('person_test.fail',true)='yes' then raise exception 'synthetic projection failure' using errcode='23514'; end if; return new; end $$;
  create trigger synthetic_projection_failure before update on candidates for each row execute function synthetic_projection_failure()`);
   await db.query("set person_test.fail='yes'");
-  await assert.rejects(lib.savePersonOnConnection(db, doc, { mode: "live" }));
+  const incoming = lib.fromHarvest(
+    {
+      experience: [
+        {
+          position: "Injected new role",
+          companyName: "New synthetic employer",
+          startDate: { year: 2026, month: 1 },
+        },
+      ],
+    },
+    {
+      id: "c0000000-0000-4000-8000-000000000099",
+      created_at: "2026-09-20T00:00:00Z",
+      cache_status: "miss",
+    },
+    id,
+  );
+  const baselineRevision = (
+    await db.query(
+      "select rev from candidate_profile_state where candidate_id=$1",
+      [id],
+    )
+  ).rows[0].rev;
+  await assert.rejects(
+    lib.savePersonOnConnection(db, incoming, { mode: "live" }),
+    /synthetic projection failure/,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select rev from candidate_profile_state where candidate_id=$1",
+        [id],
+      )
+    ).rows[0].rev,
+    baselineRevision,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select count(*)::int n from candidate_sources where candidate_id=$1 and payload_hash=$2",
+        [id, incoming.source.payload_hash],
+      )
+    ).rows[0].n,
+    0,
+  );
+  assert.equal(await count("person_audit_operations"), 0);
   assert.deepEqual(await read(), original);
-  assert.equal(await count("candidate_sources"), 0);
+  assert.equal(await count("candidate_sources"), 1);
   assert.equal(await count("person_projection_history"), 0);
   await db.query("set person_test.fail='no'");
   console.log(
     "PASS failure after normalized save rolls back both representations",
   );
   const shadow = await lib.savePersonOnConnection(db, doc, { mode: "shadow" });
-  assert.equal(shadow.changed, true);
+  assert.equal(shadow.changed, false);
   assert.deepEqual(await read(), original);
   assert.equal(await count("person_projection_history"), 0);
   const live = await lib.savePersonOnConnection(db, doc, { mode: "live" });
@@ -134,31 +181,6 @@ try {
   console.log("PASS conditional projection undo preserves normalized evidence");
   const reproject = await lib.savePersonOnConnection(db, doc, { mode: "live" });
   assert.equal(reproject.projected, true);
-  await db.query(
-    "update candidates set current_title='Concurrent Recruiter Edit' where id=$1",
-    [id],
-  );
-  assert.equal(
-    (await lib.undoPersonProjectionOnConnection(db, id, reproject.revision))
-      .status,
-    "conflict",
-  );
-  assert.equal((await read()).current_title, "Concurrent Recruiter Edit");
-  console.log(
-    "PASS undo refuses changed live rows even at the same normalized revision",
-  );
-  await assert.rejects(
-    lib.savePersonOnConnection(db, doc, { mode: "live" }),
-    /legacy_projection_drift/,
-  );
-  assert.equal((await read()).current_title, "Concurrent Recruiter Edit");
-  await db.query("update candidates set current_title=$2 where id=$1", [
-    id,
-    saved.current_title,
-  ]);
-  console.log(
-    "PASS projection refuses an uncaptured legacy edit instead of overwriting it",
-  );
   const newer = {
     ...doc,
     header: { ...doc.header, current_title: "Staff Engineer" },
@@ -226,6 +248,7 @@ try {
     "insert into candidates(id,full_name,linkedin_username,current_title,current_company,email) values($1,'Partial Person','partial-atomic','Keep Title','Keep Employer','collision@example.com')",
     [partialId],
   );
+  await prepareAuditFixture(partialId);
   const partial = lib.fromApplication(
     {
       id: "c0000000-0000-4000-8000-000000000003",
@@ -344,6 +367,31 @@ try {
   }
   assert.equal((await read()).current_title, "Staff Engineer");
   console.log("PASS raw shadow writer and atomic live writer share lock order");
+  const driftPublication = await lib.savePersonOnConnection(db, incoming, {
+    mode: "live",
+  });
+  assert.equal(driftPublication.projected, true);
+  const driftRevision = driftPublication.revision;
+  await db.query(
+    "update candidates set current_title='Concurrent Recruiter Edit' where id=$1",
+    [id],
+  );
+  assert.equal(
+    (await lib.undoPersonProjectionOnConnection(db, id, driftRevision)).status,
+    "conflict",
+  );
+  assert.equal((await read()).current_title, "Concurrent Recruiter Edit");
+  console.log(
+    "PASS undo refuses changed live rows even at the same normalized revision",
+  );
+  await assert.rejects(
+    lib.savePersonOnConnection(db, doc, { mode: "live" }),
+    /audit_unattributed_change/,
+  );
+  assert.equal((await read()).current_title, "Concurrent Recruiter Edit");
+  console.log(
+    "PASS projection refuses an uncaptured legacy edit instead of overwriting it",
+  );
 } finally {
   await db.end();
 }
