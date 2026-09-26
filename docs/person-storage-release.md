@@ -135,11 +135,35 @@ are invented. Structured Harvest education retains its full relationships.
 
 Tenant applicants and tenant resume uploads remain in their organization-owned
 application/sourcing tables. This branch does not enable all pool writers:
-directory sync, refresh claims/retries and recruiter contact integration must
+directory sync and recruiter contact integration must
 also be completed before a live cutover. Post-cutover audit must include intake
 receipts rather than reconstructing these new sources as historical legacy
 imports. The overnight reconciliation runner is pinned to the shadow sources.
 
+
+## Refresh worker preparation
+
+The refresh workflow uses the same `PERSON_WRITE_MODE` flag and website-only
+`PERSON_DATABASE_URL`. Its prepared additive migration is
+`20260926054500_person_refresh_intake.sql`; it is not applied by preparing code.
+The service-only attempt receipt retains the original Harvest ledger snapshot,
+claim token, paid reservation, and normalized documents.
+
+Queued work and failed saves are claimed atomically. Free cached work has
+priority over requests that need paid enrichment, including with a zero daily
+budget. Each queue item has at most three processing attempts. A lost or
+uncertain paid response requires review instead of another automatic purchase;
+a late successful response can still be saved against its original reservation.
+Expired claims cannot commit a candidate save. A successful normalized save,
+compatibility projection in live mode, and queue completion share one transaction.
+Old terminal queue rows are retained with an archive status and their original
+contents in the receipt.
+
+Shadow refresh leaves deployed profile fields and derived embeddings unchanged.
+Live refresh derives years and embedding text from the canonical profile and
+keeps refresh dates monotonic. Embedding work is claimed at most once after a
+semantic profile change; derivative failure does not mark a committed profile
+save as failed. No paid refresh worker is dispatched as part of the migration.
 
 ## Uncertain cached source dates
 

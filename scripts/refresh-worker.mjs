@@ -30,6 +30,7 @@ try {
   }
 } catch {}
 
+const workerLib = await import("./dist/worker-lib.mjs");
 const {
   computeFacts,
   formatFacts,
@@ -39,7 +40,8 @@ const {
   recordEnrichment,
   syncExperiences,
   syncCandidateEmbeddings,
-} = await import("./dist/worker-lib.mjs");
+} = workerLib;
+const PERSON_MODE = workerLib.personWriteMode();
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,7 +49,7 @@ const HARVEST = process.env.HARVEST_API_KEY;
 const CAP = Math.max(0, parseInt(process.env.REFRESH_DAILY_CAP || "50", 10) || 0);
 const CONCURRENCY = Math.min(8, Math.max(1, parseInt(process.env.CONCURRENCY || "1", 10) || 1));
 if (!SUPABASE_URL || !KEY) throw new Error("Supabase creds required");
-if (!HARVEST && !process.env.PRECOMPUTE_BACKFILL) throw new Error("HARVEST_API_KEY required");
+if (!HARVEST && PERSON_MODE === "legacy" && !process.env.PRECOMPUTE_BACKFILL) throw new Error("HARVEST_API_KEY required");
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
 async function rest(path, init = {}) {
@@ -65,6 +67,25 @@ async function rest(path, init = {}) {
 const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("organization not found");
 
+if (PERSON_MODE !== "legacy") {
+  const { runNormalizedRefresh } = await import("./person-refresh/worker.mjs");
+  const stats = await runNormalizedRefresh({
+    lib: workerLib, rest, organizationId: org.id, mode: PERSON_MODE,
+    dailyCap: CAP, allowPaid: !!HARVEST && !process.env.PRECOMPUTE_BACKFILL,
+    noTopup: !!process.env.NO_TOPUP || !!process.env.PRECOMPUTE_BACKFILL,
+    concurrency: CONCURRENCY,
+    harvestProfile: async (url) => {
+      const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
+        headers: { "X-API-Key": HARVEST }, signal: AbortSignal.timeout(25000),
+      });
+      // The durable reservation fences an uncertain response. A later worker
+      // must not repeat a potentially paid call without a recorded payload.
+      if (!res.ok) throw Error(`harvest_${res.status}`);
+      return (await res.json()).element;
+    },
+  });
+  if (stats.failed || stats.review) process.exitCode = 1;
+} else {
 // Budget: paid Harvest calls already made today (site + worker share the cap).
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
 const spentRes = await fetch(
@@ -310,3 +331,4 @@ await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
   while (work.length) await refreshOne(work.shift());
 }));
 console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed (${patchFailed} patch_failed), ${skipped} skipped`);
+}

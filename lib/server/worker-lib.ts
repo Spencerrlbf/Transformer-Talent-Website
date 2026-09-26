@@ -65,6 +65,7 @@ export { reviewQueued, queuedCount } from "./review-queue";
 export { fromLegacyImport, legacyRaw, legacyFetchedAt, legacyUntouched, LEGACY_IMPORT_END } from "./person/fromLegacy";
 export type { LegacyCandidateRow, LegacyEmailRow, LegacyEmailV2Row, LegacyCommunicationRow, LegacyRaw } from "./person/fromLegacy";
 export { fromHarvest } from "./person/fromHarvest";
+export { pickRefreshRows, pickRefreshRowsOnConnection, claimRefresh, storeRefreshPayload, saveRefresh, failRefresh, claimRefreshDerivatives, claimRefreshOnConnection, storeRefreshPayloadOnConnection, saveRefreshOnConnection, failRefreshOnConnection, claimRefreshDerivativesOnConnection } from "./person/refresh";
 export type { HarvestLedgerRow } from "./person/fromHarvest";
 export { fromDirectory, directoryCheck, directoryPhoneValue, unmappedDirectoryStatuses, DIRECTORY_STATUSES } from "./person/fromDirectory";
 export type { DirectoryBoardRow, DirectoryHarvestRow, DirectoryExperienceRow, DirectoryEducationRow, DirectoryEmailRow, DirectoryPhoneRow } from "./person/fromDirectory";
