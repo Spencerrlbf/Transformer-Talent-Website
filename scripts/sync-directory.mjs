@@ -133,23 +133,50 @@ export function embeddingText(m) {
   ].filter(Boolean).join(". ").slice(0, 8000);
 }
 
-/** What an existing website row gets: the directory's values, never a blank
- *  over data the pool already holds. Status, source, the link and the
- *  contact details always come across. */
-export function patchFor(m) {
-  // The pool requires a LinkedIn username, so those two never go across empty.
-  const always = new Set(["directory_contact_id", "source", "status", "email", "follow_up_at"]);
+// These facts came from a LinkedIn snapshot, so compare when the source
+// fetched it, never when this sync happens to run.
+const HISTORY_FIELDS = new Set([
+  "current_title", "current_company", "headline", "profile_summary", "location",
+  "work_experience", "education", "education_schools", "education_degrees", "education_fields",
+  "top_skills", "all_skills_text", "calculated_experience_years", "total_experience_years",
+  "linkedin_enrichment_date",
+]);
+export function directoryProfileIsOlder(previous, mapped) {
+  const websiteAt = Date.parse(previous?.linkedin_enrichment_date ?? "");
+  const directoryAt = Date.parse(mapped.linkedin_enrichment_date ?? "");
+  return Number.isFinite(websiteAt) && (!Number.isFinite(directoryAt) || websiteAt > directoryAt);
+}
+
+/** Workflow fields still propagate. Empty values never erase existing data,
+ *  and an older (or undated) directory copy cannot replace newer history. */
+export function patchFor(m, previous = {}) {
+  const always = new Set(["directory_contact_id", "source", "status"]);
+  const holdHistory = directoryProfileIsOlder(previous, m);
   const out = {};
   for (const [k, v] of Object.entries(m)) {
-    const empty = v === null || v === undefined || (Array.isArray(v) && v.length === 0);
+    if (holdHistory && HISTORY_FIELDS.has(k)) continue;
+    const empty = v === null || v === undefined || (typeof v === "string" && !v.trim()) || (Array.isArray(v) && v.length === 0);
     if (!empty || always.has(k)) out[k] = v;
   }
   return out;
 }
 
-/** Embed when the row has no embedding, or only the old Airtable one-liner
- *  and the directory now has real experience for the person. */
-export const needsEmbedding = (prev, m) => !prev.matching_embedding || (prev.embedding_type === "airtable_sync" && !!m.work_experience);
+/** A stale directory copy is also unsuitable as input to an embedding. */
+export const needsEmbedding = (prev, m) => !directoryProfileIsOlder(prev, m)
+  && (!prev.matching_embedding || (prev.embedding_type === "airtable_sync" && !!m.work_experience));
+
+/** Compare again in Postgres: a refresh may have landed since our lookup.
+ *  A skipped update leaves directory_sync_hash unchanged so a later sync retries it.
+ *  Workflow-only suppression writes omit expectedEnrichmentDate deliberately. */
+export async function persistDirectoryUpdate(sb, { id, expectedEnrichmentDate, ...body }) {
+  const guard = expectedEnrichmentDate === undefined ? "" : expectedEnrichmentDate === null
+    ? "&linkedin_enrichment_date=is.null"
+    : `&linkedin_enrichment_date=eq.${encodeURIComponent(expectedEnrichmentDate)}`;
+  const rows = await sb(`candidates?id=eq.${id}${guard}&select=id`, {
+    method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(body),
+  });
+  return rows.length === 1;
+}
 
 export const syncHash = (m, fetchedAt) => crypto.createHash("sha256").update(JSON.stringify([m, fetchedAt || null, "v1"])).digest("hex").slice(0, 32);
 
@@ -221,9 +248,10 @@ async function main() {
   Object.assign(coverage, enriched);
   console.log(`directory "${ws.name}": ${coverage.contacts} contacts (${coverage.do_not_contact} do not contact), Harvest profiles ${coverage.harvest_profiles}, with experiences ${coverage.with_experiences}, with educations ${coverage.with_educations}; with a LinkedIn URL ${coverage.with_linkedin}, of which without Harvest ${coverage.linkedin_no_harvest} (${coverage.linkedin_no_harvest_with_email} with an email)${SINCE ? `; syncing those changed since ${SINCE}` : "; syncing all"}`);
 
-  const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, noLinkedin: 0, conflicts: 0, embedded: 0, failed: 0 };
+  const tally = { read: 0, suppressed: 0, unchanged: 0, updated: 0, inserted: 0, noLinkedin: 0, conflicts: 0, embedded: 0, failed: 0, historyHeld: 0, emailKept: 0, followUpKept: 0, concurrentRefresh: 0 };
   const claimed = new Set();
   const toEmbed = []; // { id, text }
+  const blockedEmbeddingIds = new Set();
   let last = "00000000-0000-0000-0000-000000000000";
   const PAGE = 500;
   for (let page = 0; ; page++) {
@@ -248,12 +276,12 @@ async function main() {
     // Existing website rows for these contacts, by the strongest link first.
     const existing = new Map(); // contact_id -> row
     for (const part of chunk(ids, 100)) {
-      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
+      const found = await sb(`candidates?directory_contact_id=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type,linkedin_enrichment_date,email,follow_up_at`);
       for (const r of found) existing.set(r.directory_contact_id, r);
     }
     const airtableIds = rows.flatMap((r) => (existing.has(r.contact_id) ? [] : recordIds(r.airtable_record_ids).map((a) => [a, r.contact_id])));
     for (const part of chunk(airtableIds, 100)) {
-      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type`);
+      const found = await sb(`candidates?airtable_id=in.${inList(part.map(([a]) => a))}&select=id,airtable_id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type,linkedin_enrichment_date,email,follow_up_at`);
       for (const r of found) {
         const cid = part.find(([a]) => a === r.airtable_id)?.[1];
         if (cid && !existing.has(cid) && (!r.directory_contact_id || r.directory_contact_id === cid)) existing.set(cid, r);
@@ -263,7 +291,7 @@ async function main() {
     const usernames = mapped.filter(({ m }) => m.linkedin_username).map(({ m }) => m.linkedin_username);
     const taken = new Map(); // LinkedIn name -> website row id that holds it
     for (const part of chunk([...new Set(usernames)], 100)) {
-      const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
+      const found = await sb(`candidates?linkedin_username=in.${inList(part)}&select=id,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type,linkedin_enrichment_date,email,follow_up_at&order=updated_at.desc`);
       for (const f of found) if (!taken.has(f.linkedin_username)) taken.set(f.linkedin_username, f.id);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.linkedin_username) continue;
@@ -273,7 +301,7 @@ async function main() {
     }
     const emails = mapped.filter(({ row, m }) => !existing.has(row.contact_id) && m.email).map(({ m }) => m.email.toLowerCase());
     for (const part of chunk([...new Set(emails)], 100)) {
-      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type&order=updated_at.desc`);
+      const found = await sb(`candidates?email=in.${inList(part)}&select=id,email,linkedin_username,directory_contact_id,directory_sync_hash,matching_embedding,embedding_type,linkedin_enrichment_date,follow_up_at&order=updated_at.desc`);
       for (const { row, m } of mapped) {
         if (existing.has(row.contact_id) || !m.email) continue;
         const r = found.find((x) => x.email && x.email.toLowerCase() === m.email.toLowerCase() && (!x.directory_contact_id || x.directory_contact_id === row.contact_id));
@@ -296,11 +324,14 @@ async function main() {
       }
       if (prev && prev.directory_sync_hash === hash) {
         tally.unchanged++;
-        if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
+        if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m), expectedEnrichmentDate: prev.linkedin_enrichment_date ?? null });
         continue;
       }
       if (prev) {
-        const patch = patchFor(m);
+        const patch = patchFor(m, prev);
+        if (directoryProfileIsOlder(prev, m)) tally.historyHeld++;
+        if (prev.email && !m.email) tally.emailKept++;
+        if (prev.follow_up_at && !m.follow_up_at) tally.followUpKept++;
         const holder = m.linkedin_username ? taken.get(m.linkedin_username) : undefined;
         const heldElsewhere = !!holder && holder !== prev.id;
         if (!prev.linkedin_username && (!m.linkedin_username || heldElsewhere)) {
@@ -314,8 +345,8 @@ async function main() {
           delete patch.linkedin_url;
           if (heldElsewhere) tally.conflicts++;
         } else taken.set(m.linkedin_username, prev.id);
-        updates.push({ id: prev.id, ...patch, directory_sync_hash: hash, updated_at: now });
-        if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m) });
+        updates.push({ id: prev.id, expectedEnrichmentDate: prev.linkedin_enrichment_date ?? null, ...patch, directory_sync_hash: hash, updated_at: now });
+        if (needsEmbedding(prev, m)) toEmbed.push({ id: prev.id, text: embeddingText(m), expectedEnrichmentDate: patch.linkedin_enrichment_date ?? prev.linkedin_enrichment_date ?? null });
       } else if (!m.linkedin_username) {
         // The pool keys people on their LinkedIn name; an email-only contact stays in the directory.
         tally.noLinkedin++;
@@ -331,13 +362,19 @@ async function main() {
       // A PATCH changes only the columns sent and never goes through the insert
       // path, so the pool's trigger and its not-null columns stay out of the way.
       for (const part of chunk(updates, 8)) {
-        await Promise.all(part.map(async ({ id, ...body }) => {
+        await Promise.all(part.map(async (update) => {
+          const { id } = update;
           try {
-            await sb(`candidates?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(body) });
+            if (!await persistDirectoryUpdate(sb, update)) {
+              tally.concurrentRefresh++;
+              tally.updated--;
+              blockedEmbeddingIds.add(id);
+            }
           } catch (err) {
             if (!/23505|duplicate key|P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
             tally.conflicts++;
             tally.updated--;
+            blockedEmbeddingIds.add(id);
           }
         }));
       }
@@ -359,7 +396,7 @@ async function main() {
           }
         }
         const idOf = Object.fromEntries(made.map((r) => [r.directory_contact_id, r.id]));
-        for (const i of part) if (idOf[i.directory_contact_id]) toEmbed.push({ id: idOf[i.directory_contact_id], text: embeddingText(i) });
+        for (const i of part) if (idOf[i.directory_contact_id]) toEmbed.push({ id: idOf[i.directory_contact_id], text: embeddingText(i), expectedEnrichmentDate: i.linkedin_enrichment_date ?? null });
       }
     }
     tally.updated += updates.length;
@@ -370,16 +407,17 @@ async function main() {
   await db.end();
 
   if (!DRY_RUN && toEmbed.length) {
-    for (const part of chunk(toEmbed, 64)) {
+    for (const part of chunk(toEmbed.filter((p) => !blockedEmbeddingIds.has(p.id)), 64)) {
       const res = await fetch("https://api.openai.com/v1/embeddings", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "text-embedding-3-small", input: part.map((p) => p.text.slice(0, 8000)) }) });
       if (!res.ok) { tally.failed += part.length; console.log(`embeddings ${res.status}: ${(await res.text()).slice(0, 200)}`); continue; }
       const { data } = await res.json();
       // Patches, never upserts: the pool's insert trigger would reject a row without its LinkedIn name.
-      for (const rows of chunk(part.map((p, i) => ({ id: p.id, embedding: data[i].embedding })), 8)) {
-        await Promise.all(rows.map(async ({ id, embedding }) => {
+      for (const rows of chunk(part.map((p, i) => ({ id: p.id, expectedEnrichmentDate: p.expectedEnrichmentDate, embedding: data[i].embedding })), 8)) {
+        await Promise.all(rows.map(async ({ id, expectedEnrichmentDate, embedding }) => {
           try {
-            await sb(`candidates?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ matching_embedding: JSON.stringify(embedding), embedding_type: "directory" }) });
-            tally.embedded++;
+            if (await persistDirectoryUpdate(sb, { id, expectedEnrichmentDate, matching_embedding: JSON.stringify(embedding), embedding_type: "directory" })) {
+              tally.embedded++;
+            } else tally.concurrentRefresh++;
           } catch (err) {
             if (!/P0001|cannot be (NULL|blank)/.test(String(err))) throw err;
             tally.failed++;
@@ -388,7 +426,7 @@ async function main() {
       }
     }
   }
-  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}`);
+  console.log(`${DRY_RUN ? "dry run" : "done"}: read ${tally.read}, ${DRY_RUN ? "would update" : "updated"} ${tally.updated}, ${DRY_RUN ? "would insert" : "inserted"} ${tally.inserted}, unchanged ${tally.unchanged}, do-not-contact ${tally.suppressed}, no LinkedIn ${tally.noLinkedin}, conflicts ${tally.conflicts}, embedded ${tally.embedded}${DRY_RUN ? ` (would embed ${toEmbed.length + tally.inserted})` : ""}, failed ${tally.failed}; protected: history ${tally.historyHeld}, email ${tally.emailKept}, follow-up ${tally.followUpKept}, concurrent refresh ${tally.concurrentRefresh}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
