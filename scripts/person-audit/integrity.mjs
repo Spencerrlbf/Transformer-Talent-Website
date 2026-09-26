@@ -1,8 +1,10 @@
 import {arr,same,sameSource} from './evidence.mjs';
+import {sourceReferences} from './references.mjs';
 // checkStored proves list ownership/keys and projection executability. These
 // additional checks prove content, retained source contacts, identities and the
 // current primary choices which key-only comparisons do not cover.
 export function exactStored(s,docs,lib,out){
+ if(!sourceReferences(s,docs,out))return false;
  const n=s.normalized,sourceById=new Map(arr(n.sources).map(x=>[x.id,x]));
  for(const field of ['jobs','educations','skills']){const owner=n.state?.[`${field}_source_id`];if(owner&&arr(n[field]).some(row=>!row.removed_at&&row.source_id!==owner))return out.review('list_row_owner_invalid');}
  const docForRow=(r,field,key)=>docs.filter(d=>{const src=sourceById.get(r.source_id);return src&&sameSource(src,d.source);}).flatMap(d=>arr(d[field])).filter(d=>d[key]===r[key]);

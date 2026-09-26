@@ -13,6 +13,7 @@
 import {collectEvidence,sameSource as witnessedSource,same} from "./evidence.mjs";
 import {creationEvidence,metadataEvidence} from './mutations.mjs';
 import {exactStored} from "./integrity.mjs";
+import {attributionReferences} from "./references.mjs";
 import { createHash } from "node:crypto";
 import { Tally, checkStored, stable } from "../person-trial.mjs";
 
@@ -244,6 +245,7 @@ export function planAudit(snapshot, lib, external = {complete:false,rows:new Map
   if (!Object.keys(aux).length || Object.keys(aux).some((k) => aux[k] !== anchor.external_proof?.[k])) { out.review("auxiliary_changed"); return finish(); }
   out.checks.auxiliary = true;
   const evidence=collectEvidence(snapshot,lib,external,out);if(!evidence)return finish();
+  if (!attributionReferences(snapshot,lib,out)) return finish();
   if (!candidateChain(snapshot, lib.AUDIT_SCOPES, lib.AUDIT_GUARD_VERSION, lib, out)) return finish();
   if (!rawFacts(snapshot,lib,out)) return finish();
   const expected = evidence.docs;
