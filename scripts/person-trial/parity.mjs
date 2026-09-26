@@ -26,6 +26,13 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const L = await import(path.join(root, "scripts/dist/worker-lib.mjs"));
+// A doc leaves out a list its source has nothing for; the checks below read an absent list as empty.
+const withLists = (d) => ({ ...d, jobs: d.jobs ?? [], educations: d.educations ?? [], skills: d.skills ?? [] });
+const T = {
+  fromLegacyImport: (...a) => withLists(L.fromLegacyImport(...a)),
+  fromHarvest: (...a) => withLists(L.fromHarvest(...a)),
+  fromDirectory: (...a) => withLists(L.fromDirectory(...a)),
+};
 const BASE = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 if (!BASE || !KEY) throw new Error("Missing env: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
@@ -297,8 +304,8 @@ for (const id of ids) {
   bump(`sample.on_network_tab.${onNetwork.has(id) ? "yes" : "no"}`);
   try {
     const e1 = v1.get(id) || [], e2 = v2.get(id) || [];
-    const legacy = L.fromLegacyImport(row, e1, e2);
-    if (L.fromLegacyImport(row, e1, e2).source.payload_hash !== legacy.source.payload_hash) { bump("FAIL_not_deterministic"); rec.classes.push("not_deterministic"); }
+    const legacy = T.fromLegacyImport(row, e1, e2);
+    if (T.fromLegacyImport(row, e1, e2).source.payload_hash !== legacy.source.payload_hash) { bump("FAIL_not_deterministic"); rec.classes.push("not_deterministic"); }
     for (const list of [legacy.jobs, legacy.educations]) if (new Set(list.map((x) => x.row_key)).size !== list.length) { bump("FAIL_duplicate_row_key"); rec.classes.push("dup_row_key"); }
     for (const j of legacy.jobs) if (!j.row_key || j.row_key.length !== 32) bump("FAIL_bad_row_key");
     if (new Set(legacy.skills.map((x) => x.key)).size !== legacy.skills.length) bump("FAIL_duplicate_skill_key");
@@ -420,8 +427,8 @@ for (const id of ids) {
 
     // Harvest: the doc against what harvestToPoolRecord writes from the same payload.
     if (led) {
-      const doc = L.fromHarvest(led.raw_payload, led);
-      if (L.fromHarvest(led.raw_payload, led).source.payload_hash !== doc.source.payload_hash) bump("FAIL_not_deterministic");
+      const doc = T.fromHarvest(led.raw_payload, led);
+      if (T.fromHarvest(led.raw_payload, led).source.payload_hash !== doc.source.payload_hash) bump("FAIL_not_deterministic");
       for (const list of [doc.jobs, doc.educations]) if (new Set(list.map((x) => x.row_key)).size !== list.length) bump("FAIL_duplicate_row_key");
       const recRows = L.poolExperiences({ id, work_experience: recd.work_experience || [] });
       compareJobs(doc, recRows, "harvest", rec.classes);
@@ -448,7 +455,7 @@ for (const id of ids) {
 
       // The same profile through the directory route: the same jobs and schools, keyed the same way.
       const sim = commsRowsFromHarvest(led.raw_payload);
-      const dd = L.fromDirectory({ contact_id: "00000000-0000-4000-8000-000000000000", updated_at: led.created_at }, { fetched_at: led.created_at, public_identifier: led.raw_payload.publicIdentifier, skills: sim.skills, raw: led.raw_payload }, sim.exps, sim.edus, [], [], id);
+      const dd = T.fromDirectory({ contact_id: "00000000-0000-4000-8000-000000000000", updated_at: led.created_at }, { fetched_at: led.created_at, public_identifier: led.raw_payload.publicIdentifier, skills: sim.skills, raw: led.raw_payload }, sim.exps, sim.edus, [], [], id);
       const hk = doc.jobs.map((j) => j.row_key), dk = dd.jobs.map((j) => j.row_key);
       bump(`directory_sim.jobs.${JSON.stringify(hk) === JSON.stringify(dk) ? "same_keys_same_order" : JSON.stringify([...hk].sort()) === JSON.stringify([...dk].sort()) ? "same_keys_other_order" : "different_keys"}`);
       const cur = doc.jobs.filter((j, i) => dd.jobs.find((x) => x.row_key === j.row_key)?.is_current !== j.is_current).length;

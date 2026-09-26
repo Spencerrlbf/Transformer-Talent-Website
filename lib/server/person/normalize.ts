@@ -3,7 +3,7 @@
 // school names and identities. Everything here is pure: no database, no
 // network, and the same input always gives the same output.
 import crypto from "node:crypto";
-import { cleanText, SIDE_ROLE } from "../spine";
+import { cleanText, isClearSideRoleTitle, isSideRoleTitle, realJobIndex } from "../spine";
 import { skillKey } from "../facts";
 import { normalise, topEmployerOf, topUniversityOf } from "../signals/match";
 import { LISTS_VERSION } from "../signals/lists";
@@ -24,7 +24,7 @@ import type {
 } from "./types";
 
 /** Bumped whenever a translator's output changes for the same input. */
-export const PARSER_VERSION = "person-v1";
+export const PARSER_VERSION = "person-v2";
 
 /** Transformer Talent's organization: the only one whose people enter the pool. */
 export const TT_ORG_ID = "801865a7-6533-41d2-9c45-e4a90e6ad51a";
@@ -69,6 +69,16 @@ export function monthOf(m: unknown): number | null {
 export function yearOf(y: unknown): number | null {
   const n = typeof y === "string" && /^\d{4}$/.test(y.trim()) ? Number(y) : y;
   return typeof n === "number" && Number.isInteger(n) && n > 1900 && n < 2100 ? n : null;
+}
+
+/** A year span written as text: "2018 - 2022", "2016 – Present"; a lone year
+ *  ("2013") is when it ended, as LinkedIn shows a graduation year. */
+export function spanYears(t: unknown): { start: number | null; end: number | null } {
+  if (typeof t !== "string") return { start: null, end: null };
+  const m = t.match(/(\d{4})\s*[-–—]\s*(\d{4})?/);
+  if (m) return { start: yearOf(Number(m[1])), end: m[2] ? yearOf(Number(m[2])) : null };
+  const lone = t.trim().match(/^(\d{4})$/);
+  return lone ? { start: null, end: yearOf(Number(lone[1])) } : { start: null, end: null };
 }
 
 // ---------- row keys ----------
@@ -119,18 +129,19 @@ export function dedupeRowKeys<T extends { row_key: string }>(rows: T[], content:
 
 // ---------- side roles and the order of jobs ----------
 
-/** A membership, board seat, advisory or volunteer role, not the job (spine.ts SIDE_ROLE). */
-export const isSideRole = (title: string | null | undefined, company: string | null | undefined): boolean =>
-  SIDE_ROLE.test(`${title ?? ""} ${company ?? ""}`);
+/** A membership, board seat, advisory or volunteer role, not the job: the
+ *  spine.ts rule the live refresh uses (judged on the title; see
+ *  isSideRoleTitle). */
+export const isSideRole = (title: string | null | undefined, company: string | null | undefined): boolean => isSideRoleTitle(title, company);
 
 /** The person's real job goes first: the current one that is not a side
- *  role, else the latest that is not; the rest keep their order. The same
- *  rule as harvestToPoolRecord (spine.ts), which the judge, the signals and
- *  the Profile tab already read. */
-export function realJobFirst<T extends { is_current: boolean; is_side_role: boolean }>(jobs: T[]): T[] {
+ *  role, else a current one that is not clearly a side role, else the latest
+ *  that is not a side role; the rest keep their order. The same rule as
+ *  harvestToPoolRecord (spine.ts realJobIndex), which the judge, the signals
+ *  and the Profile tab already read. */
+export function realJobFirst<T extends { is_current: boolean; is_side_role: boolean; title?: string | null; company?: { name?: string | null } | null }>(jobs: T[]): T[] {
   const out = [...jobs];
-  let job = out.findIndex((j) => j.is_current && !j.is_side_role);
-  if (job < 0) job = out.findIndex((j) => !j.is_side_role);
+  const job = realJobIndex(out, (j) => j.is_side_role, (j) => j.is_side_role && isClearSideRoleTitle(j.title ?? null, j.company?.name ?? null));
   if (job > 0) out.unshift(...out.splice(job, 1));
   return out;
 }
@@ -320,10 +331,25 @@ export function endorsementCount(v: unknown): number | null {
   return null;
 }
 
+/** Several skills joined by line breaks in one value (the old import's raw
+ *  JSON does this) as one value per line; anything else as it is. */
+export function skillLines(raw: unknown): unknown[] {
+  const text = typeof raw === "string" ? raw : raw && typeof raw === "object" ? (raw as { name?: unknown }).name : null;
+  if (typeof text !== "string" || !/[\r\n]/.test(text)) return [raw];
+  const lines = text.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+  return typeof raw === "string" ? lines : lines.map((name) => ({ ...(raw as object), name }));
+}
+
 /** Collects skills in first-seen order, one per key, keeping the best facts about each. */
 export class SkillBag {
   private byKey = new Map<string, PersonSkill>();
   add(raw: unknown, opts: { is_top?: boolean; endorsements?: number | null } = {}): string | null {
+    const lines = skillLines(raw);
+    if (lines.length > 1) {
+      let first: string | null = null;
+      for (const l of lines) first = this.add(l, opts) ?? first;
+      return first;
+    }
     const split = splitSkill(raw);
     if (!split || !isRealSkill(split.name)) return null;
     const key = skillKeyOf(split.name);
@@ -352,14 +378,21 @@ export class SkillBag {
 
 /** A per-position skills cell: an array of names, or LinkedIn's rendered
  *  text ("Go (Programming Language), Algorithms and +12 skills", "A and B").
- *  " and " splits a name only when the whole is not already a known skill. */
+ *  Only rendered text is split (on commas, and on " and " when the whole is
+ *  not already a known skill); an array holds whole names ("Continuous
+ *  Integration and Continuous Delivery (CI/CD)" is one skill). */
 export function jobSkillNames(v: unknown, known?: SkillBag): string[] {
   const parts: string[] = [];
-  const pieces = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+  const rendered = typeof v === "string";
+  const pieces = Array.isArray(v) ? v : rendered ? [v] : [];
   for (const p of pieces) {
     const s = clean(typeof p === "string" ? p : p && typeof p === "object" ? (p as { name?: unknown }).name : null);
     if (!s) continue;
     const trimmed = s.replace(/\s*(,|\band\b)?\s*\+\s*\d+\s+skills?\s*$/i, "").trim();
+    if (!rendered) {
+      if (trimmed) parts.push(trimmed);
+      continue;
+    }
     for (const piece of trimmed.split(/\s*,\s*/)) {
       if (!piece) continue;
       if (/\s+and\s+/i.test(piece) && !(known && known.has(piece))) parts.push(...piece.split(/\s+and\s+/i));
@@ -390,6 +423,8 @@ export function normalizeEmail(raw: unknown): string | null {
 export function normalizePhone(raw: unknown): string | null {
   if (typeof raw !== "string" && typeof raw !== "number") return null;
   let s = String(raw).trim().replace(/\s*(ext\.?|extension|x|#)\s*\d+\s*$/i, "");
+  // A number stored as a spreadsheet float ("14155551234.0"): the fraction is not a digit of it.
+  s = s.replace(/^(\+?\d{7,})\.\d+$/, "$1");
   const plus = s.startsWith("+") || s.startsWith("00");
   if (s.startsWith("00")) s = s.slice(2);
   const digits = s.replace(/\D/g, "");
@@ -440,8 +475,10 @@ function contactBase(kind: PersonContact["kind"], raw: unknown, value_normalized
     subresult: null,
     verifier: null,
     verified_at: null,
+    verification_raw: null,
     legacy_email_id: null,
     legacy_email_ids: [],
+    legacy_primary: false,
   };
 }
 
@@ -472,7 +509,43 @@ export function githubContact(raw: unknown, fields: Partial<PersonContact> = {})
   return { ...contactBase("github", s, handle, "unknown"), ...fields };
 }
 
-const DETAIL_RANK = (c: PersonContact): number => (c.is_manual ? 0 : c.source_detail === "directory_primary" ? 1 : /:primary$/.test(c.source_detail || "") ? 2 : 3);
+/** A personal website (a URL or a bare domain), or a GitHub profile as a
+ *  github contact; null for anything that is not a web address. The form:
+ *  lower case, no scheme, no "www.", no trailing slash. */
+export function websiteContact(raw: unknown, fields: Partial<PersonContact> = {}): PersonContact | null {
+  const s = clean(raw);
+  if (!s || /\s/.test(s) || s.includes("@")) return null;
+  if (/github\.com\/[A-Za-z0-9-]+/i.test(s)) return githubContact(s, fields);
+  const v = s.toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/^www\./, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/.test(v)) return null;
+  return { ...contactBase("website", s, v, "unknown"), ...fields };
+}
+
+/** Addresses written in free text (an About section): each once, in order. */
+export function emailsInText(text: unknown): string[] {
+  if (typeof text !== "string" || !text.includes("@")) return [];
+  const out: string[] = [];
+  for (const m of text.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g)) {
+    const e = normalizeEmail(m[0].replace(/\.+$/, ""));
+    if (e && !out.includes(e)) out.push(e);
+  }
+  return out;
+}
+
+/** A verifier's raw response as JSON: an object or array as it is, a JSON
+ *  string parsed, anything else null. */
+export function verificationRawOf(v: unknown): Record<string, unknown> | unknown[] | null {
+  if (v && typeof v === "object") return v as Record<string, unknown> | unknown[];
+  if (typeof v !== "string" || !/^\s*[[{]/.test(v)) return null;
+  try {
+    const parsed = JSON.parse(v);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const DETAIL_RANK = (c: PersonContact): number => (c.is_manual ? 0 : c.source_detail === "directory_primary" ? 1 : c.legacy_primary ? 2 : 3);
 const NEGATIVE: ContactStatus[] = ["removed", "do_not_use", "bounced"];
 /** One contact per (kind, normalized value), in first-seen order. The newest
  *  check wins (verified_at); a recruiter's own entry decides its status; a
@@ -514,38 +587,55 @@ export function mergeContacts(list: (PersonContact | null | undefined)[]): Perso
       subresult: newest?.subresult ?? null,
       verifier: newest?.verifier ?? null,
       verified_at: newest?.verified_at ?? null,
+      verification_raw: newest?.verification_raw ?? null,
       legacy_email_id: ids[0] ?? null,
       legacy_email_ids: ids,
+      legacy_primary: g.some((c) => c.legacy_primary),
     });
   }
   return out;
 }
 
-/** Contacts in the order the writer ranks them (the save_person rule), for
- *  checks and the before/after page: the recruiter's choice, the directory's
- *  primary, verified personal, verified business, risky, unverified; never
- *  an invalid, claimed, removed or never-primary one. Phones: recruiter,
- *  directory, mobile, the rest. Ties go to the address the old tables
- *  marked primary (source_detail ending ':primary'), then to the first
- *  seen. The SQL's rank is the authority. */
+/** An email check as the SQL classes it (tt_email_check_class): bad | good | risky | none. */
+export function checkClass(quality: unknown, result: unknown): "bad" | "good" | "risky" | "none" {
+  const q = typeof quality === "string" ? quality.toLowerCase() : null;
+  const r = typeof result === "string" ? result.toLowerCase() : null;
+  if ((q && ["bad", "invalid"].includes(q)) || (r && ["invalid", "bad", "bounced", "disposable"].includes(r))) return "bad";
+  const goodResult = (x: string | null) => !!x && ["ok", "valid", "deliverable", "replied"].includes(x);
+  if ((q && ["good", "ok", "valid"].includes(q) && (r === null || goodResult(r))) || (q === null && goodResult(r))) return "good";
+  if ((q && ["risky", "unknown", "catch_all", "accept_all"].includes(q)) || (r && ["catch_all", "unknown", "risky", "accept_all"].includes(r))) return "risky";
+  return "none";
+}
+
+/** Contacts in the order the writer ranks them: the same rule as the SQL
+ *  (person_contact_ranks), for checks and the before/after page. Emails:
+ *  the recruiter's choice, the directory's primary, verified personal,
+ *  verified business, other verified, risky, unverified; never an invalid,
+ *  claimed, removed or never-primary one. Phones: recruiter, directory,
+ *  mobile, the rest. Within a tier: personal first, then the address the old
+ *  tables marked primary, then the newest check, then the first seen. The
+ *  SQL's rank is the authority. */
 export function rankedContacts(contacts: PersonContact[], kind: "email" | "phone"): PersonContact[] {
   const eligible = contacts.filter((c) => c.kind === kind && c.status === "active" && !c.never_primary);
-  const good = (c: PersonContact) => ["good", "ok"].includes(String(c.quality).toLowerCase()) && !["catch_all", "unknown", "risky"].includes(String(c.result).toLowerCase());
-  const risky = (c: PersonContact) => ["risky", "unknown"].includes(String(c.quality).toLowerCase()) || ["catch_all", "unknown", "risky"].includes(String(c.result).toLowerCase());
-  const score = (c: PersonContact): number => {
+  const tier = (c: PersonContact): number => {
     if (c.is_manual) return 0;
     if (kind === "phone") return String(c.source_detail || "").startsWith("directory") ? 1 : c.label === "mobile" ? 2 : 3;
     if (c.source_detail === "directory_primary") return 1;
-    if (good(c) && c.label === "personal") return 2;
-    if (good(c)) return 3;
-    if (risky(c)) return 4;
-    return 5;
+    const k = checkClass(c.quality, c.result);
+    if (k === "good") return c.label === "personal" ? 2 : c.label === "business" ? 3 : 4;
+    return k === "risky" ? 5 : 6;
   };
-  // Among equals, the address the old tables marked primary first (what the Network shows today), then first seen.
-  const legacyPrimary = (c: PersonContact) => (/:primary$/.test(c.source_detail || "") ? 0 : 1);
+  const time = (v: string | null) => (v ? Date.parse(v) || 0 : 0);
   return eligible
-    .map((c, i) => ({ c, i, s: score(c) }))
-    .sort((a, b) => a.s - b.s || legacyPrimary(a.c) - legacyPrimary(b.c) || a.i - b.i)
+    .map((c, i) => ({ c, i, t: tier(c) }))
+    .sort(
+      (a, b) =>
+        a.t - b.t ||
+        Number(b.c.label === "personal") - Number(a.c.label === "personal") ||
+        Number(!!b.c.legacy_primary) - Number(!!a.c.legacy_primary) ||
+        time(b.c.verified_at) - time(a.c.verified_at) ||
+        a.i - b.i
+    )
     .map((x) => x.c);
 }
 
@@ -579,9 +669,10 @@ export function linkedinUrnOf(v: unknown): string | null {
   return /^ACo[A-Za-z0-9_-]{10,}$/.test(s) ? s : null;
 }
 
-/** LinkedIn username from a profile URL (/in/<name>), lower case. */
+/** LinkedIn username from a profile URL (/in/<name>), lower case. A ";" or
+ *  "," ends it (some stored URLs carry "…/in/<name>; <address>"). */
 export function linkedinUsernameOf(url: unknown): string | null {
-  const m = typeof url === "string" ? url.match(/linkedin\.com\/in\/([^/?#\s]+)/i) : null;
+  const m = typeof url === "string" ? url.match(/linkedin\.com\/in\/([^/?#\s;,]+)/i) : null;
   const u = m ? safeDecode(m[1]).trim().toLowerCase() : "";
   return u || null;
 }
@@ -636,7 +727,10 @@ export function makeHeader(h: Partial<Record<keyof PersonHeader, unknown>>): Per
 }
 
 /** The doc with its source record completed (payload hash, parser version)
- *  and one identity per (kind, value). */
+ *  and one identity per (kind, value). A list the source has nothing for is
+ *  left out (undefined), not sent empty: save_person treats a missing list as
+ *  "not asserted" and leaves the person's list as it is, while an empty one
+ *  would empty it. */
 export function assembleDoc(args: {
   candidate_id: string;
   mode: PersonDoc["mode"];
@@ -655,21 +749,26 @@ export function assembleDoc(args: {
     const k = `${i.kind}|${i.value}`;
     return !seen.has(k) && !!seen.add(k);
   });
+  const list = <T>(v: T[] | undefined): T[] | undefined => (v && v.length ? v : undefined);
   const content: Omit<PersonDoc, "source"> = {
     candidate_id: args.candidate_id,
     mode: args.mode,
     identities,
     header: args.header,
-    jobs: args.jobs ?? [],
-    educations: args.educations ?? [],
-    skills: args.skills ?? [],
+    jobs: list(args.jobs),
+    educations: list(args.educations),
+    skills: list(args.skills),
     contacts: args.contacts ?? [],
   };
   // tier_list_version: which lists.ts version graded the company and school tiers in this doc
   // (save_person stamps it on the companies/schools rows it tiers). Not part of the payload hash:
   // a list edit that changes no tier leaves the doc the same.
   const source: PersonSource = { ...args.source, payload_hash: payloadHash(content, args.source), parser_version: PARSER_VERSION, tier_list_version: LISTS_VERSION };
-  return { candidate_id: content.candidate_id, mode: content.mode, source, identities, header: content.header, jobs: content.jobs, educations: content.educations, skills: content.skills, contacts: content.contacts };
+  const doc: PersonDoc = { candidate_id: content.candidate_id, mode: content.mode, source, identities, header: content.header, contacts: content.contacts };
+  if (content.jobs) doc.jobs = content.jobs;
+  if (content.educations) doc.educations = content.educations;
+  if (content.skills) doc.skills = content.skills;
+  return doc;
 }
 
 /** Runs a converter that caps its input at 25 items and treats item 0 as

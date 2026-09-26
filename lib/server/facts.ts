@@ -621,8 +621,10 @@ export function profileFacts(args: {
 
 export async function fetchExperiences(candidateId: string): Promise<ExperienceRow[]> {
   try {
+    // Only syncExperiences' rows: the person writer (migration 072) keeps its
+    // own rows here too (source 'person', removed ones included).
     const res = await sbRest(
-      `candidate_experiences?candidate_id=eq.${candidateId}&select=title,company_name,employment_type,start_month,start_year,end_month,end_year,is_current,duration_text,skills,description,sort_order&order=sort_order.asc`
+      `candidate_experiences?candidate_id=eq.${candidateId}&source=eq.harvest&select=title,company_name,employment_type,start_month,start_year,end_month,end_year,is_current,duration_text,skills,description,sort_order&order=sort_order.asc`
     );
     return res.ok ? await res.json() : [];
   } catch {

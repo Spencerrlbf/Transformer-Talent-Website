@@ -217,10 +217,171 @@ check("directory: lists, identities, contacts", () => {
   assert.equal(docD.contacts.find((c) => c.kind === "phone").value_normalized, "+14155550134");
   assert.equal(docD.source.fetched_at, "2026-06-01T00:00:00.000Z");
 });
-check("directory: no Harvest copy means contacts only", () => {
+check("directory: no Harvest copy means contacts only, no list keys", () => {
   const d = fromDirectory(board, null, [], [], emails, [], CID);
   assert.equal(d.mode, "contacts_only");
-  assert.equal(d.jobs.length + d.educations.length + d.skills.length, 0);
+  assert.ok(!("jobs" in d) && !("educations" in d) && !("skills" in d));
+});
+check("directory: statuses by exact value", () => {
+  const c = lib.directoryCheck;
+  assert.deepEqual(c("Unverified"), { status: "active", quality: null, result: null, mapped: true });
+  assert.deepEqual(c("Unavailable"), { status: "active", quality: null, result: null, mapped: true });
+  assert.equal(c("Failed").status, "invalid");
+  assert.equal(c("Failed", { provider_result: "disposable" }).result, "disposable");
+  assert.deepEqual(c("Replied"), { status: "active", quality: "good", result: "replied", mapped: true });
+  assert.deepEqual(c("Risky", { provider_result: "catch_all" }), { status: "active", quality: "risky", result: "catch_all", mapped: true });
+  assert.equal(c("Verified", { provider_result: "ok" }).quality, "good");
+  assert.equal(c("Bounced").status, "bounced");
+  assert.equal(c("Risky", { can_use: false }).status, "active");
+  assert.equal(c("Something new").mapped, false);
+});
+check("directory: the board's fallback primary is not the directory's primary", () => {
+  const fallback = [{ normalized: "first@example.org", classification: "personal", verification: { status: "Failed", provider_result: "invalid" } }];
+  const d = fromDirectory({ ...board, primary_email: "first@example.org" }, null, [], [], fallback, [], CID);
+  const e = d.contacts.find((x) => x.value_normalized === "first@example.org");
+  assert.equal(e.source_detail, "directory");
+  assert.equal(e.status, "invalid");
+  const unv = [{ normalized: "first@example.org", verification: { status: "Unverified" } }];
+  assert.equal(fromDirectory({ ...board, primary_email: "first@example.org" }, null, [], [], unv, [], CID).contacts[0].source_detail, "directory");
+  const marked = [{ normalized: "first@example.org", verification: { status: "Unverified", primary: true } }];
+  assert.equal(fromDirectory({ ...board, primary_email: "first@example.org" }, null, [], [], marked, [], CID).contacts[0].source_detail, "directory_primary");
+});
+check("directory: phones read under any column name", () => {
+  const d = fromDirectory(board, null, [], [], [], [{ value_text: "4155550134" }, { number: "+44 20 7946 0000" }], CID);
+  assert.deepEqual(d.contacts.filter((c) => c.kind === "phone").map((c) => c.value_normalized).sort(), ["+14155550134", "+442079460000"]);
+});
+
+// ---------- review fixes: the old import ----------
+check("legacy: a current title and company with no job list become one job", () => {
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", current_title: "Staff Engineer", current_company: "Example Corp" }, [], []);
+  assert.equal(d.jobs.length, 1);
+  assert.equal(d.jobs[0].is_current, true);
+  assert.equal(d.jobs[0].company.identity, "n:example");
+  assert.equal(project(d).current_title, "Staff Engineer");
+  assert.ok(!("educations" in d) && !("skills" in d), "empty lists are left out");
+});
+check("legacy: a newer current title than the list's ended jobs leads", () => {
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", current_title: "Director", current_company: "New Co",
+    work_experience: [{ title: "Engineer", company: "Old Co", start_date: { year: 2015 }, end_date: { year: 2020 } }] }, [], []);
+  assert.deepEqual(d.jobs.map((j) => j.title), ["Director", "Engineer"]);
+  const same = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", current_title: "Engineer", current_company: "Old Co",
+    work_experience: [{ title: "Engineer", company: "Old Co", start_date: { year: 2015 }, end_date: { year: 2020 } }] }, [], []);
+  assert.equal(same.jobs.length, 1, "a title the list names adds nothing");
+});
+check("legacy: username with an address pasted in comes from the URL", () => {
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", linkedin_username: "test-person-9; someone@example.org", linkedin_url: "https://www.linkedin.com/in/test-person-9/" }, [], []);
+  assert.deepEqual(d.identities.filter((i) => i.kind === "linkedin_username").map((i) => i.value), ["test-person-9"]);
+  const noUrl = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", linkedin_username: "test-person-9; someone@example.org" }, [], []);
+  assert.deepEqual(noUrl.identities.map((i) => i.value), ["test-person-9"]);
+});
+check("legacy: raw skills joined by line breaks are split", () => {
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", linkedin_data: { data: { basic_info: {}, experience: [], skills: ["Kubernetes\nTerraform\nSAFe Agilist", "Go"] } } }, [], []);
+  assert.deepEqual(d.skills.map((s) => s.key), ["kubernetes", "terraform", "safe agilist", "go"]);
+});
+check("legacy: camel-shape list shorter than fullPositions uses fullPositions", () => {
+  const pos = [{ title: "Engineer", companyName: "Gamma", companyId: 555, start: { year: 2020, month: 1 }, end: { year: 0 } }];
+  const full = [...pos, { title: "Intern", companyName: "Gamma", companyId: 555, start: { year: 2019, month: 6 }, end: { year: 2019, month: 9 } }];
+  const d = fromLegacyImport({ id: CID, created_at: "2025-12-10T00:00:00Z", work_experience: pos, linkedin_data: { urn: "ACoAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", position: pos, fullPositions: full } }, [], []);
+  assert.deepEqual(d.jobs.map((j) => j.title), ["Engineer", "Intern"]);
+});
+check("legacy: a rewritten row's education lines are the list, enriched from the raw JSON", () => {
+  const rawEdu = { data: { basic_info: {}, experience: [], education: [
+    { school: "Example State University", school_id: "999", degree_name: "Bachelor of Science - BS", start_date: { year: 2014 }, end_date: { year: 2018 } },
+    { school: "Old Academy", degree_name: "Certificate" }] } };
+  const lines = "Example State University - Bachelor of Science - BS\nExample High School";
+  const rewritten = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", source: "directory", education: lines, linkedin_data: rawEdu }, [], []);
+  assert.deepEqual(rewritten.educations.map((e) => e.school.name), ["Example State University", "Example High School"]);
+  assert.equal(rewritten.educations[0].school.identity, "li:999");
+  assert.equal(rewritten.educations[0].end_year, 2018);
+  const untouched = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", source: "LinkedIn", linkedin_enrichment_date: "2025-10-06T00:00:00Z", education: lines, linkedin_data: rawEdu }, [], []);
+  assert.deepEqual(untouched.educations.map((e) => e.school.name), ["Example State University", "Old Academy", "Example High School"]);
+});
+check("legacy: rewritten lines: a joined line, a second degree, a longer name", () => {
+  const rawEdu = { data: { basic_info: {}, experience: [], education: [
+    { school: "Example Institute of Technology", school_id: "901", degree_name: "BS", end_date: { year: 2010 } },
+    { school: "Example Accelerator", school_id: "902", end_date: { year: 2015 } },
+    { school: "Sample University", school_id: "903", degree_name: "BS", end_date: { year: 2005 } },
+    { school: "Sample University", school_id: "903", degree_name: "MS", end_date: { year: 2007 } },
+    { school: "Other College", school_id: "904", end_date: { year: 2001 } }] } };
+  const lines = "Example Accelerator, Example Institute of Technology\nSample University - MS\nOther College Springfield";
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", source: "directory", education: lines, linkedin_data: rawEdu }, [], []);
+  assert.deepEqual(d.educations.map((e) => e.school.identity), ["li:901", "li:902", "li:903", "li:904", "li:903"]);
+  assert.ok(d.educations.every((e) => e.end_year), "every school keeps its years");
+  assert.equal(d.educations[2].degree, "MS");
+});
+check("legacy: a lone education year is the end year", () => {
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", linkedin_data: { data: { basic_info: {}, experience: [], education: [{ school: "Example U", duration: "2013" }] } } }, [], []);
+  assert.equal(d.educations[0].end_year, 2013);
+  assert.equal(d.educations[0].start_year, null);
+});
+check("legacy: an address in the About is kept, never primary", () => {
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z", profile_summary: "Reach me at Test.About@example.org." }, [], []);
+  const e = d.contacts.find((c) => c.value_normalized === "test.about@example.org");
+  assert.ok(e && e.never_primary && e.source_detail === "profile_about");
+});
+check("legacy: outreach bounces and replies are checks; old primary flag; raw verifier response", () => {
+  const rows = [
+    { id: "00000000-0000-4000-8000-0000000000e3", email_address: "bounced@example.org", email_type: "personal", quality: "good", result: "ok", verification_date: "2025-01-01T00:00:00Z", raw_response: '{"result":"ok","free":true,"role":false}' },
+    { id: "00000000-0000-4000-8000-0000000000e4", email_address: "replied@example.org", email_type: "personal", email_source: "primary", quality: "risky", result: "catch_all", verification_date: "2025-01-01T00:00:00Z" },
+  ];
+  const comms = [
+    { id: "c1", communication_type: "email", status: "bounced", email_used: rows[0].id, communication_date: "2025-03-01T00:00:00Z" },
+    { id: "c2", communication_type: "email", status: "replied", email_used: rows[1].id, communication_date: "2025-03-01T00:00:00Z", response_date: "2025-03-02T00:00:00Z" },
+    { id: "c3", communication_type: "email", status: "sent", email_used: rows[1].id, communication_date: "2025-04-01T00:00:00Z" },
+  ];
+  const d = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z" }, rows, [], comms);
+  const b = d.contacts.find((c) => c.value_normalized === "bounced@example.org");
+  const r = d.contacts.find((c) => c.value_normalized === "replied@example.org");
+  assert.equal(b.status, "bounced");
+  assert.deepEqual(b.verification_raw, null, "the newest check (the bounce) has no verifier JSON");
+  assert.equal(r.quality, "good");
+  assert.equal(r.result, "replied");
+  assert.equal(r.legacy_primary, true);
+  assert.equal(lib.rankedContacts(d.contacts, "email")[0].value_normalized, "replied@example.org");
+  const noComms = fromLegacyImport({ id: CID, created_at: "2025-10-05T00:00:00Z" }, rows, []);
+  assert.deepEqual(noComms.contacts.find((c) => c.value_normalized === "bounced@example.org").verification_raw, { result: "ok", free: true, role: false });
+});
+check("ranking: ties go to the old primary, as the SQL does", () => {
+  const e = (v, extra) => ({ kind: "email", value_raw: v, value_normalized: v, label: "personal", status: "active", never_primary: false, is_manual: false, source_detail: null, quality: "good", result: "ok", resultcode: null, subresult: null, verifier: null, verified_at: "2025-01-01T00:00:00Z", verification_raw: null, legacy_email_id: null, legacy_email_ids: [], legacy_primary: false, ...extra });
+  const order = lib.rankedContacts([e("a@example.org"), e("z@example.org", { legacy_primary: true }), e("b@example.org", { label: "business" })], "email").map((c) => c.value_normalized);
+  assert.deepEqual(order, ["z@example.org", "a@example.org", "b@example.org"]);
+});
+
+// ---------- review fixes: Harvest, normalisation, side roles ----------
+check("harvest: an empty section is left out of the doc", () => {
+  const d = fromHarvest({ ...harvest, experience: [], education: [] }, { id: "x", candidate_id: CID, created_at: "2026-09-20T08:00:00Z" });
+  assert.ok(!("jobs" in d) && !("educations" in d));
+  assert.ok(d.skills.length > 0);
+  const none = fromHarvest({ publicIdentifier: "test-person-002" }, { id: "x", candidate_id: CID, created_at: "2026-09-20T08:00:00Z" });
+  assert.ok(!("jobs" in none) && !("educations" in none) && !("skills" in none));
+});
+check("harvest: websites and an About address become contacts", () => {
+  const d = fromHarvest({ ...harvest, about: "Write to test.h@example.org", websites: ["https://github.com/test-person", "https://www.example.org/me/"] }, { id: "x", candidate_id: CID, created_at: "2026-09-20T08:00:00Z" });
+  assert.equal(d.contacts.find((c) => c.kind === "github").value_normalized, "test-person");
+  assert.equal(d.contacts.find((c) => c.kind === "website").value_normalized, "example.org/me");
+  assert.equal(d.contacts.find((c) => c.kind === "email").never_primary, true);
+});
+check("job skills: an array holds whole names; rendered text is split", () => {
+  const d = fromHarvest({ ...harvest, experience: [{ position: "Engineer", companyName: "Acme", startDate: { year: 2020 }, endDate: { text: "Present" }, skills: ["Continuous Integration and Continuous Delivery (CI/CD)"] }] }, { id: "x", candidate_id: CID, created_at: "2026-09-20T08:00:00Z" });
+  assert.deepEqual(d.jobs[0].skills, ["Continuous Integration and Continuous Delivery (CI/CD)"]);
+});
+check("phone: a spreadsheet float keeps its digits", () => {
+  assert.equal(normalizePhone("14155550134.0"), "+14155550134");
+  assert.equal(normalizePhone("4155550134.0"), "+14155550134");
+});
+check("side roles: judged on the title", () => {
+  const side = lib.isSideRoleTitle;
+  assert.equal(side("Hardware Engineer", "Mentor Graphics"), false);
+  assert.equal(side("Analyst", "The College Board"), false);
+  assert.equal(side("Product Director, Membership", "Example Co"), false);
+  assert.equal(side("AVP-Business Solutions Advisor", "Example Bank"), false);
+  assert.equal(side("Sr. Principal - AI & Cloud Advisory", "Example Co"), false);
+  assert.equal(side("Official Member", "Example Technology Council"), true);
+  assert.equal(side("Board Member", "Example Co"), true);
+  assert.equal(side("VP Engineering, Board Member", "Example Co"), true);
+  assert.equal(side("Advisor", "Example Fund"), true);
+  assert.equal(side("Member of Technical Staff", "Example Co"), false);
+  assert.equal(side(null, "Example Technology Council"), true);
 });
 
 // ---------- an application ----------

@@ -30,12 +30,19 @@
 //               description, raw
 //   emails      comms.emails for the contact: normalized, original_value,
 //               classification (personal | business | academic | unknown),
-//               verification jsonb { status: Verified | Risky | Unknown |
-//               Bounced | Invalid ..., primary, can_use, source, provider,
-//               result, checked_at, bounced_at }
+//               verification jsonb { status, primary, can_use, source,
+//               provider, provider_result, checked_at, bounced_at }. The
+//               status is reply-ops' (src/replyops/verify.py and friends):
+//               Verified (MillionVerifier ok), Risky (catch_all or unknown),
+//               Failed (invalid or disposable), Unavailable (the check could
+//               not run), Unverified (never checked), Unknown (an Airtable
+//               import with no check), Bounced, Replied (the person answered
+//               from it). can_use is derived from the status, not a
+//               do-not-contact flag.
 //   phones      comms.profile_facts where field = 'phone': value (jsonb
-//               text, 10 digits), provenance ('manual' | 'source'),
-//               recorded_at; a plain string is accepted too
+//               text, 10 digits; the runner adds value_text), provenance
+//               ('manual' | 'source'), recorded_at; rows of any other comms
+//               phone table; a plain string is accepted too
 // With no Harvest profile in the directory the doc carries contacts and the
 // name only (mode contacts_only): the directory's own title, school and
 // skills text is not LinkedIn-grade and never replaces the lists.
@@ -47,6 +54,7 @@ import {
   companyOf,
   emailContact,
   emailLabel,
+  emailsInText,
   finishEducations,
   finishJobs,
   isoOf,
@@ -62,6 +70,7 @@ import {
   phoneContact,
   schoolOf,
   SkillBag,
+  verificationRawOf,
   yearOf,
 } from "./normalize";
 
@@ -157,33 +166,67 @@ export interface DirectoryEmailRow {
   [column: string]: unknown;
 }
 
-export type DirectoryPhoneRow = string | { value?: unknown; phone?: unknown; provenance?: string | null; recorded_at?: string | Date | null; [column: string]: unknown };
+export type DirectoryPhoneRow =
+  | string
+  | { value_text?: unknown; value?: unknown; normalized?: unknown; phone?: unknown; number?: unknown; provenance?: string | null; recorded_at?: string | Date | null; [column: string]: unknown };
+
+/** The number a directory phone row holds, whatever the column is called
+ *  (the runner's knownPhones reads the same way). */
+export function directoryPhoneValue(p: DirectoryPhoneRow): unknown {
+  if (typeof p === "string") return p;
+  for (const k of ["value_text", "value", "normalized", "phone", "number"] as const) {
+    const v = p[k];
+    if (typeof v === "string" || typeof v === "number") return v;
+  }
+  return null;
+}
 
 /** The directory's Airtable record ids ("rec" + 14), as the sync reads them. */
 const recordIds = (v: unknown): string[] =>
   (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,\s]+/) : []).map((s) => String(s).trim()).filter((s) => /^rec[A-Za-z0-9]{14}$/.test(s));
 
-/** A directory verification status as the contact's check and status. */
-export function directoryCheck(statusText: unknown, v: Obj = {}): { status: PersonContact["status"]; quality: string | null; result: string | null } {
+/** The directory statuses that mean the address works. */
+const WORKS = new Set(["verified", "valid", "replied"]);
+/** Every status value the mapping below knows (anything else is reported as unmapped). */
+export const DIRECTORY_STATUSES = ["verified", "valid", "replied", "risky", "failed", "invalid", "bounced", "unavailable", "unverified", "unknown", ""];
+
+/** A directory verification status as the contact's check and status, by
+ *  exact value (a substring test would read "Unverified" as verified):
+ *    Verified / Valid -> active, good, the verifier's result (ok)
+ *    Replied          -> active, good, 'replied' (the strongest check)
+ *    Risky            -> active, risky, the verifier's result (catch_all | unknown)
+ *    Failed / Invalid -> invalid, bad (MillionVerifier invalid or disposable)
+ *    Bounced          -> bounced, bad
+ *    Unavailable / Unverified / Unknown / anything else -> active, not checked
+ *  can_use is not read: reply-ops derives it from the status. */
+export function directoryCheck(statusText: unknown, v: Obj = {}): { status: PersonContact["status"]; quality: string | null; result: string | null; mapped: boolean } {
   const s = String(statusText ?? v.status ?? "").trim().toLowerCase();
-  const result = clean(v.result) ?? (s || null);
-  if (v.bounced_at || /bounce/.test(s)) return { status: "bounced", quality: "bad", result };
-  if (/invalid|undeliverable|\bbad\b|disposable/.test(s)) return { status: "invalid", quality: "bad", result };
-  if (v.can_use === false || /do not|dnc|unsubscrib|opt.?out/.test(s)) return { status: "do_not_use", quality: null, result };
-  if (/verified|valid|deliverable|\bok\b|good/.test(s)) return { status: "active", quality: "good", result: clean(v.result) ?? "ok" };
-  if (/risky|catch|accept/.test(s)) return { status: "active", quality: "risky", result: clean(v.result) ?? "catch_all" };
-  return { status: "active", quality: null, result: s && s !== "unknown" ? result : null };
+  const provider = clean(v.provider_result)?.toLowerCase() ?? null;
+  const mapped = DIRECTORY_STATUSES.includes(s);
+  if (s === "bounced" || v.bounced_at) return { status: "bounced", quality: "bad", result: "bounced", mapped: true };
+  if (s === "failed" || s === "invalid") return { status: "invalid", quality: "bad", result: provider ?? "invalid", mapped };
+  if (s === "replied") return { status: "active", quality: "good", result: "replied", mapped };
+  if (s === "verified" || s === "valid") return { status: "active", quality: "good", result: provider ?? "ok", mapped };
+  if (s === "risky") return { status: "active", quality: "risky", result: provider ?? "risky", mapped };
+  return { status: "active", quality: null, result: null, mapped };
 }
 
-/** Every directory address with its type and check; the directory's primary is marked. */
+/** Every directory address with its type and check. The directory's primary
+ *  (source_detail 'directory_primary', ranked first) is the address it marks
+ *  primary; board.primary_email falls back to "a Verified one, else the
+ *  first", so it counts only when it is marked primary or it works (Verified
+ *  or Replied). */
 function directoryEmails(board: DirectoryBoardRow, emails: DirectoryEmailRow[]): (PersonContact | null)[] {
   const primary = normalizeEmail(board.primary_email);
   const rows = emails.map((r) => {
     const v = obj(r.verification) ?? {};
     const address = r.original_value ?? r.normalized ?? r.email ?? r.address;
-    return { r, v, norm: normalizeEmail(r.normalized ?? address), address };
+    return { r, v, norm: normalizeEmail(r.normalized ?? address), address, status: String(v.status ?? "").trim().toLowerCase() };
   });
-  const flagged = primary ?? rows.find((x) => x.v.primary === true || x.r.is_primary === true)?.norm ?? null;
+  const marked = rows.filter((x) => x.v.primary === true || x.r.is_primary === true).map((x) => x.norm);
+  const boardRow = rows.find((x) => x.norm === primary);
+  const boardCounts = !!primary && (marked.includes(primary) || WORKS.has(boardRow ? boardRow.status : String(board.email_status ?? "").trim().toLowerCase()));
+  const flagged = boardCounts ? primary : marked[0] ?? null;
   const out = rows.map(({ r, v, norm, address }) => {
     if (!norm) return null;
     const check = directoryCheck(v.status, v);
@@ -194,23 +237,25 @@ function directoryEmails(board: DirectoryBoardRow, emails: DirectoryEmailRow[]):
       result: check.result,
       verifier: clean(v.provider) ?? clean(v.source) ?? "directory",
       verified_at: isoOf(v.checked_at) ?? isoOf(v.verified_at) ?? isoOf(v.bounced_at),
+      verification_raw: verificationRawOf(r.verification),
       source_detail: norm === flagged ? "directory_primary" : "directory",
     });
   });
   // The board's primary is always carried, even when comms.emails lacks it.
-  if (primary && !rows.some((x) => x.norm === primary)) {
+  if (primary && !boardRow) {
     const check = directoryCheck(board.email_status);
-    out.unshift(emailContact(board.primary_email, { status: check.status, quality: check.quality, result: check.result, verifier: check.quality ? "directory" : null, source_detail: "directory_primary" }));
+    out.unshift(emailContact(board.primary_email, { status: check.status, quality: check.quality, result: check.result, verifier: check.quality ? "directory" : null, source_detail: flagged === primary ? "directory_primary" : "directory" }));
   }
   return out;
 }
 
 function directoryPhones(phones: DirectoryPhoneRow[]): (PersonContact | null)[] {
-  return phones.map((p) => {
-    const o = typeof p === "string" ? { value: p } : p;
-    const value = typeof o.value === "string" || typeof o.value === "number" ? o.value : o.phone;
-    return phoneContact(value, { source_detail: o.provenance === "manual" ? "directory_manual" : "directory" });
-  });
+  return phones.map((p) => phoneContact(directoryPhoneValue(p), { source_detail: typeof p === "object" && p.provenance === "manual" ? "directory_manual" : "directory" }));
+}
+
+/** How many of these rows carry a verification status the mapping does not know (a count for the log). */
+export function unmappedDirectoryStatuses(emails: DirectoryEmailRow[]): number {
+  return emails.filter((r) => !directoryCheck((obj(r.verification) ?? {}).status, obj(r.verification) ?? {}).mapped).length;
 }
 
 export function fromDirectory(
@@ -288,7 +333,8 @@ export function fromDirectory(
   );
 
   const skills = bag.list(jobs);
-  // Lists only from the directory's Harvest copy, and only when it has any.
+  // Lists only from the directory's Harvest copy, and each only when it has
+  // any: a list the copy lacks is left out of the doc, never sent empty.
   const lists = !!h && (jobs.length > 0 || educations.length > 0 || skills.length > 0);
 
   const linkedin = clean(h?.linkedin_url) || clean(boardRow.linkedin_url);
@@ -327,14 +373,16 @@ export function fromDirectory(
     },
     identities,
     header,
-    jobs: lists ? jobs : [],
-    educations: lists ? educations : [],
-    skills: lists ? skills : [],
+    jobs: lists ? jobs : undefined,
+    educations: lists ? educations : undefined,
+    skills: lists ? skills : undefined,
     contacts: mergeContacts([
       ...directoryEmails(boardRow, [...emails].sort((a, b) => byText(a.normalized ?? a.email ?? a.address, b.normalized ?? b.email ?? b.address) || byText(a.original_value, b.original_value))),
       ...directoryPhones([...phones].sort((a, b) => byText(typeof a === "string" ? a : a.value ?? a.phone, typeof b === "string" ? b : b.value ?? b.phone))),
       // Addresses on the directory's Harvest copy (Harvest has returned none so far).
       ...(Array.isArray(h?.emails) ? h!.emails : []).map((e) => emailContact(e, { source_detail: "directory_harvest" })),
+      // An address the person wrote in their About: kept, never primary on its own.
+      ...[...new Set([...emailsInText(raw?.about), ...emailsInText(h?.about)])].map((e) => emailContact(e, { never_primary: true, source_detail: "profile_about" })),
     ]),
   });
 }

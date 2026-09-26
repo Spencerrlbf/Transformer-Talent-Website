@@ -2,7 +2,10 @@
 // PersonDoc. The positions are read by spine.ts harvestToExperiences, the
 // converter the refresh and the fact engine already use, over the whole
 // list; the company ids, school ids and years the old candidates columns
-// dropped are kept. Harvest carries no e-mail addresses.
+// dropped are kept. Harvest carries no e-mail field; an address the person
+// wrote in their About is kept (never primary), and their listed websites
+// become website/GitHub contacts. A section the payload has nothing for
+// (no positions, say) is left out of the doc, so it never empties a list.
 import { harvestToExperiences } from "../spine";
 import type { PersonDoc, PersonEducation } from "./types";
 import {
@@ -10,6 +13,8 @@ import {
   clean,
   cleanLong,
   companyOf,
+  emailContact,
+  emailsInText,
   endorsementCount,
   finishEducations,
   finishJobs,
@@ -20,10 +25,13 @@ import {
   makeEducation,
   makeHeader,
   makeJob,
+  mergeContacts,
   monthOf,
   schoolOf,
   SkillBag,
+  spanYears,
   uncapped,
+  websiteContact,
   yearOf,
 } from "./normalize";
 
@@ -38,12 +46,6 @@ export interface HarvestLedgerRow {
   created_at: string;
   provider?: string | null;
   operation?: string | null;
-}
-
-/** "2016 - 2017" -> years. */
-function periodYears(t: unknown): { start: number | null; end: number | null } {
-  const m = typeof t === "string" ? t.match(/(\d{4})\s*[-–—]\s*(\d{4})?/) : null;
-  return m ? { start: yearOf(Number(m[1])), end: m[2] ? yearOf(Number(m[2])) : null } : { start: null, end: null };
 }
 
 /** The Harvest skills list and topSkills, first-seen order. */
@@ -98,7 +100,7 @@ export function harvestEducations(payload: Obj): PersonEducation[] {
       if (!school) return null;
       const start = obj(ed.startDate);
       const end = obj(ed.endDate);
-      const span = periodYears(ed.period);
+      const span = spanYears(ed.period);
       return makeEducation({
         school,
         degree: clean(ed.degree),
@@ -129,6 +131,8 @@ export function harvestHeader(payload: Obj) {
   });
 }
 
+const hasItems = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
+
 export function fromHarvest(payload: Record<string, unknown>, ledgerRow: HarvestLedgerRow, candidateId?: string): PersonDoc {
   const p = (obj(payload) ?? {}) as Obj;
   const bag = new SkillBag();
@@ -136,6 +140,8 @@ export function fromHarvest(payload: Record<string, unknown>, ledgerRow: Harvest
   const { jobs } = finishJobs(harvestJobs(p, bag));
   for (const j of jobs) for (const s of j.skills) bag.add(s);
   const { educations } = finishEducations(harvestEducations(p));
+  // A section the pull returned empty is not asserted (the live refresh never blanks a column either).
+  const hasSkills = hasItems(p.skills) || hasItems(p.topSkills);
   const urn = linkedinUrnOf(p.id);
   const username = clean(p.publicIdentifier)?.toLowerCase() ?? linkedinUsernameOf(p.linkedinUrl);
   return assembleDoc({
@@ -154,9 +160,12 @@ export function fromHarvest(payload: Record<string, unknown>, ledgerRow: Harvest
       username ? { kind: "linkedin_username", value: username } : null,
     ],
     header: harvestHeader(p),
-    jobs,
-    educations,
-    skills: bag.list(jobs),
-    contacts: [],
+    jobs: hasItems(p.experience || p.experiences) ? jobs : undefined,
+    educations: hasItems(p.education) ? educations : undefined,
+    skills: hasSkills ? bag.list(jobs) : undefined,
+    contacts: mergeContacts([
+      ...emailsInText(p.about).map((e) => emailContact(e, { never_primary: true, source_detail: "profile_about" })),
+      ...(Array.isArray(p.websites) ? p.websites : []).map((w) => websiteContact(w, { source_detail: "harvest_websites" })),
+    ]),
   });
 }

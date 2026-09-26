@@ -62,11 +62,11 @@ export { reviewQueued, queuedCount } from "./review-queue";
 // The person writer's translators (lib/server/person/): every source's data
 // as one PersonDoc for save_person, and the projection back to today's
 // candidates columns (the 50-person trial's before/after page and checks).
-export { fromLegacyImport, legacyRaw, legacyFetchedAt, LEGACY_IMPORT_END } from "./person/fromLegacy";
-export type { LegacyCandidateRow, LegacyEmailRow, LegacyEmailV2Row, LegacyRaw } from "./person/fromLegacy";
+export { fromLegacyImport, legacyRaw, legacyFetchedAt, legacyUntouched, LEGACY_IMPORT_END } from "./person/fromLegacy";
+export type { LegacyCandidateRow, LegacyEmailRow, LegacyEmailV2Row, LegacyCommunicationRow, LegacyRaw } from "./person/fromLegacy";
 export { fromHarvest } from "./person/fromHarvest";
 export type { HarvestLedgerRow } from "./person/fromHarvest";
-export { fromDirectory, directoryCheck } from "./person/fromDirectory";
+export { fromDirectory, directoryCheck, directoryPhoneValue, unmappedDirectoryStatuses, DIRECTORY_STATUSES } from "./person/fromDirectory";
 export type { DirectoryBoardRow, DirectoryHarvestRow, DirectoryExperienceRow, DirectoryEducationRow, DirectoryEmailRow, DirectoryPhoneRow } from "./person/fromDirectory";
 export { fromApplication } from "./person/fromApplication";
 export type { ApplicationRow } from "./person/fromApplication";
@@ -92,6 +92,11 @@ export {
   realJobFirst,
   mergeContacts,
   rankedContacts,
+  checkClass,
+  emailsInText,
+  websiteContact,
+  spanYears,
   stableStringify,
 } from "./person/normalize";
+export { isSideRoleTitle } from "./spine";
 export type * from "./person/types";

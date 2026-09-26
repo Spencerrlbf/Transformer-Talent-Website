@@ -7,6 +7,7 @@
 // "School - Degree in Field" lines, every skill, the current job's title and
 // company, plus each position's employment type and a company reference.
 import { computeFacts, type ExperienceRow } from "../facts";
+import { cleanText, isClearSideRoleTitle, realJobIndex } from "../spine";
 import { poolEducation, poolExperiences, poolSkills, type PoolCandidate } from "../pool/profile";
 import type { PersonContact, PersonHeader } from "./types";
 import { isSideRole, rankedContacts } from "./normalize";
@@ -109,6 +110,11 @@ export interface Projection {
 const live = <T extends { removed_at?: string | null; sort_order?: number | null }>(rows: T[] | null | undefined): T[] =>
   (rows || []).filter((r) => r && !r.removed_at).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 const txt = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+/** One line, capped: the shapes harvestToPoolRecord writes (cleanText, then a length cap). */
+const line = (v: unknown, cap?: number): string | null => {
+  const t = cleanText(v);
+  return t && cap ? t.slice(0, cap) : t;
+};
 
 function ranked(contacts: ProjectContactIn[], kind: "email" | "phone"): string[] {
   const mine = contacts.filter((c) => c.kind === kind);
@@ -131,8 +137,10 @@ function ranked(contacts: ProjectContactIn[], kind: "email" | "phone"): string[]
     subresult: null,
     verifier: null,
     verified_at: c.verified_at ?? null,
+    verification_raw: null,
     legacy_email_id: null,
     legacy_email_ids: [],
+    legacy_primary: !!c.legacy_primary,
     kind: c.kind,
     value_normalized: c.value_normalized,
   })) as PersonContact[];
@@ -172,15 +180,18 @@ export function project(tables: ProjectionInput): Projection {
       is_current: current,
       start_date: j.start_year ? { year: j.start_year, month: j.start_month ? MONTH_NAMES[j.start_month - 1] : null } : null,
       end_date: j.end_year && !current ? { year: j.end_year, month: j.end_month ? MONTH_NAMES[j.end_month - 1] : null } : null,
-      description: txt(j.description),
+      // Today's columns hold descriptions as one line (harvestToPoolRecord's cleanText).
+      description: line(j.description),
       company_linkedin_url: txt(j.company_linkedin_url) ?? txt(j.company?.linkedin_url),
       employment_type: txt(j.employment_type),
       company_ref: txt(j.company_id) ?? txt(j.company?.identity),
     };
   });
 
+  // The stored order already puts the real job first (realJobFirst); the same rule again for a list that did not come through it.
   const side = (j: ProjectJobIn) => (typeof j.is_side_role === "boolean" ? j.is_side_role : isSideRole(j.title, companyName(j)));
-  const current = jobs.find((j) => j.is_current === true && !side(j)) ?? jobs[0] ?? null;
+  const at = realJobIndex(jobs.map((j) => ({ ...j, is_current: j.is_current === true })), side, (j) => side(j) && isClearSideRoleTitle(j.title ?? null, companyName(j)));
+  const current = jobs[at] ?? jobs[0] ?? null;
 
   const schools = edus.map((e) => ({ school: txt(e.school_name) ?? txt(e.school?.name), degree: txt(e.degree), field: txt(e.field_of_study), end: e.end_year ?? null })).filter((e) => !!e.school) as {
     school: string;
@@ -236,9 +247,9 @@ export function project(tables: ProjectionInput): Projection {
     previous_companies: previousCompanies(work_experience, current ? jobs.indexOf(current) : -1),
     career_years: careerYears,
     career_years_today_rule: todayYears,
-    headline: txt(h.headline),
-    profile_summary: txt(h.summary),
-    location: txt(h.location),
+    headline: line(h.headline, 500),
+    profile_summary: line(h.summary, 5000),
+    location: line(h.location, 200),
     profile_picture_url: txt(h.photo),
     email: emails[0] ?? null,
     phone: phones[0] ?? null,

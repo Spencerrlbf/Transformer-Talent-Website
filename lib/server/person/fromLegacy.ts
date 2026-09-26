@@ -16,6 +16,7 @@
 // at the same company. Schools come from the raw education when there is
 // one, else from the "School - Degree in Field" lines.
 import { poolEducation, poolExperiences, type PoolCandidate } from "../pool/profile";
+import { isClearSideRoleTitle } from "../spine";
 import type { ExperienceRow } from "../facts";
 import type { PersonContact, PersonDoc, PersonEducation, PersonIdentity, PersonJob } from "./types";
 import {
@@ -26,6 +27,7 @@ import {
   countryCodeOf,
   emailContact,
   emailLabel,
+  emailsInText,
   endorsementCount,
   finishEducations,
   finishJobs,
@@ -33,6 +35,7 @@ import {
   isoOf,
   jobSkillNames,
   linkedinUrnOf,
+  linkedinUsernameOf,
   makeEducation,
   makeHeader,
   makeJob,
@@ -44,8 +47,11 @@ import {
   phoneContact,
   schoolOf,
   SkillBag,
+  skillLines,
+  spanYears,
   statusFromCheck,
   uncapped,
+  verificationRawOf,
   yearOf,
 } from "./normalize";
 
@@ -120,6 +126,17 @@ export interface LegacyEmailV2Row {
   created_at?: string | null;
 }
 
+/** An outreach e-mail's outcome (candidate_communications): a bounce or a
+ *  reply, sent to one candidate_emails row (email_used). */
+export interface LegacyCommunicationRow {
+  id: string;
+  communication_type?: string | null;
+  status?: string | null;
+  email_used?: string | null;
+  communication_date?: string | null;
+  response_date?: string | null;
+}
+
 /** The old import stopped before the website's own LinkedIn refresh began
  *  (the Harvest ledger starts 2026-08-15): a row whose enrichment date is
  *  older than this, and that no directory sync relabelled, still holds the
@@ -160,7 +177,8 @@ export function legacyRaw(linkedinData: unknown): LegacyRaw {
       generation: "A",
       experience: objs(a.experience),
       education: objs(a.education),
-      profileSkills: arr(a.skills).map((s) => ({ name: s, endorsements: null })),
+      // One raw element can hold several skills, one per line.
+      profileSkills: arr(a.skills).flatMap(skillLines).map((s) => ({ name: s, endorsements: null })),
       topSkills: arr(bi.top_skills).filter((s): s is string => typeof s === "string"),
       urn: linkedinUrnOf(bi.urn),
       username: clean(bi.public_identifier)?.toLowerCase() ?? null,
@@ -209,16 +227,15 @@ function positionCompany(p: Obj) {
   };
 }
 
-/** A year span written as text ("2018 - 2022", "2016 – Present"). */
-function yearsFromText(t: unknown): { start: number | null; end: number | null } {
-  const m = typeof t === "string" ? t.match(/(\d{4})\s*[-–—]\s*(\d{4})?/) : null;
-  return m ? { start: yearOf(Number(m[1])), end: m[2] ? yearOf(Number(m[2])) : null } : { start: null, end: null };
-}
-
-/** The jobs: work_experience in either shape, else the raw JSON's positions. */
+/** The jobs: work_experience in either shape, else the raw JSON's positions.
+ *  A camel-shape stored list (companyName/start/end) is the import's copy of
+ *  generation B's "position" list; its "fullPositions" also holds the other
+ *  roles at the same employers, so when it is longer it is the list. */
 function legacyJobs(row: LegacyCandidateRow, raw: LegacyRaw, bag: SkillBag): PersonJob[] {
   const stored = objs(row.work_experience);
-  const positions = stored.length ? stored : raw.experience;
+  const camel = stored.length > 0 && stored.some((p) => "companyName" in p || "start" in p);
+  const useFull = camel && raw.generation === "B" && raw.experience.length > stored.length;
+  const positions = stored.length && !useFull ? stored : raw.experience;
   const rows: ExperienceRow[] = uncapped<Obj, ExperienceRow>(positions, (items) => poolExperiences({ id: row.id, work_experience: items } as PoolCandidate), {});
 
   // Company identity and position details by company name from the raw JSON,
@@ -226,7 +243,7 @@ function legacyJobs(row: LegacyCandidateRow, raw: LegacyRaw, bag: SkillBag): Per
   // JSON gives two different LinkedIn identities is left alone.
   const byName = new Map<string, Obj | null>();
   const byPosition = new Map<string, Obj>();
-  if (stored.length) {
+  if (stored.length && !useFull) {
     for (const p of raw.experience) {
       const c = companyOf(positionCompany(p));
       const n = normalizedName(c.name);
@@ -268,44 +285,126 @@ function legacyJobs(row: LegacyCandidateRow, raw: LegacyRaw, bag: SkillBag): Per
   });
 }
 
-/** Schools with ids and years from the raw JSON, else the education lines. */
+/** A school name as a matching key between the record's lines and the raw
+ *  JSON, which spell names a little differently ("University of Illinois at
+ *  Urbana-Champaign" / "University of Illinois Urbana-Champaign",
+ *  "... Technologies" / "... Technology"): the normalised words without
+ *  of/at/the/and/in/for, a plural "s" off, in sorted order. */
+function schoolKey(name: unknown): string | null {
+  const n = normalizedName(typeof name === "string" ? name : null);
+  if (!n) return null;
+  const words = n.split(" ").filter((w) => !["of", "at", "the", "and", "in", "for", "de"].includes(w)).map((w) => (w.length > 4 && w.endsWith("ies") ? `${w.slice(0, -3)}y` : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w));
+  return words.length ? [...words].sort().join(" ") : n;
+}
+
+/** Is the row still the old import's, lists and all? (Not relabelled by a
+ *  directory sync and not refreshed since the import ended.) */
+export function legacyUntouched(row: LegacyCandidateRow): boolean {
+  const led = isoOf(row.linkedin_enrichment_date);
+  const relabelled = row.source === "directory" || row.source === "airtable_sync";
+  return !relabelled && !!led && led < LEGACY_IMPORT_END;
+}
+
+/** One raw education entry (either generation) as a doc education, with the
+ *  school's LinkedIn id and the years; `line` overrides the school name,
+ *  degree and field (the record's own text). */
+function rawEducation(raw: LegacyRaw, ed: Obj, i: number, line?: { schoolName: string; degree: string | null; fieldOfStudy: string | null }): PersonEducation | null {
+  const a = raw.generation === "A";
+  const school = schoolOf(
+    a
+      ? { name: line?.schoolName ?? ed.school, linkedin_org_id: ed.school_id, linkedin_url: ed.school_linkedin_url, logo_url: ed.school_logo_url }
+      : { name: line?.schoolName ?? ed.schoolName, linkedin_org_id: ed.schoolId, linkedin_url: ed.url, logo_url: objs(ed.logo)[0]?.url }
+  );
+  if (!school) return null;
+  const start = obj(a ? ed.start_date : ed.start);
+  const end = obj(a ? ed.end_date : ed.end);
+  const span = spanYears(ed.duration);
+  return makeEducation({
+    school,
+    degree: clean(a ? ed.degree_name ?? ed.degree : ed.degree) ?? clean(line?.degree),
+    field_of_study: clean(a ? ed.field_of_study : ed.fieldOfStudy) ?? clean(line?.fieldOfStudy),
+    start_year: yearOf(start?.year) ?? span.start,
+    start_month: monthOf(start?.month),
+    end_year: yearOf(end?.year) ?? span.end,
+    end_month: monthOf(end?.month),
+    description: cleanLong(ed.description),
+    activities: cleanLong(ed.activities),
+    sort_order: i,
+  });
+}
+
+/** Two school keys name the same school: equal, or one's words (at least
+ *  two) all in the other's ("Anna University" / "Anna University Chennai"). */
+function sameSchool(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const A = new Set(a.split(" "));
+  const B = new Set(b.split(" "));
+  const [small, big] = A.size <= B.size ? [A, B] : [B, A];
+  return small.size >= 2 && [...small].every((w) => big.has(w));
+}
+
+/** Schools. The record's education lines are what the site shows today; the
+ *  raw JSON has the school ids and years. While the row is still the old
+ *  import's, the raw entries are the list (the lines were made from them),
+ *  plus any line naming a school the raw JSON lacks. Once a directory sync
+ *  or a refresh rewrote the row, its lines are the list: each line takes the
+ *  id, years and degree of a raw entry at the same school (same degree
+ *  first); a line that joins several schools ("A, B") becomes their raw
+ *  entries; another degree the raw JSON has at a school the lines still name
+ *  is kept; a school only the raw JSON still names is not brought back. */
 function legacyEducations(row: LegacyCandidateRow, raw: LegacyRaw): PersonEducation[] {
-  if (raw.education.length) {
-    return raw.education
-      .map((ed, i) => {
-        const a = raw.generation === "A";
-        const school = schoolOf(
-          a
-            ? { name: ed.school, linkedin_org_id: ed.school_id, linkedin_url: ed.school_linkedin_url, logo_url: ed.school_logo_url }
-            : { name: ed.schoolName, linkedin_org_id: ed.schoolId, linkedin_url: ed.url, logo_url: objs(ed.logo)[0]?.url }
-        );
-        if (!school) return null;
-        const start = obj(a ? ed.start_date : ed.start);
-        const end = obj(a ? ed.end_date : ed.end);
-        const span = yearsFromText(ed.duration);
-        return makeEducation({
-          school,
-          degree: clean(a ? ed.degree_name ?? ed.degree : ed.degree),
-          field_of_study: clean(a ? ed.field_of_study : ed.fieldOfStudy),
-          start_year: yearOf(start?.year) ?? span.start,
-          start_month: monthOf(start?.month),
-          end_year: yearOf(end?.year) ?? span.end,
-          end_month: monthOf(end?.month),
-          description: cleanLong(ed.description),
-          activities: cleanLong(ed.activities),
-          sort_order: i,
-        });
-      })
-      .filter((e): e is PersonEducation => !!e);
+  const lines = poolEducation(row as PoolCandidate);
+  const ok = (e: PersonEducation | null | undefined): e is PersonEducation => !!e;
+  const lineOnly = (l: (typeof lines)[number], i: number) => {
+    const school = schoolOf({ name: l.schoolName });
+    return school
+      ? makeEducation({ school, degree: clean(l.degree), field_of_study: clean(l.fieldOfStudy), start_year: null, start_month: null, end_year: null, end_month: null, description: null, activities: null, sort_order: i })
+      : null;
+  };
+  if (!raw.education.length) return lines.map(lineOnly).filter(ok);
+  const rawKeys = raw.education.map((ed) => schoolKey(raw.generation === "A" ? ed.school : ed.schoolName));
+  const rawDegree = (k: number) => normalizeTitle(clean(raw.generation === "A" ? raw.education[k].degree_name ?? raw.education[k].degree : raw.education[k].degree));
+  const matchesOf = (l: (typeof lines)[number]) => {
+    const key = schoolKey(l.schoolName);
+    return raw.education.map((_, k) => k).filter((k) => sameSchool(key, rawKeys[k]));
+  };
+  if (!lines.length || legacyUntouched(row)) {
+    const fromRaw = raw.education.map((ed, i) => rawEducation(raw, ed, i)).filter(ok);
+    const extra = lines.filter((l) => !matchesOf(l).length).map((l, i) => lineOnly(l, fromRaw.length + i)).filter(ok);
+    return [...fromRaw, ...extra];
   }
-  return poolEducation(row as PoolCandidate)
-    .map((e, i) => {
-      const school = schoolOf({ name: e.schoolName });
-      return school
-        ? makeEducation({ school, degree: clean(e.degree), field_of_study: clean(e.fieldOfStudy), start_year: null, start_month: null, end_year: null, end_month: null, description: null, activities: null, sort_order: i })
-        : null;
-    })
-    .filter((e): e is PersonEducation => !!e);
+  const used = new Set<number>();
+  const named = new Set<string | null>();
+  const out: (PersonEducation | null)[] = [];
+  for (const l of lines) {
+    const matches = matchesOf(l);
+    for (const k of matches) named.add(rawKeys[k]);
+    if (!matches.length) {
+      out.push(lineOnly(l, out.length));
+      continue;
+    }
+    if (new Set(matches.map((k) => rawKeys[k])).size > 1) {
+      // One line naming several schools: each school's own entries.
+      for (const k of matches) if (!used.has(k)) (used.add(k), out.push(rawEducation(raw, raw.education[k], out.length)));
+      continue;
+    }
+    const free = matches.filter((k) => !used.has(k));
+    const deg = normalizeTitle(clean(l.degree));
+    const pick = free.find((k) => rawDegree(k) === deg) ?? (!deg || free.every((k) => !rawDegree(k)) ? free[0] : undefined) ?? free.find((k) => !rawDegree(k));
+    if (pick !== undefined) {
+      used.add(pick);
+      out.push(rawEducation(raw, raw.education[pick], out.length, l));
+      continue;
+    }
+    // No entry for this degree: the line, with the school's LinkedIn identity from the raw JSON.
+    const e = rawEducation(raw, raw.education[matches[0]], out.length, l);
+    out.push(e ? makeEducation({ ...e, degree: clean(l.degree), field_of_study: clean(l.fieldOfStudy), start_year: null, start_month: null, end_year: null, end_month: null, description: null, activities: null }) : null);
+  }
+  raw.education.forEach((ed, k) => {
+    if (!used.has(k) && named.has(rawKeys[k])) out.push(rawEducation(raw, ed, out.length));
+  });
+  return out.filter(ok);
 }
 
 /** Every skill the row and the raw JSON name, first-seen order. */
@@ -333,8 +432,10 @@ const verifierOf = (raw: unknown, checked: boolean): string | null => {
   return checked ? "legacy_import" : null;
 };
 
-/** candidate_emails and candidate_emails_v2 rows as contacts, with their checks. */
-function legacyEmailContacts(v1: LegacyEmailRow[], v2: LegacyEmailV2Row[]): (PersonContact | null)[] {
+/** candidate_emails and candidate_emails_v2 rows as contacts, with their
+ *  checks; an outreach bounce or reply to a candidate_emails row is the
+ *  newest check of that address when it is newer than the verifier's. */
+function legacyEmailContacts(v1: LegacyEmailRow[], v2: LegacyEmailV2Row[], comms: LegacyCommunicationRow[]): (PersonContact | null)[] {
   const order = <T extends { is_primary?: boolean | null; created_at?: string | null; id: string }>(rows: T[]) =>
     [...rows].sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary) || String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || a.id.localeCompare(b.id));
   const one = (table: string, r: LegacyEmailRow | LegacyEmailV2Row, address: unknown, legacyId: string | null) => {
@@ -351,14 +452,42 @@ function legacyEmailContacts(v1: LegacyEmailRow[], v2: LegacyEmailV2Row[]): (Per
       subresult: clean(r.subresult),
       verifier: verifierOf(r.raw_response, checked),
       verified_at: isoOf(r.verification_date) ?? (checked ? isoOf(r.last_verification_attempt) : null),
+      verification_raw: verificationRawOf(r.raw_response),
       legacy_email_id: legacyId,
       legacy_email_ids: legacyId ? [legacyId] : [],
+      // What the Network treats as the person's primary today: is_primary, or an email_source of 'primary'.
+      legacy_primary: !!r.is_primary || String(r.email_source ?? "").toLowerCase() === "primary",
     });
   };
+  // The latest outreach outcome per candidate_emails row: bounced or replied.
+  const outcome = new Map<string, { status: string; at: string | null }>();
+  for (const c of comms) {
+    const status = String(c.status ?? "").toLowerCase();
+    if (!c.email_used || String(c.communication_type ?? "email").toLowerCase() !== "email" || !["bounced", "replied"].includes(status)) continue;
+    const at = isoOf(status === "replied" ? c.response_date ?? c.communication_date : c.communication_date);
+    const had = outcome.get(c.email_used);
+    if (!had || String(at ?? "") > String(had.at ?? "")) outcome.set(c.email_used, { status, at });
+  }
+  const outreach = v1.map((r) => {
+    const o = outcome.get(r.id);
+    if (!o) return null;
+    return emailContact(r.email_address, o.status === "bounced"
+      ? { status: "bounced", quality: "bad", result: "bounced", verifier: "outreach", verified_at: o.at, source_detail: "candidate_communications:bounced", legacy_email_id: r.id, legacy_email_ids: [r.id] }
+      : { status: "active", quality: "good", result: "replied", verifier: "outreach", verified_at: o.at, source_detail: "candidate_communications:replied", legacy_email_id: r.id, legacy_email_ids: [r.id] });
+  });
   return [
     ...order(v1).map((r) => one("candidate_emails", r, r.email_address, r.id)),
     ...order(v2).map((r) => one("candidate_emails_v2", r, r.email_normalized ?? r.email_raw, null)),
+    ...outreach,
   ];
+}
+
+/** A LinkedIn username as the old column holds it: the text before a ";"
+ *  (some rows carry "slug; address"), when it is a slug (no spaces, "@",
+ *  ":" or "/"; placeholders such as "xxxxx:" are not usernames). */
+function usernameOfColumn(v: unknown): string | null {
+  const t = typeof v === "string" ? v.split(";")[0].trim().toLowerCase() : "";
+  return t && /^[^\s,@:/?#]+$/u.test(t) ? t : null;
 }
 
 /** When the lists this row holds were true: the import date while the row
@@ -370,19 +499,59 @@ export function legacyFetchedAt(row: LegacyCandidateRow): string {
   return at ?? "1970-01-01T00:00:00.000Z";
 }
 
-export function fromLegacyImport(candidateRow: LegacyCandidateRow, legacyEmails: LegacyEmailRow[] = [], v2Emails: LegacyEmailV2Row[] = []): PersonDoc {
+/** The record's current title and company, as a job, when the list lacks
+ *  them: a person with a title and employer on the record but no position
+ *  list, or whose list's real job (the first, after ordering) has ended and
+ *  does not name that title (a later sync wrote the title). Needs an
+ *  employer (every job links to a company); a title that is clearly a side
+ *  role is added only when the list is empty. */
+function recordCurrentJob(row: LegacyCandidateRow, jobs: PersonJob[]): PersonJob | null {
+  const title = clean(row.current_title);
+  const company = clean(row.current_company);
+  if (!company) return null;
+  if (jobs.length) {
+    if (jobs[0].is_current) return null;
+    if (title && jobs.some((j) => normalizeTitle(j.title) === normalizeTitle(title))) return null;
+    if (!title && jobs.some((j) => normalizedName(j.company.name) === normalizedName(company))) return null;
+    if (isClearSideRoleTitle(title, company)) return null;
+  }
+  return makeJob({
+    title,
+    company: companyOf({ name: company }),
+    employment_type: null,
+    location: null,
+    description: null,
+    duration_text: null,
+    start_year: null,
+    start_month: null,
+    end_year: null,
+    end_month: null,
+    is_current: true,
+    skills: [],
+    sort_order: -1,
+  });
+}
+
+export function fromLegacyImport(
+  candidateRow: LegacyCandidateRow,
+  legacyEmails: LegacyEmailRow[] = [],
+  v2Emails: LegacyEmailV2Row[] = [],
+  communications: LegacyCommunicationRow[] = []
+): PersonDoc {
   const row = candidateRow;
   const raw = legacyRaw(row.linkedin_data);
 
   const bag = new SkillBag();
   legacyProfileSkills(row, raw, bag);
-  const { jobs } = finishJobs(legacyJobs(row, raw, bag));
+  const listed = legacyJobs(row, raw, bag);
+  const extra = recordCurrentJob(row, finishJobs(listed).jobs);
+  const { jobs } = finishJobs(extra ? [extra, ...listed] : listed);
   for (const j of jobs) for (const s of j.skills) bag.add(s);
   const { educations } = finishEducations(legacyEducations(row, raw));
 
   const c = row.contact && typeof row.contact === "object" ? row.contact : null;
   const contacts = mergeContacts([
-    ...legacyEmailContacts(legacyEmails, v2Emails),
+    ...legacyEmailContacts(legacyEmails, v2Emails, communications),
     emailContact(row.email, { source_detail: "candidates.email" }),
     phoneContact(row.phone, { source_detail: "candidates.phone" }),
     // A recruiter's curated contact: the chosen address and number lead.
@@ -390,12 +559,15 @@ export function fromLegacyImport(candidateRow: LegacyCandidateRow, legacyEmails:
     phoneContact(c?.phone, { is_manual: true, source_detail: "recruiter" }),
     githubContact(c?.github, { is_manual: true, source_detail: "recruiter" }),
     ...arr(c?.otherEmails).map((e) => emailContact(e, { source_detail: "recruiter_other" })),
-    // Only in the raw scrape: kept, never made primary on its own.
+    // Only in the raw scrape, or written in the person's own About: kept, never made primary on its own.
     emailContact(raw.email, { never_primary: true, source_detail: "linkedin_data" }),
+    ...[...emailsInText(row.profile_summary), ...emailsInText(raw.summary)].map((e) => emailContact(e, { never_primary: true, source_detail: "profile_about" })),
   ]);
 
+  // The username from the profile URL when there is one: the column sometimes carries more than the slug.
+  const username = linkedinUsernameOf(row.linkedin_url) ?? usernameOfColumn(row.linkedin_username);
   const identities: (PersonIdentity | null)[] = [
-    row.linkedin_username ? { kind: "linkedin_username", value: row.linkedin_username.trim().toLowerCase() } : null,
+    username ? { kind: "linkedin_username", value: username } : null,
     raw.urn ? { kind: "linkedin_urn", value: raw.urn } : null,
     row.airtable_id ? { kind: "airtable_id", value: row.airtable_id.trim() } : null,
     row.directory_contact_id ? { kind: "directory_contact_id", value: row.directory_contact_id } : null,

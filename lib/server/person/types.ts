@@ -144,19 +144,27 @@ export interface PersonContact {
   subresult: string | null;
   verifier: string | null;
   verified_at: string | null;
+  /** The verifier's own response (MillionVerifier's JSON, the directory's verification object). */
+  verification_raw: Record<string, unknown> | unknown[] | null;
   legacy_email_id: string | null;
   // Extra: every candidate_emails id the address came from (legacy_email_id is the first).
   legacy_email_ids: string[];
+  // Extra: the old tables marked it the person's primary (candidate_emails / _v2 is_primary,
+  // or email_source 'primary'). save_person breaks ties within a tier on it.
+  legacy_primary: boolean;
 }
 
+/** A list the source has nothing for is left out (undefined): save_person
+ *  then leaves the person's list as it is. A list that is present, even
+ *  empty, is the whole list. */
 export interface PersonDoc {
   candidate_id: string;
   mode: PersonDocMode;
   source: PersonSource;
   identities: PersonIdentity[];
   header: PersonHeader;
-  jobs: PersonJob[];
-  educations: PersonEducation[];
-  skills: PersonSkill[];
+  jobs?: PersonJob[];
+  educations?: PersonEducation[];
+  skills?: PersonSkill[];
   contacts: PersonContact[];
 }
