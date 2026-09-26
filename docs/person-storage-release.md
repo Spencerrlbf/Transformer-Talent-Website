@@ -57,3 +57,44 @@ and the service-only batch RPCs without changing fact precedence or projecting
 legacy candidate fields. Transient transport/lock failures get at most three
 attempts with backoff. Integrity errors stop the run, and a lost committed
 response can be replayed without incrementing the person's normalized revision.
+
+## Reconciliation and final accounting
+
+Dispatch the existing person-trial workflow at the reviewed commit with
+`backfill` containing `reconcile: true`, an explicit run-id/limit/batch-size, and
+`scope: all` for the full source scan. `scope: queue` drains captured writes and
+pending normalized revisions; `scope: directory` is a bounded directory scan.
+The dry-run default remains on. A complete, stable full scan is required before
+a queue-only pass can establish global completion. Resumption retains the
+original external-source boundary hash.
+
+Every source is reread and checked against normalized storage. Exact sources
+skip redundant saves. New dated sources go through the same writer; an altered
+historical snapshot with no trustworthy newer fact date is recorded as
+`review`, and its captured evidence stays pending. The runner never labels an
+automated old-writer change as a recruiter edit, changes fact dates to force
+precedence, or deletes event evidence. Older transient source snapshots are
+also inspected so a contact added and removed during migration is not silently
+forgotten. `person_reconcile_people` records the checked source hash, normalized
+revision, capture version and result. `person_reconcile_pending` includes both
+legacy changes and later normalized revisions.
+
+The directory fingerprint covers translated facts; historical `_v2` emails are
+read only. Matching observations at both scan boundaries are required. A changed
+external source requires another scan. This is a migration checkpoint, not a
+promise that outside systems will stop changing after it. Run final catch-up
+again before the later approved application cutover.
+
+A completed source scan pauses with `source_scan_complete` and an external
+boundary result. Finalize locally using the already-linked website CLI project:
+
+```sh
+node scripts/person-reconcile-finalize.mjs --run-id=<run-id> --workdir=<linked-website-workdir>
+```
+
+This executes `SET LOCAL statement_timeout='8s'` before the finish statement.
+Finish rejects an unbounded caller and briefly gates normalized/capture commits
+while checking current queue and revision counts. A PostgreSQL function's own
+`SET statement_timeout` does not arm a timer for the statement already running.
+The final status is `reconciled`, `review_required`, or `catchup_pending`; a
+source scan or baseline copy alone must never be reported as fully reconciled.

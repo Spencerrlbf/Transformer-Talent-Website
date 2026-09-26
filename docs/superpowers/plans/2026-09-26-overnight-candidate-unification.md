@@ -27,7 +27,7 @@
 
 ## Execution ruling after the original-50 trial
 
-Tasks 1, 2 and 6 passed. Implement task 5 on `feat/person-06-backfill` before application tasks 3–4, because the approved database backfill must run while main remains unchanged. Database triggers durably capture old-writer changes, including writes without updated_at. Historical backfill and catch-up report any source ambiguity explicitly; neither the migration nor queue processing silently labels an automated write as a recruiter edit. Application branches follow after pilot/full-backfill dispatch, still sequentially from the parent.
+Tasks 1, 2, 3, 6 and 7 passed. Task 5 baseline/capture and its restart checks passed; task 8 full backfill and reconciliation remain in progress. Implement task 5 on `feat/person-06-backfill` before application tasks 3–4, because the approved database backfill must run while main remains unchanged. Database triggers durably capture old-writer changes, including writes without updated_at. Historical backfill and catch-up report any source ambiguity explicitly; neither the migration nor queue processing silently labels an automated write as a recruiter edit. Application branches follow after pilot/full-backfill dispatch, still sequentially from the parent.
 
 ## Global Constraints
 
@@ -56,10 +56,10 @@ Tasks 1, 2 and 6 passed. Implement task 5 on `feat/person-06-backfill` before ap
 
 **Files/artifacts:** Existing safeguard PR #1; private `overnight-migration/baseline.json`, `workflow-state.json`, and `progress.json` outside git. Branch/worktree setup follows the using-git-worktrees skill.
 
-- [ ] Refresh main/branch state, live schema version, candidate/source counts, running Actions, database size, available disk, and normal query latency. Confirm no other session is modifying the writer/schema.
-- [ ] Verify a recent usable backup, recovery permissions and a documented restoration procedure. Capture row-level before-images for every planned live profile rewrite; prove the row restore procedure on a local copy. Do not describe a backup as restore-tested unless a restore was actually tested.
-- [ ] Record the current deployment and workflow enabled/disabled states. Identify the jobs starting at approximately 06:30–08:45 UTC; pause conflicting workers only before live schema/large-batch operations, not throughout code development. Applications remain available.
-- [ ] Define the progress record: task, pinned commit/parser version, start/end time, verification result, run ID, checkpoint, and rollback reference. Give every live phase a bounded maximum batch size.
+- [x] Refresh main/branch state, live schema version, candidate/source counts, running Actions, database size, available disk, and normal query latency. Confirm no other session is modifying the writer/schema.
+- [x] Verify a recent usable backup, recovery permissions and a documented restoration procedure. Capture row-level before-images for every planned live profile rewrite; prove the row restore procedure on a local copy. Do not describe a backup as restore-tested unless a restore was actually tested.
+- [x] Record the current deployment and workflow enabled/disabled states. Identify the jobs starting at approximately 06:30–08:45 UTC; pause conflicting workers only before live schema/large-batch operations, not throughout code development. Applications remain available.
+- [x] Define the progress record: task, pinned commit/parser version, start/end time, verification result, run ID, checkpoint, and rollback reference. Give every live phase a bounded maximum batch size.
 
 **Gate:** Recoverability and required access are established; otherwise keep all production work read-only. **Undo:** None for inspection; restore only workflow states changed by this run.
 
@@ -69,12 +69,12 @@ Tasks 1, 2 and 6 passed. Implement task 5 on `feat/person-06-backfill` before ap
 
 **Interfaces:** Retain `PersonDoc`, `fromLegacyImport`, `fromHarvest`, `fromDirectory`, `fromApplication`, `save_person(doc jsonb)` and `project(tables: ProjectionInput): Projection`. Extend header/provenance support to current title/company without changing existing callers' required fields.
 
-- [ ] Add failing tests: newer directory title without Harvest history wins over an older job title; older title loses; blank title does not erase; equal-date inputs converge in both arrival orders; recruiter priority remains deterministic.
-- [ ] Pin list semantics to the existing independently owned jobs/education/skills lists: omitted means unknown/no replacement; an explicitly present empty list means replace with empty. Document this refinement of the brief.
-- [ ] Add failing tests for company identity enrichment: an unambiguous company match preserves the existing job ID; ambiguous matches retain history and enter review rather than merging people or inventing equivalence.
-- [ ] Apply the brief's stated rule that invalid, bounced, claimed and never-primary contacts are never ranked. Preserve manual choices among usable contacts; record contradictions with existing manual selections for review before their live projection changes.
-- [ ] Implement version-aware replay: the same parser/hash is a no-op; an explicitly approved newer parser can correct the same historical source without pretending it was fetched later. Replay must not override a genuinely newer source.
-- [ ] Run translator, SQL and concurrency suites, including both arrival orders and duplicate replay; commit the independently tested correction.
+- [x] Add failing tests: newer directory title without Harvest history wins over an older job title; older title loses; blank title does not erase; equal-date inputs converge in both arrival orders; recruiter priority remains deterministic.
+- [x] Pin list semantics to the existing independently owned jobs/education/skills lists: omitted means unknown/no replacement; an explicitly present empty list means replace with empty. Document this refinement of the brief.
+- [x] Add failing tests for company identity enrichment: an unambiguous company match preserves the existing job ID; ambiguous matches retain history and enter review rather than merging people or inventing equivalence.
+- [x] Apply the brief's stated rule that invalid, bounced, claimed and never-primary contacts are never ranked. Preserve manual choices among usable contacts; record contradictions with existing manual selections for review before their live projection changes.
+- [x] Implement version-aware replay: the same parser/hash is a no-op; an explicitly approved newer parser can correct the same historical source without pretending it was fetched later. Replay must not override a genuinely newer source.
+- [x] Run translator, SQL and concurrency suites, including both arrival orders and duplicate replay; commit the independently tested correction.
 
 **Gate:** All new regressions pass; current IDs, source dates and source precedence remain valid. **Undo:** Previous application remains active; no live profile projection changes yet.
 
@@ -84,12 +84,12 @@ Tasks 1, 2 and 6 passed. Implement task 5 on `feat/person-06-backfill` before ap
 
 **Interface:** Add server-only `savePerson(doc: PersonDoc, options: { mode: 'shadow' | 'live' }): Promise<{ candidateId: string; changed: boolean; revision: string }>` around database transactions. Shadow mode changes normalized storage only; live mode also saves the compatibility fields atomically. Every successful normalized change has a revision; projection/undo checks that revision.
 
-- [ ] Write failing tests for a failure between normalized and candidate writes: either both commit or neither does. Test duplicate submission and simultaneous sources.
-- [ ] Add transactional projection using the same precedence rules as `project()`, with parity tests between the two representations. Do not compute a projection from an unlocked snapshot and PATCH it unconditionally.
-- [ ] Preserve unique legacy email behavior, engagement/source labels, contact visibility, workflow/follow-up fields, and existing calculation rules. Do not rewrite unrelated fields or change side-role selection.
-- [ ] Store protected before-images and a semantic profile hash. Representation-only changes must not enqueue everyone for paid embedding/judging.
-- [ ] Add and test conditional undo: restore only when the candidate still has the revision this run wrote; report newer revisions as conflicts.
-- [ ] Run local SQL/concurrency suites and commit.
+- [x] Write failing tests for a failure between normalized and candidate writes: either both commit or neither does. Test duplicate submission and simultaneous sources.
+- [x] Add transactional projection using the same precedence rules as `project()`, with parity tests between the two representations. Do not compute a projection from an unlocked snapshot and PATCH it unconditionally.
+- [x] Preserve unique legacy email behavior, engagement/source labels, contact visibility, workflow/follow-up fields, and existing calculation rules. Do not rewrite unrelated fields or change side-role selection.
+- [x] Store protected before-images and a semantic profile hash. Representation-only changes must not enqueue everyone for paid embedding/judging.
+- [x] Add and test conditional undo: restore only when the candidate still has the revision this run wrote; report newer revisions as conflicts.
+- [x] Run local SQL/concurrency suites and commit.
 
 **Gate:** Atomicity, parity and rollback tests pass. **Undo:** Feature flag returns to old projection path; retain normalized facts and before-images.
 
@@ -126,19 +126,19 @@ Tasks 1, 2 and 6 passed. Implement task 5 on `feat/person-06-backfill` before ap
 
 **Artifacts:** Private before-images, pinned parser version, aggregate trial report, source/projection differences by candidate ID.
 
-- [ ] Under production authorization, apply reviewed additive corrections after checking lock/disk conditions. Deploy scripts pinned to the reviewed commit.
-- [ ] Replay the same 50 with the repaired parser, preserving existing source evidence; do not use the old destructive trial undo once live shadow writes exist.
-- [ ] Verify the known title failure is fixed, every known contact/job is accounted for, no unusable contact is primary, and legacy profile rows are unchanged in shadow mode.
-- [ ] Repeat the run and require no unexplained changes. Resolve the three existing identity conflicts by preserving separate identities and reporting them; do not auto-merge.
+- [x] Under production authorization, apply reviewed additive corrections after checking lock/disk conditions. Deploy scripts pinned to the reviewed commit.
+- [x] Replay the same 50 with the repaired parser, preserving existing source evidence; do not use the old destructive trial undo once live shadow writes exist.
+- [x] Verify the known title failure is fixed, every known contact/job is accounted for, no unusable contact is primary, and legacy profile rows are unchanged in shadow mode.
+- [x] Repeat the run and require no unexplained changes. Resolve the three existing identity conflicts by preserving separate identities and reporting them; do not auto-merge.
 
 **Gate:** No unexplained destructive difference. **Undo:** Halt expansion; leave existing candidate projections serving the app.
 
 ### Task 7: Run the 5,000-person pilot and measure capacity
 
-- [ ] Select a representative mix of old imports, directory people, cached Harvest profiles, contacts with verification conflicts, shortlisted candidates and recent applications.
-- [ ] Run shadow-only in bounded batches. Record elapsed time, rows/second, lock waits, query latency, database growth and errors.
-- [ ] Audit all 5,000 and repeat a bounded sample to prove no-op behavior. Increase workers only when measured headroom supports it.
-- [ ] Calculate a remaining-runtime range from actual throughput plus observed retry/validation cost. Recheck free disk using measured growth with safety headroom.
+- [x] Select a representative mix of old imports, directory people, cached Harvest profiles, contacts with verification conflicts, shortlisted candidates and recent applications.
+- [x] Run shadow-only in bounded batches. Record elapsed time, rows/second, lock waits, query latency, database growth and errors.
+- [x] Audit all 5,000 and repeat a bounded sample to prove no-op behavior. Increase workers only when measured headroom supports it.
+- [x] Calculate a remaining-runtime range from actual throughput plus observed retry/validation cost. Recheck free disk using measured growth with safety headroom.
 
 **Gate:** Integrity checks pass and the database remains healthy. A slow pilot changes the ETA; it does not justify relaxing checks. **Undo:** Stop at the saved checkpoint; live reads are unchanged.
 

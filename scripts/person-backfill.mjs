@@ -101,6 +101,7 @@ export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
  return executePage(ids,hooks,config.concurrency);
 }
 export async function main(){
+ if(truthy(JSON.parse(process.env.BACKFILL_CONFIG??'{}').reconcile))return (await import('./person-reconcile.mjs')).main();
  const config=options();const site=await openSite();let comms;
  const start=Date.now();let started=false;let processed=0;let after=null;let exitStatus='paused';
  try{
