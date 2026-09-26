@@ -42,3 +42,18 @@ Before release, complete source catch-up and writer integration, run the whole
 branch tests and preview tenancy test, verify connection/configuration on the
 approved deployment, then perform a bounded live canary. Do not enable the
 restrictive legacy-write guard until every active writer supports this path.
+
+## Shadow backfill throughput
+
+The backfill reads at most four REST responses concurrently, including their
+response bodies. It saves at most ten people in one transaction and audits a
+whole checked page before advancing its checkpoint. An exclusive database gate
+keeps each short bulk transaction clear of other normalized writers; individual
+writers take the shared gate first and can otherwise run concurrently. The
+atomic application writer acquires that gate before its candidate lock too.
+
+Migration `20260926040300_person_backfill_bulk.sql` installs this coordination
+and the service-only batch RPCs without changing fact precedence or projecting
+legacy candidate fields. Transient transport/lock failures get at most three
+attempts with backoff. Integrity errors stop the run, and a lost committed
+response can be replayed without incrementing the person's normalized revision.

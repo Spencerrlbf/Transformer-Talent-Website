@@ -145,6 +145,7 @@ async function begin(client: PersonConnection, id: string) {
   );
   // Same normalized-writer lock first as save_person, then take the strongest
   // candidate lock before any projection/capture write can upgrade a row lock.
+  await client.query("select pg_advisory_xact_lock_shared(72005,0)");
   await client.query("select pg_advisory_xact_lock(hashtext($1))", [id]);
   const before = (
     await client.query(
