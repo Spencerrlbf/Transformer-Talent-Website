@@ -902,4 +902,64 @@ begin
 end $$;
 reset role;
 
+-- ---------------------------------------------------------------------------
+-- 14. A writer-made company learns the rest of its LinkedIn identity, so the
+-- order docs arrive in does not split one LinkedIn page into two rows
+-- ---------------------------------------------------------------------------
+insert into public.candidates (id, full_name, linkedin_username)
+select t.p(2000 + n), 'Order Person ' || n, 'order-person-' || n from generate_series(1, 4) n;
+
+create function t.job_doc(p uuid, p_hash text, p_fetched text, p_company jsonb) returns jsonb language sql as $$
+  select jsonb_build_object('candidate_id', p, 'mode', 'replace_lists',
+    'source', jsonb_build_object('source', 'harvest', 'fetched_at', p_fetched, 'payload_hash', p_hash,
+      'raw_in', 'candidate_enrichments', 'parser_version', 'test-1'),
+    'jobs', jsonb_build_array(jsonb_build_object('row_key', 'rk-' || p_hash, 'title', 'Engineer', 'company', p_company)))
+$$;
+
+set role service_role;
+do $$
+declare r jsonb; v uuid; n int;
+begin
+  -- Username first, then id + username, then the id alone (another person).
+  r := public.save_person(t.job_doc(t.p(2001), 'o1', '2024-01-01T00:00:00Z', '{"name": "Split Co", "linkedin_username": "split-co"}'));
+  select c.id into v from public.companies c where c.linkedin_username = 'split-co';
+  assert (select c.linkedin_id is null and c.identity_basis = 'linkedin_username' from public.companies c where c.id = v), 'username-only row';
+  r := public.save_person(t.job_doc(t.p(2001), 'o2', '2025-01-01T00:00:00Z', '{"name": "Split Co", "linkedin_id": "97001", "linkedin_username": "split-co"}'));
+  assert (r->'counts'->>'companies_created')::int = 0, format('o2 %s', r);
+  assert (select c.linkedin_id = '97001' and c.identity_basis = 'linkedin_id' from public.companies c where c.id = v), 'the row learns its LinkedIn id';
+  r := public.save_person(t.job_doc(t.p(2002), 'o3', '2025-01-01T00:00:00Z', '{"name": "Split Co", "linkedin_id": "97001"}'));
+  assert (r->'counts'->>'companies_created')::int = 0, format('o3 %s', r);
+  assert (select e.company_id = v from public.candidate_experiences e where e.candidate_id = t.p(2002) and e.removed_at is null),
+    'the id alone finds the same row';
+
+  -- Id first, then id + username, then a mixed-case username alone.
+  r := public.save_person(t.job_doc(t.p(2003), 'o4', '2024-01-01T00:00:00Z', '{"name": "Other Co", "linkedin_id": "97002"}'));
+  select c.id into v from public.companies c where c.linkedin_id = '97002';
+  r := public.save_person(t.job_doc(t.p(2003), 'o5', '2025-01-01T00:00:00Z', '{"name": "Other Co", "linkedin_id": "97002", "linkedin_username": "other-co"}'));
+  assert (select c.linkedin_username = 'other-co' and c.identity_basis = 'linkedin_id' from public.companies c where c.id = v), 'the row learns its username';
+  r := public.save_person(t.job_doc(t.p(2004), 'o6', '2025-01-01T00:00:00Z', '{"name": "Other Co", "linkedin_username": "Other-Co"}'));
+  assert (r->'counts'->>'companies_created')::int = 0, format('o6 %s', r);
+  assert (select e.company_id = v from public.candidate_experiences e where e.candidate_id = t.p(2004) and e.removed_at is null),
+    'the username alone finds the same row';
+
+  -- A pre-existing row keeps its LinkedIn columns (Umbrella has no username).
+  r := public.save_person(t.job_doc(t.p(2004), 'o7', '2025-06-01T00:00:00Z', '{"name": "Umbrella", "linkedin_id": "4004", "linkedin_username": "umbrella-inc"}'));
+  assert (r->'counts'->>'companies_created')::int = 0, format('o7 %s', r);
+  assert (select c.linkedin_username is null from public.companies c where c.linkedin_id = '4004'), 'pre-existing row not changed';
+
+  -- A value another row already holds is not copied (no unique violation, no merge).
+  r := public.save_person(t.job_doc(t.p(2001), 'o8', '2025-06-01T00:00:00Z', '{"name": "Dup Co", "linkedin_id": "97003"}'));
+  r := public.save_person(t.job_doc(t.p(2002), 'o9', '2025-06-01T00:00:00Z', '{"name": "Dup Co", "linkedin_username": "dup-co"}'));
+  r := public.save_person(t.job_doc(t.p(2003), 'o10', '2025-06-01T00:00:00Z', '{"name": "Dup Co", "linkedin_id": "97003", "linkedin_username": "dup-co"}'));
+  assert (select c.linkedin_username is null from public.companies c where c.linkedin_id = '97003'), 'username held elsewhere is not copied';
+  assert (select c.linkedin_id is null from public.companies c where c.linkedin_username = 'dup-co'), 'the other row is left alone';
+
+  select count(*) into n from (select c.linkedin_id from public.companies c where c.linkedin_id is not null group by 1 having count(*) > 1) d;
+  assert n = 0, 'no duplicate LinkedIn ids';
+  select count(*) into n from (select lower(c.linkedin_username) from public.companies c where c.linkedin_username is not null group by 1 having count(*) > 1) d;
+  assert n = 0, 'no duplicate usernames';
+  raise notice 'PASS 14 a writer-made company learns its LinkedIn id or username; pre-existing rows and values held elsewhere are left alone';
+end $$;
+reset role;
+
 select 'ALL TESTS PASSED' as result;

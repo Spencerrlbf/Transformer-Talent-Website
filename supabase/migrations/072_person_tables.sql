@@ -409,12 +409,16 @@ $$;
 -- not a match: a new row is made for the id and a company_identity conflict
 -- is logged. No LinkedIn identity: the shared placeholder row or the one
 -- name-only row for the normalised name. A name never matches a LinkedIn
--- company. The caller holds the advisory locks for the identity's keys.
+-- company. A matched row the writer created fills in a missing LinkedIn id
+-- or username from the doc (when no other row holds it), so docs arriving
+-- in any order end on one row per LinkedIn page. The caller holds the
+-- advisory locks for the identity's keys.
 create or replace function public.person_company(i jsonb, p_candidate uuid, p_source uuid,
   out company_id uuid, out created boolean, out conflicts int)
 language plpgsql set search_path = '' as $$
 declare
   v_row record;
+  v_own record;
   v_user_clash uuid;
   v_url_clash uuid;
   v_has_li boolean;
@@ -470,6 +474,31 @@ begin
   end if;
 
   if company_id is not null then
+    -- A row this writer made from part of a LinkedIn identity learns the rest
+    -- (a username-only row meets a doc with the id, or an id-only row meets
+    -- a doc with the username), so the next doc that names only the id or
+    -- only the username finds this row instead of making a second one for
+    -- the same LinkedIn page. Only when no other row holds the value, and
+    -- only on the writer's own rows: pre-existing companies rows keep their
+    -- LinkedIn columns as they are. The caller holds the advisory locks for
+    -- every key of this identity, so no other writer can take the value.
+    if v_has_li then
+      select c.created_from, c.linkedin_id, c.linkedin_username, c.identity_basis into v_own
+      from public.companies c where c.id = company_id;
+      if v_own.created_from = 'person_writer' then
+        if i->>'id' is not null and v_own.linkedin_id is null
+           and not exists (select 1 from public.companies x where x.linkedin_id = i->>'id') then
+          update public.companies c set linkedin_id = i->>'id', identity_basis = 'linkedin_id'
+          where c.id = company_id;
+        end if;
+        if i->>'user' is not null and v_own.linkedin_username is null
+           and not exists (select 1 from public.companies x where lower(x.linkedin_username) = i->>'user') then
+          update public.companies c set linkedin_username = i->>'user',
+            identity_basis = case when c.identity_basis = 'linkedin_url' then 'linkedin_username' else c.identity_basis end
+          where c.id = company_id;
+        end if;
+      end if;
+    end if;
     -- Fill a missing tier on an existing row (never on a placeholder).
     if v_row.tier is null and (i->>'tier') is not null and i->>'ph' is null then
       update public.companies c set tier = (i->>'tier')::smallint, tier_list_version = i->>'tlv'
