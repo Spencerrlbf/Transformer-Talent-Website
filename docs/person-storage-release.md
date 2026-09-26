@@ -99,6 +99,47 @@ while checking current queue and revision counts. A PostgreSQL function's own
 The final status is `reconciled`, `review_required`, or `catchup_pending`; a
 source scan or baseline copy alone must never be reported as fully reconciled.
 
+## Application intake preparation
+
+`PERSON_WRITE_MODE` defaults to `legacy`. The `shadow` and `live` application
+paths require the website's server-only `PERSON_DATABASE_URL`, the prepared
+projection migration, and `20260926044800_person_application_intake.sql`.
+Neither migration is applied and no intake flag is enabled by preparing code.
+Review-queue Actions reads the same flag and DSN after an approved release.
+
+Applications, referrals, future interest and queued retries share the same TT
+pool helper. The helper verifies the application's organization and resolves
+LinkedIn identity under a transaction lock; email is never an identity lookup.
+Creation, all normalized documents, the application link and receipt commit
+together. An existing person must already have normalized state before this
+path can update them. Claimed public contact details cannot replace incumbent
+contacts. Shadow leaves existing compatibility profiles alone; a newly created
+person receives its initial usable profile in the creation transaction.
+
+`person_application_receipts` keeps the creation decision, exact normalized
+documents, original application snapshot and Harvest ledger reference. Retries
+reuse those inputs. A new Harvest result is stored before later parsing;
+only original cache-miss ledger rows can supply a dated cached result. Retries
+read the receipt before extracting a PDF and reuse its immutable Harvest payload.
+Concurrent attempts use the transaction's winning resume and parse for later
+matching and application updates. A vector from a superseded parse is never
+stored as the winning person's embedding. Failures queue the retained
+application for the existing review worker. Existing application review budgets
+and paid service limits remain in force.
+
+The resume parser currently returns independent school, degree and field arrays.
+School names are normalized; degree/field associations are used only when there
+is one school and one value. The entire original parse remains in the private
+receipt and application, including unpaired values. No dates or associations
+are invented. Structured Harvest education retains its full relationships.
+
+Tenant applicants and tenant resume uploads remain in their organization-owned
+application/sourcing tables. This branch does not enable all pool writers:
+directory sync, refresh claims/retries and recruiter contact integration must
+also be completed before a live cutover. Post-cutover audit must include intake
+receipts rather than reconstructing these new sources as historical legacy
+imports. The overnight reconciliation runner is pinned to the shadow sources.
+
 
 ## Uncertain cached source dates
 
