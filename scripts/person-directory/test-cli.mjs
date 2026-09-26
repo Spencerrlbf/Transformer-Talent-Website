@@ -74,6 +74,7 @@ await test("actual directory reader uses one read-only repeatable snapshot inclu
     const cols = await commsColumns(reader);
     let updated = false;
     const proxy = {
+      withReadOnly: (fn) => reader.withReadOnly(fn),
       query: async (sql, params) => {
         const result = await reader.query(sql, params);
         if (sql.startsWith("select * from board.candidates") && !updated) {
@@ -100,6 +101,7 @@ await test("actual directory reader uses one read-only repeatable snapshot inclu
     assert.equal(b.facts[0].value, "2025550199");
     await reader.query("set default_transaction_read_only=off");
     const attempted = {
+      withReadOnly: (fn) => reader.withReadOnly(fn),
       query: async (sql, params) => {
         if (sql.startsWith("select * from board.candidates"))
           await reader.query(

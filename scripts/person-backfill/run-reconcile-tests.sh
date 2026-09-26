@@ -16,3 +16,4 @@ q -d person_reconcile_test -1 -f supabase/migrations/20260926050355_person_sourc
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_reconcile_test" node scripts/person-backfill/test-reconcile.mjs
 node --test scripts/person-backfill/test-reconcile-evidence.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_reconcile_test" node scripts/person-backfill/test-source-holds.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_reconcile_test" node --test scripts/person-backfill/test-comms-reconnect.mjs
