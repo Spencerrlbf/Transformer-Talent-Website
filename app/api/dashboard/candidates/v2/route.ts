@@ -1,3 +1,4 @@
+import { jobInOrg } from "@/lib/server/organization-access";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { listUnifiedCandidates } from "@/lib/server/candidates-unified";
@@ -11,12 +12,16 @@ export async function GET(req: NextRequest) {
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
   const q = req.nextUrl.searchParams;
+  const job = q.get("job"), jobAlias = q.get("jobId");
+  if (job && jobAlias && job !== jobAlias) return NextResponse.json({ error: "conflicting_job" }, { status: 400 });
+  const jobId = job || jobAlias || undefined;
+  if (jobId && !(await jobInOrg(member.org.id, jobId))) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
   const source = q.get("source");
   const sort = q.get("sort");
   const list = await listUnifiedCandidates({
     orgId: member.org.id,
     source: source === "applied" || source === "sourced" ? source : undefined,
-    jobId: q.get("job") || undefined,
+    jobId,
     fit: q.get("fit") || undefined,
     q: q.get("q") || undefined,
     hideNotNow: q.get("hideNotNow") === "1",
