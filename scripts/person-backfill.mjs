@@ -101,7 +101,16 @@ export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
  return executePage(ids,hooks,config.concurrency);
 }
 export async function main(){
- if(truthy(JSON.parse(process.env.BACKFILL_CONFIG??'{}').reconcile))return (await import('./person-reconcile.mjs')).main();
+ const dispatch=JSON.parse(process.env.BACKFILL_CONFIG??'{}');
+ // The read-only projection preview: "reconcile" in the dispatch only selects
+ // the workflow's read-only concurrency group; it must never reach the
+ // reconciliation code, and the preview refuses to run with dry_run off.
+ if(truthy(dispatch.preview)){
+  if(!truthy(process.env.BACKFILL_DRY_RUN??'true'))throw Error('preview_requires_dry_run');
+  const argv=[];for(const k of ['limit','batch-size','after','collision-ids'])if(dispatch[k]!==undefined)argv.push(`--${k}=${dispatch[k]}`);
+  return (await import('./person-publish-preview.mjs')).main(argv);
+ }
+ if(truthy(dispatch.reconcile))return (await import('./person-reconcile.mjs')).main();
  const config=options();const site=await openSite();let comms;
  const start=Date.now();let started=false;let processed=0;let after=null;let exitStatus='paused';
  try{
