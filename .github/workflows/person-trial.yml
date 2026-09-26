@@ -3,8 +3,13 @@ name: Person writer trial
 # The 50-person trial of the one writer (lib/server/person + save_person,
 # migration 072): reads every stored source for the given people, saves them
 # into the new tables only and checks the counts. Manual only, never scheduled.
-# The log shows ids, counts and check results; never a name, email or phone.
-# Undo: scripts/person-trial-undo.mjs with the same ids.
+# The log shows ids, counts and check results; never a name, email, phone or
+# date (the repository is public, and so are its Actions logs).
+# dry_run (ticked by default) saves nothing; only an unticked box saves.
+# A run after a translator change needs scripts/person-trial-undo.mjs --apply
+# for the same ids first (the run refuses otherwise: sources_current).
+# GitHub dispatches only workflows whose file is on the default branch: with
+# this file on main, dispatch with --ref <the trial branch> to run its scripts.
 
 on:
   workflow_dispatch:
@@ -26,6 +31,10 @@ on:
         description: "Only print the directory's table and column names the trial reads"
         type: boolean
         default: false
+      undo:
+        description: "Undo the trial for these ids (scripts/person-trial-undo.mjs); with dry_run ticked it only counts"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,12 +54,20 @@ jobs:
           node-version: 20
       - run: npm install --no-save --no-audit --no-fund pg@8
       - run: node scripts/build-worker-lib.mjs
-      - run: node scripts/person-trial.mjs
+      - if: ${{ !inputs.undo }}
+        run: node scripts/person-trial.mjs
         env:
           TRIAL_IDS: ${{ inputs.ids }}
-          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           REPEAT: ${{ inputs.repeat && '1' || '' }}
           DESCRIBE: ${{ inputs.describe && '1' || '' }}
           COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - if: ${{ inputs.undo }}
+        run: node scripts/person-trial-undo.mjs
+        env:
+          TRIAL_IDS: ${{ inputs.ids }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

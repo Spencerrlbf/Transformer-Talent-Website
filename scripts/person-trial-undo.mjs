@@ -7,10 +7,12 @@
 // table only the writer fills) that the trial people used and nobody else uses
 // are deleted last; a skill anyone else still has is kept.
 //
-// Not undone: save_person fills a null companies.tier / tier_list_version on a
-// pre-existing companies row it links a job to (the spec's rule), and the live
-// update_companies_updated_at trigger bumps that row's updated_at. Those rows
-// are counted here (tier set, not created by the writer) but left as they are.
+// save_person never writes a pre-existing companies row (it fills a missing tier
+// only on rows it created), so deleting these rows restores every table exactly.
+// The count of pre-existing companies rows that have a tier is printed as a
+// check: it must stay 0 until migration step 10 tiers every company.
+// Deleting any of these people's candidates rows is refused (on delete
+// restrict) while their rows exist in the new tables: run this first.
 // Prints counts only. A dry run (the default) counts what it would delete.
 //
 //   node scripts/person-trial-undo.mjs --ids <id,id,...>   (or --file ids.txt | ids.json, or TRIAL_IDS)
@@ -70,21 +72,26 @@ export async function undo(site, ids, { apply }) {
 
   // Companies and schools the writer made that nothing points at any more. In a dry run the
   // trial's own rows still exist, so "still used" leaves out the rows this undo would delete.
+  // Schools first: which writer schools go decides which companies are still pointed at.
   const jobIds = new Set(jobs.map((j) => j.id));
   const eduIds = new Set(educations.map((e) => e.id));
-  const writerCompanies = (await site.select("companies", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" })).map((c) => c.id);
-  const usedCompanies = new Set();
-  for (const r of await selectIn(site, "candidate_experiences", "company_id", writerCompanies, { columns: "id,company_id", order: "id.asc" })) if (!jobIds.has(r.id)) usedCompanies.add(r.company_id);
-  for (const c of await referenced(site, "schools", "company_id", writerCompanies)) usedCompanies.add(c);
-  for (const c of await referenced(site, "candidates", "current_company_id", writerCompanies)) usedCompanies.add(c);
-  for (const c of await referenced(site, "companies", "merged_into", writerCompanies)) usedCompanies.add(c);
   const writerSchools = (await site.select("schools", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" })).map((s) => s.id);
   const usedSchools = new Set();
   for (const r of await selectIn(site, "candidate_educations", "school_id", writerSchools, { columns: "id,school_id", order: "id.asc" })) if (!eduIds.has(r.id)) usedSchools.add(r.school_id);
   for (const s of await referenced(site, "schools", "merged_into", writerSchools)) usedSchools.add(s);
   const orphanSchools = writerSchools.filter((s) => !usedSchools.has(s));
+  const orphanSchoolSet = new Set(orphanSchools);
+
+  const writerCompanies = (await site.select("companies", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" })).map((c) => c.id);
+  const usedCompanies = new Set();
+  for (const r of await selectIn(site, "candidate_experiences", "company_id", writerCompanies, { columns: "id,company_id", order: "id.asc" })) if (!jobIds.has(r.id)) usedCompanies.add(r.company_id);
+  // A school this undo deletes does not keep its company (a university someone worked at and studied at).
+  for (const r of await selectIn(site, "schools", "company_id", writerCompanies, { columns: "id,company_id", order: "id.asc" })) if (!orphanSchoolSet.has(r.id)) usedCompanies.add(r.company_id);
+  // Every other table with a foreign key to companies.
+  for (const c of await referenced(site, "candidates", "current_company_id", writerCompanies)) usedCompanies.add(c);
+  for (const c of await referenced(site, "candidate_company_history", "company_id", writerCompanies)) usedCompanies.add(c);
+  for (const c of await referenced(site, "companies", "merged_into", writerCompanies)) usedCompanies.add(c);
   const orphanCompanies = writerCompanies.filter((c) => !usedCompanies.has(c));
-  // Schools first: a school can point at a company.
   await chunked("schools (created by the writer, unused)", "schools", "id", orphanSchools, [["created_from", "eq", "person_writer"]], orphanSchools.length);
   await chunked("companies (created by the writer, unused)", "companies", "id", orphanCompanies, [["created_from", "eq", "person_writer"]], orphanCompanies.length);
   const kept = { companies: writerCompanies.length - orphanCompanies.length, schools: writerSchools.length - orphanSchools.length };
@@ -95,7 +102,7 @@ export async function undo(site, ids, { apply }) {
   const orphanSkills = skillIds.filter((s) => !skillsStillUsed.has(s));
   await chunked("skills (used only by these people)", "skills", "id", orphanSkills, [], orphanSkills.length);
   kept.skills = skillIds.length - orphanSkills.length;
-  // Pre-existing companies rows given a tier by the writer (see the header): counted, not reverted.
+  // Pre-existing companies rows with a tier (see the header): must be 0; the writer never sets one.
   kept.tiered_existing_companies = (await site.select("companies", { columns: "id", filters: [["created_from", "is_null"], ["tier", "not_null"]], order: "id.asc" })).length;
   return { steps: out, kept };
 }
@@ -112,7 +119,7 @@ async function main() {
     for (const [label, n] of steps) console.log(`${apply ? "deleted" : "would delete"} ${String(n).padStart(6)}  ${label}`);
     console.log(`writer companies still used by other rows: ${kept.companies}; writer schools still used: ${kept.schools}`);
     console.log(`skills the trial people share with others (kept): ${kept.skills}`);
-    console.log(`companies not created by the writer that have a tier (the writer's tier fill; not reverted, updated_at was bumped): ${kept.tiered_existing_companies}`);
+    console.log(`pre-existing companies rows with a tier (must be 0: the writer never writes them): ${kept.tiered_existing_companies}`);
     console.log("the candidates rows were not touched");
     return 0;
   } finally {

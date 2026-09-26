@@ -185,3 +185,50 @@ create table if not exists public.person_signals (
   source_hash text not null,
   computed_at timestamptz not null default now()
 );
+
+-- Outreach outcomes (the runner reads bounces and replies to candidate_emails
+-- rows) and the other live table with a foreign key to companies (the undo
+-- checks it). Live types, enums included.
+do $$ begin
+  create type public.communication_type as enum ('linkedin_connection_request', 'linkedin_message', 'linkedin_inmail', 'email', 'phone_call', 'meeting');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type public.communication_status as enum ('sent', 'delivered', 'bounced', 'opened', 'replied', 'failed');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.candidate_communications (
+  id uuid primary key default gen_random_uuid(),
+  recruiter_id integer not null,
+  candidate_id uuid not null,
+  communication_type public.communication_type not null,
+  communication_date timestamptz default now(),
+  email_used uuid,
+  subject text,
+  linkedin_message_type varchar,
+  message_content text,
+  status public.communication_status default 'sent'::public.communication_status,
+  response_date timestamptz,
+  response_content text,
+  sent_by varchar,
+  notes text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  sender_email varchar,
+  email_provider varchar,
+  interest_level varchar,
+  campaign_name varchar
+);
+
+create table if not exists public.candidate_company_history (
+  id uuid primary key default gen_random_uuid(),
+  candidate_id uuid,
+  company_id uuid references public.companies(id),
+  position_title text,
+  start_date date,
+  end_date date,
+  is_current boolean default false,
+  linkedin_company_username text,
+  raw_company_name text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);

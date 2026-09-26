@@ -10,11 +10,20 @@
 //   present, exactly one primary email per person with a usable address,
 //   0 errors, a second run changes nothing, and the candidates rows are
 //   exactly what they were before (the live site reads only those).
-// It prints ids, counts and check results only, never a name, email or phone,
-// and exits 1 when any check fails.
+// It prints ids, counts and check results only, never a name, email, phone or
+// (on GitHub Actions) a date, and exits 1 when any check fails.
 //
 //   node scripts/person-trial.mjs --ids <id,id,...>   (or --file ids.txt | ids.json, or TRIAL_IDS)
-//   DRY_RUN=1          read everything and build the docs; save nothing (the doc checks still run)
+//   A DRY RUN IS THE DEFAULT: read everything and build the docs; save nothing (the doc checks
+//   still run). Saving needs --apply or DRY_RUN=0 (the workflow passes DRY_RUN=0 only when its
+//   dry_run box is unticked). The first line names the database it will use and whether it saves.
+//   A saving run stops before writing anything when a check that can be made before saving
+//   failed (ids_found, directory_read, zero_errors, docs_cover_known_emails, doc_jobs_named,
+//   sources_current); ALLOW_PARTIAL=1 saves anyway.
+//   sources_current: a stored source of the same record (source, source_ref, fetched_at) with a
+//   different payload hash means the translators changed since it was saved; save_person would
+//   keep the old one (a tie goes to one of them), so the run refuses: run
+//   scripts/person-trial-undo.mjs --apply for those ids first, then run again.
 //   REPEAT=1           save everything twice; the second pass must be all 'unchanged' and change no row
 //   --describe         print the directory's table and column names this script reads, nothing else
 //   SKIP_DIRECTORY=1   dry runs, or any run against LOCAL_DATABASE_URL (a local test cannot reach the
@@ -45,10 +54,10 @@ try {
 export const TT_ORG = "801865a7-6533-41d2-9c45-e4a90e6ad51a";
 const MAX_IDS = 200;
 const PAGE = 1000;
+/** A REST request that takes longer than this fails (a hung request must not hold the run). */
+const REQUEST_TIMEOUT_MS = 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const IN_CI = process.env.GITHUB_ACTIONS === "true";
-/** Which translator a source kind comes from, and the order of docs that share a fetched_at. */
-const SOURCE_ORDER = { legacy_import: 0, directory: 1, harvest: 2, application: 3, recruiter: 4 };
 const LIB_EXPORTS = ["fromLegacyImport", "fromHarvest", "fromDirectory", "fromApplication", "project"];
 
 // ---------------------------------------------------------------- small helpers
@@ -171,7 +180,7 @@ export function restSite(url, key) {
   async function request(path, init = {}) {
     let res;
     try {
-      res = await fetch(base + path, { ...init, headers: { ...headers, ...(init.headers || {}) } });
+      res = await fetch(base + path, { ...init, headers: { ...headers, ...(init.headers || {}) }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     } catch (err) {
       throw new Error(`${init.method || "GET"} ${path.split("?")[0]}: ${err?.cause?.message || err?.message || err}`);
     }
@@ -187,6 +196,8 @@ export function restSite(url, key) {
   const json = async (res) => { const t = await res.text(); return t ? JSON.parse(t) : null; };
   return {
     kind: "rest",
+    // The host locally; on GitHub Actions only that it is the SUPABASE_URL secret's database.
+    target: IN_CI ? "REST (the SUPABASE_URL secret)" : `REST ${new URL(base).host}`,
     async select(table, { columns = "*", filters = [], order }) {
       const q = [`select=${columnsOf(columns)}`, ...filters.map(restFilter), `order=${orderOf(order).map(([c, d]) => `${c}.${d}`).join(",")}`].join("&");
       const out = [];
@@ -211,11 +222,14 @@ export function restSite(url, key) {
 
 export async function pgSite(url) {
   const { default: pg } = await import("pg");
-  const db = new pg.Client({ connectionString: url, application_name: "tt-person-trial-local" });
-  await db.connect();
+  // A pool, so the parallel saves (applyDocs) really run side by side, as they do over REST.
+  const db = new pg.Pool({ connectionString: url, application_name: "tt-person-trial-local", max: 4 });
+  await db.query("select 1");
   const where = (filters, params) => (filters.length ? ` where ${filters.map((f) => sqlFilter(f, params)).join(" and ")}` : "");
+  const u = new URL(url);
   return {
     kind: "pg",
+    target: `postgres ${u.hostname}:${u.port || 5432}${u.pathname}`,
     // Whole rows as Postgres's own JSON (full timestamp precision), like REST's select=*.
     async select(table, { filters = [], order }) {
       const params = [];
@@ -321,10 +335,25 @@ export function missingComms(cols) {
   return Object.entries(COMMS_NEEDS).flatMap(([t, cs]) => cs.filter((c) => !(cols.get(t) || []).includes(c)).map((c) => `${t}.${c}`));
 }
 
+/** Runs fn inside a READ ONLY transaction (rolled back): the directory is never written, even
+ *  if the session's read-only default were changed. */
+async function readOnly(db, fn) {
+  await db.query("begin transaction read only");
+  try {
+    return await fn();
+  } finally {
+    await db.query("rollback");
+  }
+}
+
 /** Everything the directory holds for these contacts, grouped by contact id. Read-only. */
 export async function readDirectory(db, contactIds, cols) {
   const missing = missingComms(cols);
   if (missing.length) throw new Error(`the directory has no ${missing.join(", ")}; run with --describe and update the runner`);
+  return readOnly(db, () => readDirectoryIn(db, contactIds, cols));
+}
+
+async function readDirectoryIn(db, contactIds, cols) {
   const q = async (sql, params = [contactIds]) => (await db.query(sql, params)).rows;
   const board = await q("select * from board.candidates where contact_id = any($1::uuid[])");
   const harvest = await q("select * from comms.harvest_profiles where contact_id = any($1::uuid[])");
@@ -361,13 +390,19 @@ async function describe() {
   if (!process.env.COMMS_DATABASE_URL) throw new Error("Missing env: COMMS_DATABASE_URL");
   const db = await openComms(process.env.COMMS_DATABASE_URL);
   try {
-    const cols = await commsColumns(db);
+    const cols = await readOnly(db, () => commsColumns(db));
     console.log("directory tables and columns (names only):");
     for (const [t, cs] of cols) console.log(`  ${t}: ${cs.join(", ")}`);
     const phoneTables = phoneTablesOf(cols);
     console.log(`phones are read from comms.profile_facts (field 'phone')${phoneTables.length ? ` and ${phoneTables.join(", ")}` : ""}`);
     const missing = missingComms(cols);
     console.log(missing.length ? `MISSING (the trial would stop): ${missing.join(", ")}` : "every column the trial reads is present");
+    if ((cols.get("comms.emails") || []).includes("verification")) {
+      // The status vocabulary the translator maps (counts per value, no addresses).
+      const { rows } = await readOnly(db, () => db.query("select coalesce(verification->>'status', '(none)') as status, count(*)::int as n, count(*) filter (where verification ? 'provider_result')::int as with_provider_result, count(*) filter (where (verification->>'primary')::boolean)::int as marked_primary from comms.emails group by 1 order by 2 desc limit 40"));
+      console.log("comms.emails verification.status values (count, with provider_result, marked primary):");
+      for (const r of rows) console.log(`  ${String(r.status).slice(0, 40)}: ${r.n}, ${r.with_provider_result}, ${r.marked_primary}`);
+    }
     return missing.length ? 1 : 0;
   } finally {
     await db.end();
@@ -400,11 +435,18 @@ async function readSources(site, ids, rows) {
     chunk: 10,
   });
   const apps = await selectIn(site, "website_applications", "candidate_id", ids, { filters: [["organization_id", "eq", TT_ORG]], order: "created_at.asc,id.asc" });
+  // Outreach outcomes: a bounce or a reply to a candidate_emails row (never the message text).
+  const comms = await selectIn(site, "candidate_communications", "candidate_id", ids, {
+    columns: "id,candidate_id,communication_type,status,email_used,communication_date,response_date",
+    filters: [["communication_type", "eq", "email"], ["status", "in", ["bounced", "replied"]]],
+    order: "candidate_id.asc,id.asc",
+  });
   const L = groupBy(legacy, "candidate_id");
   const V = groupBy(v2, "candidate_id");
   const H = groupBy(ledger, "candidate_id");
   const A = groupBy(apps, "candidate_id");
-  return new Map(ids.filter((id) => rows.has(id)).map((id) => [id, { row: rows.get(id), legacy: L.get(id) ?? [], v2: V.get(id) ?? [], ledger: H.get(id) ?? [], apps: A.get(id) ?? [], dir: null }]));
+  const C = groupBy(comms, "candidate_id");
+  return new Map(ids.filter((id) => rows.has(id)).map((id) => [id, { row: rows.get(id), legacy: L.get(id) ?? [], v2: V.get(id) ?? [], ledger: H.get(id) ?? [], apps: A.get(id) ?? [], comms: C.get(id) ?? [], dir: null }]));
 }
 
 /** The application made the person when the pool row appeared with it (the apply pipeline creates
@@ -413,6 +455,12 @@ export function createdThePerson(app, row) {
   const a = Date.parse(app?.created_at);
   const c = Date.parse(row?.created_at);
   return Number.isFinite(a) && Number.isFinite(c) && c >= a - 5_000 && c - a <= 15 * 60_000;
+}
+
+/** Addresses written in free text (an About section). */
+export function textEmails(t) {
+  if (typeof t !== "string" || !t.includes("@")) return [];
+  return [...t.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g)].map((m) => m[0].replace(/\.+$/, ""));
 }
 
 /** Every email any source holds for the person, found independently of the translators. */
@@ -432,11 +480,17 @@ export function knownEmails({ row, legacy, v2, ledger, apps, dir }) {
     for (const x of arr(row.contact.otherEmails)) add(x, "candidates.contact");
   }
   add(row.linkedin_data?.data?.basic_info?.email, "raw_import");
-  for (const l of ledger) for (const x of arr(l.raw_payload?.emails)) add(x, "harvest");
+  // Addresses the person wrote in their own About (the record, both raw generations, Harvest, the directory's copy).
+  for (const t of [row.profile_summary, row.linkedin_data?.data?.basic_info?.about, row.linkedin_data?.summary]) for (const x of textEmails(t)) add(x, "about");
+  for (const l of ledger) {
+    for (const x of arr(l.raw_payload?.emails)) add(x, "harvest");
+    for (const x of textEmails(l.raw_payload?.about)) add(x, "about");
+  }
   if (dir) {
     for (const e of dir.emails) add(e.normalized ?? e.original_value, "directory");
     add(dir.board?.primary_email, "directory");
     for (const x of arr(dir.harvest?.emails)) add(x, "directory_harvest");
+    for (const t of [dir.harvest?.about, dir.harvest?.raw?.about]) for (const x of textEmails(t)) add(x, "about");
   }
   for (const a of apps) {
     add(a.email, "application");
@@ -455,13 +509,16 @@ export function knownPhones({ row, apps, dir }) {
   add(row.phone);
   if (row.contact && typeof row.contact === "object") add(row.contact.phone);
   for (const a of apps) if (a.contact && typeof a.contact === "object") add(a.contact.phone);
-  if (dir) for (const p of dir.phones) add(p.value_text ?? p.normalized ?? p.value ?? p.phone ?? p.number);
+  // The same column order as the translator (fromDirectory directoryPhoneValue).
+  const phoneOf = (p) => { for (const k of ["value_text", "value", "normalized", "phone", "number"]) if (typeof p?.[k] === "string" || typeof p?.[k] === "number") return p[k]; return typeof p === "string" ? p : null; };
+  if (dir) for (const p of dir.phones) add(phoneOf(p));
   return out;
 }
 
 // ---------------------------------------------------------------- building the docs
 
-const docLabel = (d) => `${d.source?.source ?? "?"}@${String(d.source?.fetched_at ?? "").slice(0, 10) || "?"}`;
+/** A doc's label in the log: its source and date; on GitHub Actions (public logs) the source only. */
+const docLabel = (d) => (IN_CI ? `${d.source?.source ?? "?"}` : `${d.source?.source ?? "?"}@${String(d.source?.fetched_at ?? "").slice(0, 10) || "?"}`);
 
 async function buildDocs(lib, id, inp) {
   const docs = [];
@@ -480,7 +537,7 @@ async function buildDocs(lib, id, inp) {
     }
   };
   // The spec's arguments, plus the person's id last (the translators that cannot read it from their input take it there).
-  await add("legacy_import", () => lib.fromLegacyImport(inp.row, inp.legacy, inp.v2));
+  await add("legacy_import", () => lib.fromLegacyImport(inp.row, inp.legacy, inp.v2, inp.comms ?? []));
   for (const l of inp.ledger) {
     const { raw_payload, ...ledgerRow } = l;
     // A few ledger rows are marked ok but hold no payload (9 on 2026-09-25): there is nothing to
@@ -490,8 +547,9 @@ async function buildDocs(lib, id, inp) {
   }
   if (inp.dir) await add("directory", () => lib.fromDirectory(inp.dir.board, inp.dir.harvest, inp.dir.exps, inp.dir.edus, inp.dir.emails, inp.dir.phones, id));
   for (const a of inp.apps) await add("application", () => lib.fromApplication(a, createdThePerson(a, inp.row), id));
-  // Oldest -> newest, so the newest LinkedIn-grade source ends up owning the lists.
-  docs.sort((x, y) => (Date.parse(x.source.fetched_at) || 0) - (Date.parse(y.source.fetched_at) || 0) || (SOURCE_ORDER[x.source.source] ?? 9) - (SOURCE_ORDER[y.source.source] ?? 9));
+  // Oldest -> newest (save_person's own ranking of list owners), so the log reads in time order.
+  // The result does not depend on it: save_person ends the same way in any order.
+  docs.sort((x, y) => outranks(x, y));
   return { docs, errors };
 }
 
@@ -579,21 +637,22 @@ function projectionInput(id, t) {
 export const CHECKS = {
   ids_found: ["spec", "every id is a pool person"],
   zero_errors: ["spec", "0 errors (translators and save_person)"],
-  jobs_accounted: ["spec", "every job accounted for: the list owner's jobs are stored, nothing else"],
+  jobs_accounted: ["spec", "every job accounted for: the jobs' owner's jobs are stored, nothing else"],
   jobs_linked: ["spec", "every stored job linked to a company"],
   emails_present: ["spec", "every known email present"],
   one_primary_email: ["spec", "exactly one primary email per person with a usable address"],
   repeat_unchanged: ["spec", "a second run changes nothing"],
   candidates_untouched: ["spec", "candidates rows identical before and after"],
-  newest_source_owns_lists: ["extra", "the newest list source owns the lists"],
-  educations_accounted: ["extra", "the list owner's schools are stored, nothing else"],
-  skills_accounted: ["extra", "the list owner's skills are stored, nothing else"],
+  newest_source_owns_lists: ["extra", "each list (jobs, schools, skills) is owned by the newest doc that carries it"],
+  educations_accounted: ["extra", "the schools' owner's schools are stored, nothing else"],
+  skills_accounted: ["extra", "the skills' owner's skills are stored, nothing else"],
   phones_present: ["extra", "every known phone present"],
   one_primary_phone: ["extra", "exactly one primary phone per person with a usable phone"],
   dead_never_primary: ["extra", "invalid, bounced, claimed, removed or do-not-use contacts are never ranked"],
   summary_view_agrees: ["extra", "candidate_contact_summary names the rank-1 email"],
   other_experience_rows_untouched: ["extra", "candidate_experiences rows from other writers unchanged"],
   directory_read: ["extra", "every directory person's directory records were read"],
+  sources_current: ["extra", "no stored source of the same record differs from its rebuilt doc (else undo first)"],
   docs_deterministic: ["extra", "the same sources give the same docs (payload hashes) on the second run"],
   projection_runs: ["extra", "project() runs on every person's stored rows"],
   docs_cover_known_emails: ["extra", "the docs carry every known email"],
@@ -626,44 +685,59 @@ function checkDocs(tally, id, inp, docs) {
   return { knownEmails: known.size, emailsMissingFromDocs: missing.length, unnamedJobs: unnamed };
 }
 
+/** The tie-break save_person uses (tt_source_rank, then the payload hash, as the "C" collation orders it). */
+const SOURCE_RANK = { legacy_import: 0, application: 1, directory: 2, harvest: 3, recruiter: 4 };
+/** > 0 when doc a outranks doc b as a list owner (save_person person_doc_beats). */
+export function outranks(a, b) {
+  return (Date.parse(a.source.fetched_at) - Date.parse(b.source.fetched_at))
+    || ((SOURCE_RANK[a.source.source] ?? -1) - (SOURCE_RANK[b.source.source] ?? -1))
+    || (a.source.payload_hash > b.source.payload_hash ? 1 : a.source.payload_hash < b.source.payload_hash ? -1 : 0);
+}
+const LISTS = [["jobs", "jobs_source_id"], ["educations", "educations_source_id"], ["skills", "skills_source_id"]];
+
 /** Checks over the stored rows of one person. Returns the counts printed for them. */
 function checkStored(tally, id, inp, docs, t, lib) {
   const active = (rows) => (rows ?? []).filter((r) => !r.removed_at);
-  const listDocs = docs.filter((d) => d.mode === "replace_lists");
-  const newest = listDocs.reduce((best, d) => (!best || Date.parse(d.source.fetched_at) >= Date.parse(best.source.fetched_at) ? d : best), null);
   const state = t.state.get(id);
-  const ownerSource = state?.lists_source_id ? t.sourceById.get(state.lists_source_id) : null;
-  const owner = ownerSource ? docs.find((d) => d.source.payload_hash === ownerSource.payload_hash && d.source.source === ownerSource.source) : null;
-
+  const docOf = (sourceId) => {
+    const src = sourceId ? t.sourceById.get(sourceId) : null;
+    return { src, doc: src ? docs.find((d) => d.source.payload_hash === src.payload_hash && d.source.source === src.source) ?? null : null };
+  };
+  // Each list's owner: the newest replace_lists doc that carries that list (save_person's rule).
   tally.run("newest_source_owns_lists");
-  if (newest && (!owner || owner.source.payload_hash !== newest.source.payload_hash)) {
-    // Another doc with the same fetched_at is as new; that is not a failure.
-    if (!owner || Date.parse(owner.source.fetched_at) !== Date.parse(newest.source.fetched_at)) tally.bad("newest_source_owns_lists", id);
+  const owners = {};
+  for (const [field, col] of LISTS) {
+    const carriers = docs.filter((d) => d.mode === "replace_lists" && Array.isArray(d[field]));
+    const newest = carriers.reduce((best, d) => (!best || outranks(d, best) > 0 ? d : best), null);
+    const { src, doc } = docOf(state?.[col]);
+    if (newest ? doc !== newest : !!src) tally.bad("newest_source_owns_lists", id);
+    owners[field] = { src, doc };
   }
-  if (!newest && ownerSource) tally.bad("newest_source_owns_lists", id);
+  const listsOwner = docOf(state?.lists_source_id);
 
-  const compare = (check, expected, stored) => {
+  const compare = (check, field, expected, stored) => {
     tally.run(check);
     const e = new Set(expected);
     const s = new Set(stored);
     const missing = [...e].filter((k) => !s.has(k)).length;
     const extra = [...s].filter((k) => !e.has(k)).length;
     const dupes = stored.length - s.size;
-    if (missing || extra || dupes || (ownerSource && !owner)) tally.bad(check, id);
+    if (missing || extra || dupes || (owners[field].src && !owners[field].doc)) tally.bad(check, id);
     return { expected: e.size, stored: stored.length, missing, extra };
   };
-  // With no list owner (no replace_lists doc was ever applied), only gap-filling docs can have
-  // added list rows (an applicant's resume jobs when there is no LinkedIn history).
-  const listed = (field, key) => (owner ? arr(owner[field]) : docs.filter((d) => d.mode === "fill_gaps").flatMap((d) => arr(d[field]))).map(key);
+  // With no owner for a list (no replace_lists doc carried it), only gap-filling docs can have
+  // added its rows (an applicant's resume jobs when there is no LinkedIn history).
+  const listed = (field, key) => (owners[field].doc ? arr(owners[field].doc[field]) : docs.filter((d) => d.mode === "fill_gaps").flatMap((d) => arr(d[field]))).map(key);
   const jobs = active(t.jobs.get(id));
-  const jobCounts = compare("jobs_accounted", listed("jobs", (j) => j.row_key), jobs.map((j) => j.row_key));
+  const jobCounts = compare("jobs_accounted", "jobs", listed("jobs", (j) => j.row_key), jobs.map((j) => j.row_key));
   const legacy = docs.find((d) => d.source.source === "legacy_import");
   const storedKeys = new Set(jobs.map((j) => j.row_key));
   // Jobs on today's record that the newer list owner no longer lists (shown on the page, not a failure).
-  const superseded = owner && legacy && owner !== legacy ? arr(legacy.jobs).filter((j) => !storedKeys.has(j.row_key)).length : 0;
-  const eduCounts = compare("educations_accounted", listed("educations", (e) => e.row_key), active(t.educations.get(id)).map((e) => e.row_key));
+  const jobsOwner = owners.jobs.doc;
+  const superseded = jobsOwner && legacy && jobsOwner !== legacy ? arr(legacy.jobs).filter((j) => !storedKeys.has(j.row_key)).length : 0;
+  const eduCounts = compare("educations_accounted", "educations", listed("educations", (e) => e.row_key), active(t.educations.get(id)).map((e) => e.row_key));
   const skillKeys = active(t.cskills.get(id)).map((s) => t.skillById.get(String(s.skill_id))?.key ?? `?${s.skill_id}`);
-  const skillCounts = compare("skills_accounted", listed("skills", (s) => s.key), skillKeys);
+  const skillCounts = compare("skills_accounted", "skills", listed("skills", (s) => s.key), skillKeys);
 
   tally.run("jobs_linked");
   const linked = jobs.filter((j) => j.company_id && t.companyById.has(j.company_id)).length;
@@ -711,9 +785,11 @@ function checkStored(tally, id, inp, docs, t, lib) {
   } catch (err) {
     tally.bad("projection_runs", id, why(err));
   }
-  const title = (v) => (typeof v === "string" ? v.trim().toLowerCase() : null);
+  const title = (v) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().toLowerCase() : null);
+  const label = ({ src, doc }) => (doc ? docLabel(doc) : src ? `${src.source}@(not this run)` : null);
   return {
-    owner: owner ? docLabel(owner) : ownerSource ? `${ownerSource.source}@(not this run)` : null,
+    owner: label(listsOwner),
+    owners: { jobs: label(owners.jobs), educations: label(owners.educations), skills: label(owners.skills) },
     record_jobs: arr(inp.row.work_experience).length,
     jobs: { ...jobCounts, linked, superseded },
     educations: eduCounts,
@@ -792,7 +868,11 @@ async function main() {
   const opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
   if (argv.includes("--describe") || truthy(process.env.DESCRIBE)) return describe();
 
-  const DRY_RUN = argv.includes("--dry-run") || truthy(process.env.DRY_RUN);
+  // Dry unless asked to save: --apply or DRY_RUN=0.
+  const APPLY = argv.includes("--apply") || falsy(process.env.DRY_RUN);
+  if (APPLY && (argv.includes("--dry-run") || truthy(process.env.DRY_RUN))) throw new Error("--apply and a dry run were both asked for");
+  const DRY_RUN = !APPLY;
+  const ALLOW_PARTIAL = truthy(process.env.ALLOW_PARTIAL);
   const REPEAT = argv.includes("--repeat") || truthy(process.env.REPEAT);
   const SUMMARY_FILE = (process.env.SUMMARY_FILE || "").trim();
   const DETAIL_FILE = (process.env.DETAIL_FILE || "").trim();
@@ -816,7 +896,7 @@ async function main() {
   const tally = new Tally();
   const t0 = Date.now();
   try {
-    console.log(`person trial: ${ids.length} ids, website ${site.kind}, directory ${commsDb ? "connected" : "not configured"}${DRY_RUN ? ", dry run (nothing saved)" : ""}${REPEAT ? ", repeat" : ""}`);
+    console.log(`person trial: ${ids.length} ids; website ${site.target}; directory ${commsDb ? "connected (read only)" : "not configured"}; ${DRY_RUN ? "DRY RUN, nothing is saved (--apply or DRY_RUN=0 to save)" : "SAVING"}${REPEAT ? ", repeat" : ""}`);
 
     // 1. Before: the candidates rows and other writers' experience rows, hashed.
     const before = await readAll(site, ids, commsDb, commsCols, SKIP_DIRECTORY);
@@ -837,25 +917,52 @@ async function main() {
     const docsBy = new Map();
     const perPerson = new Map();
     tally.run("zero_errors");
+    let unmappedStatuses = 0;
     for (const [id, inp] of before.inputs) {
       const { docs, errors } = await buildDocs(lib, id, inp);
       docsBy.set(id, docs);
       const docCheck = checkDocs(tally, id, inp, docs);
       if (errors.length) tally.bad("zero_errors", id);
+      if (inp.dir && typeof lib.unmappedDirectoryStatuses === "function") unmappedStatuses += lib.unmappedDirectoryStatuses(inp.dir.emails);
       const emptyLedger = inp.ledger.filter((l) => !l.raw_payload || typeof l.raw_payload !== "object" || Array.isArray(l.raw_payload)).length;
-      perPerson.set(id, { docs, buildErrors: errors, docCheck, inputs: { legacy: inp.legacy.length, v2: inp.v2.length, ledger: inp.ledger.length, ledger_without_payload: emptyLedger, apps: inp.apps.length, directory: !!inp.dir } });
+      perPerson.set(id, { docs, buildErrors: errors, docCheck, inputs: { legacy: inp.legacy.length, v2: inp.v2.length, ledger: inp.ledger.length, ledger_without_payload: emptyLedger, apps: inp.apps.length, outreach_outcomes: (inp.comms ?? []).length, directory: !!inp.dir } });
     }
+    if (unmappedStatuses) console.log(`directory: ${unmappedStatuses} address(es) carry a verification status the translator does not know (read as unchecked); run --describe`);
+
+    // 2b. A stored source of the same record with another hash: the translators changed since it was
+    // saved. save_person would not let the rebuilt doc take over from it, so the run needs an undo first.
+    let stale = { rows: 0, readable: true };
+    try {
+      const storedSources = groupBy(await selectIn(site, "candidate_sources", "candidate_id", ids, { columns: "candidate_id,source,source_ref,fetched_at,payload_hash,parser_version", order: "candidate_id.asc,fetched_at.asc" }), "candidate_id");
+      tally.run("sources_current");
+      for (const [id, docs] of docsBy) {
+        const rows = storedSources.get(id) ?? [];
+        const n = docs.filter((d) => rows.some((r) => r.source === d.source.source && String(r.source_ref ?? "") === String(d.source.source_ref ?? "")
+          && Date.parse(r.fetched_at) === Date.parse(d.source.fetched_at) && (r.payload_hash !== d.source.payload_hash || r.parser_version !== d.source.parser_version))).length;
+        if (n) { stale.rows += n; tally.bad("sources_current", id, "run scripts/person-trial-undo.mjs --apply for these ids first, then run again"); }
+      }
+    } catch (err) {
+      if (!DRY_RUN) throw err;
+      stale.readable = false;
+      console.log(`candidate_sources not readable (${why(err).slice(0, 80)}): migration 072 is not applied here; sources_current not checked`);
+    }
+
+    // 3. The checks that can be made before anything is written decide whether a saving run saves.
+    const PRE_SAVE = ["ids_found", "directory_read", "zero_errors", "docs_cover_known_emails", "doc_jobs_named", "sources_current"];
+    const preFailed = PRE_SAVE.filter((k) => tally.fail.has(k));
+    const refused = !DRY_RUN && preFailed.length > 0 && !ALLOW_PARTIAL ? preFailed : null;
+    if (refused) console.log(`NOTHING SAVED: ${refused.join(", ")} failed before saving (ALLOW_PARTIAL=1 saves anyway)`);
 
     let results = new Map();
     let second = null;
     let stored = null;
-    if (!DRY_RUN) {
-      // 3. Save, oldest -> newest per person.
+    if (!DRY_RUN && !refused) {
+      // 4. Save, oldest -> newest per person.
       results = await applyDocs(site, docsBy);
       for (const [id, rs] of results) if (rs.some((r) => r.status === "error")) tally.bad("zero_errors", id);
       stored = await readNew(site, ids);
 
-      // 4. The second run: the sources read again, the docs built again, everything saved again.
+      // 4b. The second run: the sources read again, the docs built again, everything saved again.
       if (REPEAT) {
         const again = await readAll(site, ids, commsDb, commsCols, SKIP_DIRECTORY);
         const docs2 = new Map();
@@ -906,7 +1013,7 @@ async function main() {
       const inp = before.inputs.get(id);
       const saved = results.get(id) ?? [];
       const check = stored ? checkStored(tally, id, inp, p.docs, stored, lib) : null;
-      const docsOut = p.docs.map((d, i) => ({ source: d.source.source, fetched_at: String(d.source.fetched_at).slice(0, 10), mode: d.mode, ...docCounts(d), status: saved[i]?.status ?? (DRY_RUN ? "dry_run" : null), saved: saved[i]?.counts ?? null }));
+      const docsOut = p.docs.map((d, i) => ({ source: d.source.source, fetched_at: String(d.source.fetched_at).slice(0, 10), mode: d.mode, ...docCounts(d), status: saved[i]?.status ?? (DRY_RUN || refused ? "not_saved" : null), saved: saved[i]?.counts ?? null }));
       const errors = [...p.buildErrors, ...saved.filter((r) => r.status === "error").map((r) => ({ where: r.label, error: r.error }))];
       const person = { id, inputs: p.inputs, docs: docsOut, doc_check: p.docCheck, errors };
       if (check) {
@@ -915,7 +1022,8 @@ async function main() {
         if (DETAIL_FILE) detail.push({ id, projection: _projection });
       }
       people.push(person);
-      const docText = docsOut.map((d) => `${d.source}@${d.fetched_at}:${d.mode}${d.status && d.status !== "dry_run" ? `=${d.status}` : ""}(${d.jobs}j/${d.educations}e/${d.skills}s/${d.contacts}c)`).join(" ");
+      // No dates in a public (GitHub Actions) log: they would tie an id to when the person applied or was refreshed.
+      const docText = docsOut.map((d) => `${IN_CI ? d.source : `${d.source}@${d.fetched_at}`}:${d.mode}${d.status && d.status !== "not_saved" ? `=${d.status}` : ""}(${d.jobs}j/${d.educations}e/${d.skills}s/${d.contacts}c)`).join(" ");
       const storedText = check
         ? ` | owner ${check.owner ?? "none"}; jobs ${check.jobs.stored}/${check.jobs.expected} linked ${check.jobs.linked}${check.jobs.superseded ? ` superseded ${check.jobs.superseded}` : ""}; schools ${check.educations.stored}/${check.educations.expected}; skills ${check.skills.stored}/${check.skills.expected}; emails ${check.emails.stored} (known ${check.emails.known}, missing ${check.emails.missing}, primary ${check.emails.primary}); phones ${check.phones.stored} (known ${check.phones.known}); conflicts ${check.conflicts}`
         : ` | known emails ${p.docCheck.knownEmails}${p.docCheck.emailsMissingFromDocs ? `, ${p.docCheck.emailsMissingFromDocs} not in any doc` : ""}${p.docCheck.unnamedJobs ? `, ${p.docCheck.unnamedJobs} jobs without a company` : ""}`;
@@ -936,13 +1044,14 @@ async function main() {
       console.log(`CHECK ${c.skipped ? "SKIP" : c.pass ? "PASS" : "FAIL"} ${c.kind.padEnd(5)} ${c.name.padEnd(32)} ${c.what}${c.pass ? "" : ` | failed: ${n} ${c.failed_ids.join(", ")}`}${c.note ? ` | ${c.note}` : ""}`);
     }
     const allDocs = [...docsBy.values()].flat();
-    const totals = DRY_RUN ? {
+    const totals = DRY_RUN || refused ? {
       people: ids.length,
       docs: allDocs.length,
       doc_jobs: allDocs.reduce((n, d) => n + arr(d.jobs).length, 0),
       doc_contacts: allDocs.reduce((n, d) => n + arr(d.contacts).length, 0),
       known_emails: people.reduce((n, p) => n + (p.doc_check?.knownEmails ?? 0), 0),
       ledger_rows_without_payload: people.reduce((n, p) => n + (p.inputs?.ledger_without_payload ?? 0), 0),
+      stale_sources: stale.readable ? stale.rows : null,
     } : {
       people: ids.length,
       ...counts(results),
@@ -961,12 +1070,12 @@ async function main() {
     };
     console.log(`totals: ${Object.entries(totals).filter(([, v]) => v !== null).map(([k, v]) => `${k} ${v}`).join(", ")}`);
     if (second) console.log(`second run: ${Object.entries(second.counts).map(([k, v]) => `${k} ${v}`).join(", ")}${second.tables_changed.length ? `; tables changed: ${second.tables_changed.join(", ")}` : "; no table changed"}`);
-    const pass = checks.every((c) => c.pass);
+    const pass = checks.every((c) => c.pass) && !refused;
     const skippedChecks = checks.filter((c) => c.skipped).map((c) => c.name);
     console.log(`${pass ? "PASS" : "FAIL"}${skippedChecks.length ? ` (not checked here: ${skippedChecks.join(", ")})` : ""} in ${Math.round((Date.now() - t0) / 1000)}s`);
 
     if (SUMMARY_FILE) {
-      fs.writeFileSync(SUMMARY_FILE, JSON.stringify({ run_at: new Date().toISOString(), dry_run: DRY_RUN, repeat: REPEAT, website: site.kind, pass, checks, totals, second, people }, null, 1));
+      fs.writeFileSync(SUMMARY_FILE, JSON.stringify({ run_at: new Date().toISOString(), dry_run: DRY_RUN, saved: !DRY_RUN && !refused, refused, repeat: REPEAT, website: site.kind, pass, checks, totals, second, people }, null, 1));
       console.log(`summary written to ${SUMMARY_FILE}`);
     }
     if (DETAIL_FILE) {
