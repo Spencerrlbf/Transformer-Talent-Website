@@ -13,3 +13,6 @@ scripts/dist/
 .claude/
 
 supabase/.temp/
+
+# Private migration recovery evidence and local test dependencies
+.superpowers/

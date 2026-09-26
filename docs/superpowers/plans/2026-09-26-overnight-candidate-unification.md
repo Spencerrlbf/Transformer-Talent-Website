@@ -25,6 +25,10 @@
 - Tomorrow, after Spencer approves the combined feature and release: deploy the shared application/worker writers, reconcile the final delta, publish compatible projections and only then enforce the live-write guard. Complete production release checks and report separately from the overnight database backfill.
 - Task 12 must distinguish normalized data migrated tonight from live application writers switched tomorrow. No promise of a full-pool morning finish before the pilot measures capacity.
 
+## Execution ruling after the original-50 trial
+
+Tasks 1, 2 and 6 passed. Implement task 5 on `feat/person-06-backfill` before application tasks 3–4, because the approved database backfill must run while main remains unchanged. Database triggers durably capture old-writer changes, including writes without updated_at. Historical backfill and catch-up report any source ambiguity explicitly; neither the migration nor queue processing silently labels an automated write as a recruiter edit. Application branches follow after pilot/full-backfill dispatch, still sequentially from the parent.
+
 ## Global Constraints
 
 - Preserve `candidates.id`, existing links, verdicts, signals, and current application read contracts.
