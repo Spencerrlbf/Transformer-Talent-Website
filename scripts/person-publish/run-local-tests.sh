@@ -20,3 +20,4 @@ q -d $DB -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish/test-publish.mjs
 
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish/test-review-regressions.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish/test-preview.mjs
