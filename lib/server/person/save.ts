@@ -201,13 +201,22 @@ async function storeProjectionBaseline(
     [id, revision, hash(profile), semanticProfileHash(profile)],
   );
 }
-async function applyProjection(
+interface ComputedProjection {
+  original: Record<string, any>;
+  after: Record<string, any>;
+  changedFields: string[];
+  emailCollision: boolean;
+  invalidatedKinds: Set<string>;
+  projectionEmail: string | null;
+}
+/** Pure read: what the compatibility columns would become. Writes nothing.
+ * Throws legacy_projection_drift when the row changed since it was last
+ * projected, so a stale before-image can never be published over a newer edit. */
+async function computeProjection(
   client: PersonConnection,
   id: string,
-  revision: string,
   before: Record<string, any>,
-  audit: AuditOperation,
-) {
+): Promise<ComputedProjection> {
   const tables = await readPersonProjection(client, id);
   const projection = project(tables);
   const previousProjection = (
@@ -314,13 +323,7 @@ async function applyProjection(
         ? (before.current_company_id ?? null)
         : null;
   const original = profileOf(before);
-  const recordEmailCollision = async () =>
-    client.query(
-      `insert into public.identity_conflicts(kind,candidate_ids,incoming,evidence_hash)
-   values('legacy_email_collision',array[$1::uuid],'{}'::jsonb,$2)
-   on conflict(kind,evidence_hash) where status='open' do nothing`,
-      [id, hash([id, projection.email])],
-    );
+  let emailCollision = false;
   if (
     after.email &&
     after.email !== before.email &&
@@ -332,11 +335,43 @@ async function applyProjection(
     ).rows.length
   ) {
     after.email = invalidatedKinds.has("email") ? null : (before.email ?? null);
-    await recordEmailCollision();
+    emailCollision = true;
   }
+  const changedFields = PROFILE_FIELDS.filter(
+    (k) => hash(original[k] ?? null) !== hash(after[k] ?? null),
+  );
+  return {
+    original,
+    after,
+    changedFields,
+    emailCollision,
+    invalidatedKinds,
+    projectionEmail: projection.email ?? null,
+  };
+}
+/** Writes a computed projection inside the caller's audited transaction and
+ * keeps the before-image. runId marks history rows written by a publish run. */
+async function writeProjection(
+  client: PersonConnection,
+  id: string,
+  revision: string,
+  before: Record<string, any>,
+  computed: ComputedProjection,
+  audit: AuditOperation,
+  runId: string | null = null,
+): Promise<{ projected: boolean; semanticChanged: boolean; historyId: string | null }> {
+  const { original, after, invalidatedKinds } = computed;
+  const recordEmailCollision = async () =>
+    client.query(
+      `insert into public.identity_conflicts(kind,candidate_ids,incoming,evidence_hash)
+   values('legacy_email_collision',array[$1::uuid],'{}'::jsonb,$2)
+   on conflict(kind,evidence_hash) where status='open' do nothing`,
+      [id, hash([id, computed.projectionEmail])],
+    );
+  if (computed.emailCollision) await recordEmailCollision();
   if (hash(original) === hash(after)) {
     await storeProjectionBaseline(client, id, revision, after);
-    return { projected: false, semanticChanged: false };
+    return { projected: false, semanticChanged: false, historyId: null };
   }
   // A legacy unique email collision must never merge identities or discard the
   // rest of a good profile update. Preserve its current compatibility address.
@@ -358,13 +393,39 @@ async function applyProjection(
   const semanticBefore = semanticProfileHash(original),
     semanticAfter = semanticProfileHash(after),
     afterHash = hash(after);
-  await client.query(
-    `insert into public.person_projection_history(candidate_id,revision,before_profile,after_hash,semantic_before,semantic_after)
- values($1,$2,$3,$4,$5,$6)`,
-    [id, revision, original, afterHash, semanticBefore, semanticAfter],
+  const historyId = String(
+    (
+      await client.query(
+        `insert into public.person_projection_history(candidate_id,revision,before_profile,after_hash,semantic_before,semantic_after,run_id)
+ values($1,$2,$3,$4,$5,$6,$7) returning id`,
+        [id, revision, original, afterHash, semanticBefore, semanticAfter, runId],
+      )
+    ).rows[0].id,
   );
   await storeProjectionBaseline(client, id, revision, after);
-  return { projected: true, semanticChanged: semanticBefore !== semanticAfter };
+  return {
+    projected: true,
+    semanticChanged: semanticBefore !== semanticAfter,
+    historyId,
+  };
+}
+async function applyProjection(
+  client: PersonConnection,
+  id: string,
+  revision: string,
+  before: Record<string, any>,
+  audit: AuditOperation,
+) {
+  const computed = await computeProjection(client, id, before);
+  const { projected, semanticChanged } = await writeProjection(
+    client,
+    id,
+    revision,
+    before,
+    computed,
+    audit,
+  );
+  return { projected, semanticChanged };
 }
 /** Caller owns the transaction and has taken the shared writer gate and
  * candidate lock. Multiple source docs produce one compatibility projection. */
@@ -506,6 +567,139 @@ export async function undoPersonProjectionOnConnection(
   } catch (error) {
     await client.query("rollback").catch(() => {});
     if ((error as any).code === "23505") return { status: "conflict" };
+    throw error;
+  }
+}
+export interface PublishPersonOptions {
+  /** The publish run this write belongs to; recorded on the before-image. */
+  runId: string;
+  /** Compute and report the change; write nothing (the transaction rolls back). */
+  dryRun: boolean;
+}
+export type PublishPersonStatus =
+  | "projected"
+  | "unchanged"
+  | "held"
+  | "unmigrated"
+  | "drift"
+  | "audit_blocked"
+  | "dry_changed"
+  | "dry_unchanged";
+export interface PublishPersonResult {
+  candidateId: string;
+  status: PublishPersonStatus;
+  revision: string | null;
+  changedFields: string[];
+  emailCollision: boolean;
+  historyId: string | null;
+  /** The audit guard's refusal code when status is audit_blocked. */
+  reason?: string;
+}
+/** Publish one already-migrated person's compatibility columns from the
+ * normalized tables, without a new source document. Owns BEGIN/COMMIT.
+ * Held people and people without normalized state are reported, not written.
+ * A row that changed since its last projection is reported as drift and left
+ * alone. Live writes go through the same audited path as savePerson. */
+export async function publishPersonProjectionOnConnection(
+  client: PersonConnection,
+  id: string,
+  options: PublishPersonOptions,
+): Promise<PublishPersonResult> {
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(options.runId))
+    throw Error("invalid_publish_run");
+  const done = (
+    status: PublishPersonStatus,
+    extra: Partial<PublishPersonResult> = {},
+  ): PublishPersonResult => ({
+    candidateId: id,
+    status,
+    revision: null,
+    changedFields: [],
+    emailCollision: false,
+    historyId: null,
+    ...extra,
+  });
+  try {
+    await beginPersonTransaction(client);
+    const before = await lockPerson(client, id);
+    if (
+      (
+        await client.query(
+          "select 1 from public.person_source_holds where candidate_id=$1 and resolved_at is null limit 1",
+          [id],
+        )
+      ).rows.length
+    ) {
+      await client.query("rollback");
+      return done("held");
+    }
+    const state = (
+      await client.query(
+        "select rev from public.candidate_profile_state where candidate_id=$1",
+        [id],
+      )
+    ).rows[0];
+    if (!state) {
+      await client.query("rollback");
+      return done("unmigrated");
+    }
+    const revision = String(state.rev);
+    let computed: ComputedProjection;
+    try {
+      computed = await computeProjection(client, id, before);
+    } catch (error) {
+      if ((error as Error).message !== "legacy_projection_drift") throw error;
+      await client.query("rollback");
+      return done("drift", { revision });
+    }
+    const summary = {
+      revision,
+      changedFields: computed.changedFields,
+      emailCollision: computed.emailCollision,
+    };
+    if (options.dryRun) {
+      await client.query("rollback");
+      return done(
+        computed.changedFields.length ? "dry_changed" : "dry_unchanged",
+        summary,
+      );
+    }
+    if (!computed.changedFields.length) {
+      await storeProjectionBaseline(client, id, revision, computed.after);
+      await client.query("commit");
+      return done("unchanged", summary);
+    }
+    let audit: AuditOperation;
+    try {
+      audit = await beginGuardedAuditOperationLocked(client, before, {
+        writer: "projection",
+        receiptRef: `projection:publish:${options.runId}:${randomUUID()}`,
+        evidence: { mode: "publish", run_id: options.runId },
+      });
+    } catch (error) {
+      // A missing anchor, a broken candidate chain (an unattributed legacy
+      // edit) or an unresolved hold is this person's problem, not the run's.
+      const reason = (error as Error).message;
+      if (!/^audit_[a-z_]+$/.test(reason)) throw error;
+      await client.query("rollback");
+      return done("audit_blocked", { ...summary, reason });
+    }
+    const written = await writeProjection(
+      client,
+      id,
+      revision,
+      before,
+      computed,
+      audit,
+      options.runId,
+    );
+    await client.query("commit");
+    return done(written.projected ? "projected" : "unchanged", {
+      ...summary,
+      historyId: written.historyId,
+    });
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
     throw error;
   }
 }
