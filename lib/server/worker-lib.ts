@@ -100,3 +100,4 @@ export {
 } from "./person/normalize";
 export { isSideRoleTitle } from "./person/role-selection";
 export type * from "./person/types";
+export { savePerson, savePersonOnConnection, undoPersonProjectionOnConnection, semanticProfileHash, readPersonProjection } from './person/save';

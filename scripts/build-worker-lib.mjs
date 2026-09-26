@@ -15,6 +15,7 @@ execFileSync(
     "lib/server/worker-lib.ts",
     "--bundle",
     "--platform=node",
+    "--external:pg",
     "--format=esm",
     `--alias:@=${root}`,
     "--outfile=scripts/dist/worker-lib.mjs",
