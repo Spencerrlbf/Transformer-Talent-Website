@@ -1,16 +1,21 @@
 # Candidate storage unification: handoff and remaining runbook
 
-Updated 2026-09-26 17:25 UTC for any agent continuing this work.
+Updated 2026-09-26 20:30 UTC for any agent continuing this work.
 Plan: `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Release prerequisites and per-writer notes: `docs/person-storage-release.md`.
 
 ## Where things stand
 
 **Code.** Parent integration branch `feat/person-00-storage-unification`,
-draft PR #2 to main. Child PRs #1 and #3–#19 are merged into the parent. PR #19
-(`feat/person-21-audit-writers`, audit guard) passed its exact-commit hosted
-preview and all 913 tenancy calls in 236 seconds, with full fixture cleanup.
-The parent is at `63bc2ec998117c58ef71267aa0459359d0dcd4c3`. Main remains unchanged at `0c2b9a8463f902737fd6e7e35aea724fa31755a8`
+draft PR #2 to main. Child PRs #1 and #3–#21 are merged into the parent. PR #21
+(`feat/person-23-audit-snapshots`) passed its exact-commit hosted preview and
+all 913 tenancy calls in 260 seconds, with full fixture cleanup.
+The parent is at `d1987ab0c07b62cdbb50e7c9a5eafb3e381c2efe`. The next child,
+`fix/person-27-publish-review`, combines PR #22's prepared publish runbook with
+independently reviewed rollback, audit and restart fixes. PR #23's read-only
+preview and PR #24's comms reconnect fix remain unintegrated; the latter must
+preserve the entire repeatable-read scope across a connection failure.
+Main remains unchanged at `0c2b9a8463f902737fd6e7e35aea724fa31755a8`
 (which already contains the dispatch-only person trial workflow). `PERSON_WRITE_MODE` defaults to `legacy` everywhere.
 Nothing new is deployed.
 
@@ -27,7 +32,9 @@ Prepared in the branch, NOT applied: `20260926033900_person_atomic_projection`,
 `20260926061600_person_directory_intake` (plus `scripts/person-directory/prepare-lookup.sql`,
 run outside a transaction), `20260926065300_person_recruiter_contacts`,
 `20260926072840_person_derivative_jobs`, `20260926074407_person_audit_evidence`,
-`20260926080238` (anchors), `20260926082012` (audit guard, PR #19).
+`20260926080238` (anchors), `20260926082012` (audit guard, PR #19),
+`20260926172608` (post-cutover snapshots, PR #21), `20260926183000`
+(publish runbook), `20260926201342` (exact attribution enforcement, disabled).
 
 **Historical baseline copy: COMPLETE for unheld candidates.** Run `person-full-phones-20260926`, pinned commit
 `c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc` (branch `fix/person-13-phone-audit`),
@@ -50,20 +57,34 @@ Candidate rows and IDs are unchanged. Two earlier full runs
 (`person-full-20260926`, `person-full-bulk-20260926`) failed safely and are
 retained as records; do not resume them.
 
-**Reconciliation.** Queue catch-up is now running as GitHub Actions
-`36258797364`, run `person-reconcile-queue-20260926`, same reviewed pin.
-Do not duplicate this active run. Previously only a 500-person saving pilot ran
-(`person-reconcile-save500-20260926`, paused, source scan complete, external
-directory fingerprint stable at 54c56e296a2a744d00e07bc196a8afca). Full
-reconciliation has NOT run.
+**Reconciliation.** Queue catch-up `36258797364` completed with zero pending
+people. The full source scan `person-reconcile-full-20260926` completed at the
+same reviewed pin through GHA `36259479370` and safe resume `36266729979`.
+Finalized at 19:52:54 UTC with **review_required**, not reconciled:
 
-**Paused workflows.** Disabled at 03:49 UTC and still disabled; prior state was
-active for all five: `build-shortlists.yml`, `compute-signals.yml`,
+| Measure | Final value |
+|---|---:|
+| Pool / scanned | 423,050 / 423,050 |
+| Verified / source review / unscanned | 422,963 / 87 / 0 |
+| Same-snapshot mutations / unknown Harvest dates | 85 / 2 |
+| Open identity/contact/employer conflict rows | 5,483 |
+| Distinct pool people with open conflicts | 9,346 |
+| People in both source review and open conflicts | 3 |
+| Captured events / queue / blocked sessions after fixture cleanup | 0 / 0 / 0 |
+| Database bytes | 31,881,792,659 |
+
+The external directory fingerprint changed during the scan. Stable source
+catch-up remains necessary; a finished scan does not establish a consistent
+external boundary. No people were merged and no source dates were invented.
+Do not redispatch or refinalize these completed run IDs.
+
+**Restored workflows.** Restored at 19:53 UTC and verified active after migration
+load ended. Prior state was active for all five: `build-shortlists.yml`, `compute-signals.yml`,
 `judge-shortlists.yml`, `refresh-queue.yml`, `sync-candidates.yml`.
 `review-queue.yml`, `sourcing-resumer.yml`, `draft-open-roles.yml` and
-`person-trial.yml` were left active. Restore their original active states once migration load ends, including if
-remaining work is waiting for release approval. Do not leave them disabled
-through the approval wait or manually dispatch their paid work.
+`person-trial.yml` were left active. No paid workflow was manually dispatched.
+The private restoration ledger retains original states and timestamps. Future
+pauses must be separately recorded and restored after the relevant load ends.
 
 **Holds.** Two people are held because the original fetch date of their cached
 Harvest payload cannot be proven. Do not clear a hold without provenance.
@@ -78,6 +99,9 @@ Rotate it after the runner no longer depends on it; coordinate dependent access.
 All production runs go through the dispatch-only workflow `person-trial.yml`,
 dispatched with `--ref` pointing at the branch whose scripts should run. Logs
 show IDs, hashes and counts only. Never log names, contacts or payloads.
+The commands below document the completed historical runs, not instructions to
+dispatch them again. A further pass needs a reviewed source plan, fresh run ID
+and verified idle Actions/database checkpoints.
 
 ```bash
 # Queue catch-up: drain captured old-writer changes and pending revisions.
@@ -113,18 +137,21 @@ from public.backfill_runs order by started_at desc limit 5;
 
 ## Remaining steps in order
 
-1. **Catch-up** (`scope: queue`). Monitor the existing run above; do not duplicate it.
-2. **Full reconciliation** (`scope: all`) then bounded finalize. The two source-date
-   holds prevent `reconciled`. Report eligible, verified, pending, review and open
-   conflict counts separately. The 5,007 baseline people with conflicts and 5,483
-   conflict rows are different measures; do not treat them as reconciliation totals.
+1. **Stable source catch-up.** The queue and full historical scan completed;
+   the external boundary was unstable. Retain the 85 same-snapshot source
+   reviews and two date holds until real provenance supports a reviewed repair.
+   Recheck Actions/checkpoints before any additional bounded run.
+2. **Finish reviewed preparation.** Integrate the publish/undo remediation only
+   after its local regressions, build, independent review and exact-preview
+   tenancy gate. Repair PR #24's mid-transaction reconnect behavior before
+   using it in another scan; give the read-only preview load/time gates.
 3. **Complete application preparation**: finish and test the separate post-cutover
    auditor. It must understand frozen anchors, actual receipt documents and exact
    captured-event attribution. The historical reconciler cannot certify newly
    published profiles. This remains a release prerequisite; flags stay off.
-4. **Restore schedules** as soon as migration load ends, preserving the five
-   original active states and existing budget limits. Leave a precise accounting
-   report, remaining holds and release prerequisites for Spencer.
+4. **Maintain schedules and accounting.** The original five schedules are
+   restored. Keep exact review/hold/conflict counts separate and preserve
+   existing budget limits; restore any future temporary pauses promptly.
 5. **Spencer's release approval** covers parent PR #2, deployment, profile
    publication and restrictive write guards. Child integration and additive shadow
    database work remain authorized. Retain unresolved identity/source conflicts;
