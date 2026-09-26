@@ -380,3 +380,29 @@ Concurrent calls cannot join another callback's transaction.
 Local recovery tests terminate only their own exact PostgreSQL backend PID in
 the test database. The completed historical run remains pinned to `c4d0e4e`;
 this prepared repair does not change that run or its retained accounting.
+
+## Bounded projection comparison
+
+`scripts/person-publish-preview.mjs` compares normalized projections with the
+current profile and reports held, missing and previously published-but-drifted
+people separately. It requires the prepared `person_projection_state` table;
+unavailable tables or metrics stop the scan. It does not validate anchors,
+receipt admission or a consistent snapshot across all reads, and does not certify
+publication eligibility or source reconciliation.
+
+The default time budget is 600 seconds, checked before every page; an already
+started page finishes before a duration pause. Size at or above 34 GB, more than
+five blocked sessions, invalid health metrics, or three metric probes above
+twice the initial median (250 ms floor) stop further pages. `--max-seconds`
+(1–18,000) and `--max-db-bytes` also propagate through the Actions dispatcher.
+Existing request and retry limits remain in force within each page.
+
+`preview_finished` includes `status` (`exhausted`, `limit_reached` or `paused`),
+the scope and `last_id`. `preview_stopped` retains only fully accounted pages
+and has a nonzero process exit. Resume by passing that cursor as `--after`;
+each invocation's counters are separate. A bounded sample, an explicit ID list
+or a resumed suffix never claims full-pool coverage. Even `full_migrated_scan:true`
+means traversal of normalized profiles only, and every summary is labeled
+`comparison_only`. People without normalized state are outside that scan; the
+`population` field identifies normalized profiles or an explicit requested set.
+Missing IDs in an explicit list are counted without hiding later valid IDs.

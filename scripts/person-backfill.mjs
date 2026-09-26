@@ -107,8 +107,8 @@ export async function main(){
  // reconciliation code, and the preview refuses to run with dry_run off.
  if(truthy(dispatch.preview)){
   if(!truthy(process.env.BACKFILL_DRY_RUN??'true'))throw Error('preview_requires_dry_run');
-  const argv=[];for(const k of ['limit','batch-size','after','collision-ids'])if(dispatch[k]!==undefined)argv.push(`--${k}=${dispatch[k]}`);
-  return (await import('./person-publish-preview.mjs')).main(argv);
+  const preview=await import('./person-publish-preview.mjs');
+  return preview.main(preview.previewDispatchArguments(dispatch));
  }
  if(truthy(dispatch.reconcile))return (await import('./person-reconcile.mjs')).main();
  const config=options();const site=await openSite();let comms;

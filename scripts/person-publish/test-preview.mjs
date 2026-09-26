@@ -105,6 +105,20 @@ test("held people are skipped, open review records are flagged, and the scan pag
   assert.equal(rest.people, all.people - upToP, "the cursor skips every migrated id up to P");
   assert.equal(rest.held, 0, "P, the held person, is behind the cursor");
   const ids = await runPreview({ site, lib, options: parseOptions([`--ids=${Q},${NOSTATE}`], SPEC), onProgress: quiet });
-  assert.equal(ids.people, 1, "an id without normalized state is not a migrated person");
+  assert.equal(ids.people, 2, "every explicit target is accounted for");
+  assert.equal(ids.missing, 1, "missing normalized state is explicit");
   await pool.query("update person_source_holds set resolved_at=clock_timestamp(),resolution='{\"test\":true}'::jsonb where candidate_id=$1", [P]);
+});
+
+test('a drifted published profile is not reported as a publishable change',async()=>{
+ const client=await pool.connect();
+ try {
+  await lib.publishPersonProjectionOnConnection(client,R,{runId:'preview-drift-base',dryRun:false});
+  await pool.query("update candidates set headline='Synthetic unexplained drift' where id=$1",[R]);
+  const dry=await lib.publishPersonProjectionOnConnection(client,R,{runId:'preview-drift-check',dryRun:true});
+  assert.equal(dry.status,'drift');
+  const [preview]=await previewPage({site,lib,ids:[R]});
+  assert.equal(preview.status,'drift');
+  assert.ok(!preview.changed?.length);
+ } finally {client.release();}
 });
