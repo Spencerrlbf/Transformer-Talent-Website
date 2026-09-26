@@ -23,10 +23,11 @@ language plpgsql security definer set search_path='' as $$
 begin
  if new.organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and new.provider='harvest'
   and new.status='ok' and new.cache_status='hit' and new.raw_payload is not null and new.candidate_id is not null then
+  perform pg_advisory_xact_lock(72008,hashtext(new.candidate_id::text));
   perform 1 from public.candidates where id=new.candidate_id for key share;
   if not found then return null;end if;
   insert into public.person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence)
-  values(new.candidate_id,new.id,md5(jsonb_build_array(new.created_at,new.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(new)) on conflict do nothing;
+  values(new.candidate_id,new.id,md5(jsonb_build_array(extract(epoch from new.created_at),new.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(new)) on conflict do nothing;
  end if;
  return null;
 end $$;
@@ -36,18 +37,21 @@ revoke all on function person_private.hold_cache_date() from public,anon,authent
 create trigger person_source_date_hold after insert or update on public.candidate_enrichments
  for each row execute function person_private.hold_cache_date();
 insert into public.person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence)
-select e.candidate_id,e.id,md5(jsonb_build_array(e.created_at,e.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(e)
+select e.candidate_id,e.id,md5(jsonb_build_array(extract(epoch from e.created_at),e.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(e)
 from public.candidate_enrichments e join public.candidates c on c.id=e.candidate_id
 where e.organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and e.provider='harvest'
  and e.status='ok' and e.cache_status='hit' and e.raw_payload is not null and e.candidate_id is not null;
 
 -- A historical ledger can reference a person not yet present in the pool.
 -- Keep legacy acceptance, and establish holds if that person is later created.
+-- Both paths take the same per-person gate after the capture locks, before
+-- looking up the other row. A concurrent uncommitted arrival cannot be missed.
 create function person_private.hold_existing_cache_dates() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
+ perform pg_advisory_xact_lock(72008,hashtext(new.id::text));
  insert into public.person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence)
- select new.id,e.id,md5(jsonb_build_array(e.created_at,e.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(e)
+ select new.id,e.id,md5(jsonb_build_array(extract(epoch from e.created_at),e.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(e)
  from public.candidate_enrichments e where e.candidate_id=new.id
  and e.organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and e.provider='harvest'
  and e.status='ok' and e.cache_status='hit' and e.raw_payload is not null on conflict do nothing;

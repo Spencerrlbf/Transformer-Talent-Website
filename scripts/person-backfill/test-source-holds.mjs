@@ -51,6 +51,24 @@ try{
  await db.query("insert into candidates(id,full_name,linkedin_username) values($1::uuid,'Synthetic later arrival',$1::text)",[orphan]);
  assert.equal((await db.query('select count(*)::int n from person_source_holds where candidate_id=$1',[orphan])).rows[0].n,1);
  console.log('PASS orphan ledger remains accepted and later pool arrival is held');
+ const simultaneous='d0000000-0000-4000-8000-000000000098';
+ const other=new pg.Client({connectionString:url});await other.connect();
+ try{
+  await db.query('begin');
+  await db.query("insert into candidates(id,full_name,linkedin_username) values($1::uuid,'Synthetic concurrent arrival',$1::text)",[simultaneous]);
+  let done=false;
+  const pending=other.query(`insert into candidate_enrichments(candidate_id,organization_id,provider,status,cache_status,created_at,raw_payload) values($1,$2,'harvest','ok','hit',now(),'{}')`,[simultaneous,tt]).then(()=>{done=true;});
+  let blocked=false;
+  for(let i=0;i<100;i++){
+   blocked=(await db.query("select exists(select 1 from pg_stat_activity where pid=$1 and wait_event_type='Lock') blocked",[other.processID])).rows[0].blocked;
+   if(done||blocked)break;await new Promise(r=>setTimeout(r,5));
+  }
+  await db.query('commit');await pending;
+  assert.equal(blocked,true,'cache-hit arrival must wait for concurrent candidate creation');
+  assert.equal((await db.query('select count(*)::int n from person_source_holds where candidate_id=$1',[simultaneous])).rows[0].n,1);
+  console.log('PASS concurrent candidate and cached ledger arrivals cannot escape hold');
+ }finally{await db.query('rollback');await other.end();}
+
 
 
 }finally{await site.end();await db.end();}
