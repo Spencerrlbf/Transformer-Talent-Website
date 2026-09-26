@@ -56,7 +56,11 @@ enrichment or duplicate-person merges were performed.
    and load gates, and PR32 repaired the auditor. All passed local suites/build
    and exact-preview tenancy. Complete the remaining transition/canary work
    below and verify that final combined code before seeking release approval.
-3. Prove a canary and drain procedure that isolates one surface. All three
+3. The local rollback-only application-admission rehearsal is documented in
+   `scripts/person-canary/README.md`. It uses the actual writer, deferred guard and
+   precommit planner with a bounded local footprint and an independent rollback
+   check. It does not authorize or implement a website canary. Finish and review
+   the website scope/drain procedure that isolates one surface. All three
    Actions workers currently read the same repository `vars.PERSON_WRITE_MODE`;
    changing it is a shared rollout, not a review-queue-only canary. Use a reviewed
    per-dispatch override or an isolated worker invocation with explicit synthetic
