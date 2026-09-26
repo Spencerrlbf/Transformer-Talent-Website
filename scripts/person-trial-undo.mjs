@@ -3,8 +3,14 @@
 // from the new tables (migration 072) and then the companies and schools the
 // writer created (created_from = 'person_writer') that nothing references any
 // more. The candidates rows, and candidate_experiences rows written by anything
-// other than the writer (source <> 'person'), are never touched. The shared skill
-// dictionary is kept; the skills nobody uses any more are only counted.
+// other than the writer (source <> 'person'), are never touched. Skills (a new
+// table only the writer fills) that the trial people used and nobody else uses
+// are deleted last; a skill anyone else still has is kept.
+//
+// Not undone: save_person fills a null companies.tier / tier_list_version on a
+// pre-existing companies row it links a job to (the spec's rule), and the live
+// update_companies_updated_at trigger bumps that row's updated_at. Those rows
+// are counted here (tier set, not created by the writer) but left as they are.
 // Prints counts only. A dry run (the default) counts what it would delete.
 //
 //   node scripts/person-trial-undo.mjs --ids <id,id,...>   (or --file ids.txt | ids.json, or TRIAL_IDS)
@@ -41,6 +47,9 @@ export async function undo(site, ids, { apply }) {
   }
   for (const c of await selectIn(site, "identity_conflicts", "source_id", sourceIds, { order: "id.asc" })) conflicts.set(c.id, c);
   const skillIds = uniq(cskills.map((s) => s.skill_id));
+  const idSet = new Set(ids);
+  const skillsUsedElsewhere = new Set((await selectIn(site, "candidate_skills", "skill_id", skillIds, { columns: "candidate_id,skill_id", order: "skill_id.asc" }))
+    .filter((r) => !idSet.has(r.candidate_id)).map((r) => r.skill_id));
 
   // Children first: every row pointing at candidate_sources goes before it.
   const byIds = (col, values) => [[col, "in", values]];
@@ -80,9 +89,15 @@ export async function undo(site, ids, { apply }) {
   await chunked("companies (created by the writer, unused)", "companies", "id", orphanCompanies, [["created_from", "eq", "person_writer"]], orphanCompanies.length);
   const kept = { companies: writerCompanies.length - orphanCompanies.length, schools: writerSchools.length - orphanSchools.length };
 
-  const skillsStillUsed = apply ? await referenced(site, "candidate_skills", "skill_id", skillIds) : new Set();
-  const unusedSkills = apply ? skillIds.filter((s) => !skillsStillUsed.has(s)).length : null;
-  return { steps: out, kept, unusedSkills };
+  // Skills last (candidate_skills restricts deleting one still in use). Applying re-reads the
+  // references after the trial's rows are gone, so a skill someone started using meanwhile stays.
+  const skillsStillUsed = apply ? await referenced(site, "candidate_skills", "skill_id", skillIds) : skillsUsedElsewhere;
+  const orphanSkills = skillIds.filter((s) => !skillsStillUsed.has(s));
+  await chunked("skills (used only by these people)", "skills", "id", orphanSkills, [], orphanSkills.length);
+  kept.skills = skillIds.length - orphanSkills.length;
+  // Pre-existing companies rows given a tier by the writer (see the header): counted, not reverted.
+  kept.tiered_existing_companies = (await site.select("companies", { columns: "id", filters: [["created_from", "is_null"], ["tier", "not_null"]], order: "id.asc" })).length;
+  return { steps: out, kept };
 }
 
 async function main() {
@@ -93,10 +108,11 @@ async function main() {
   const site = await openSite();
   try {
     console.log(`person trial undo: ${ids.length} ids, website ${site.kind}, ${apply ? "DELETING" : "dry run (DRY_RUN=0 or --apply to delete)"}`);
-    const { steps, kept, unusedSkills } = await undo(site, ids, { apply });
+    const { steps, kept } = await undo(site, ids, { apply });
     for (const [label, n] of steps) console.log(`${apply ? "deleted" : "would delete"} ${String(n).padStart(6)}  ${label}`);
     console.log(`writer companies still used by other rows: ${kept.companies}; writer schools still used: ${kept.schools}`);
-    if (unusedSkills !== null) console.log(`skills the trial people used that nobody uses now: ${unusedSkills} (kept: the dictionary is shared)`);
+    console.log(`skills the trial people share with others (kept): ${kept.skills}`);
+    console.log(`companies not created by the writer that have a tier (the writer's tier fill; not reverted, updated_at was bumped): ${kept.tiered_existing_companies}`);
     console.log("the candidates rows were not touched");
     return 0;
   } finally {
