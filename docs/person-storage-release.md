@@ -297,3 +297,48 @@ the new live path: the legacy REST updater does not participate in the new
 transaction locks. Keep public submissions accepted and durably queued during
 this transition. Main merge, flag activation and existing profile publication
 remain separately gated by Spencer's approval.
+
+## Cutover runbook scripts: publish, undo, write guard
+
+Prepared migration `20260926183000_person_publish_runbook.sql` adds a `run_id`
+to `person_projection_history`, the service-only `person_publish_runs` and
+`person_publish_results` tables, and the profile write guard on
+`public.candidates`, created DISABLED. Nothing in it rewrites a candidate row.
+It is not applied in production.
+
+`scripts/person-publish.mjs` publishes already-migrated people's compatibility
+columns from the normalized tables (plan task 10, step 16 of the cutover). It
+needs the website's server-only `PERSON_DATABASE_URL`, the projection and audit
+migrations, and a valid audit anchor for every person it writes. Each person is
+one audited transaction through `publishPersonProjectionOnConnection`: candidate
+lock, hold check, drift check against the last projection, a before-image tagged
+with the run id, then the same profile update path as `savePerson`. `--mode=dry`
+(the default) computes every change and writes nothing; its `--out` file holds
+ids, statuses and the names of changed columns only. Per-person outcomes are
+`projected`, `unchanged`, `held`, `unmigrated`, `drift`, `audit_blocked` and
+`review_skipped`; `--review=skip|publish` carries Spencer's decision on people
+with an open identity or contact review record. Pages are bounded (at most 500),
+the checkpoint follows the page, and a crash between a person's commit and the
+checkpoint is safe: re-running the person changes nothing and the before-image
+already carries the run id. Capacity gates match the other runners.
+
+`scripts/person-publish-undo.mjs --run-id=<publish run> [--apply]` restores the
+profile columns from that run's before-images through
+`undoPersonProjectionOnConnection`: only when the person still has the
+normalized revision the run wrote and the current profile hash equals what
+publish produced. A newer edit, later revision or unique-email clash is a
+`conflict` and is left alone. Restored rows are marked, so a re-run is a no-op.
+
+`scripts/person-guard.mjs` reads and toggles the write guard through
+`person_write_guard_status()` / `person_write_guard_set()`. While enabled, an
+UPDATE that changes any compatibility profile column must belong to a transaction
+that opened a `person_audit_operations` row for that candidate; workflow and
+metadata columns are not guarded and INSERTs are not guarded (creation is
+admitted by its receipt anchor). `--test-rejected=<id>` and `--test-allowed=<id>`
+prove both outcomes on a real row and roll back. Enable the guard only after
+every legitimate writer runs in live mode (step 17).
+
+Local proof: `bash scripts/person-publish/run-local-tests.sh <port>` covers dry
+run, publish, resume idempotency, crash between commit and checkpoint, drift,
+exact undo and undo conflict, review and hold skips, the guard's three cases,
+and scan paging with pause and resume.
