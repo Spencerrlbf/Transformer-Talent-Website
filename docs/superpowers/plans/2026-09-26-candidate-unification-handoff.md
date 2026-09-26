@@ -1,23 +1,27 @@
 # Candidate storage unification: handoff and remaining runbook
 
-Updated 2026-09-26 20:30 UTC for any agent continuing this work.
+Updated 2026-09-26 21:23 UTC for any agent continuing this work.
 Plan: `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Release prerequisites and per-writer notes: `docs/person-storage-release.md`.
 
 ## Where things stand
 
 **Code.** Parent integration branch `feat/person-00-storage-unification`,
-draft PR #2 to main. Child PRs #1 and #3–#21 are merged into the parent. PR #21
-(`feat/person-23-audit-snapshots`) passed its exact-commit hosted preview and
-all 913 tenancy calls in 260 seconds, with full fixture cleanup.
-The parent is at `d1987ab0c07b62cdbb50e7c9a5eafb3e381c2efe`. The next child,
-`fix/person-27-publish-review`, combines PR #22's prepared publish runbook with
-independently reviewed rollback, audit and restart fixes. PR #23's read-only
-preview and PR #24's comms reconnect fix remain unintegrated; the latter must
-preserve the entire repeatable-read scope across a connection failure.
-Main remains unchanged at `0c2b9a8463f902737fd6e7e35aea724fa31755a8`
-(which already contains the dispatch-only person trial workflow). `PERSON_WRITE_MODE` defaults to `legacy` everywhere.
-Nothing new is deployed.
+draft PR #2 to main. Children through PR #28 are integrated at parent
+`e29ddbd` (query GitHub for the full current SHA). PR #25 corrected publication,
+exact-history undo, durable accounting and deferred attribution guards. PR #27
+preserves complete directory snapshots across connection failures. PR #28 fixes
+preview drift, explicit-ID coverage, completion labels and time/load gates.
+Their exact hosted previews passed 913 tenancy calls in 252, 261 and 248 seconds
+respectively, with exact-run fixture cleanup verified empty. The combined PR27
+parent was retested after the other task integrated PR23/24/26.
+
+The source-aware post-cutover audit planner/accounting/finalization/CLI is still
+unfinished. A tested isolated canary and queue-only/drain transition also remain
+required. Read the corrected `2026-09-26-cutover-runbook.md`; the earlier version
+incorrectly treated these prerequisites as ready. Main remains unchanged at
+`0c2b9a8463f902737fd6e7e35aea724fa31755a8`, and production write flags remain legacy.
+No application activation, profile publication or restrictive guard was performed.
 
 **Database (website Supabase project kmuihequfurvjxpnugxf).**
 
@@ -48,7 +52,7 @@ parser `person-v3`, status `baseline_complete` at 2026-09-26 17:04:41 UTC
 | Excluded by design | 2 (unresolved source-date holds) |
 | Rows in candidate_profile_state | 423,049 |
 | Rows in candidate_sources | 491,056 |
-| People with a review record | 5,007 |
+| Backfill runner’s own reviewed-person count | 5,007 |
 | Rows in identity_conflicts | 5,483 |
 | Blocked sessions / pending queue / captured events at finish | 0 / 0 / 0 |
 | Database size | 31.2 GB (runner cap 34 GB, disk 40 GB) |
@@ -141,14 +145,19 @@ from public.backfill_runs order by started_at desc limit 5;
    the external boundary was unstable. Retain the 85 same-snapshot source
    reviews and two date holds until real provenance supports a reviewed repair.
    Recheck Actions/checkpoints before any additional bounded run.
-2. **Finish reviewed preparation.** Integrate the publish/undo remediation only
-   after its local regressions, build, independent review and exact-preview
-   tenancy gate. Repair PR #24's mid-transaction reconnect behavior before
-   using it in another scan; give the read-only preview load/time gates.
+2. **Reviewed repairs are integrated.** PR #25 fixes publish/undo/guard defects;
+   PR #27 fixes whole-snapshot reconnect; PR #28 adds safe preview coverage and
+   load/time controls. The preview requires the prepared projection-state schema.
+   Historical anchor policy still accepts only the frozen c4 runtime; do not
+   repin a catch-up run merely because the connection fix exists on the parent.
 3. **Complete application preparation**: finish and test the separate post-cutover
    auditor. It must understand frozen anchors, actual receipt documents and exact
    captured-event attribution. The historical reconciler cannot certify newly
-   published profiles. This remains a release prerequisite; flags stay off.
+   published profiles. Complete an isolated canary and a tested queue-only/drain
+   transition preserving submissions before the anchor-to-activation window.
+   All three workflow modes share one repository variable; draining Actions
+   alone does not stop Vercel legacy writes. These remain release prerequisites;
+   flags stay off.
 4. **Maintain schedules and accounting.** The original five schedules are
    restored. Keep exact review/hold/conflict counts separate and preserve
    existing budget limits; restore any future temporary pauses promptly.

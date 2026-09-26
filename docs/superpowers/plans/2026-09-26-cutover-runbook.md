@@ -1,107 +1,125 @@
-# Candidate storage cutover: pre-cutover summary and runbook
+# Candidate storage: release preparation and cutover runbook
 
-Written 2026-09-26 evening (UTC) after Phase 1 and Phase 2 of the cutover brief.
-Nothing in this document has been run against production. Every step below
-waits for Spencer's go-ahead at the pause points marked **PAUSE**.
+This is a prepared runbook, not release approval. Main, application write flags,
+profile publication and restrictive guards remain held for Spencer. The parent
+is not ready to release until the prerequisites below are completed and tested.
+A snapshot marked `ready` means inputs were collected; it is not an audit pass.
 
-## 1. Where things stand
+## Current database outcome
 
-**Production.** `main` is unchanged at `0c2b9a8` (plus the dispatch-only person
-trial workflow). Nothing built for the unification is deployed. `PERSON_WRITE_MODE`
-is unset everywhere, so every writer runs in legacy mode.
+The historical backfill completed at its frozen runtime
+`c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc`, parser `person-v3`. The full source
+scan finished and was finalized once, at 2026-09-26 19:52:54 UTC:
 
-**Database (website project `kmuihequfurvjxpnugxf`).** Seven additive migrations
-are live: `20260926011500` (072 tables), `025355`, `031057`, `032752`, `040300`,
-`042200`, `050355`. Candidate rows and IDs are unchanged. Twelve prepared
-migrations are NOT applied (section 4, step 13).
+| Measure | Retained result |
+|---|---|
+| Pool candidates scanned | 423,050 |
+| Verified at that observed boundary | 422,963 |
+| Source reviews | 87: 85 same-snapshot mutations and 2 unknown cache dates |
+| Unscanned candidates | 0 |
+| Normalized profile states | 423,049 |
+| Open identity/contact conflict rows | 5,483, affecting 9,346 distinct pool people |
+| Overlap of source-review and identity-conflict populations | 3 people |
+| Captured queue pending at finalization | 0 |
+| External source fingerprint | Changed between scan start and end |
+| Final historical status | `review_required`, not `reconciled` |
 
-| Measure | Value | Evidence |
-|---|---|---|
-| Candidates in pool | 423,050 | `select count(*) from candidates` |
-| Normalized (shadow) profiles | 423,049 | run `person-full-phones-20260926`, status `baseline_complete` |
-| Excluded by source-date hold | 2 | `person_source_holds`, reason `harvest_cache_date_unknown` |
-| Reconciliation | `review_required` | run `person-reconcile-full-20260926`: 422,963 verified, 87 review (2 holds + 85 same-snapshot mutations), queue 0, full scan complete, external directory not stable across the scan |
-| Open identity/contact review records | 5,483 rows, ~4,835 people | `identity_conflicts` status open |
-| Database size | 31.8 GB of 40 GB disk, 34 GB runner cap | `person_backfill_metrics()` |
-| Nightly workflows | all 9 active (restored 2026-09-26 ~20:00 UTC) | GitHub Actions |
+Counts are observations, not a guarantee that live sources stopped changing.
+The five temporarily paused workflows were restored to their original active
+states at 19:53 UTC; none was manually dispatched. Any new pause must record and
+restore the exact original state. Public application acceptance must continue.
 
-**Decisions taken by Spencer (2026-09-26, in chat).**
-1. Restore the five paused workflows: done.
-2. Fill emails at publish for the 146,696 people who have none today; collisions keep today's address and get a review record.
-3. Contact rule: invalid, bounced, claimed or suppressed contacts never rank; a manual choice wins only among usable contacts.
-4. Newest dated source owns current title and company; recruiter edits win; shared addresses never primary.
-5. List contract: separate owners for jobs, education, skills; omitted = untouched, explicit empty = clear.
-6. Company identity change: keep the job row id on an unambiguous match; review the ambiguous.
-7. Parser replay: version-aware.
-8. Publish everyone, including the ~4,835 review people and the 85 mutated-snapshot people (`--review=publish`); deduplicate the collision pairs in a separate review after cutover.
-9. Keep the 2 holds out of publication; resolve after cutover with two fresh Harvest pulls.
-10. Directory drift is a bounded catch-up step before cutover, not a gate.
-11. Merge order into the parent: #22, #23, #24, #21 (#21, #22 and #25 already merged).
-12. Token rotation is Spencer's, after cutover.
+Seven additive storage/capture/backfill migrations are live. Application,
+projection, receipt, audit, anchor and restrictive-guard migrations are prepared
+only. Main remains `0c2b9a8463f902737fd6e7e35aea724fa31755a8`. Candidate IDs and live
+legacy fields were preserved. No `_v2` or communications writes, paid migration
+enrichment or duplicate-person merges were performed.
 
-## 2. Pull requests and evidence
+## Prerequisites before asking for release approval
 
-| PR | Branch | State | What | Tests |
-|---|---|---|---|---|
-| #2 | `feat/person-00-storage-unification` | draft to main | the parent | combined below |
-| #1, #3 to #18 | children | merged | writer rules, atomic save, backfill, reconcile, holds, intake (application, refresh, directory, recruiter), published reads, derived data, audit evidence and anchors | each child's local suite, hosted preview, 913-call tenancy sweep |
-| #19 | `feat/person-21-audit-writers` | merged | audit guard on writers | 149 audit tests, sweep 236 s PASS |
-| #20 | `docs/person-22-handoff` | merged | handoff document | docs |
-| #21 | `feat/person-23-audit-snapshots` | merged | post-cutover audit evidence snapshots | 19 PostgreSQL tests |
-| #22 | `feat/person-24-publish-runbook` | merged | publish, undo, write-guard scripts and migration `183000` | 9 tests + CLI demonstration; all suites green |
-| #25 | `fix/person-27-publish-review` | merged | review fixes on #22; migration `201342` (deferred guard checks) | 27 publish/undo/guard tests; sweep 252 s PASS on f0183f6 |
-| #23 | `chore/person-25-email-collision-check` | open, rebased | read-only projection preview + email collision check | 3 tests; production preview run 36263047493 |
-| #24 | `fix/person-26-comms-connection` | open, rebased | directory connection survives a server-side disconnect | 2 tests; reconcile, backfill, directory, trial suites |
+1. Finish the separate post-cutover evidence planner, durable audit accounting,
+   timed record/finalize RPCs and CLI. Test the actual writer receipts, full
+   captured-event chain, shared lookup changes and receipt-only mutations. PR21
+   supplied the snapshot reader only. Its `ready` status cannot replace this gate.
+2. Finish and review all corrective children on the feature parent. The directory
+   snapshot-loss repair is PR27. The projection-preview correctness/load repair
+   is PR28. Run the relevant suites, build, hosted tenancy gate and exact fixture
+   cleanup. Read the current parent and deployment SHAs rather than relying on
+   this document's historical branch names.
+3. Prove a canary and drain procedure that isolates one surface. All three
+   Actions workers currently read the same repository `vars.PERSON_WRITE_MODE`;
+   changing it is a shared rollout, not a review-queue-only canary. Use a reviewed
+   per-dispatch override or an isolated worker invocation with explicit synthetic
+   targets and cost controls before changing the shared variable. Do not describe
+   a normal scheduled workflow as isolated when it uses that shared setting.
+4. Prove a queue-only/drain transition for source mutations while public
+   submissions remain durably accepted. Draining Actions does not drain Vercel
+   requests or recruiter/contact writes. Legacy source edits after an immutable
+   anchor can block later guarded writes; waiting through nightly cycles between
+   anchoring and activation is unsafe. Do not invent a maintenance command or
+   proceed until the actual drain/queued-retry path has been tested.
+5. Resolve the runtime/evidence policy for final historical catch-up. The current
+   anchor policy accepts only verification from the frozen `c4d0e4e...` runtime.
+   A newer run at a different `GITHUB_SHA` cannot simply replace that latest
+   verification. Until a compatibility-policy change is independently tested,
+   historical catch-up must stay on the accepted pin, with bounded slices and
+   the same run/configuration on resume. Never relabel a new runtime as the old
+   pin. Never use the historical reconciler after compatible profiles are published.
+6. Preserve the distinction between identity reviews and source-proof failures.
+   Spencer's recorded preference is to publish identity-review people while
+   retaining their reviews. `--review=publish` only bypasses that identity filter;
+   it does not provide an anchor for the 85 source-review people, clear a hold or
+   bypass a broken evidence chain. Those people remain `audit_blocked` until a
+   separately reviewed provenance/replay policy supports them. Report them as such.
 
-Local suites at the current parent (Node 24, PostgreSQL 15): publish 9 + 18 + 3,
-atomic 15, audit 149, backfill 15, derivatives 16, directory 48, intake 27,
-published 27, reconcile 8, recruiter 23, refresh 23. `tsc --noEmit` exit 0.
-Note: the suites end their connection pool in top-level code and fail under
-Node 20 even on unmodified code; use `/opt/homebrew/bin/node` (24).
+Two source-date holds stay excluded. Fresh Harvest pulls and duplicate resolution
+are separate owner-directed work after cutover, outside the overnight scope.
 
-## 3. The parity diff, explained
+## Projection comparison and expected changes
 
-Read-only projection preview over all 423,049 migrated people (Actions run
-36263047493, 4,041 s). Full table with per-column explanations is on PR #23.
+The retained read-only comparison (Actions 36263047493) scanned 423,049 normalized
+profiles: 420,207 changed, 2,841 unchanged and 1 held within that population. The
+other held person has no normalized state. It flagged 9,345 conflict-affected
+people in that population and 272 legacy-email collisions; 7 desired emails also
+had another owner in `_v2` (informational, no writes).
 
-| Column | Would change | Cause |
-|---|---|---|
-| current_company_id | 415,485 | null for everyone today; projection links the companies table |
-| work_experience | 419,442 | 92.8% same positions gaining company references; 6.2% more positions than the old JSON; 0.2% fewer (exact duplicates and empty positions removed) |
-| previous_companies | 299,985 | derived from the same positions by the projection rule |
-| top_skills / all_skills_text | 179,205 / 177,514 | 134,705 filled from empty; 17,960 supersets; 26,540 newer set |
-| profile_summary | 138,049 | ~119,000 whitespace and newline normalisation; ~18,500 newer text; 210 filled |
-| education_fields / degrees / schools | 120,186 / 55,313 / 20,851 | one entry per education row instead of the old deduplicated list; filled from empty; canonical school names |
-| headline, current_title, current_company, full_name, photo, location, phone | 16,258 / 9,275 / 3,078 / 789 / 4,457 / 23 / 812 | normalisation, plus newer-source values (832 titles, 705 names) |
-| email | 146,699 | 146,696 filled from normalized contacts; 91 different; 4 case only; 180 cleared as invalid or bounced; 272 collisions kept as today with a review record |
+This comparison is not publication eligibility. It does not prove anchors or
+stable cross-table reads. Counts may change after live intake and final catch-up;
+recompute them on the exact reviewed release and report the population and cursor.
+PR28 adds explicit drift/missing accounting, duration and health gates. Its reader
+requires the prepared `person_projection_state` schema and fails closed if absent.
 
-Not touched by publish: candidate ids, verdict links, signals, status, notes,
-follow_up_at, contact JSON, embeddings and every non-profile column (publish
-writes the 18 profile columns and `updated_at` only; proven by the publish
-suite's workflow-preservation and exact-undo assertions).
+Major differences are normalized company references, consistent job/education
+lists, and filling previously empty profile fields from retained sources. Email
+collision handling keeps today's address and records review; invalidated current
+addresses may be cleared under the tested contact rule. Do not add the old
+filled/different/case/cleared observations together: those intermediate comparison
+counts overlapped. Use the final per-person change results for release accounting.
 
-## 4. Cutover runbook (Phase 4)
+## Approval and execution sequence
 
-Run from the Mac Mini in one sitting. Conventions: `REPO` is a checkout of the
-parent at the released commit; `WD` is `~/Mac-Mini-Projects/Recruitment-Matching`
-(linked to the website Supabase project); every `psql`-style check goes through
-`supabase db query --linked --workdir $WD`. Logs carry ids and counts only.
+Complete prerequisites first. Then present Spencer with the exact parent commit,
+preview, test evidence, source/review accounting, migration inventory and rollback
+steps. **Wait for approval before merging the parent to main or changing production
+behavior.** A main merge deploys automatically. Each later expansion/publication/
+guard action below must be covered by explicit release approval before execution.
 
-Secrets needed before step 14, provided by Spencer and never pasted in chat:
-- `PERSON_DATABASE_URL`: the website project's **transaction pooler (port 6543)** URL, for Vercel and the worker secrets.
-- `PERSON_PUBLISH_DATABASE_URL`: the **direct or session pooler (port 5432)** URL, for the publish, undo and guard CLIs (they refuse 6543).
-- The `.env.scripts` file (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) for the tenancy test.
+### 1. Deploy the approved code with write flags off
 
-### Step 12: merge the parent to main and verify the deploy
-1. Merge #23 and #24 into the parent (after #23's tenancy sweep, or Spencer's acceptance of the suites).
-2. Take PR #2 out of draft and merge it to main **only on Spencer's explicit go**.
-3. Verify: `gh run list` shows the main deploy green; Vercel production points at the merge commit; `curl -sL -o /dev/null -w '%{http_code}' https://www.transformertalent.com/` and `/roles`, `/talent`, `/apply` return 200. Flags are unset, so behaviour is unchanged.
-- Rollback: revert the merge commit on main; Vercel redeploys the previous build.
+Verify that Vercel production and the GitHub repository write variable are still
+unset/legacy. Merge the approved parent only after Spencer's go. Verify the exact
+production deployment succeeded and the public/application routes remain healthy.
+Keep application submissions durably accepted throughout.
 
-### Step 13: apply the prepared migrations
-Apply in this order, each file in one transaction through the linked CLI, and
-record each in `supabase_migrations.schema_migrations` with its filename prefix
-as the version, the same way the seven live ones were recorded overnight:
+Rollback before activation: revert the approved merge through a reviewed PR and
+verify the previous deployment. Once restrictive guards are active, do not switch
+back to legacy writers without coordinating guard state and queued work.
+
+### 2. Install the complete reviewed additive schema
+
+Use the verified website project `kmuihequfurvjxpnugxf`, an active statement/lock
+budget, and the exact migration inventory from the released commit. The currently
+prepared chain is:
 
 ```
 20260926033900_person_atomic_projection.sql
@@ -118,95 +136,121 @@ as the version, the same way the seven live ones were recorded overnight:
 20260926201342_person_publish_review_guards.sql
 ```
 
-Then, outside a transaction: `psql -v ON_ERROR_STOP=1 -f scripts/person-directory/prepare-lookup.sql`
-(creates the case-folded LinkedIn lookup index concurrently).
+This list is incomplete until the remaining audit implementation is reviewed;
+append its actual migrations before execution. Apply each reviewed file atomically
+and record its exact version. Run the reviewed directory lookup index preparation
+outside a transaction. Verify installed objects, service-only permissions and site
+health after each stage. Only call `person_write_guard_status()` after the migration
+that creates it; it must remain disabled. Refresh live candidate counts rather than
+requiring a stale count while applications are arriving.
 
-Verify after each file: `select to_regclass('public.<new table>')` is not null for
-its tables; `select public.person_write_guard_status()` returns `enabled: false`;
-`select count(*) from candidates` is still 423,050; the site still answers 200.
-All twelve are additive; none rewrites a candidate row.
-- Rollback: each migration's objects can be dropped without touching candidate rows; nothing reads them until the flag flips.
+Rollback: leave unused additive objects in place with flags off. Do not drop
+receipt, anchor or attribution evidence as a routine rollback.
 
-**PAUSE 1: report the applied list and checks to Spencer; wait for OK.**
+### 3. Configure connections and complete the coordinated transition
 
-### Step 14: secrets, drain, catch-up, anchors
-1. Set `PERSON_DATABASE_URL` in Vercel (production, server-only) and in the GitHub Actions secrets used by `refresh-queue.yml`, `sync-candidates.yml` and `review-queue.yml`. Leave `PERSON_WRITE_MODE` unset (legacy).
-2. Redeploy so the new secret is present; verify the deploy is green and pages return 200.
-3. Drain in-flight old workers: confirm no `Person writer trial`, refresh, directory sync or review-queue run is in progress (`gh run list --status in_progress`).
-4. Directory catch-up (decision 10): dispatch `person-trial.yml` with `dry_run` off and
-   `backfill = {"run-id":"person-reconcile-precutover-<date>","reconcile":true,"scope":"directory","limit":1000000,"batch-size":500,"max-db-bytes":34000000000,"max-seconds":18000}`;
-   expect `source_scan_complete` and finalize locally with `scripts/person-reconcile-finalize.mjs`. Record the status; `review_required` from the 87 known review people is expected.
-5. Prepare audit anchors for the whole pool (publish refuses a person without one):
-   `PERSON_PUBLISH_DATABASE_URL=... node scripts/person-audit-anchors.mjs --limit=1000 --batch=20` (dry) then `--save`, measuring throughput on the first 1,000 before extending `--limit` and `--max-seconds`. Expected outcome per person: `created`, `unchanged` or `review`; `review` people are the same review bucket.
-- Rollback: remove the secret and redeploy; anchors are additive rows.
+Supply secrets through server-only configuration, never chat or committed files:
 
-### Step 15: writers live, canary first
-1. Set `PERSON_WRITE_MODE=live` on **one** surface first: the review-queue Actions workflow (bounded, retryable, TT applications only). Dispatch it once; verify in `person_application_receipts` that receipts commit and that `person_derivative_jobs` shows queued work with no `review` status.
-2. Extend to `refresh-queue.yml` and `sync-candidates.yml`, one nightly cycle each, checking `person_refresh_attempts` and `person_directory_receipts`.
-3. Set `PERSON_WRITE_MODE=live` in Vercel production and redeploy. Submit one synthetic test application through the tenancy fixture (`node scripts/test-tenancy.mjs --base https://www.transformertalent.com`) and confirm the 913 calls PASS and cleanup is empty.
-4. Health checks between each move: `person_backfill_metrics()` (blocked sessions 0, queue pending 0), Vercel function error rate, `select count(*) from person_change_queue`.
-- Rollback: unset `PERSON_WRITE_MODE` on the affected surface and redeploy; legacy writers resume; normalized receipts remain for replay.
+- `PERSON_DATABASE_URL`: website app/worker PostgreSQL URL, transaction pooler
+  supported; also used by the anchor CLI.
+- `PERSON_PUBLISH_DATABASE_URL`: dedicated website direct/session endpoint on
+  port 5432 for publish/undo/guard CLIs; these refuse transaction poolers on 6543.
+- Existing private website API credentials for the hosted tenancy fixture.
 
-**PAUSE 2: report canary results; wait for OK before flipping everywhere.**
+Verify configuration without printing credentials. Use the tested queue-only/drain
+procedure from prerequisite 4. Inspect active Actions and database checkpoints
+before any dispatch; do not duplicate an active migration or overlap a source
+scan with tenancy fixtures. Record any temporary schedule pauses.
 
-### Step 16: publish projections in batches
-Dry run first, over everyone (writes nothing):
+Run bounded final catch-up under the accepted historical policy before publication;
+retain new run IDs and resume the same pin/configuration. Account exact verified,
+pending, review, queue and external-boundary outcomes. An unstable external
+observation is reported explicitly; Spencer's tolerance for drift does not turn it
+into a verified stable fingerprint or authorize bypassing the writer's guard.
+
+Then prepare anchors using the unchanged translator and installed audit chain:
+
+```sh
+# PERSON_DATABASE_URL is already securely configured for this process.
+node scripts/person-audit-anchors.mjs --limit=1000 --batch=20
+node scripts/person-audit-anchors.mjs --save --limit=1000 --batch=20
 ```
-PERSON_PUBLISH_DATABASE_URL=... node scripts/person-publish.mjs --run-id=publish-<date>-dry --mode=dry --limit=1000000 --batch-size=500 --review=publish --out=<private path>
+
+Advance only from the last completed cursor, within time/load gates. Verify every
+reported review/pending outcome. Anchors are immutable; do not recreate them to
+legitimize an unexplained edit. Keep the drain effective through activation.
+
+### 4. Canary, audit, then expand writers
+
+**Obtain approval before the first live canary.** Run the tested isolated canary,
+validate its actual receipts and queued derivatives, and run the completed
+receipt-aware auditor. A snapshot-ready result is insufficient. Verify the allowed
+and disallowed write paths, application retry behavior and read contracts.
+
+**Report the canary and wait for approval before expanding all writers.** Only then
+change the shared Actions variable and Vercel mode in the tested order, drain old
+in-flight code, and verify each surface's receipt-backed writes. Restore temporarily
+paused schedules promptly once migration load and transition coordination end.
+Do not wait for another full nightly cycle while old writers mutate anchored rows.
+
+Rollback follows the tested queue/guard procedure and preserves submissions and
+receipts. A flag flip alone is not proof that already-running legacy code stopped.
+
+### 5. Publish compatible profiles under a separately tracked run
+
+**Obtain approval before publishing the first profile.** Run the bounded dry
+comparison/publish dry run and retain its exact counts and limitations. Do not
+expect every historical source-review person to pass the anchor guard.
+
+Use an explicit ID set for the initial canary, with its own run ID:
+
+```sh
+node scripts/person-publish.mjs --run-id=publish-DATE-canary --mode=publish --ids=UUIDS --review=publish --max-seconds=600
 ```
-Expected: counts matching the PR #23 preview within the drift of live intake.
 
-First batch, the 50 trial people. They are the only people with a normalized
-source written before the baseline started:
-`select distinct candidate_id from candidate_sources where created_at < '2026-09-26 03:30+00'`
-(verified: exactly 50). Pass them as `--ids`:
+Use only the approved concrete UUID list. Verify per-person results and history,
+read the selected people in the drawer, Network and Send, then audit the canary.
+**Wait for approval before expanding publication.**
+
+Start the full scan with a different run ID; it cannot resume the explicit-ID run:
+
+```sh
+node scripts/person-publish.mjs --run-id=publish-DATE-full --mode=publish --limit=1000000 --batch-size=500 --review=publish --max-seconds=3600
+# Later invocations of this same full-scan run only:
+node scripts/person-publish.mjs --run-id=publish-DATE-full --mode=publish --limit=1000000 --batch-size=500 --review=publish --resume --max-seconds=3600
 ```
-PERSON_PUBLISH_DATABASE_URL=... node scripts/person-publish.mjs --run-id=publish-<date> --mode=publish --ids=<50 ids> --review=publish
-```
-Verify: `select status,count(*) from person_publish_results where run_id='publish-<date>' group by 1`
-shows `projected` and `unchanged` only; open three of the 50 in the pool drawer,
-Network and Send and confirm title, company, contacts; `select count(*) from
-person_projection_history where run_id='publish-<date>'` equals the projected count.
 
-**PAUSE 3: show the first batch's results; wait for OK before publishing beyond it.**
+Retain the same runtime and target/review configuration on resume. Report durable
+distinct outcomes, including held, drift and audit-blocked people; completion of
+traversal does not mean all profiles were published. Canary people encountered by
+the full scan normally become unchanged; do not double-count distinct people.
+Keep both run IDs for separate reporting and exact-history undo.
 
-Then the pool, resumable, in one-hour slices:
-```
-PERSON_PUBLISH_DATABASE_URL=... node scripts/person-publish.mjs --run-id=publish-<date> --mode=publish --limit=1000000 --batch-size=500 --review=publish --resume --max-seconds=3600
-```
-Repeat with `--resume` until `publish_complete`. Watch `person_publish_runs.counts`
-after each slice: `drift` and `audit_blocked` must stay near zero (a rising
-`drift` means a legacy writer is still active: stop and find it). Expected
-totals: about 420,000 projected, about 2,800 unchanged, 2 held, 0 unmigrated.
-Recompute unpaid signals only (`compute-signals.yml` on its schedule); do not
-dispatch judge or refresh for storage-only changes.
-- Rollback: `node scripts/person-publish-undo.mjs --run-id=publish-<date>` (count), then `--apply`; `conflict` rows are people edited since publish and are left alone.
+Undo uses `person-publish-undo.mjs --run-id=EXACT_RUN` for a dry count, then `--apply`
+only within approved rollback scope. Newer edits/publications remain conflicts.
+Do not mass-trigger paid enrichment, embeddings or judging for storage-only changes.
 
-### Step 17: audit and enable the guard
-1. Run the post-cutover audit evidence snapshot on a bounded sample (from #21) and confirm `ready` outcomes; anything `review` is added to the review bucket.
-2. `node scripts/person-guard.mjs --test-rejected=<one published id>` must print `outcome: rejected` (guard still disabled prints `allowed`, which is expected before enabling) and `--test-allowed=<same id>` must print `allowed`. Both roll back.
-3. `node scripts/person-guard.mjs --enable --note="cutover <date>"`, then repeat both tests: rejected and allowed.
+### 6. Audit and restrictive guard
 
-**PAUSE 4: show the two test writes; wait for OK before leaving the guard enabled.**
+Run the completed audit and its fenced finalization; retain verified/pending/review
+counts, shared-lookup and source-boundary results. Preserve unresolved reviews.
+Test allowed/rejected guard behavior on a local/isolated fixture first; production
+probe commands roll back. A rejected probe while the guard is disabled is not an
+expected success assertion: report the actual guard state.
 
-- Rollback: `node scripts/person-guard.mjs --disable --note="..."`, instant.
+**Obtain approval before `person-guard.mjs --enable`.** Enable only after the audited
+writer rollout and publication gates have passed. Then verify both the rejected
+legacy write and allowed attributed write with the guard enabled. Report failures
+immediately and follow the approved guard/queue rollback procedure.
 
-### Step 18: restore, verify, rotate
-1. Workflows are already active; confirm each of shortlists, signals, judge, refresh queue and directory sync completes one clean scheduled cycle against the live writer (the morning after).
-2. Tenancy test against production: 913 calls PASS, cleanup empty.
-3. Live read checks: pool drawer, Network, Send, public talent cards, `/roles`, `/apply`.
-4. Spencer rotates the Supabase access token noted in the overnight ledger.
+### 7. Release report and follow-up
 
-### Step 19: completion report
-State separately: historical data copied (done 2026-09-26 17:04 UTC); sources
-reconciled (review_required with 87 known); writers switched (per surface, with
-dates); projections published (count, held 2, drift, blocked); derived data
-refreshed (which nightly cycle). Include the review-bucket status (~4,835
-collision people + 85 mutated snapshots + 272 email collisions: resolved or
-deferred with counts), the 2 holds, and token rotation. April retirement is
-out of scope.
+Verify the exact production commit, public application intake, tenancy cleanup,
+recruiter reads, Network/Send, schedules, queue health and bounded query latency.
+Spencer owns token rotation from the incident documented in the overnight handoff.
+Never reproduce that token in logs or messages.
 
-## 5. Open items that are not blockers
-- The 272 email collision ids and the 2,000-id sample of collision people are in the preview run log; the dedup review is post-cutover work.
-- PR #24's connection fix is not in the pinned runner used by the reconciliation runs; the next long scan should use a new pin that includes it.
-- The tenancy sweep for #23 needs `.env.scripts` on the Mac Mini or Spencer's acceptance of the suites.
+Report historical copying, source reconciliation, writer activation, publication
+and derivative refresh separately, each with its actual run/commit/count. Include
+unresolved source reviews, identity conflicts and both holds. Keep April retirement,
+legacy deletion, duplicate-person merging and paid follow-up work outside this release.
