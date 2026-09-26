@@ -52,3 +52,11 @@ test('external directory fingerprints track translated facts, not unrelated meta
  assert.equal(directoryEvidenceHash(lib,{...row,board:{...row.board,unrelated_metric:42}},id),hash);
  assert.notEqual(directoryEvidenceHash(lib,{...row,board:{...row.board,title:'Staff Engineer'}},id),hash);
 });
+test('a legacy cache reuse date is never treated as the fetch date',async()=>{
+ const inp=input();const row={id:'d0000000-0000-4000-8000-000000000005',organization_id:TT_ORG,candidate_id:id,provider:'harvest',status:'ok',cache_status:'hit',created_at:'2026-09-25T00:00:00Z',raw_payload:{headline:'Stale Engineer'}};
+ inp.ledger=[row];
+ assert.throws(()=>lib.fromHarvest(row.raw_payload,row,id),/harvest_cache_date_unknown/);
+ assert.equal((await prepareEvidence(lib,id,inp,[],[])).review,'harvest_cache_date_unknown');
+ inp.ledger=[];
+ assert.equal((await prepareEvidence(lib,id,inp,[{source_table:'candidate_enrichments',payload:row}],[])).review,'harvest_cache_date_unknown','deleted historical cached evidence also requires review');
+});

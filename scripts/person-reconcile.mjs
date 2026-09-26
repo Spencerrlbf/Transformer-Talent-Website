@@ -43,6 +43,8 @@ function evidenceInputs(input,events,id){
 export async function prepareEvidence(lib,id,input,events,storedSources){
  if(events.length>200) return {review:'event_limit',hash:hashOf(events.map(e=>e.id))};
  const inputs=evidenceInputs(input,events,id),byHash=new Map(),snapshots=new Map();const tally=new Tally();
+ const reused=inputs.flatMap(inp=>inp.ledger).filter(row=>row.cache_status==='hit'&&row.raw_payload);
+ if(reused.length)return {review:'harvest_cache_date_unknown',hash:hashOf(reused)};
  for(const inp of inputs){
   const built=await buildDocs(lib,id,inp);if(built.errors.length)throw Error('source_translation');
   checkDocs(tally,id,inp,built.docs);
@@ -67,8 +69,9 @@ export async function reconcilePage({site,lib,comms,cols,config,page,afterSave,b
  if(before.rows.size!==ids.length||before.dirMissing||before.dirSkipped)throw Error('source_coverage');
  const events=groupBy(await selectIn(site,'person_change_events','candidate_id',ids,{order:'candidate_id.asc,id.asc'}),'candidate_id');
  const sources=groupBy(await selectIn(site,'candidate_sources','candidate_id',ids,{order:'candidate_id.asc,id.asc'}),'candidate_id');
+ const holds=groupBy(await selectIn(site,'person_source_holds','candidate_id',ids,{filters:[['resolved_at','is_null',null]],columns:'candidate_id,ledger_id,reason',order:'candidate_id.asc,ledger_id.asc'}),'candidate_id');
  const prepared=new Map();
- for(const id of ids)prepared.set(id,await prepareEvidence(lib,id,before.inputs.get(id),events.get(id)??[],sources.get(id)??[]));
+ for(const id of ids)prepared.set(id,holds.has(id)?{review:'harvest_cache_date_unknown',hash:hashOf(holds.get(id))}:await prepareEvidence(lib,id,before.inputs.get(id),events.get(id)??[],sources.get(id)??[]));
  const ready=ids.filter(id=>!prepared.get(id).review);
  const toSave=ready.filter(id=>prepared.get(id).needsSave);
  if(config.dry)return {processed:ids.length,review:ids.length-ready.length};
