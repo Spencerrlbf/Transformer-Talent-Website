@@ -14,3 +14,4 @@ for migration in 072_person_tables 20260926025355_person_writer_corrections 2026
 done
 bash scripts/person-audit/install-local.sh "$PORT" person_publish_test
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_publish_test" node --test --test-concurrency=1 scripts/person-publish/test-publish.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_publish_test" node --test --test-concurrency=1 scripts/person-publish/test-preview.mjs

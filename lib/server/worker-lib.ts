@@ -101,8 +101,8 @@ export {
 } from "./person/normalize";
 export { isSideRoleTitle } from "./person/role-selection";
 export type * from "./person/types";
-export { savePerson, savePersonOnConnection, undoPersonProjectionOnConnection, semanticProfileHash, readPersonProjection, publishPersonProjectionOnConnection, PROFILE_FIELDS, projectionProfileHash } from './person/save';
-export type { PublishPersonOptions, PublishPersonResult, PublishPersonStatus } from './person/save';
+export { savePerson, savePersonOnConnection, undoPersonProjectionOnConnection, semanticProfileHash, readPersonProjection, publishPersonProjectionOnConnection, compatibilityProjection, PROFILE_FIELDS, projectionProfileHash } from './person/save';
+export type { PublishPersonOptions, PublishPersonResult, PublishPersonStatus, ComputedProjection } from './person/save';
 export { personWriteMode, saveApplicationPerson, saveApplicationPersonOnConnection, applicationProfileDoc } from './person/intake';
 
 export { runApplicantPipeline } from './applicant-pipeline';

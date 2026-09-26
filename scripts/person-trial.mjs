@@ -162,6 +162,7 @@ function restFilter([col, op, val]) {
   switch (op) {
     case "eq": return `${c}=eq.${encodeURIComponent(val)}`;
     case "neq": return `${c}=neq.${encodeURIComponent(val)}`;
+    case "gt": return `${c}=gt.${encodeURIComponent(val)}`;
     case "in": return `${c}=in.${encodeURIComponent(`(${list(val)})`)}`;
     case "ov": return `${c}=ov.${encodeURIComponent(`{${list(val)}}`)}`;
     case "is_null": return `${c}=is.null`;
@@ -176,6 +177,7 @@ function sqlFilter([col, op, val], params) {
   switch (op) {
     case "eq": return `${c} = ${p()}`;
     case "neq": return `${c} <> ${p()}`;
+    case "gt": return `${c} > ${p()}`;
     case "in": return `${c} = any(${p()})`;
     case "ov": return `${c} && ${p()}`;
     case "is_null": return `${c} is null`;
@@ -214,13 +216,16 @@ export function restSite(url, key) {
     kind: "rest",
     // The host locally; on GitHub Actions only that it is the SUPABASE_URL secret's database.
     target: IN_CI ? "REST (the SUPABASE_URL secret)" : `REST ${new URL(base).host}`,
-    async select(table, { columns = "*", filters = [], order }) {
+    // limit: at most that many rows (keyset paging with a gt filter); default every match.
+    async select(table, { columns = "*", filters = [], order, limit = null }) {
       const q = [`select=${columnsOf(columns)}`, ...filters.map(restFilter), `order=${orderOf(order).map(([c, d]) => `${c}.${d}`).join(",")}`].join("&");
       const out = [];
       for (let offset = 0; ; offset += PAGE) {
-        const rows = await retryTransient(()=>requestJson(`${name(table)}?${q}&limit=${PAGE}&offset=${offset}`));
+        const size = limit === null ? PAGE : Math.min(PAGE, limit - out.length);
+        if (size <= 0) return out;
+        const rows = await retryTransient(()=>requestJson(`${name(table)}?${q}&limit=${size}&offset=${offset}`));
         out.push(...rows);
-        if (rows.length < PAGE) return out;
+        if (rows.length < size || (limit !== null && out.length >= limit)) return out;
       }
     },
     async rpc(fn, args) {
@@ -247,9 +252,9 @@ export async function pgSite(url) {
     kind: "pg",
     target: `postgres ${u.hostname}:${u.port || 5432}${u.pathname}`,
     // Whole rows as Postgres's own JSON (full timestamp precision), like REST's select=*.
-    async select(table, { filters = [], order }) {
+    async select(table, { filters = [], order, limit = null }) {
       const params = [];
-      const sql = `select to_jsonb(t) as j from public.${name(table)} t${where(filters, params)} order by ${orderOf(order).map(([c, d]) => `t.${c} ${d}`).join(", ")}`;
+      const sql = `select to_jsonb(t) as j from public.${name(table)} t${where(filters, params)} order by ${orderOf(order).map(([c, d]) => `t.${c} ${d}`).join(", ")}${limit === null ? "" : ` limit ${Number(limit)}`}`;
       return (await db.query(sql, params)).rows.map((r) => r.j);
     },
     async rpc(fn, args) {

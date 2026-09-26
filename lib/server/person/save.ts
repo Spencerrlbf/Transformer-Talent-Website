@@ -201,7 +201,7 @@ async function storeProjectionBaseline(
     [id, revision, hash(profile), semanticProfileHash(profile)],
   );
 }
-interface ComputedProjection {
+export interface ComputedProjection {
   original: Record<string, any>;
   after: Record<string, any>;
   changedFields: string[];
@@ -218,7 +218,6 @@ async function computeProjection(
   before: Record<string, any>,
 ): Promise<ComputedProjection> {
   const tables = await readPersonProjection(client, id);
-  const projection = project(tables);
   const previousProjection = (
     await client.query(
       "select profile_hash from public.person_projection_state where candidate_id=$1",
@@ -230,6 +229,37 @@ async function computeProjection(
     previousProjection.profile_hash !== hash(profileOf(before))
   )
     throw Error("legacy_projection_drift");
+  const state = (
+    await client.query(
+      "select * from public.candidate_profile_state where candidate_id=$1",
+      [id],
+    )
+  ).rows[0];
+  return compatibilityProjection(
+    tables,
+    state,
+    before,
+    async (email) =>
+      (
+        await client.query(
+          "select id from public.candidates where email=$1 and id<>$2 limit 1",
+          [email, id],
+        )
+      ).rows.length > 0,
+  );
+}
+/** The compatibility columns a person's normalized rows project to, given the
+ * row they would replace. Pure apart from the email ownership lookup, so a
+ * read-only preview over REST computes exactly what a live publish would write.
+ * `state` is the person's candidate_profile_state row (header provenance and
+ * list owners); `tables` is what readPersonProjection or the trial reader gives. */
+export async function compatibilityProjection(
+  tables: ProjectionInput,
+  state: Record<string, any>,
+  before: Record<string, any>,
+  emailTaken: (email: string) => Promise<boolean>,
+): Promise<ComputedProjection> {
+  const projection = project(tables);
   const after: Record<string, any> = {
     ...profileOf(before),
     ...Object.fromEntries(
@@ -242,12 +272,6 @@ async function computeProjection(
   // Missing list data is not a deliberate clear. An explicitly owned empty list
   // IS a clear, and is preserved by project(). No change to career-year rules:
   // the existing app computes them from the same positions with computeFacts().
-  const state = (
-    await client.query(
-      "select * from public.candidate_profile_state where candidate_id=$1",
-      [id],
-    )
-  ).rows[0];
   if (!state.jobs_source_id && !tables.jobs.length)
     for (const k of ["work_experience", "previous_companies"])
       after[k] = before[k] ?? null;
@@ -327,12 +351,7 @@ async function computeProjection(
   if (
     after.email &&
     after.email !== before.email &&
-    (
-      await client.query(
-        "select id from public.candidates where email=$1 and id<>$2 limit 1",
-        [after.email, id],
-      )
-    ).rows.length
+    (await emailTaken(after.email))
   ) {
     after.email = invalidatedKinds.has("email") ? null : (before.email ?? null);
     emailCollision = true;
