@@ -166,15 +166,42 @@ notes and outreach message bodies are omitted. Event hashes cover the retained
 original event; message-body redaction does not alter that stored evidence.
 Never print snapshot payloads in runner or Actions logs.
 
-The planner, audit result/checkpoint tables, timed record/finalize RPCs and CLI
-remain separate unfinished stages. They must validate full source/receipt/event
-provenance and compare fresh boundaries under the writer/capture gates, including
-changes to relevant shared company/school/skill lookups. Historical reconciliation
-records are not modified or acknowledged by this reader. Do not activate the
-application writers until that audit path and the release gates are complete.
+The separate planner, result/checkpoint tables, timed record/finalize RPCs and
+CLI are prepared on the feature branch. They validate source/receipt/event
+provenance and compare committed boundaries under the writer/capture gates,
+including shared company/school/skill lookups. Historical reconciliation records
+are not modified or acknowledged by this reader. Production activation still
+requires the release gates in the cutover runbook.
+
+The prepared `20260926233000_person_audit_reference_ownership.sql` adds independent,
+candidate-indexed attribution references to `person_postcutover_audit_inputs_with_witness`.
+It returns only event/candidate/operation IDs, stops at 201 references (200 accepted),
+and keeps the 8 MB snapshot cap. The planner checks every reference before unchanged
+event shortcuts. Application finalization must name its exact application receipt.
+
+Normalized source references must belong to the same candidate. Contacts and
+identities must also occur in a witnessed document for that exact source;
+verification merged from later sources remains valid. Removed list rows retain
+their own historical source rather than adopting today's list owner.
+
+Reference changes append committed candidate epochs under the existing capture
+gate. Reassignment marks both owners; a misattribution also marks the referenced
+event's actual owner. Sighting/rank/revision-only noise does not add reference
+markers. These narrow triggers do not claim to fence every arbitrary direct
+normalized-content mutation. The versioned boundary invalidates older results,
+and verified records require `checks.reference_version = 1`. Pending paging and
+finalization reject retained proofless results. Always run the current reviewed
+planner with the complete prepared migration chain; an older ready-only snapshot
+is insufficient.
 
 Local verification (resets only `person_postcutover_test`):
 
 ```sh
 PSQL=/path/to/psql bash scripts/person-audit/run-snapshot-tests.sh 55487
+```
+
+Full local auditor verification (also resets only `person_postcutover_test`):
+
+```sh
+PSQL=/path/to/psql bash scripts/person-audit/run-postcutover-audit-tests.sh 55487
 ```

@@ -49,7 +49,7 @@ test('an attribution cannot claim an incumbent event as the canary event',async(
  const before=await snapshot(pool);
  await assert.rejects(rehearse({url,beforeVerify:async(c,r)=>{
   await c.query("insert into person_change_attributions(event_id,candidate_id,operation_id,scope,changed_fields,event_hash) select $1,$2,id,'creation','{}'::text[],repeat('0',32) from person_audit_operations where candidate_id=$2 limit 1",[foreign,r.candidateId]);
- }}),/canary_scope_reference/);
+ }}),/canary_scope_(reference|added)/); // Referenced-owner epoch may expose the extra row first.
  assert.deepEqual(await snapshot(pool),before);
 });
 test('new contacts cannot borrow another candidate source',async()=>{

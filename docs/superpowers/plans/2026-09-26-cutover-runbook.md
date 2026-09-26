@@ -91,6 +91,22 @@ Fresh evidence does not prove the old cache payload’s missing date. Hold resol
 and anchor eligibility need separately reviewed provenance handling. Fresh Harvest
 pulls and duplicate resolution remain outside the overnight scope.
 
+## Final-auditor capacity gate
+
+The reference-correction branch passed 85 local auditor cases and 15 rollback
+canary cases. Its 423,050-person synthetic accounting probe initially reached
+the unchanged eight-second finalizer limit; a repeated unmodified finalizer took
+7,230 ms. This fixture is an accounting load test, not a full-content production
+benchmark. It does not establish safe production capacity. Narrower rows, a
+relational variant and a 16 MB local memory probe did not establish useful margin;
+no memory or query-plan setting was adopted.
+
+Keep the eight-second/lock/load gates. After the reviewed schema is installed,
+measure the actual complete evidence population under the release load gate. If
+it times out, stop that audit/publication stage, retain the run, diagnose the plan
+and continue only independent work. Do not raise the timeout or treat a warm local
+pass as the missing production capacity proof.
+
 ## Projection comparison and expected changes
 
 The retained read-only comparison (Actions 36263047493) scanned 423,049 normalized
@@ -149,11 +165,14 @@ prepared chain is:
 20260926082012_person_audit_writer_guards.sql
 20260926172608_person_postcutover_snapshots.sql
 20260926213000_person_postcutover_audit.sql
+20260926233000_person_audit_reference_ownership.sql
 20260926183000_person_publish_runbook.sql
 20260926201342_person_publish_review_guards.sql
 ```
 
-This is the reviewed chain through PR32. Append any subsequently reviewed
+The chain includes the prepared reference-ownership correction: candidate-indexed
+attribution references, source ownership checks and committed reference epochs.
+Older snapshots/planners/results lack versioned proof and must be revisited. Append any subsequently reviewed
 transition migrations before execution. Apply each reviewed file atomically
 and record its exact version. Run the reviewed directory lookup index preparation
 outside a transaction. Verify installed objects, service-only permissions and site
