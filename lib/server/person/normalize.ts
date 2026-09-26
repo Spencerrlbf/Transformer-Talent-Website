@@ -169,6 +169,7 @@ const PLACEHOLDERS: [RegExp, string][] = [
   [/^stealth\b/, "stealth"],
   [/^career break$/, "career break"],
   [/^confidential\b/, "confidential"],
+  [/^unknown employer$/, "unknown employer"],
 ];
 export function placeholderKey(name: string | null | undefined): string | null {
   const n = normalizedName(name);
@@ -684,6 +685,9 @@ export function linkedinUsernameOf(url: unknown): string | null {
 export function makeJob(p: Omit<PersonJob, "row_key" | "is_side_role" | "sort_order"> & { sort_order?: number }): PersonJob {
   const job: PersonJob = {
     ...p,
+    // Retain a real titled position whose source names no employer. This is
+    // an explicit missing-data placeholder, never a guessed organization.
+    company: p.title && !p.company.identity && !p.company.name ? companyOf({ name: "Unknown employer" }) : p.company,
     is_side_role: isSideRole(p.title, p.company.name),
     sort_order: p.sort_order ?? 0,
     row_key: "",

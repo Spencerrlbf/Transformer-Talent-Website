@@ -66,6 +66,8 @@ export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
   async audit(id,_docs,saved,verified){
    if(config.dry)return;
    const {_projection,...checks}=verified.checked.get(id);
+   if(_docs.get(id).some(d=>(d.jobs??[]).some(j=>j.company.is_placeholder&&j.company.normalized_name==='unknown employer')))
+    await site.rpc('person_backfill_flag_missing_employers',{p_candidate:id});
    await site.rpc('person_backfill_audit',{p_run:config.run,p_candidate:id,p_revision:saved.revision,p_version:versions.get(id),p_checks:{...checks,concurrent_legacy_change:verified.changed.includes(id)}});
   },
   async checkpoint(){

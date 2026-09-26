@@ -67,3 +67,15 @@ test('equal-time conflicting checks converge to the unusable check', async () =>
   assert.equal(mergeContacts([good, bad])[0].status, 'invalid');
   assert.equal(mergeContacts([bad, good])[0].status, 'invalid');
 });
+test('an imported job with a title but no employer is retained as an explicit unknown placeholder',()=>{
+ const d=fromLegacyImport({id,created_at:'2025-01-01T00:00:00Z',work_experience:[{title:'Engineer',company:'.',start_date:{year:2020,month:'Jan'},end_date:{year:2021,month:'Dec'},description:'Synthetic work history'}]},[],[]);
+ assert.equal(d.jobs.length,1);
+ assert.equal(d.jobs[0].company.is_placeholder,true);
+ assert.equal(d.jobs[0].company.normalized_name,'unknown employer');
+ assert.equal(d.jobs[0].company.linkedin_id,null);
+ assert.equal(d.jobs[0].title,'Engineer');
+});
+test('an empty imported position does not turn into an unknown job',()=>{
+ const d=fromLegacyImport({id,created_at:'2025-01-01T00:00:00Z',work_experience:[{}]},[],[]);
+ assert.equal(d.jobs,undefined);
+});
