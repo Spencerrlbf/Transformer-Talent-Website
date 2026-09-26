@@ -41,6 +41,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mapBounded, createLimiter, retryTransient } from "./person-backfill/engine.mjs";
 
 try {
@@ -326,30 +327,100 @@ export async function openComms(url) {
   // The directory connection sits idle between pages for hours. A server-side
   // disconnect used to surface as an unhandled 'error' event and kill the run
   // (reconciliation 2026-09-26 at 412,500 of 423,050). Absorb it, mark the
-  // connection dead and reopen on the next statement. A statement that dies
-  // mid-flight still fails to its caller, which decides whether to retry.
-  let client = null, dead = true, reconnects = 0;
-  const open = async () => {
-    const db = new pg.Client(config);
-    db.on("error", () => { if (client === db) dead = true; });
-    await db.connect();
-    await db.query("set default_transaction_read_only = on");
-    client = db; dead = false;
-  };
-  await open();
-  return {
-    get reconnects() { return reconnects; },
-    async query(sql, params) {
-      if (dead) { await client?.end().catch(() => {}); reconnects += 1; await open(); }
-      try { return await client.query(sql, params); }
-      catch (error) {
-        // Server FATAL ("terminating connection ..."), socket loss ("Connection
-        // terminated unexpectedly", ECONNRESET, EPIPE) or a client already closed.
-        if (/terminat|ECONNRESET|EPIPE|Connection ended|not queryable/i.test(error?.message ?? "")) dead = true;
+  // connection dead and reopen only outside a protected source-read scope.
+  // A lost snapshot fails its entire callback; rollback never reconnects.
+  let client = null, dead = true, reconnects = 0, opened = false, closed = false;
+  let opening = null, active = null;
+  let queryTail = Promise.resolve();
+  const context = new AsyncLocalStorage();
+  const ensureOpen = async () => {
+    if (closed) throw Error('comms_connection_closed');
+    if (!dead) return client;
+    if (!opening) opening = (async () => {
+      await client?.end().catch(() => {});
+      if (opened) reconnects++;
+      const db = new pg.Client(config);
+      client = db;
+      db.on('error', () => {
+        if (client === db) { dead = true; if (active) active.failed = true; }
+      });
+      try {
+        await db.connect();
+        await db.query('set default_transaction_read_only = on');
+        if (closed) throw Error('comms_connection_closed');
+        dead = false; opened = true;
+        return db;
+      } catch (error) {
+        dead = true;
+        await db.end().catch(() => {});
         throw error;
       }
+    })();
+    const pending = opening;
+    try { return await pending; }
+    finally { if (opening === pending) opening = null; }
+  };
+  await ensureOpen();
+  return {
+    get reconnects() { return reconnects; },
+    query(sql, params) {
+      const owner = context.getStore(), text = typeof sql === 'string' ? sql : sql?.text;
+      if (/^\s*(begin|start\s+transaction|commit|end|rollback|abort)\b/i.test(text ?? ''))
+        return Promise.reject(Error('comms_read_scope_required'));
+      if (owner && (owner !== active || owner.closing)) return Promise.reject(Error('comms_snapshot_closed'));
+      if (active && owner !== active) return Promise.reject(Error('comms_read_scope_busy'));
+      if (owner) owner.pending++;
+      // Serialize explicitly: pg9 will no longer queue concurrent Client calls.
+      const task = queryTail.then(async () => {
+        if (owner && (owner !== active || owner.closing)) throw Error('comms_snapshot_closed');
+        if (active && owner !== active) throw Error('comms_read_scope_busy');
+        if (active && (dead || active.failed || closed)) throw Error('comms_snapshot_lost');
+        const db = active ? client : await ensureOpen();
+        if (active && owner !== active) throw Error('comms_read_scope_busy');
+        try { return await db.query(sql, params); }
+        catch (error) {
+          if (owner) owner.failed = true;
+          if (/terminat|ECONNRESET|EPIPE|Connection ended|not queryable/i.test(error?.message ?? '')) dead = true;
+          throw error;
+        }
+      });
+      const result = task.finally(() => { if (owner) owner.pending--; });
+      queryTail = result.catch(() => {});
+      return result;
     },
-    async end() { await client?.end().catch(() => {}); client = null; dead = true; },
+    async withReadOnly(fn) {
+      if (active) throw Error('comms_read_scope_busy');
+      const scope = {failed:false,closing:false,pending:0}; active = scope;
+      let db, result, failure;
+      try {
+        await queryTail;
+        db = await ensureOpen();
+        await db.query('begin transaction isolation level repeatable read read only');
+        result = await context.run(scope, fn);
+        if (scope.pending) throw Error('comms_snapshot_incomplete');
+        if (scope.failed || dead || client !== db || closed) throw Error('comms_snapshot_lost');
+      } catch (error) { failure = error; }
+      finally {
+        scope.closing = true;
+        await queryTail;
+        // Use the original backend only. A new connection cannot roll back or
+        // certify the old transaction, even if the callback swallowed an error.
+        if (db && !dead && client === db && !closed) {
+          try { await db.query('rollback'); }
+          catch (error) { dead = true; failure ??= error; }
+        }
+        if (scope.failed || dead || closed || client !== db) failure ??= Error('comms_snapshot_lost');
+        active = null;
+      }
+      if (failure) throw failure;
+      return result;
+    },
+    async end() {
+      closed = true;
+      await opening?.catch(() => {});
+      await client?.end().catch(() => {});
+      client = null; dead = true;
+    },
   };
 }
 
@@ -382,6 +453,7 @@ export function missingComms(cols) {
 /** Runs fn inside a READ ONLY transaction (rolled back): the directory is never written, even
  *  if the session's read-only default were changed. */
 export async function readOnly(db, fn) {
+  if (db.withReadOnly) return db.withReadOnly(fn);
   await db.query("begin transaction isolation level repeatable read read only");
   try {
     return await fn();

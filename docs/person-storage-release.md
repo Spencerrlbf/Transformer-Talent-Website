@@ -365,3 +365,18 @@ cross-run undo, unchanged unanchored/stale profiles, atomic result failure,
 exact resume IDs, concurrent runs, unattributed second writes, and real
 application/directory creation while the guard is enabled. All fixtures are
 local and synthetic; the migrations and guard remain unapplied in production.
+
+## Directory connection recovery
+
+The directory reader absorbs idle connection failures and reconnects read-only
+before the next complete source-read scope. Within a repeatable-read scope,
+connection loss, a failed query or an unfinished query rejects the entire
+callback. Cleanup uses the original backend and never reconnects to roll back.
+The caller may retry the whole read from its beginning; statements are never
+transparently replayed inside a lost snapshot. Raw transaction control must use
+`readOnly`/`withReadOnly`, and instrumentation proxies must forward that method.
+Concurrent calls cannot join another callback's transaction.
+
+Local recovery tests terminate only their own exact PostgreSQL backend PID in
+the test database. The completed historical run remains pinned to `c4d0e4e`;
+this prepared repair does not change that run or its retained accounting.
