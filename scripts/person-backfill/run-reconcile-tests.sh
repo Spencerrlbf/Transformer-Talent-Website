@@ -12,5 +12,7 @@ q -d person_reconcile_test -1 -f supabase/migrations/20260926031057_person_backf
 q -d person_reconcile_test -1 -f supabase/migrations/20260926032752_person_missing_employer_review.sql
 q -d person_reconcile_test -1 -f supabase/migrations/20260926040300_person_backfill_bulk.sql
 q -d person_reconcile_test -1 -f supabase/migrations/20260926042200_person_reconcile.sql
+q -d person_reconcile_test -1 -f supabase/migrations/20260926050355_person_source_date_holds.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_reconcile_test" node scripts/person-backfill/test-reconcile.mjs
 node --test scripts/person-backfill/test-reconcile-evidence.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_reconcile_test" node scripts/person-backfill/test-source-holds.mjs

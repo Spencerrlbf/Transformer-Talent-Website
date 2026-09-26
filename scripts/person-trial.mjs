@@ -434,7 +434,7 @@ async function readSources(site, ids, rows) {
    ()=>selectIn(site,"candidate_emails","candidate_id",ids,{order:"id.asc"}),
    ()=>selectIn(site,"candidate_emails_v2","candidate_id",ids,{order:"id.asc"}),
    ()=>selectIn(site,"candidate_enrichments","candidate_id",ids,{
-    columns:"id,organization_id,candidate_id,linkedin_username,provider,operation,status,created_at,raw_payload",
+    columns:"id,organization_id,candidate_id,linkedin_username,provider,operation,status,cache_status,created_at,raw_payload",
     filters:[["organization_id","eq",TT_ORG],["provider","eq","harvest"],["status","eq","ok"]],order:"created_at.asc,id.asc",chunk:10}),
    ()=>selectIn(site,"website_applications","candidate_id",ids,{filters:[["organization_id","eq",TT_ORG]],order:"created_at.asc,id.asc"}),
    // Outreach outcomes only, never message text.

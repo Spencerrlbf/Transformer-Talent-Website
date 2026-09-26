@@ -98,3 +98,21 @@ while checking current queue and revision counts. A PostgreSQL function's own
 `SET statement_timeout` does not arm a timer for the statement already running.
 The final status is `reconciled`, `review_required`, or `catchup_pending`; a
 source scan or baseline copy alone must never be reported as fully reconciled.
+
+
+## Uncertain cached source dates
+
+Legacy Harvest cache-hit rows store when a payload was reused, which does not
+prove when its facts were fetched. Migration
+`20260926050355_person_source_date_holds.sql` retains these rows in the private,
+service-only `person_source_holds` table. Holds survive deletion of the ledger
+row. New successful TT cache-hit payloads automatically create a hold. Tenant
+application data is excluded.
+
+The baseline skips held people, the normalized writer refuses their updates,
+and reconciliation records them for review. Final accounting cannot report
+`reconciled` while any hold is unresolved. Previously normalized held evidence
+remains preserved in shadow storage; it must not be published. Resolve a hold
+only after establishing original fetch provenance and reviewing the affected
+normalized facts. Merely clearing the hold or changing a timestamp is not a
+repair. Hold counts are separate from migrated/verified counts.
