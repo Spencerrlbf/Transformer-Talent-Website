@@ -5,12 +5,13 @@ set local statement_timeout='30s';
 create table public.person_source_holds(
  candidate_id uuid not null references public.candidates(id) on delete cascade,
  ledger_id uuid not null,
+ evidence_hash text not null,
  reason text not null check(reason='harvest_cache_date_unknown'),
  evidence jsonb not null,
  recorded_at timestamptz not null default clock_timestamp(),
  resolved_at timestamptz,
  resolution jsonb,
- primary key(candidate_id,ledger_id),
+ primary key(candidate_id,ledger_id,evidence_hash),
  check((resolved_at is null)=(resolution is null))
 );
 create index person_source_holds_open_idx on public.person_source_holds(candidate_id) where resolved_at is null;
@@ -22,8 +23,10 @@ language plpgsql security definer set search_path='' as $$
 begin
  if new.organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and new.provider='harvest'
   and new.status='ok' and new.cache_status='hit' and new.raw_payload is not null and new.candidate_id is not null then
-  insert into public.person_source_holds(candidate_id,ledger_id,reason,evidence)
-  values(new.candidate_id,new.id,'harvest_cache_date_unknown',to_jsonb(new)) on conflict do nothing;
+  perform 1 from public.candidates where id=new.candidate_id for key share;
+  if not found then return null;end if;
+  insert into public.person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence)
+  values(new.candidate_id,new.id,md5(jsonb_build_array(new.created_at,new.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(new)) on conflict do nothing;
  end if;
  return null;
 end $$;
@@ -32,10 +35,27 @@ revoke all on function person_private.hold_cache_date() from public,anon,authent
 -- and parent/capture locks already protect this transaction's final boundary.
 create trigger person_source_date_hold after insert or update on public.candidate_enrichments
  for each row execute function person_private.hold_cache_date();
-insert into public.person_source_holds(candidate_id,ledger_id,reason,evidence)
-select e.candidate_id,e.id,'harvest_cache_date_unknown',to_jsonb(e) from public.candidate_enrichments e
+insert into public.person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence)
+select e.candidate_id,e.id,md5(jsonb_build_array(e.created_at,e.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(e)
+from public.candidate_enrichments e join public.candidates c on c.id=e.candidate_id
 where e.organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and e.provider='harvest'
  and e.status='ok' and e.cache_status='hit' and e.raw_payload is not null and e.candidate_id is not null;
+
+-- A historical ledger can reference a person not yet present in the pool.
+-- Keep legacy acceptance, and establish holds if that person is later created.
+create function person_private.hold_existing_cache_dates() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+ insert into public.person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence)
+ select new.id,e.id,md5(jsonb_build_array(e.created_at,e.raw_payload)::text),'harvest_cache_date_unknown',to_jsonb(e)
+ from public.candidate_enrichments e where e.candidate_id=new.id
+ and e.organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and e.provider='harvest'
+ and e.status='ok' and e.cache_status='hit' and e.raw_payload is not null on conflict do nothing;
+ return null;
+end $$;
+revoke all on function person_private.hold_existing_cache_dates() from public,anon,authenticated;
+create trigger person_source_date_hold after insert on public.candidates
+ for each row execute function person_private.hold_existing_cache_dates();
 
 -- Edit only the already-reviewed migration functions, with exact shape guards.
 do $patch$

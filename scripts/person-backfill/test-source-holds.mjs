@@ -40,4 +40,17 @@ try{
  assert.equal((await db.query("select has_table_privilege('anon','person_source_holds','select') ok")).rows[0].ok,false);
  assert.equal((await db.query("select has_table_privilege('authenticated','person_source_holds','select') ok")).rows[0].ok,false);
  console.log('PASS source evidence remains service-only');
+ await db.query(`update person_source_holds set resolved_at=now(),resolution='{"proof":"synthetic reviewed original fetch"}' where candidate_id=$1`,[ids[0]]);
+ await db.query(`insert into candidate_enrichments(id,candidate_id,organization_id,provider,status,cache_status,created_at,raw_payload) values($1,$2,$3,'harvest','ok','hit','2026-09-25','{"headline":"Changed stale evidence"}')`,[ledger,ids[0],tt]);
+ assert.equal((await db.query('select count(*)::int n from person_source_holds where candidate_id=$1 and resolved_at is null',[ids[0]])).rows[0].n,1,'a changed cached payload reopens review even after earlier evidence was resolved');
+ assert.equal((await db.query('select count(*)::int n from person_source_holds where candidate_id=$1 and resolved_at is not null',[ids[0]])).rows[0].n,1,'prior evidence and resolution remain intact');
+ console.log('PASS changed cached evidence cannot inherit an earlier resolution');
+ const orphan='d0000000-0000-4000-8000-000000000099';
+ await db.query(`insert into candidate_enrichments(candidate_id,organization_id,provider,status,cache_status,created_at,raw_payload) values($1,$2,'harvest','ok','hit',now(),'{}')`,[orphan,tt]);
+ assert.equal((await db.query('select count(*)::int n from person_source_holds where candidate_id=$1',[orphan])).rows[0].n,0);
+ await db.query("insert into candidates(id,full_name,linkedin_username) values($1::uuid,'Synthetic later arrival',$1::text)",[orphan]);
+ assert.equal((await db.query('select count(*)::int n from person_source_holds where candidate_id=$1',[orphan])).rows[0].n,1);
+ console.log('PASS orphan ledger remains accepted and later pool arrival is held');
+
+
 }finally{await site.end();await db.end();}

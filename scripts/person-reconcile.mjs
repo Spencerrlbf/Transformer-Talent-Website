@@ -69,7 +69,7 @@ export async function reconcilePage({site,lib,comms,cols,config,page,afterSave,b
  if(before.rows.size!==ids.length||before.dirMissing||before.dirSkipped)throw Error('source_coverage');
  const events=groupBy(await selectIn(site,'person_change_events','candidate_id',ids,{order:'candidate_id.asc,id.asc'}),'candidate_id');
  const sources=groupBy(await selectIn(site,'candidate_sources','candidate_id',ids,{order:'candidate_id.asc,id.asc'}),'candidate_id');
- const holds=groupBy(await selectIn(site,'person_source_holds','candidate_id',ids,{filters:[['resolved_at','is_null',null]],columns:'candidate_id,ledger_id,reason',order:'candidate_id.asc,ledger_id.asc'}),'candidate_id');
+ const holds=groupBy(await selectIn(site,'person_source_holds','candidate_id',ids,{filters:[['resolved_at','is_null',null]],columns:'candidate_id,ledger_id,evidence_hash,reason',order:'candidate_id.asc,ledger_id.asc,evidence_hash.asc'}),'candidate_id');
  const prepared=new Map();
  for(const id of ids)prepared.set(id,holds.has(id)?{review:'harvest_cache_date_unknown',hash:hashOf(holds.get(id))}:await prepareEvidence(lib,id,before.inputs.get(id),events.get(id)??[],sources.get(id)??[]));
  const ready=ids.filter(id=>!prepared.get(id).review);
