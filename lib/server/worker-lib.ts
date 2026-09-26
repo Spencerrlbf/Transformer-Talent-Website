@@ -126,3 +126,4 @@ export { saveUnifiedContact, unifiedCandidateDetail } from './candidates-unified
 
 export { publishedPoolProfiles,publishedPoolProfilesOnConnection,canonicalProfileSnapshot } from './person/profile-view';
 export { enqueuePersonDerivativesLocked, preparePersonDerivativesOnConnection, completePersonDerivativesOnConnection, failPersonDerivativesOnConnection, personDerivativeChunks, embedPersonDerivativeChunks, processPersonDerivatives, drainPersonDerivatives } from './person/derivatives';
+export { prepareLegacyAuditAnchor } from './person/audit-anchor';
