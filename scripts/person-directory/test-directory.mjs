@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import pg from "pg";
@@ -77,30 +78,9 @@ async function fixture(n, { normalized = true, baseline = false } = {}) {
     [id(n), `directory-${n}`, `https://www.linkedin.com/in/directory-${n}`],
   );
   if (normalized)
-    await pool.query("select save_person($1)", [
-      lib.fromLegacyImport({
-        id: id(n),
-        full_name: "Synthetic Existing",
-        linkedin_username: `directory-${n}`,
-        current_title: "Original",
-        created_at: "2020-01-01",
-      }),
-    ]);
-  if (baseline) {
-    const s = snap(n);
-    await pool.query("select save_person($1)", [
-      lib.fromDirectory(
-        s.board,
-        s.harvest,
-        s.exps,
-        s.edus,
-        s.emails,
-        s.phones,
-        id(n),
-      ),
-    ]);
-  }
+    await prepareAuditFixture(id(n), { directory: baseline ? snap(n) : null });
 }
+
 after(() => pool.end());
 await test("directory intake has durable staging and atomic saving contracts", () => {
   for (const k of [
@@ -149,7 +129,7 @@ await test("immutable receipt survives failed profile transaction; retry creates
   await pool.query(
     `create function reject_directory() returns trigger language plpgsql as $$begin if new.linkedin_username='directory-1' then raise exception 'injected';end if;return new;end $$;create trigger reject_directory before update on candidates for each row execute function reject_directory()`,
   );
-  await assert.rejects(save(r.receiptId));
+  await assert.rejects(save(r.receiptId), /injected/);
   assert.equal(
     (
       await pool.query(
@@ -337,11 +317,28 @@ await test("same receipt in shadow can be projected on live replay", async () =>
     ).rows[0].current_title,
     "Original",
   );
-  assert.equal((await pool.query('select 1 from person_derivative_jobs where candidate_id=$1',[id(10)])).rows.length,0);
+  assert.equal(
+    (
+      await pool.query(
+        "select 1 from person_derivative_jobs where candidate_id=$1",
+        [id(10)],
+      )
+    ).rows.length,
+    0,
+  );
   await save(r.receiptId, "live");
-  const job=(await pool.query('select sources from person_derivative_jobs where candidate_id=$1',[id(10)])).rows[0];
-  assert.match(job.sources.linkedin_profile,/Staff Engineer/);
-  assert.deepEqual(Object.keys(job.sources).sort(),['linkedin_profile','resume','summary']);
+  const job = (
+    await pool.query(
+      "select sources from person_derivative_jobs where candidate_id=$1",
+      [id(10)],
+    )
+  ).rows[0];
+  assert.match(job.sources.linkedin_profile, /Staff Engineer/);
+  assert.deepEqual(Object.keys(job.sources).sort(), [
+    "linkedin_profile",
+    "resume",
+    "summary",
+  ]);
   assert.equal(
     (
       await pool.query("select current_title from candidates where id=$1", [

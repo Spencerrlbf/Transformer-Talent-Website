@@ -9,10 +9,15 @@ const db = new pg.Client({ connectionString: url });
 await db.connect();
 const row = (
   await db.query(
-    "select * from candidates where linkedin_username='atomic-review-2'",
+    "select * from candidates where linkedin_username='atomic-review-5'",
   )
 ).rows[0];
-const doc = lib.fromLegacyImport(row);
+const doc = (
+  await db.query(
+    "select legacy_doc from person_audit_anchors where candidate_id=$1",
+    [row.id],
+  )
+).rows[0].legacy_doc;
 try {
   if (process.argv.includes("--idle")) {
     await lib.savePerson(doc, { mode: "shadow" });

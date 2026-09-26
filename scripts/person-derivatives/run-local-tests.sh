@@ -14,4 +14,5 @@ if test -f supabase/migrations/20260926065300_person_recruiter_contacts.sql;then
 fi
 q -d person_derivative_test -f scripts/person-derivatives/local-embeddings.sql
 q -d person_derivative_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
+bash scripts/person-audit/install-local.sh "$PORT" person_derivative_test
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_derivative_test" node --test scripts/person-derivatives/test-derivatives.mjs

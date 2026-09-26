@@ -1,3 +1,4 @@
+import {prepareAuditFixture} from '../person-audit/local-fixture.mjs';
 // Actual CLI + compiled shared library + local PostgreSQL. The fetch preload
 // forbids every network destination except this local REST fixture.
 import assert from "node:assert/strict";
@@ -46,15 +47,7 @@ async function fixture(n) {
     "insert into candidates(id,full_name,linkedin_username,current_title,created_at) values($1,'Synthetic CLI',$2,'Old title','2020-01-01')",
     [id(n), `cli-${n}`],
   );
-  await db.query("select save_person($1)", [
-    lib.fromLegacyImport({
-      id: id(n),
-      full_name: "Synthetic CLI",
-      linkedin_username: `cli-${n}`,
-      current_title: "Old title",
-      created_at: "2020-01-01",
-    }),
-  ]);
+  await prepareAuditFixture(id(n));
   await db.query(
     "insert into candidate_enrichments(candidate_id,organization_id,linkedin_username,raw_payload,created_at) values($1,$2,$3,$4,now()-interval '1 day')",
     [

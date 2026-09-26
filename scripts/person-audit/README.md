@@ -1,10 +1,12 @@
 # Post-cutover audit evidence (prepared)
 
-This stage supplies the evidence schema for a separate future audit. It does
-not enable a writer, prepare existing-person anchors, run an audit, change a
-historical checkpoint, or certify migration completion.
+These prepared migrations and helpers supply immutable anchors, exact event
+attribution and writer guards for a separate future audit. They do not activate
+live writers, run the audit, change historical checkpoints or certify migration
+completion. Production schema installation and anchor preparation are separate
+steps.
 
-`person_audit_anchors` will freeze the proven original legacy document and
+`person_audit_anchors` freezes the proven original legacy document and
 candidate before-image. Receipt-created people have no invented legacy source.
 `person_audit_operations` and `person_change_attributions` bind a covered change
 to an explicit writer operation and the actual captured event. Attribution
@@ -37,9 +39,8 @@ The runner recreates only `person_audit_test`, checks the evidence schema, then
 runs all four existing candidate-writer transaction suites against it. Fixtures
 are synthetic; no external calls or paid enrichment run.
 
-Before activation, the next stages must prepare verified anchors, integrate
-writer guards/attribution, and implement the separate bounded audit with record
-and finalization fences. Historical source holds, missing owner documents,
+Before activation, production must have verified anchors and the separate
+bounded audit with record and finalization fences. Historical source holds, missing owner documents,
 unexplained legacy edits and unresolved directory components must remain review
 items. The existing historical reconciler cannot certify projected rows as new
 legacy evidence. Main merge and live activation remain subject to approval.
@@ -93,6 +94,50 @@ reported by the subsequent writer guard/auditor. The preparation command never
 writes or locks external tables, rewrites candidate facts, calls `save_person`,
 or clears historical capture/acknowledgement state.
 
-Caller guard/attribution integration and the separate post-cutover auditor
-remain required before activating normalized writers. This migration and the
+The separate post-cutover auditor remains required before activating
+normalized writers. This migration and the
 anchor pass have not been applied to production by preparing these files.
+
+## Guarded application writes
+
+`20260926082012_person_audit_writer_guards` adds fixed UTC/ISO timestamp rendering for the candidate contract and both
+anchor/guard auxiliary proofs, plus the narrow DNC-only anchor exception.
+Install all three prepared audit migrations before preparing any anchors. Application, directory,
+refresh, recruiter and generic projection/undo writes require a valid anchor.
+The guard verifies its source witness, auxiliary contact/outreach hashes and the
+captured transition chain before admitting any facts. Unexplained source edits,
+source holds, invalid attribution, changed auxiliary evidence or more than 200
+uncheckpointed candidate events require review. Workflow-only changes remain
+outside the source contract.
+
+Each immutable operation retains its validated pre-write boundary. Subsequent
+writes verify the actual events after that boundary, keeping repeated valid
+writes bounded without erasing history. The separate auditor must still check
+the full original evidence; a recent guard checkpoint is not a completion audit.
+
+The explicit mutation helper requires zero or one affected row, its returned ID,
+and exactly that many captured events for the same candidate, row and transaction.
+Only those events receive attribution. Raw ledgers remain independent facts.
+Profile projection, conditional undo, metadata, requested recruiter contacts and
+application finalization have separate positive field scopes. Missing capture or
+a mixed field mutation rolls back the transaction.
+
+New application/directory people receive a `receipt_created` anchor from the
+same-transaction seed INSERT, bound to the real receipt's name, canonical LinkedIn
+identity and expected source. No legacy document is invented. This applies to
+initial shadow-mode publication too. Existing shadow receipt writers also guard
+source admission and contact changes. A generic, unanchored historical shadow save
+may admit source documents through a private helper but cannot publish a profile;
+the exported locked writer always requires its current transaction's operation.
+Generic anchored saves retain their exact source documents in operation evidence.
+
+Directory suppression can still set only DNC workflow status for an unanchored
+or held person. It admits no source facts or audit checkpoint. A later legacy
+anchor requires fresh historical verification and no unresolved source hold.
+
+Local fixtures create real historical source/check/anchor evidence rather than
+bypassing the guard. The combined runner covers all four real writers, first
+creation, shadow admission, retries, missing evidence, unknown edits, rollback,
+source/contact/finalization scopes, generic saves and conditional undo. The
+standalone writer runners install missing audit prerequisites only in their
+explicitly named disposable localhost databases.

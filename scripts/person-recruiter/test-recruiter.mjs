@@ -1,3 +1,4 @@
+import { prepareAuditFixture } from "../person-audit/local-fixture.mjs";
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import pg from "pg";
@@ -55,8 +56,7 @@ async function fixture(n, { normalized = true, contact = null } = {}) {
       contact,
     ],
   );
-  if (normalized)
-    await pool.query("select save_person($1)", [lib.fromLegacyImport(row)]);
+  if (normalized) await prepareAuditFixture(id(n));
 }
 const chosen = async (n) =>
   (
@@ -76,7 +76,10 @@ await test("source, authority, overlay and projection roll back together", async
   await pool.query(
     `create function reject_recruiter() returns trigger language plpgsql as $$begin if new.id='${id(1)}' and new.contact is distinct from old.contact then raise exception 'injected';end if;return new;end$$;create trigger reject_recruiter before update on candidates for each row execute function reject_recruiter()`,
   );
-  await assert.rejects(save(input(1, 1, { email: "manual-1@example.test" })));
+  await assert.rejects(
+    save(input(1, 1, { email: "manual-1@example.test" })),
+    /injected/,
+  );
   assert.equal(
     (
       await pool.query(

@@ -1,3 +1,7 @@
+import {
+  beginGuardedAuditOperationLocked,
+  attributeAuditMutation,
+} from "./audit";
 // A contact edit is one website transaction. Public/tenant applications and
 // sourced records never enter this TT-only service.
 import { createHash } from "node:crypto";
@@ -135,6 +139,10 @@ export async function saveRecruiterContactOnConnection(
       ).rows.length
     )
       throw Error("person_recruiter_source_hold");
+    const audit = await beginGuardedAuditOperationLocked(c, before, {
+      writer: "recruiter",
+      receiptRef: `recruiter:${a.requestId}`,
+    });
     const existing = (
       await c.query(
         "select * from public.candidate_contacts where candidate_id=$1",
@@ -217,7 +225,7 @@ export async function saveRecruiterContactOnConnection(
         a.mode,
       ],
     );
-    await savePersonLocked(c, [doc], { mode: "shadow" }, before);
+    await savePersonLocked(c, [doc], { mode: "shadow" }, before, audit);
     for (const [kind, value] of Object.entries(choices))
       await c.query(
         "insert into public.person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id) values($1,$2,$3,$4) on conflict(candidate_id,kind) do update set chosen_value=excluded.chosen_value,receipt_id=excluded.receipt_id",
@@ -247,11 +255,23 @@ export async function saveRecruiterContactOnConnection(
         )
       )
         throw Error(`${kind}_unusable`);
-    await c.query(
-      "update public.candidates set contact=$2,updated_at=clock_timestamp() where id=$1",
-      [a.candidateId, cleaned],
+    await attributeAuditMutation(
+      c,
+      audit,
+      { scope: "recruiter_contact", table: "candidates", rowId: a.candidateId },
+      () =>
+        c.query(
+          "update public.candidates set contact=$2,updated_at=clock_timestamp() where id=$1 returning id",
+          [a.candidateId, cleaned],
+        ),
     );
-    const result = await savePersonLocked(c, [doc], { mode: a.mode }, before);
+    const result = await savePersonLocked(
+      c,
+      [doc],
+      { mode: a.mode },
+      before,
+      audit,
+    );
     const contact =
       a.mode === "live"
         ? effectivePoolContact(stored, cleaned).contact

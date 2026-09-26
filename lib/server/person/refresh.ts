@@ -1,9 +1,13 @@
+import {
+  beginGuardedAuditOperationLocked,
+  attributeAuditMutation,
+} from "./audit";
 // Server/worker only. Paid requests happen outside these bounded transactions.
 import { randomUUID } from "node:crypto";
 import { TT_ORG_ID } from "./normalize";
 import { fromHarvest } from "./fromHarvest";
 import { poolSignals } from "../pool/profile";
-import { enqueuePersonDerivativesLocked } from './derivatives';
+import { enqueuePersonDerivativesLocked } from "./derivatives";
 import {
   beginPersonTransaction,
   lockPerson,
@@ -345,12 +349,17 @@ export async function saveRefreshOnConnection(
       a.linkedin_username
     )
       throw Error("person_refresh_identity_changed");
+    const audit = await beginGuardedAuditOperationLocked(c, before, {
+      writer: "refresh",
+      receiptRef: `refresh:${row.id}`,
+    });
     const doc = fromHarvest(ledger.raw_payload, ledger, row.candidate_id);
     const result = await savePersonLocked(
       c,
       [doc],
       { mode: args.mode },
       before,
+      audit,
     );
     if (args.mode === "live") {
       const canonical = (
@@ -363,17 +372,31 @@ export async function saveRefreshOnConnection(
         calculated_experience_years: null,
         total_experience_years: null,
       }).years;
-      await c.query(
-        `update public.candidates set linkedin_enrichment_date=greatest(linkedin_enrichment_date,$2::timestamptz),calculated_experience_years=coalesce($3,calculated_experience_years) where id=$1`,
-        [
-          row.candidate_id,
-          ledger.created_at,
-          Number.isFinite(years) ? Math.round(years!) : null,
-        ],
+      await attributeAuditMutation(
+        c,
+        audit,
+        {
+          scope: "refresh_metadata",
+          table: "candidates",
+          rowId: row.candidate_id,
+        },
+        () =>
+          c.query(
+            `update public.candidates set linkedin_enrichment_date=greatest(linkedin_enrichment_date,$2::timestamptz),calculated_experience_years=coalesce($3,calculated_experience_years) where id=$1 returning id`,
+            [
+              row.candidate_id,
+              ledger.created_at,
+              Number.isFinite(years) ? Math.round(years!) : null,
+            ],
+          ),
       );
     }
-    if(args.mode === 'live')
-      await enqueuePersonDerivativesLocked(c,{organizationId:TT_ORG_ID,candidateId:row.candidate_id,receiptRef:`refresh:${row.id}`});
+    if (args.mode === "live")
+      await enqueuePersonDerivativesLocked(c, {
+        organizationId: TT_ORG_ID,
+        candidateId: row.candidate_id,
+        receiptRef: `refresh:${row.id}`,
+      });
     await c.query(
       "update public.person_refresh_attempts set phase='done',lease_until=null,documents=$2,result=$3,updated_at=clock_timestamp() where queue_id=$1",
       [row.id, JSON.stringify([doc]), JSON.stringify(result)],
