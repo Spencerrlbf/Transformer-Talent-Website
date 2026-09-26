@@ -21,7 +21,7 @@ export interface SavePersonResult {
   projected: boolean;
   semanticChanged: boolean;
 }
-const PROFILE_FIELDS = [
+export const PROFILE_FIELDS = [
   "full_name",
   "current_title",
   "current_company",
@@ -57,6 +57,8 @@ const hash = (value: unknown): string =>
     .digest("hex");
 const profileOf = (row: Record<string, unknown>) =>
   Object.fromEntries(PROFILE_FIELDS.map((k) => [k, row[k] ?? null]));
+/** Exact compatibility hash used for published reads and write drift checks. */
+export const projectionProfileHash = (row: Record<string, unknown>): string => hash(profileOf(row));
 /** Used for observation only. This writer never calls paid enrichment or marks
  * matching/embedding work stale just because storage representation changed. */
 export function semanticProfileHash(row: Record<string, any>): string {
@@ -485,7 +487,14 @@ export async function withPersonConnection<T>(
     client = await (await poolPromise).connect();
     return await operation(client);
   } catch (error) {
-    // Driver messages/details can contain candidate data; expose codes only.
+    // Only exact, application-owned codes may escape. Driver details can
+    // contain private candidate data and must remain redacted.
+    const safeCodes = new Set([
+      "person_profile_unavailable", "person_profile_read_limit",
+      "invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable",
+      "person_not_found", "person_recruiter_not_migrated", "person_recruiter_source_hold",
+    ]);
+    if (safeCodes.has((error as Error)?.message)) throw Error((error as Error).message);
     throw Error(`person_save_failed:${errorCode(error)}`);
   } finally {
     client?.release();

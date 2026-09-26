@@ -8,6 +8,8 @@
 // renders in the job's pipeline as an applicant with the Via-TT badge.
 import { sbRest, sbInsert } from "./supabase";
 import { publishedPoolContacts, type ResolvedPoolContact } from "./person/contacts";
+import { publishedPoolProfiles } from "./person/profile-view";
+import { TT_ORG_ID } from "./person/normalize";
 import { clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
 
 export const TT_ORG_SLUG = "transformer-talent";
@@ -262,6 +264,7 @@ const TAG_OF: Record<"contact" | "message", ClientTag> = { contact: "strong", me
  *  quick read. A failed page is an error, never an empty list: the tab
  *  shows "Couldn't load" with a way to try again. */
 export async function listNetworkMatches(orgId: string, opts: NetworkListOptions = {}): Promise<NetworkList> {
+  if (orgId !== TT_ORG_ID) throw Error("person_pool_tenant");
   const perPage = Math.min(200, Math.max(10, opts.perPage ?? 50));
   const page = Math.max(1, opts.page ?? 1);
   const body = {
@@ -302,7 +305,8 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
     const res = await sbRest(`candidates?id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=${POOL_COLS}`);
     for (const r of (res.ok ? await res.json() : []) as PoolRow[]) pool.set(r.id, r);
   }
-  const published = await publishedPoolContacts(ids);
+  const published = await publishedPoolProfiles(ids);
+  for (const [id, snapshot] of published) pool.set(id, snapshot.profile as PoolRow);
   const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])), published);
 
   const people: NetworkPerson[] = [];
@@ -361,6 +365,7 @@ export async function sendNetworkCandidate(
   candidateId: string,
   jobId: string
 ): Promise<{ ok: true; applicationId: string } | { ok: false; error: string }> {
+  if (orgId !== TT_ORG_ID) return { ok: false, error: "candidate_not_found" };
   const roleRes = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}` +
       `&select=id,title,linked_org_role&limit=1`
@@ -385,9 +390,11 @@ export async function sendNetworkCandidate(
   }
 
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
-  const [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
+  let [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
   if (!cand) return { ok: false, error: "candidate_not_found" };
-  const published = await publishedPoolContacts([candidateId]);
+  const published = await publishedPoolProfiles([candidateId]);
+  const canonical = published.get(candidateId);
+  if (canonical) cand = canonical.profile as PoolRow;
   const bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : str(cand.contact?.phone) ?? str(cand.phone);
   const bestEmail =
     (
@@ -402,13 +409,12 @@ export async function sendNetworkCandidate(
   if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
     return { ok: false, error: "already_sent" };
 
-  // Richest stored profile: the newest raw Harvest full_profile from the
-  // enrichment ledger — powers the drawer (photo, experience, education).
-  const enrRes = await sbRest(
+  // Published compatibility profile; raw Harvest remains the legacy fallback.
+  const enrRes = canonical ? null : await sbRest(
     `candidate_enrichments?candidate_id=eq.${candidateId}&operation=eq.full_profile` +
       `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
   );
-  const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
+  const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
 
   // Their verdict for the MATCHED role rides along in the apply-flow
   // screening shape, so the pipeline's fit tag + review render exactly like
@@ -446,10 +452,10 @@ export async function sendNetworkCandidate(
         current_company: str(cand.current_company),
         location: str(cand.location),
       },
-      harvest_profile: enr?.raw_payload ?? null,
+      harvest_profile: canonical?.harvest ?? enr?.raw_payload ?? null,
       screening: carried ? [{ ...carried, job_id: target.jobId }] : null,
       contact:
-        bestEmail || bestPhone
+        canonical || bestEmail || bestPhone
           ? { email: bestEmail, phone: bestPhone }
           : null,
     },

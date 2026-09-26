@@ -3,6 +3,7 @@
 import { checkClass, normalizeEmail } from "./normalize";
 import { withPersonConnection, type PersonConnection } from "./save";
 import { personWriteMode } from "./intake";
+import { publishedPersonRowsOnConnection } from "./published";
 export interface PoolContact {
   email?: string | null;
   phone?: string | null;
@@ -72,20 +73,8 @@ export async function publishedPoolContactsOnConnection(
   ids: string[],
 ): Promise<Map<string, ResolvedPoolContact>> {
   const out = new Map<string, ResolvedPoolContact>();
-  if (ids.length > 1000) throw Error("person_contact_read_limit");
-  for (let i = 0; i < ids.length; i += 100) {
-    const rows = (
-      await c.query(
-        `select c.id,c.contact,
-   coalesce((select jsonb_agg(jsonb_build_object('kind',cc.kind,'value_normalized',cc.value_normalized,'rank',cc.rank,'status',cc.status,'never_primary',cc.never_primary,'quality',cc.quality,'result',cc.result) order by cc.kind,cc.rank,cc.value_normalized) from public.candidate_contacts cc where cc.candidate_id=c.id and cc.kind in ('email','phone') and cc.rank is not null),'[]'::jsonb) contacts
-   from public.candidates c join public.person_projection_state p on p.candidate_id=c.id
-   where c.id=any($1::uuid[])`,
-        [ids.slice(i, i + 100)],
-      )
-    ).rows;
-    for (const row of rows)
-      out.set(row.id, effectivePoolContact(row.contacts, row.contact));
-  }
+  const rows = await publishedPersonRowsOnConnection(c, ids);
+  for (const [id, row] of rows) out.set(id, effectivePoolContact(row.contacts, row.contact));
   return out;
 }
 export async function publishedPoolContacts(

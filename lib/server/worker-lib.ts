@@ -123,3 +123,5 @@ export { publishedPoolContacts, publishedPoolContactsOnConnection, effectivePool
 
 export { poolEmails, listNetworkMatches, sendNetworkCandidate } from './network';
 export { saveUnifiedContact, unifiedCandidateDetail } from './candidates-unified';
+
+export { publishedPoolProfiles,publishedPoolProfilesOnConnection,canonicalProfileSnapshot } from './person/profile-view';

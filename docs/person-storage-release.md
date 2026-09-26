@@ -258,3 +258,25 @@ that person's details or finish a newer save. Local checks include PostgreSQL
 rollback/concurrency, server-path parity, tenant scoping and actual React
 navigation/retry cases. This release still requires the separate canonical
 profile-history and derived-data integration checks before cutover.
+
+## Published profile reads
+
+Live published profiles now use one bounded, consistent database snapshot for
+profile fields and eligible contacts across the pool drawer, Network cards and
+Send. The reader checks the published profile hash, normalized revision and
+source holds. A profile awaiting publication or carrying unexplained drift is
+unavailable; it cannot fall back to an older raw Harvest response. Unpublished
+people and legacy/shadow modes retain their current read behavior.
+
+Send stores that canonical snapshot in its existing application profile shape.
+It preserves structured employment dates, explicit current/ended status,
+headline, skills and intentional empty lists. A marked canonical Send remains
+authoritative in the recipient's drawer even when the recipient already has
+an older sourced copy; empty sent contacts cannot revive that copy's unusable
+addresses. Recipient edits still apply within their own organization. Only
+client-safe verdict information crosses the organization boundary.
+
+This change requires no database migration. The pooled connection wrapper
+preserves a fixed allowlist of application error codes needed for contact
+validation and unavailable-profile handling; all other driver messages remain
+redacted. Main deployment and live activation are still separate release gates.
