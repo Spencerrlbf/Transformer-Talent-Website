@@ -565,13 +565,15 @@ export function mergeContacts(list: (PersonContact | null | undefined)[]): Perso
   for (const g of groups.values()) {
     const first = g[0];
     const checked = g.filter((c) => c.quality || c.result || c.verified_at);
-    const newest = checked.sort((a, b) => String(b.verified_at ?? "").localeCompare(String(a.verified_at ?? "")))[0] ?? null;
+    const severity = (c: PersonContact) => ({ none: 0, good: 1, risky: 2, bad: 3 })[checkClass(c.quality, c.result)];
+    const newest = checked.sort((a, b) => String(b.verified_at ?? "").localeCompare(String(a.verified_at ?? "")) || severity(b) - severity(a))[0] ?? null;
     const manual = g.find((c) => c.is_manual) ?? null;
     const best = [...g].sort((a, b) => DETAIL_RANK(a) - DETAIL_RANK(b))[0];
     const ids = [...new Set(g.flatMap((c) => [...c.legacy_email_ids, ...(c.legacy_email_id ? [c.legacy_email_id] : [])]))];
     let status: ContactStatus;
-    if (g.some((c) => NEGATIVE.includes(c.status))) status = g.find((c) => NEGATIVE.includes(c.status))!.status;
+    if (g.some((c) => NEGATIVE.includes(c.status))) status = NEGATIVE.find((st) => g.some((c) => c.status === st))!;
     else if (newest && (newest.status === "invalid" || checkClass(newest.quality, newest.result) === "bad")) status = "invalid";
+    else if (!newest && g.some((c) => c.status === "invalid")) status = "invalid";
     else if (manual) status = manual.status;
     else if (g.every((c) => c.status === "claimed")) status = "claimed";
     else status = "active";

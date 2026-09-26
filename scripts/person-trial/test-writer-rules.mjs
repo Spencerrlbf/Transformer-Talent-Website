@@ -51,3 +51,19 @@ test('a recruiter choice does not revive a known invalid contact', () => {
   assert.equal(d.contacts[0].status, 'invalid');
   assert.equal(project({ jobs: [], educations: [], skills: [], contacts: d.contacts }).email, null);
 });
+test('contact merging retains an invalid status with no verifier metadata', async () => {
+  const { mergeContacts } = await import('../dist/worker-lib.mjs');
+  const base = { kind: 'email', value_normalized: 'status@example.com', label: 'unknown', legacy_email_ids: [], never_primary: false };
+  const bad = { ...base, status: 'invalid' };
+  const manual = { ...base, status: 'active', is_manual: true };
+  assert.equal(mergeContacts([bad, manual])[0].status, 'invalid');
+  assert.equal(mergeContacts([manual, bad])[0].status, 'invalid');
+});
+test('equal-time conflicting checks converge to the unusable check', async () => {
+  const { mergeContacts } = await import('../dist/worker-lib.mjs');
+  const base = { kind: 'email', value_normalized: 'tie@example.com', label: 'unknown', legacy_email_ids: [], never_primary: false, verified_at: '2026-09-20T00:00:00Z' };
+  const good = { ...base, status: 'active', quality: 'good', result: 'ok' };
+  const bad = { ...base, status: 'invalid', quality: 'bad', result: 'invalid' };
+  assert.equal(mergeContacts([good, bad])[0].status, 'invalid');
+  assert.equal(mergeContacts([bad, good])[0].status, 'invalid');
+});

@@ -99,6 +99,7 @@ declare
   v_rk text;
   v_seen text[] := '{}';
   v_kept uuid[] := '{}';
+  v_matches uuid[];
   v_kept_skills bigint[] := '{}';
   v_row record;
   v_sk record;
@@ -348,7 +349,7 @@ begin
       -- Match only active rows with the resolved company, title and start date;
       -- never guess among multiple positions or reuse a row already in this doc.
       if not found then
-        select count(*), (array_agg(e.id))[1] into v_n, v_id
+        select count(*), (array_agg(e.id order by e.id))[1], array_agg(e.id order by e.id) into v_n, v_id, v_matches
         from public.candidate_experiences e
         where e.candidate_id = v_cid and e.source = 'person' and e.removed_at is null
           and e.company_id = v_co.company_id and not (e.id = any(v_kept))
@@ -358,6 +359,13 @@ begin
         if v_n = 1 then
           select e.id, e.removed_at into v_row from public.candidate_experiences e where e.id=v_id;
         else
+          if v_n > 1 then
+            insert into public.identity_conflicts(kind,candidate_ids,incoming,evidence_hash,source_id)
+            values('job_identity',array[v_cid],jsonb_build_object('job_ids',v_matches,'incoming_row_key',v_rk),
+              md5('job|'||v_cid::text||'|'||v_rk||'|'||v_matches::text),v_source_id)
+            on conflict(kind,evidence_hash) where status='open' do nothing;
+            if found then k_conf:=k_conf+1; end if;
+          end if;
           select e.id, e.removed_at into v_row from public.candidate_experiences e where false;
         end if;
       end if;
@@ -563,7 +571,7 @@ begin
       v_dir_newest := not exists (
         select 1 from public.candidate_sources cs
         where cs.candidate_id = v_cid and cs.source = 'directory' and cs.id <> v_source_id
-          and (cs.fetched_at > v_fetched or (cs.fetched_at = v_fetched and cs.payload_hash collate "C" > v_hash collate "C")));
+          and not public.person_source_beats(doc,cs.id));
     end if;
     for v_el in select value from jsonb_array_elements(doc->'contacts') loop
       c_kind := lower(v_el->>'kind');
@@ -647,23 +655,39 @@ begin
           end if;
         end if;
       else
-        -- Keep the best check: the newest verified_at wins; a check beats none.
+        -- Newest verification wins. Equal timestamps use a conservative,
+        -- deterministic check class and metadata order, never arrival order.
         c_newer := (c_q is not null or c_r is not null or c_vat is not null)
           and ((c_vat is not null and (v_row.verified_at is null or c_vat > v_row.verified_at))
-               or (c_vat is null and v_row.verified_at is null and v_row.quality is null and v_row.result is null));
+            or (c_vat is not distinct from v_row.verified_at and
+              row(case c_class when 'bad' then 3 when 'risky' then 2 when 'good' then 1 else 0 end,
+                  jsonb_build_array(c_q,c_r,c_rc,c_sr,c_ver,c_raw)::text collate "C") >
+              row(case public.tt_email_check_class(v_row.quality,v_row.result) when 'bad' then 3 when 'risky' then 2 when 'good' then 1 else 0 end,
+                  jsonb_build_array(v_row.quality,v_row.result,v_row.resultcode,v_row.subresult,v_row.verifier,v_row.verification_raw)::text collate "C")));
+        if c_vat is not distinct from v_row.verified_at
+           and c_class <> 'none' and public.tt_email_check_class(v_row.quality,v_row.result) <> 'none'
+           and c_class <> public.tt_email_check_class(v_row.quality,v_row.result) then
+          insert into public.identity_conflicts(kind,candidate_ids,incoming,evidence_hash,source_id)
+          values('contact_verification',array[v_cid],jsonb_build_object('contact_id',v_row.id,
+            'stored_class',public.tt_email_check_class(v_row.quality,v_row.result),'incoming_class',c_class,'verified_at',c_vat),
+            md5('verification|'||v_cid::text||'|'||c_kind||'|'||c_vn||'|'||coalesce(c_vat::text,'')),v_source_id)
+          on conflict(kind,evidence_hash) where status='open' do nothing;
+          if found then k_conf:=k_conf+1; end if;
+        end if;
         n_class := case when c_kind <> 'email' then 'none'
                         when c_newer then c_class
+                        when v_row.status='invalid' and v_row.quality is null and v_row.result is null then 'bad'
                         when c_class = 'bad' and c_q is null and c_r is null and c_vat is null
                              and v_row.quality is null and v_row.result is null then 'bad'
                         else public.tt_email_check_class(v_row.quality, v_row.result) end;
-        -- Status: a recruiter decides; removed/do-not-use stay; a recruiter's
-        -- active choice is not demoted by automation; claimed becomes active
-        -- once a trusted source backs it; otherwise the newest check wins.
+        -- Negative delivery/consent statuses stay ineligible in either arrival
+        -- order. Manual preference only chooses among usable addresses.
         n_status := v_row.status;
-        if c_manual then
+        if 'removed' in (c_status,v_row.status) then n_status:='removed';
+        elsif 'do_not_use' in (c_status,v_row.status) then n_status:='do_not_use';
+        elsif 'bounced' in (c_status,v_row.status) then n_status:='bounced';
+        elsif c_manual then
           n_status := c_status;
-        elsif v_row.status in ('removed', 'do_not_use') then
-          n_status := v_row.status;
         elsif v_row.is_manual and v_row.status in ('active', 'shared') then
           n_status := case when c_status in ('bounced', 'do_not_use') then c_status else v_row.status end;
         elsif c_status in ('removed', 'do_not_use', 'bounced') then
@@ -678,6 +702,15 @@ begin
           end if;
         end if;
         if n_class = 'bad' and n_status in ('active','shared') then n_status := 'invalid'; end if;
+        if (c_manual or v_row.is_manual) and n_status in ('invalid','bounced','removed','do_not_use')
+           and (c_status in ('active','shared') or v_row.status in ('active','shared')) then
+          insert into public.identity_conflicts(kind,candidate_ids,incoming,evidence_hash,source_id)
+          values('contact_status',array[v_cid],jsonb_build_object('contact_id',v_row.id,
+            'stored_status',v_row.status,'incoming_status',c_status,'chosen_status',n_status),
+            md5('contact|'||v_cid::text||'|'||c_kind||'|'||c_vn),v_source_id)
+          on conflict(kind,evidence_hash) where status='open' do nothing;
+          if found then k_conf:=k_conf+1; end if;
+        end if;
         c_new := jsonb_build_object(
           'label', case when v_row.label = 'unknown' and c_label <> 'unknown' then c_label else v_row.label end,
           'status', n_status,

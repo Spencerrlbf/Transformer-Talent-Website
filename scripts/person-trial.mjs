@@ -21,9 +21,8 @@
 //   failed (ids_found, directory_read, zero_errors, docs_cover_known_emails, doc_jobs_named,
 //   sources_current); ALLOW_PARTIAL=1 saves anyway.
 //   sources_current: a stored source of the same record (source, source_ref, fetched_at) with a
-//   different payload hash means the translators changed since it was saved; save_person would
-//   keep the old one (a tie goes to one of them), so the run refuses: run
-//   scripts/person-trial-undo.mjs --apply for those ids first, then run again.
+//   different payload hash needs review. ALLOW_PARSER_REPLAY permits the reviewed v2-to-v3
+//   correction; an exact stored source remains a safe no-op. Never undo concurrent shadow writes.
 //   REPEAT=1           save everything twice; the second pass must be all 'unchanged' and change no row
 //   --describe         print the directory's table and column names this script reads, nothing else
 //   SKIP_DIRECTORY=1   dry runs, or any run against LOCAL_DATABASE_URL (a local test cannot reach the
@@ -866,6 +865,14 @@ function counts(results) {
 }
 
 /** Only the reviewed v2→v3 parser correction may replay an identical source snapshot. */
+export function sourceNeedsReview(rows, doc, enabled) {
+  const sameSnapshot = rows.filter((r) => r.source === doc.source.source
+    && String(r.source_ref ?? "") === String(doc.source.source_ref ?? "")
+    && Date.parse(r.fetched_at) === Date.parse(doc.source.fetched_at));
+  if (sameSnapshot.some((r) => r.payload_hash === doc.source.payload_hash && r.parser_version === doc.source.parser_version)) return false;
+  return sameSnapshot.some((r) => !allowedParserReplay(r, doc, enabled));
+}
+
 export function allowedParserReplay(stored, doc, enabled) {
   const incoming = doc.source;
   return !!enabled && stored.parser_version === "person-v2" && incoming.parser_version === "person-v3"
@@ -940,17 +947,15 @@ async function main() {
     }
     if (unmappedStatuses) console.log(`directory: ${unmappedStatuses} address(es) carry a verification status the translator does not know (read as unchecked); run --describe`);
 
-    // 2b. A stored source of the same record with another hash: the translators changed since it was
-    // saved. save_person would not let the rebuilt doc take over from it, so the run needs an undo first.
+    // 2b. Exact saved documents are safe reruns. Otherwise a changed snapshot
+    // needs review or the explicit, bounded parser upgrade permission.
     let stale = { rows: 0, readable: true };
     try {
       const storedSources = groupBy(await selectIn(site, "candidate_sources", "candidate_id", ids, { columns: "candidate_id,source,source_ref,fetched_at,payload_hash,parser_version", order: "candidate_id.asc,fetched_at.asc" }), "candidate_id");
       tally.run("sources_current");
       for (const [id, docs] of docsBy) {
         const rows = storedSources.get(id) ?? [];
-        const n = docs.filter((d) => rows.some((r) => r.source === d.source.source && String(r.source_ref ?? "") === String(d.source.source_ref ?? "")
-          && Date.parse(r.fetched_at) === Date.parse(d.source.fetched_at) && (r.payload_hash !== d.source.payload_hash || r.parser_version !== d.source.parser_version)
-          && !allowedParserReplay(r, d, ALLOW_PARSER_REPLAY))).length;
+        const n = docs.filter((d) => sourceNeedsReview(rows, d, ALLOW_PARSER_REPLAY)).length;
         if (n) { stale.rows += n; tally.bad("sources_current", id, "source snapshot differs from stored data; inspect it before applying (only reviewed v2-to-v3 parser replay is allowed)"); }
       }
     } catch (err) {

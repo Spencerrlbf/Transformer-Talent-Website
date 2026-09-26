@@ -19,3 +19,4 @@ q -d person_trial_test -1 -f "$ROOT/supabase/migrations/072_person_tables.sql"
 q -d person_trial_test -1 -f "$ROOT/supabase/migrations/072_person_tables.sql" 2>/dev/null
 q -d person_trial_test -1 -f "$ROOT/supabase/migrations/20260926025355_person_writer_corrections.sql"
 q -d person_trial_test -f "$DIR/test-save-person.sql"
+q -d person_trial_test -f "$DIR/test-writer-rules.sql"

@@ -6,8 +6,8 @@ name: Person writer trial
 # The log shows ids, counts and check results; never a name, email, phone or
 # date (the repository is public, and so are its Actions logs).
 # dry_run (ticked by default) saves nothing; only an unticked box saves.
-# A run after a translator change needs scripts/person-trial-undo.mjs --apply
-# for the same ids first (the run refuses otherwise: sources_current).
+# Reviewed parser corrections use allow_parser_replay; exact replays are no-ops.
+# Do not use destructive trial undo after concurrent shadow writes exist.
 # GitHub dispatches only workflows whose file is on the default branch: with
 # this file on main, dispatch with --ref <the trial branch> to run its scripts.
 

@@ -10,3 +10,9 @@ test('explicit replay permits only the reviewed v2 to v3 correction of the same 
  assert.equal(trial.allowedParserReplay({...old,source_ref:'other-input'},doc,true),false);
  assert.equal(trial.allowedParserReplay({...old,fetched_at:'2026-02-01T00:00:00Z'},doc,true),false);
 });
+test('an exact corrected source already stored remains safe to rerun without replay permission',()=>{
+ assert.equal(trial.sourceNeedsReview([old,doc.source],doc,false),false);
+ assert.equal(trial.sourceNeedsReview([old],doc,false),true);
+ assert.equal(trial.sourceNeedsReview([old],doc,true),false);
+ assert.equal(trial.sourceNeedsReview([{...doc.source,payload_hash:'unexpected'}],doc,true),true);
+});
