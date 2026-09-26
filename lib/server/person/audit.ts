@@ -16,8 +16,12 @@ export interface AuditOperation {
   receiptRef: string;
   anchorHash: string;
 }
-const GUARD = "candidate-audit-1";
-const scopes: Record<string, { writer?: AuditWriter; fields: string[] }> = {
+/** Guard checkpoint version written into every operation's evidence. */
+export const AUDIT_GUARD_VERSION = "candidate-audit-1";
+const GUARD = AUDIT_GUARD_VERSION;
+/** Allowed field sets per attribution scope. Exported read-only for the
+ * separate post-cutover auditor, which re-validates attributions offline. */
+export const AUDIT_SCOPES: Readonly<Record<string, { writer?: AuditWriter; fields: readonly string[] }>> = {
   profile: {
     fields: [
       "full_name",
@@ -73,6 +77,7 @@ const scopes: Record<string, { writer?: AuditWriter; fields: string[] }> = {
     ],
   },
 };
+const scopes = AUDIT_SCOPES as Record<string, { writer?: AuditWriter; fields: readonly string[] }>;
 const integer = (v: unknown) =>
   typeof v === "string" &&
   /^\d{1,19}$/.test(v) &&

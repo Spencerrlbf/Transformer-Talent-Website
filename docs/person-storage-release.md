@@ -406,3 +406,67 @@ means traversal of normalized profiles only, and every summary is labeled
 `comparison_only`. People without normalized state are outside that scan; the
 `population` field identifies normalized profiles or an explicit requested set.
 Missing IDs in an explicit list are counted without hiding later valid IDs.
+
+## Post-cutover auditor: planner, accounting, finalization
+
+Prepared migration `20260926213000_person_postcutover_audit.sql` adds service-only
+audit runs/results, append-only shared-lookup markers, bounded snapshots and
+fenced record/finalize RPCs. This schema has not been applied in production.
+The auditor writes its own bookkeeping; source, candidate and communications
+records remain unchanged.
+
+The pure planner reconstructs documents from the frozen legacy anchor, raw
+sources and exact immutable writer receipts. It checks the complete captured
+candidate chain and transient source changes, tenant ownership, document hashes,
+list owners and content, header winners, contacts and identities. Recruiter edits
+retain their requested contacts' prior eligibility flags in the immutable audit
+operation, captured after the person lock. This input survives later historical
+replays and transactions whose start predates their actual admission. Missing
+prior evidence requires review. Request hashes and retries remain unchanged.
+Metadata checks use the captured event clock, so running the audit in a later
+year does not change the meaning of an earlier experience calculation.
+
+The runner reads full communications provenance, including facts, identifiers
+and source-version payloads. It records complete start/end fingerprints over
+all linked contacts and the website scope and `_v2` witness. Missing access or
+coverage stays pending. There is no operator boolean that can substitute for
+source observations. This is an observed cross-database boundary, not a
+transaction locking both projects; new source changes still require catch-up.
+
+Snapshot and recording calls use an armed 15-second statement timeout. The
+record RPC takes gates 72005 then 72006 exclusively, checks committed candidate,
+directory and shared-lookup boundaries, and turns changed evidence into
+`pending/boundary_moved`. Overflow snapshots stay compact review results and do
+not trigger uncapped follow-up calculations. Three baseline load probes precede
+scanning; size, blocking, sustained latency and duration gates stop safely.
+Communications startup and queries have bounded timeouts that URL parameters
+cannot disable. A session mutex prevents concurrent invocations of one audit run.
+
+Resuming retains the commit, batch and durable cursor. A new pending pass gets a
+new generation and revisits stale results, including a changed external
+fingerprint. Old checkpoints and observations cannot mutate the new generation.
+Counts are distinct durable outcomes; limits and suffix scans report partial
+coverage explicitly. Finalization uses one set-based statement with an eight-
+second timeout, checking current candidates against verified results and exact
+boundaries. It reports `audited`, `catchup_pending` or `review_required` with the
+remaining counts. Open identity conflicts are retained and counted separately;
+they do not override source-proof failures or holds.
+
+Local verification includes actual first writes and retries for all four intake
+paths in both modes, receipt-created candidates, publication and undo, source
+and content counterexamples, delayed commits, restart generations, external
+proof, capacity limits and a stalled PostgreSQL endpoint. A separate accounting
+load test used 423,050 synthetic empty candidates and finished finalization in
+4.1 seconds under the eight-second bound. That synthetic accounting test is not
+a production data audit. Run the disposable PostgreSQL suite with:
+
+```sh
+node scripts/build-worker-lib.mjs
+bash scripts/person-audit/run-postcutover-audit-tests.sh LOCAL_PORT
+# Optional local-only full-size accounting probe, after installing the suite:
+LOCAL_DATABASE_URL=postgresql://postgres@127.0.0.1:LOCAL_PORT/person_postcutover_test node scripts/person-audit/test-audit-scale.mjs
+```
+
+Production use requires the reviewed prepared migration chain, anchors, source
+catch-up and Spencer's release approval. The isolated canary and queue/drain
+transition remain separate release prerequisites in the cutover runbook.

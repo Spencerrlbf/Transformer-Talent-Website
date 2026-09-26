@@ -74,6 +74,7 @@ export type { ApplicationRow } from "./person/fromApplication";
 export { project } from "./person/project";
 export type { Projection, ProjectionInput, ProjectedPosition } from "./person/project";
 export {
+  assembleDoc, makeHeader, emailContact, phoneContact, githubContact,
   PARSER_VERSION,
   TT_ORG_ID,
   jobRowKey,
@@ -107,7 +108,7 @@ export { personWriteMode, saveApplicationPerson, saveApplicationPersonOnConnecti
 
 export { runApplicantPipeline } from './applicant-pipeline';
 export {
-  directoryDocuments, directoryIdentities, directorySnapshotHash, directoryPrimary,
+  directoryDocuments, directoryIdentities, directorySnapshotHash, directoryPrimary, directoryCanonicalUsername,
 } from './person/directory-sources';
 export {
   claimDirectoryScan, stageDirectory, saveDirectory, checkpointDirectoryScan,
@@ -128,4 +129,4 @@ export { saveUnifiedContact, unifiedCandidateDetail } from './candidates-unified
 export { publishedPoolProfiles,publishedPoolProfilesOnConnection,canonicalProfileSnapshot } from './person/profile-view';
 export { enqueuePersonDerivativesLocked, preparePersonDerivativesOnConnection, completePersonDerivativesOnConnection, failPersonDerivativesOnConnection, personDerivativeChunks, embedPersonDerivativeChunks, processPersonDerivatives, drainPersonDerivatives } from './person/derivatives';
 export { prepareLegacyAuditAnchor } from './person/audit-anchor';
-export { beginGuardedAuditOperationLocked, attributeAuditMutation, createReceiptAuditAnchorLocked } from './person/audit';
+export { beginGuardedAuditOperationLocked, attributeAuditMutation, createReceiptAuditAnchorLocked, AUDIT_SCOPES, AUDIT_GUARD_VERSION } from './person/audit';

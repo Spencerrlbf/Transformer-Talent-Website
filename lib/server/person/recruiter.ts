@@ -139,16 +139,31 @@ export async function saveRecruiterContactOnConnection(
       ).rows.length
     )
       throw Error("person_recruiter_source_hold");
-    const audit = await beginGuardedAuditOperationLocked(c, before, {
-      writer: "recruiter",
-      receiptRef: `recruiter:${a.requestId}`,
-    });
     const existing = (
       await c.query(
         "select * from public.candidate_contacts where candidate_id=$1",
         [a.candidateId],
       )
     ).rows;
+    // Record the exact pre-edit eligibility input under the candidate lock.
+    // Source timestamps use transaction start and cannot reconstruct this
+    // state after a delayed admission or a later replay of historical facts.
+    const requestedKeys = new Map<string, {kind: string; value_normalized: string}>();
+    for (const [kind, value] of [
+      ["email", normalizeEmail(cleaned.email)],
+      ["phone", normalizePhone(cleaned.phone)],
+      ["github", githubContact(cleaned.github)?.value_normalized],
+      ...(cleaned.otherEmails ?? []).map(value => ["email", normalizeEmail(value)]),
+    ]) if (kind && value) requestedKeys.set(`${kind}:${value}`, {kind, value_normalized: value});
+    const priorContactFlags = [...requestedKeys.values()].map(key => {
+      const previous = existing.find(row => row.kind === key.kind && row.value_normalized === key.value_normalized);
+      return {...key, existed: !!previous, never_primary: previous ? previous.never_primary : null};
+    });
+    const audit = await beginGuardedAuditOperationLocked(c, before, {
+      writer: "recruiter",
+      receiptRef: `recruiter:${a.requestId}`,
+      evidence: {prior_contact_flags: priorContactFlags},
+    });
     const choices = {
       email: normalizeEmail(cleaned.email),
       phone: normalizePhone(cleaned.phone),
