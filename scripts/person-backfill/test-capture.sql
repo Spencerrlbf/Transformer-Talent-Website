@@ -51,4 +51,17 @@ begin
  assert (select processed=1 from backfill_runs where run_id='test-atomic'), 'checkpoint restart never double-counts';
  raise notice 'PASS atomic person save, killed/restarted run and concurrent intake';
 end $$;
+do $$
+declare cid uuid:=gen_random_uuid(); aid uuid:=gen_random_uuid(); tenant uuid:=gen_random_uuid(); n bigint;
+begin
+ insert into candidates(id,linkedin_username,full_name) values(cid,cid::text,'Synthetic Transition');
+ insert into website_applications(id,candidate_id,organization_id,name,email) values(aid,cid,tenant,'CLIENT_PRIVATE_MARKER','private@example.com');
+ update website_applications set organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a',name='Synthetic TT Transition',email='tt-transition@example.com' where id=aid;
+ assert not exists(select 1 from person_change_events where candidate_id=cid and previous_payload->>'name'='CLIENT_PRIVATE_MARKER'), 'previous tenant input never copied into TT evidence';
+ select count(*) into n from person_change_events where candidate_id=cid;
+ update website_applications set organization_id=tenant,name='CLIENT_NEW_MARKER' where id=aid;
+ assert (select count(*) from person_change_events where candidate_id=cid)=n+1, 'TT source removal captured';
+ assert not exists(select 1 from person_change_events where candidate_id=cid and payload->>'name'='CLIENT_NEW_MARKER'), 'new tenant input never copied into TT evidence';
+ raise notice 'PASS organization transitions retain only TT evidence';
+end $$;
 rollback;

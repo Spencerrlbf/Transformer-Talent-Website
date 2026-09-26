@@ -51,9 +51,12 @@ declare fresh jsonb; prior jsonb; row_data jsonb; cid uuid; event_id bigint; ids
 begin
  if tg_op<>'DELETE' then fresh:=to_jsonb(new); end if;
  if tg_op<>'INSERT' then prior:=to_jsonb(old); end if;
+ if tg_table_name in ('website_applications','candidate_enrichments') then
+  if fresh->>'organization_id' is distinct from '801865a7-6533-41d2-9c45-e4a90e6ad51a' then fresh:=null; end if;
+  if prior->>'organization_id' is distinct from '801865a7-6533-41d2-9c45-e4a90e6ad51a' then prior:=null; end if;
+ end if;
  row_data:=coalesce(fresh,prior);
- if tg_table_name in ('website_applications','candidate_enrichments')
-   and row_data->>'organization_id' is distinct from '801865a7-6533-41d2-9c45-e4a90e6ad51a' then return null; end if;
+ if row_data is null then return null; end if;
  if tg_table_name='candidates' then
   if tg_op='DELETE' then return null; end if;
   ids:=array[(row_data->>'id')::uuid];
@@ -62,10 +65,13 @@ begin
     (fresh->>'candidate_id')::uuid,(prior->>'candidate_id')::uuid]) x where x is not null;
  end if;
  foreach cid in array coalesce(ids,'{}'::uuid[]) loop
-  if not exists(select 1 from public.candidates where id=cid) then continue; end if;
+  -- Match the parent-row -> capture lock order used by candidate writers.
+  -- Otherwise an application event's FK can deadlock with a locked candidate.
+  perform 1 from public.candidates where id=cid for key share;
+  if not found then continue; end if;
   perform pg_advisory_xact_lock(72004,hashtext(cid::text));
   insert into public.person_change_events(candidate_id,source_table,source_row_id,operation,payload,previous_payload)
-  values(cid,tg_table_name,row_data->>'id',tg_op,
+  values(cid,tg_table_name,row_data->>'id',case when fresh is null then 'DELETE' when prior is null then 'INSERT' else 'UPDATE' end,
     row_data - array['resume_embedding','matching_embedding','resume_text','notes'],
     prior - array['resume_embedding','matching_embedding','resume_text','notes']) returning id into event_id;
   insert into public.person_change_queue(candidate_id,version) values(cid,event_id)

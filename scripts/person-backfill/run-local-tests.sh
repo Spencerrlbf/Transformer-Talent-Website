@@ -12,3 +12,4 @@ q -d person_backfill_test -1 -f supabase/migrations/20260926031057_person_backfi
 q -d person_backfill_test -f scripts/person-backfill/test-capture.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_backfill_test" node scripts/person-backfill/test-local.mjs
 node --test scripts/person-backfill/test-engine.mjs
+PSQL="$PSQL" bash scripts/person-backfill/test-capture-concurrency.sh "$PORT"
