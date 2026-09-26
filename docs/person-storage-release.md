@@ -406,3 +406,50 @@ means traversal of normalized profiles only, and every summary is labeled
 `comparison_only`. People without normalized state are outside that scan; the
 `population` field identifies normalized profiles or an explicit requested set.
 Missing IDs in an explicit list are counted without hiding later valid IDs.
+
+## Post-cutover auditor: planner, accounting, finalization
+
+Prepared migration `20260926213000_person_postcutover_audit.sql` adds the
+service-only `person_postcutover_audit_runs` and `person_postcutover_audit_results`
+tables, append-only `person_postcutover_lookup_epochs` markers on `companies`,
+`schools` and `skills` (so a shared lookup change after a person was checked is
+visible), a lookup witness, `person_postcutover_audit_inputs_with_witness`
+(the existing snapshot plus the witness from one database snapshot), and the
+timed run RPCs: start, page, `record_many`, checkpoint and `finalize`. It is
+not applied in production and writes nothing outside its own tables.
+
+`scripts/person-audit/postcutover.mjs` is the pure planner. From one person's
+snapshot it decides `verified`, `pending` or `review` with a reason: the anchor
+must be valid and its auxiliary proof unchanged; every candidate change since
+the anchor must be exactly attributed (event hash, changed fields, scope,
+writer, transaction, guard checkpoint) to an audited operation; raw facts
+(Harvest ledgers, TT applications) must be admitted by a receipt or remain
+`pending`; legacy email rows must be unchanged; every stored normalized source
+must be owned by the frozen legacy document, an admitted receipt or a retained
+generic-save document, and every admitted receipt must be stored; the stored
+rows must pass the trial's `checkStored` against that exact document set; a
+published profile must match its projection state; linked directory contacts
+must have nothing pending or in review. Open identity conflicts are counted,
+not failed (Spencer's decision to publish and deduplicate afterwards).
+
+`scripts/person-postcutover-audit.mjs` reads snapshots in batches of at most 20
+under an armed 15-second statement timeout, plans, and with `--record` calls
+`record_many`, which retakes the writer and capture gates (shared), recomputes
+the compact boundary (anchor hash, revision, capture, candidate epoch,
+directory epochs, lookup witness) and stores the outcome only when it still
+matches; otherwise `pending/boundary_moved`. Runs are resumable from a cursor
+with the same commit, scope and batch. `scripts/person-postcutover-finalize.mjs`
+takes the writer gate then the capture gate exclusively inside an 8-second
+statement, and reports `audited` only when every current candidate has a
+verified result at its current boundary, no directory or lookup marker was
+committed after its check, no hold is open, nothing is pending in the
+directory and the operator states the external fingerprint was stable.
+Otherwise `catchup_pending`, or `review_required` when any review remains.
+
+Local proof: `bash scripts/person-audit/run-postcutover-audit-tests.sh <port>`
+(13 cases on real writer paths: anchored people, an audited publish, an
+unattributed edit, a legacy email row, a hold, a missing anchor, a receipt
+created application person, boundary moved between snapshot and record, a
+lookup rename after a record, unbounded and repeatable-read callers, client
+roles, and resume without double counting). The auditor has not run against
+production; it needs the prepared chain applied and anchors prepared first.

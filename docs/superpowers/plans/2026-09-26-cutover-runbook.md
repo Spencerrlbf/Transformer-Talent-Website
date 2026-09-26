@@ -134,10 +134,11 @@ prepared chain is:
 20260926172608_person_postcutover_snapshots.sql
 20260926183000_person_publish_runbook.sql
 20260926201342_person_publish_review_guards.sql
+20260926213000_person_postcutover_audit.sql
 ```
 
-This list is incomplete until the remaining audit implementation is reviewed;
-append its actual migrations before execution. Apply each reviewed file atomically
+The last file is the post-cutover auditor's accounting (runs, results, lookup
+markers, witness, record and finalize RPCs). Apply each reviewed file atomically
 and record its exact version. Run the reviewed directory lookup index preparation
 outside a transaction. Verify installed objects, service-only permissions and site
 health after each stage. Only call `person_write_guard_status()` after the migration
@@ -234,6 +235,21 @@ Do not mass-trigger paid enrichment, embeddings or judging for storage-only chan
 
 Run the completed audit and its fenced finalization; retain verified/pending/review
 counts, shared-lookup and source-boundary results. Preserve unresolved reviews.
+
+```
+PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-audit.mjs --run-id=audit-<date> --limit=1000 --batch-size=10
+PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-audit.mjs --run-id=audit-<date> --record --limit=1000000 --batch-size=10 --max-seconds=3600
+# repeat with --resume (same commit, scope and batch) until audit_scan_paused reports the whole pool, then:
+PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-finalize.mjs --run-id=audit-<date> --external-stable=<true|false from the last directory reconciliation>
+```
+
+Expected: `verified` for published people; `review` for the known review bucket
+(holds, mutated snapshots) and for any unexplained edit; `pending` for raw facts
+or receipts no writer has admitted yet, or for a person whose boundary moved
+between snapshot and record (revisit with `--scope=pending --resume`). Finalize
+reports `audited`, `catchup_pending` (naming which fence moved: stale, directory,
+lookup, holds, directory pending, external) or `review_required`. Any `review`
+outside the known bucket stops the sitting.
 Test allowed/rejected guard behavior on a local/isolated fixture first; production
 probe commands roll back. A rejected probe while the guard is disabled is not an
 expected success assertion: report the actual guard state.

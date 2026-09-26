@@ -3,7 +3,7 @@
 set -euo pipefail
 PORT="${1:?local port required}"
 DB="${2:?local test database required}"
-case "$DB" in person_publish_test|person_publish_review_test|person_atomic_test|person_intake_test|person_refresh_test|person_directory_test|person_recruiter_test|person_published_test|person_derivative_test|person_audit_test) ;; *) exit 2;; esac
+case "$DB" in person_postcutover_audit_test|person_publish_test|person_publish_review_test|person_atomic_test|person_intake_test|person_refresh_test|person_directory_test|person_recruiter_test|person_published_test|person_derivative_test|person_audit_test) ;; *) exit 2;; esac
 PSQL="${PSQL:-psql}"
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -d "$DB" -v ON_ERROR_STOP=1 -q "$@"; }
 while read -r relation migration;do
