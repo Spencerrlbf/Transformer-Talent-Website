@@ -462,6 +462,7 @@ export default function CandidateDrawer({
   const [editingContact, setEditingContact] = useState(false);
   // Mirrors editingContact for async work that resolves later (resume upload).
   const editingRef = useRef(false);
+  const pendingContactEdit = useRef<{ key: string; body: string; id: string } | null>(null);
   useEffect(() => {
     editingRef.current = editingContact;
   }, [editingContact]);
@@ -549,6 +550,8 @@ export default function CandidateDrawer({
     setTab(initialTab || "profile");
     setEditingContact(false);
     setContactErr("");
+    setSaving(false);
+    pendingContactEdit.current = null;
     setOpenJob(null);
     setEmailOpen(false);
     setMarking(false);
@@ -840,22 +843,33 @@ export default function CandidateDrawer({
   }): Promise<boolean> => {
     setSaving(true);
     setContactErr("");
+    const body = JSON.stringify(payload);
+    if (pendingContactEdit.current?.body !== body || pendingContactEdit.current?.key !== candKey)
+      pendingContactEdit.current = { key: candKey, body, id: crypto.randomUUID() };
+    const request = pendingContactEdit.current!;
     const res = await fetch(`/api/dashboard/candidates/v2/${candKey}/contact`, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": request.id },
+      body,
     }).catch(() => null);
+    if (keyRef.current !== request.key || pendingContactEdit.current?.id !== request.id) return false;
     setSaving(false);
     if (!res || !res.ok) {
       const err = res ? ((await res.json()) as { error?: string }).error : null;
+      if (keyRef.current !== request.key || pendingContactEdit.current?.id !== request.id) return false;
       setContactErr(
         err === "invalid_email" ? "One of those emails doesn't look right."
         : err === "invalid_phone" ? "That phone number doesn't look right."
+        : err === "email_unusable" ? "That email is marked unusable. Choose another address."
+        : err === "phone_unusable" ? "That phone number is marked unusable. Choose another number."
+        : err === "contact_review_required" ? "This profile needs a data review before contact details can be changed."
         : "Couldn't save — try again."
       );
       return false;
     }
     const { contact } = (await res.json()) as { contact: Detail["contact"] };
+    if (keyRef.current !== request.key || pendingContactEdit.current?.id !== request.id) return false;
+    pendingContactEdit.current = null;
     setDetail((d) => (d ? { ...d, contact } : d));
     setCEmail(contact.email || "");
     setCPhone(contact.phone || "");

@@ -117,3 +117,9 @@ export {
   inspectDirectoryPage, inspectDirectoryPageOnConnection,
   pendingDirectoryReceipts, pendingDirectoryReceiptsOnConnection,
 } from './person/directory';
+
+export { saveRecruiterContact, saveRecruiterContactOnConnection } from './person/recruiter';
+export { publishedPoolContacts, publishedPoolContactsOnConnection, effectivePoolContact } from './person/contacts';
+
+export { poolEmails, listNetworkMatches, sendNetworkCandidate } from './network';
+export { saveUnifiedContact, unifiedCandidateDetail } from './candidates-unified';

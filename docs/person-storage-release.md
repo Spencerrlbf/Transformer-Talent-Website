@@ -227,3 +227,34 @@ Optional matching embeddings are queued in receipts and capped at 50 requests
 per invocation. They commit only if the receipt, canonical text and person
 revision remain current. A retry keeps unfinished work; three failed attempts
 require review. No Harvest calls or migration embedding fanout are introduced.
+
+## Recruiter contact preparation
+
+Prepared migration `20260926065300_person_recruiter_contacts.sql` adds private,
+service-only edit receipts and explicit email/phone primary authority. It is
+not applied in production. The normalized pool edit path requires TT membership,
+a stable request UUID and an already migrated, unheld person. Tenant application
+and sourced-candidate contact edits retain their organization-scoped storage.
+
+The edit, its original server timestamp, source document, nullable primary
+selection, curated display fields and optional live projection commit in one
+transaction. Repeating an old request returns the current contact state without
+reapplying the older edit. Reusing its ID for another actor, person or payload
+fails. Clearing a primary withdraws the recruiter's preference while retaining
+historical facts and allowing an eligible source fallback. Hiding alternate
+emails changes their display selection without deleting source evidence.
+Invalid, bounced, suppressed, shared or otherwise ineligible contacts cannot
+be promoted by this endpoint.
+
+In live mode, published pool contact reads in the drawer, Network and Send use
+persisted eligible ranks. Curated alternate emails are filtered against that
+same eligible set. Manual preference never implies independent verification.
+A normalized read failure does not fall back to a stale legacy override;
+unpublished people and legacy/shadow modes retain their existing reads.
+
+The drawer keeps the same receipt ID for an unchanged failed retry. Navigating
+to another person clears pending UI state, and late responses cannot overwrite
+that person's details or finish a newer save. Local checks include PostgreSQL
+rollback/concurrency, server-path parity, tenant scoping and actual React
+navigation/retry cases. This release still requires the separate canonical
+profile-history and derived-data integration checks before cutover.
