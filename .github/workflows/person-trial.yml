@@ -31,6 +31,10 @@ on:
         description: "Only print the directory's table and column names the trial reads"
         type: boolean
         default: false
+      allow_parser_replay:
+        description: "Allow the reviewed person-v2 to person-v3 source replay"
+        type: boolean
+        default: false
       undo:
         description: "Undo the trial for these ids (scripts/person-trial-undo.mjs); with dry_run ticked it only counts"
         type: boolean
@@ -57,6 +61,7 @@ jobs:
       - if: ${{ !inputs.undo }}
         run: node scripts/person-trial.mjs
         env:
+          ALLOW_PARSER_REPLAY: ${{ inputs.allow_parser_replay && '1' || '' }}
           TRIAL_IDS: ${{ inputs.ids }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           REPEAT: ${{ inputs.repeat && '1' || '' }}

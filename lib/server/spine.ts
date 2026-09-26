@@ -125,7 +125,7 @@ export function harvestToExperiences(harvest: Record<string, unknown> | null) {
 // ---------- The candidates row from a Harvest profile ----------
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const cleanText = (s: unknown): string | null =>
+export const cleanText = (s: unknown): string | null =>
   typeof s === "string" ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim() || null : null;
 
 /** A "position" that is a membership or side role, not the job: a council
