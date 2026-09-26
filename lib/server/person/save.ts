@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { project, type ProjectionInput } from "./project";
 import type { PersonDoc } from "./types";
+import { normalizeEmail, normalizePhone, checkClass } from "./normalize";
 
 export interface PersonConnection {
   query(
@@ -164,8 +165,21 @@ async function updateProfile(
     k === "work_experience" ? JSON.stringify(profile[k]) : profile[k],
   );
   await client.query(
-    `update public.candidates set ${keys.map((k, i) => `"${k}"=$${i + 2}`).join(",")} where id=$1`,
+    `update public.candidates set ${keys.map((k, i) => `"${k}"=$${i + 2}`).join(",")},updated_at=clock_timestamp() where id=$1`,
     [id, ...values],
+  );
+}
+async function storeProjectionBaseline(
+  client: PersonConnection,
+  id: string,
+  revision: string,
+  profile: Record<string, any>,
+) {
+  await client.query(
+    `insert into public.person_projection_state as old(candidate_id,revision,profile_hash,semantic_hash) values($1,$2,$3,$4)
+ on conflict(candidate_id) do update set revision=excluded.revision,profile_hash=excluded.profile_hash,semantic_hash=excluded.semantic_hash,updated_at=clock_timestamp()
+ where (old.revision,old.profile_hash,old.semantic_hash) is distinct from (excluded.revision,excluded.profile_hash,excluded.semantic_hash)`,
+    [id, revision, hash(profile), semanticProfileHash(profile)],
   );
 }
 async function applyProjection(
@@ -227,14 +241,37 @@ async function applyProjection(
     profile_picture_url: "photo",
   };
   for (const [column, field] of Object.entries(headerMap))
-    if (!header[field]) after[column] = before[column] ?? null;
-  if (header.full_name?.value) after.full_name = header.full_name.value;
+    if (
+      !header[field] ||
+      (header[field].source === "application" && before[column])
+    )
+      after[column] = before[column] ?? null;
+  if (
+    header.full_name?.value &&
+    !(header.full_name.source === "application" && before.full_name)
+  )
+    after.full_name = header.full_name.value;
   for (const key of ["current_title", "current_company"])
     if (!header[key] && !tables.jobs.length && !state.jobs_source_id)
       after[key] = before[key] ?? null;
-  for (const kind of ["email", "phone"])
-    if (!tables.contacts?.some((c) => c.kind === kind))
-      after[kind] = before[kind] ?? null;
+  for (const kind of ["email", "phone"]) {
+    const current =
+      kind === "email"
+        ? normalizeEmail(before[kind])
+        : normalizePhone(before[kind]);
+    const invalidated = tables.contacts?.some(
+      (c) =>
+        c.kind === kind &&
+        c.value_normalized === current &&
+        (["invalid", "bounced", "do_not_use", "removed", "shared"].includes(
+          c.status ?? "active",
+        ) ||
+          (kind === "email" && checkClass(c.quality, c.result) === "bad")),
+    );
+    // A claim or an unrelated contact provides no authority to erase an
+    // incumbent address. Explicit negative evidence for that value does.
+    if (!after[kind] && !invalidated) after[kind] = before[kind] ?? null;
+  }
   const companyIds = [
     ...new Set(
       projection.work_experience
@@ -275,8 +312,10 @@ async function applyProjection(
     after.email = before.email ?? null;
     await recordEmailCollision();
   }
-  if (hash(original) === hash(after))
+  if (hash(original) === hash(after)) {
+    await storeProjectionBaseline(client, id, revision, after);
     return { projected: false, semanticChanged: false };
+  }
   // A legacy unique email collision must never merge identities or discard the
   // rest of a good profile update. Preserve its current compatibility address.
   await client.query("savepoint person_email");
@@ -302,11 +341,7 @@ async function applyProjection(
  values($1,$2,$3,$4,$5,$6)`,
     [id, revision, original, afterHash, semanticBefore, semanticAfter],
   );
-  await client.query(
-    `insert into public.person_projection_state(candidate_id,revision,profile_hash,semantic_hash) values($1,$2,$3,$4)
- on conflict(candidate_id) do update set revision=excluded.revision,profile_hash=excluded.profile_hash,semantic_hash=excluded.semantic_hash,updated_at=clock_timestamp()`,
-    [id, revision, afterHash, semanticAfter],
-  );
+  await storeProjectionBaseline(client, id, revision, after);
   return { projected: true, semanticChanged: semanticBefore !== semanticAfter };
 }
 /** Owns BEGIN/COMMIT on an idle connection. Callers must never share that
@@ -375,10 +410,7 @@ export async function undoPersonProjectionOnConnection(
       "update public.person_projection_history set restored_at=clock_timestamp() where id=$1",
       [history.id],
     );
-    await client.query(
-      "delete from public.person_projection_state where candidate_id=$1",
-      [id],
-    );
+    await storeProjectionBaseline(client, id, revision, history.before_profile);
     await client.query("commit");
     return { status: "restored" };
   } catch (error) {
@@ -387,7 +419,11 @@ export async function undoPersonProjectionOnConnection(
     throw error;
   }
 }
-let pool: import("pg").Pool | undefined;
+let poolPromise: Promise<import("pg").Pool> | undefined;
+const errorCode = (error: unknown): string =>
+  /^[0-9A-Z]{5}$/.test((error as any)?.code ?? "")
+    ? (error as any).code
+    : "operation_failed";
 /** Uses the WEBSITE project's server-only pooled PostgreSQL URL. Never falls
  * back to COMMS_DATABASE_URL. Disabled feature paths never open a connection. */
 export async function savePerson(
@@ -397,25 +433,35 @@ export async function savePerson(
   if (typeof window !== "undefined") throw Error("server_only");
   const url = process.env.PERSON_DATABASE_URL;
   if (!url) throw Error("PERSON_DATABASE_URL is required for atomic saves");
-  if (!pool) {
-    const { default: pg } = await import("pg");
-    pool = new pg.Pool({
-      connectionString: url,
-      max: 2,
-      idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 10000,
-      application_name: "tt-person-writer",
+  // Cache before the asynchronous import yields, so concurrent first requests
+  // cannot each allocate their own connection pool.
+  poolPromise ??= import("pg")
+    .then(({ default: pg }) => {
+      const pool = new pg.Pool({
+        connectionString: url,
+        max: 2,
+        idleTimeoutMillis: 10000,
+        connectionTimeoutMillis: 10000,
+        allowExitOnIdle: true,
+        application_name: "tt-person-writer",
+      });
+      pool.on("error", (error) =>
+        console.error(`person_pool_idle_error:${errorCode(error)}`),
+      );
+      return pool;
+    })
+    .catch((error) => {
+      poolPromise = undefined;
+      throw error;
     });
-  }
-  const client = await pool.connect();
+  let client: import("pg").PoolClient | undefined;
   try {
+    client = await (await poolPromise).connect();
     return await savePersonOnConnection(client, doc, options);
   } catch (error) {
-    // Driver error messages/details can contain candidate data. Expose codes only.
-    throw Error(
-      `person_save_failed:${/^[0-9A-Z]{5}$/.test((error as any).code ?? "") ? (error as any).code : "operation_failed"}`,
-    );
+    // Driver messages/details can contain candidate data; expose codes only.
+    throw Error(`person_save_failed:${errorCode(error)}`);
   } finally {
-    client.release();
+    client?.release();
   }
 }
