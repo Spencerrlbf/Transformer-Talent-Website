@@ -3,7 +3,7 @@
 set -euo pipefail
 PORT="${1:?local port required}"
 DB="${2:?local test database required}"
-case "$DB" in person_atomic_test|person_intake_test|person_refresh_test|person_directory_test|person_recruiter_test|person_published_test|person_derivative_test|person_audit_test) ;; *) exit 2;; esac
+case "$DB" in person_publish_test|person_publish_review_test|person_atomic_test|person_intake_test|person_refresh_test|person_directory_test|person_recruiter_test|person_published_test|person_derivative_test|person_audit_test) ;; *) exit 2;; esac
 PSQL="${PSQL:-psql}"
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -d "$DB" -v ON_ERROR_STOP=1 -q "$@"; }
 while read -r relation migration;do
@@ -18,10 +18,14 @@ person_directory_receipts 20260926061600_person_directory_intake
 person_recruiter_receipts 20260926065300_person_recruiter_contacts
 person_refresh_attempts 20260926054500_person_refresh_intake
 person_audit_operations 20260926074407_person_audit_evidence
+person_publish_runs 20260926183000_person_publish_runbook
 LIST
 if test "$(q -Atc "select to_regprocedure('public.person_audit_anchor_inputs(jsonb)') is null")" = t;then
  q -1 -f supabase/migrations/20260926080238_person_audit_anchor_preparation.sql
 fi
 if test "$(q -Atc "select to_regprocedure('person_private.audit_candidate_hash(jsonb)') is null")" = t;then
  q -1 -f supabase/migrations/20260926082012_person_audit_writer_guards.sql
+fi
+if test "$(q -Atc "select to_regprocedure('person_private.profile_attribution_guard()') is null")" = t;then
+ q -1 -f supabase/migrations/20260926201342_person_publish_review_guards.sql
 fi

@@ -297,3 +297,71 @@ the new live path: the legacy REST updater does not participate in the new
 transaction locks. Keep public submissions accepted and durably queued during
 this transition. Main merge, flag activation and existing profile publication
 remain separately gated by Spencer's approval.
+
+## Cutover runbook scripts: publish, undo, write guard
+
+Prepared migration `20260926183000_person_publish_runbook.sql` adds a `run_id`
+to `person_projection_history`, the service-only `person_publish_runs` and
+`person_publish_results` tables, and the profile write guard on
+`public.candidates`, created DISABLED. Nothing in it rewrites a candidate row.
+It is not applied in production.
+
+`scripts/person-publish.mjs` publishes already-migrated people's compatibility
+columns from the normalized tables (plan task 10, step 16 of the cutover). It
+needs the website's server-only `PERSON_PUBLISH_DATABASE_URL`, the projection and audit
+migrations, and a valid audit anchor even when a person's projection is unchanged.
+Use the website's **direct or shared session-pooler connection on port 5432**
+for these publish/undo/guard CLIs; they refuse port 6543 and unknown proxy hosts.
+They never fall back to the app's `PERSON_DATABASE_URL`. Their run mutex is a
+session advisory lock, which transaction pooling cannot retain across commits
+([Supabase connection modes](https://supabase.com/docs/guides/database/connecting-to-postgres)).
+Keep this separate secret server-side; no production connection was provisioned
+or used during local preparation. Each person is
+one audited transaction through `publishPersonProjectionOnConnection`: candidate
+lock, hold check, drift check against the last projection, a before-image tagged
+with the run id, then the same profile update path as `savePerson`. `--mode=dry`
+(the default) computes every change and writes nothing; its `--out` file holds
+ids, statuses and the names of changed columns only. Per-person outcomes are
+`projected`, `unchanged`, `held`, `unmigrated`, `drift`, `audit_blocked` and
+`review_skipped`; `--review=skip|publish` carries Spencer's decision on people
+with an open identity or contact review record. Pages are bounded (at most 500),
+the checkpoint follows the page, and a crash between a person's commit and the
+checkpoint is safe: the original per-person outcome commits atomically with
+the projection and is reused on replay. Totals are derived from these distinct
+durable outcomes. Resume requires the same commit, exact candidate ID set and
+review policy. Publish and undo share a per-run database mutex. Capacity gates
+match the other runners. A refused person remains recorded in that run; use a
+new reviewed run after resolving its evidence problem. An unattributed edit
+requires a separately reviewed evidence repair: immutable anchors cannot be
+replaced by rerunning the anchor pass on today's profile.
+
+`scripts/person-publish-undo.mjs --run-id=<publish run> [--apply]` restores the
+profile columns from that run's before-images through
+`undoPersonProjectionOnConnection`: only when the person still has the
+normalized revision the run wrote, the exact history ID still belongs to that
+run and is the newest unrestored publication, and the current profile hash
+equals what publish produced. A newer edit, later publication (including one
+at the same revision), later revision or unique-email clash is a
+`conflict` and is left alone. Restored rows and their result commit together;
+reruns retain the original cumulative totals. Derived undo run IDs are bounded
+and cannot overwrite a publish run with the same name.
+
+`scripts/person-guard.mjs` reads and toggles the write guard through
+`person_write_guard_status()` / `person_write_guard_set()`. While enabled,
+prepared migration `20260926201342_person_publish_review_guards.sql` requires
+each candidate source-contract mutation to have its exact validated event,
+field and same-transaction attribution at commit. This includes compatibility
+profiles, contact, identity, source and enrichment-date fields. Creation needs
+a real application or directory receipt and its creation anchor. Workflow-only
+edits remain allowed. `--test-rejected=<id>` and `--test-allowed=<id>` force
+deferred checks before rolling back. Enable the guard only after
+every legitimate writer runs in live mode (step 17).
+
+Local proof: `bash scripts/person-publish/run-local-tests.sh <port>` covers dry
+run, publish, resume idempotency, crash between commit and checkpoint, drift,
+exact undo and undo conflict, review and hold skips, the guard's three cases,
+and scan paging with pause and resume. Additional regressions cover same-revision
+cross-run undo, unchanged unanchored/stale profiles, atomic result failure,
+exact resume IDs, concurrent runs, unattributed second writes, and real
+application/directory creation while the guard is enabled. All fixtures are
+local and synthetic; the migrations and guard remain unapplied in production.
