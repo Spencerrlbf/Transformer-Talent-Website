@@ -49,7 +49,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: person-trial
+  # A bounded read-only reconciliation check can run during the baseline.
+  # Every saving trial/backfill/reconciliation still shares the same group.
+  group: ${{ inputs.dry_run && fromJSON(inputs.backfill || '{}').reconcile == true && 'person-source-readonly' || 'person-trial' }}
   cancel-in-progress: false
 
 jobs:
