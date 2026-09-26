@@ -17,8 +17,10 @@
 //   DRY_RUN=1          read everything and build the docs; save nothing (the doc checks still run)
 //   REPEAT=1           save everything twice; the second pass must be all 'unchanged' and change no row
 //   --describe         print the directory's table and column names this script reads, nothing else
-//   SKIP_DIRECTORY=1   dry runs only, for testing the reads without the directory: directory people
-//                      get no directory doc, and the directory_read check fails so the run cannot pass
+//   SKIP_DIRECTORY=1   dry runs, or any run against LOCAL_DATABASE_URL (a local test cannot reach the
+//                      directory): directory people get no directory doc and go through their other
+//                      sources only. Against the live database the directory_read check then fails,
+//                      so the run cannot pass; against a local database it is reported as SKIP.
 //   SUMMARY_FILE=path  also write the summary as JSON (ids, counts and checks only)
 //   DETAIL_FILE=path   local runs only: every person's before and after, with personal data, for the
 //                      review page. Refused on GitHub Actions.
@@ -599,8 +601,10 @@ export const CHECKS = {
 };
 
 class Tally {
-  constructor() { this.fail = new Map(); this.ran = new Set(); this.notes = new Map(); }
+  constructor() { this.fail = new Map(); this.ran = new Set(); this.notes = new Map(); this.skipped = new Set(); }
   run(check) { this.ran.add(check); }
+  /** A check this run cannot make (a local test without the directory): reported, never a pass. */
+  skip(check, note) { this.ran.add(check); this.skipped.add(check); if (note) this.notes.set(check, note); }
   bad(check, id, note) {
     this.ran.add(check);
     if (!this.fail.has(check)) this.fail.set(check, new Set());
@@ -793,7 +797,8 @@ async function main() {
   const SUMMARY_FILE = (process.env.SUMMARY_FILE || "").trim();
   const DETAIL_FILE = (process.env.DETAIL_FILE || "").trim();
   const SKIP_DIRECTORY = truthy(process.env.SKIP_DIRECTORY);
-  if (SKIP_DIRECTORY && !DRY_RUN) throw new Error("SKIP_DIRECTORY is for dry runs only: a real run must read the directory");
+  const LOCAL = !!process.env.LOCAL_DATABASE_URL;
+  if (SKIP_DIRECTORY && !DRY_RUN && !LOCAL) throw new Error("SKIP_DIRECTORY is for dry runs and local tests only: a real run must read the directory");
   if (DETAIL_FILE && IN_CI) throw new Error("DETAIL_FILE holds personal data and is refused on GitHub Actions");
   const ids = parseIds({ list: opt("--ids") ?? process.env.TRIAL_IDS, file: opt("--file") ?? process.env.TRIAL_IDS_FILE });
 
@@ -819,9 +824,13 @@ async function main() {
     const beforeOther = await otherExperienceHashes(site, ids);
     tally.run("ids_found");
     for (const id of ids) if (!before.rows.has(id)) tally.bad("ids_found", id);
-    tally.run("directory_read");
-    for (const [id, inp] of before.inputs) if (inp.row.directory_contact_id && !inp.dir) tally.bad("directory_read", id);
-    if (SKIP_DIRECTORY) tally.notes.set("directory_read", "SKIP_DIRECTORY: the directory was not read");
+    if (SKIP_DIRECTORY && LOCAL) {
+      tally.skip("directory_read", `SKIP_DIRECTORY on a local database: ${before.dirIds} directory people have no directory doc and go through their other sources only`);
+    } else {
+      tally.run("directory_read");
+      for (const [id, inp] of before.inputs) if (inp.row.directory_contact_id && !inp.dir) tally.bad("directory_read", id);
+      if (SKIP_DIRECTORY) tally.notes.set("directory_read", "SKIP_DIRECTORY: the directory was not read");
+    }
     console.log(`read: ${before.rows.size} candidates, ${before.dirIds} linked to the directory${before.dirSkipped ? " (not read: SKIP_DIRECTORY)" : before.dirMissing ? ` (${before.dirMissing} not found there)` : ""}`);
 
     // 2. The docs.
@@ -848,7 +857,7 @@ async function main() {
 
       // 4. The second run: the sources read again, the docs built again, everything saved again.
       if (REPEAT) {
-        const again = await readAll(site, ids, commsDb, commsCols);
+        const again = await readAll(site, ids, commsDb, commsCols, SKIP_DIRECTORY);
         const docs2 = new Map();
         tally.run("docs_deterministic");
         for (const [id, inp] of again.inputs) {
@@ -918,12 +927,13 @@ async function main() {
       .filter(([k]) => tally.ran.has(k))
       .map(([k, [kind, what]]) => {
         const failed = [...(tally.fail.get(k) ?? [])];
-        return { name: k, kind, what, pass: failed.length === 0, failed_ids: failed, note: tally.notes.get(k) ?? null };
+        const skipped = tally.skipped.has(k);
+        return { name: k, kind, what, pass: failed.length === 0, skipped, failed_ids: failed, note: tally.notes.get(k) ?? null };
       });
     console.log("");
     for (const c of checks) {
       const n = c.failed_ids.filter((x) => x !== "*").length;
-      console.log(`CHECK ${c.pass ? "PASS" : "FAIL"} ${c.kind.padEnd(5)} ${c.name.padEnd(32)} ${c.what}${c.pass ? "" : ` | failed: ${n} ${c.failed_ids.join(", ")}`}${c.note ? ` | ${c.note}` : ""}`);
+      console.log(`CHECK ${c.skipped ? "SKIP" : c.pass ? "PASS" : "FAIL"} ${c.kind.padEnd(5)} ${c.name.padEnd(32)} ${c.what}${c.pass ? "" : ` | failed: ${n} ${c.failed_ids.join(", ")}`}${c.note ? ` | ${c.note}` : ""}`);
     }
     const allDocs = [...docsBy.values()].flat();
     const totals = DRY_RUN ? {
@@ -952,7 +962,8 @@ async function main() {
     console.log(`totals: ${Object.entries(totals).filter(([, v]) => v !== null).map(([k, v]) => `${k} ${v}`).join(", ")}`);
     if (second) console.log(`second run: ${Object.entries(second.counts).map(([k, v]) => `${k} ${v}`).join(", ")}${second.tables_changed.length ? `; tables changed: ${second.tables_changed.join(", ")}` : "; no table changed"}`);
     const pass = checks.every((c) => c.pass);
-    console.log(`${pass ? "PASS" : "FAIL"} in ${Math.round((Date.now() - t0) / 1000)}s`);
+    const skippedChecks = checks.filter((c) => c.skipped).map((c) => c.name);
+    console.log(`${pass ? "PASS" : "FAIL"}${skippedChecks.length ? ` (not checked here: ${skippedChecks.join(", ")})` : ""} in ${Math.round((Date.now() - t0) / 1000)}s`);
 
     if (SUMMARY_FILE) {
       fs.writeFileSync(SUMMARY_FILE, JSON.stringify({ run_at: new Date().toISOString(), dry_run: DRY_RUN, repeat: REPEAT, website: site.kind, pass, checks, totals, second, people }, null, 1));
