@@ -138,7 +138,7 @@ export async function readPersonProjection(
     jobs_source,
   };
 }
-async function begin(client: PersonConnection, id: string) {
+export async function beginPersonTransaction(client: PersonConnection) {
   await client.query("begin");
   await client.query(
     "set local lock_timeout='3s'; set local statement_timeout='20s'; set local idle_in_transaction_session_timeout='30s'",
@@ -146,6 +146,8 @@ async function begin(client: PersonConnection, id: string) {
   // Same normalized-writer lock first as save_person, then take the strongest
   // candidate lock before any projection/capture write can upgrade a row lock.
   await client.query("select pg_advisory_xact_lock_shared(72005,0)");
+}
+export async function lockPerson(client: PersonConnection, id: string) {
   await client.query("select pg_advisory_xact_lock(hashtext($1))", [id]);
   const before = (
     await client.query(
@@ -345,32 +347,52 @@ async function applyProjection(
   await storeProjectionBaseline(client, id, revision, after);
   return { projected: true, semanticChanged: semanticBefore !== semanticAfter };
 }
-/** Owns BEGIN/COMMIT on an idle connection. Callers must never share that
- * connection with another operation while this function is running. */
+/** Caller owns the transaction and has taken the shared writer gate and
+ * candidate lock. Multiple source docs produce one compatibility projection. */
+export async function savePersonLocked(
+  client: PersonConnection,
+  docs: PersonDoc[],
+  options: SavePersonOptions,
+  before: Record<string, any>,
+): Promise<SavePersonResult> {
+  if (
+    !["shadow", "live"].includes(options.mode) ||
+    !docs.length ||
+    docs.some((doc) => doc.candidate_id !== before.id)
+  )
+    throw Error("invalid_person_save");
+  let changed = false,
+    revision = "";
+  for (const doc of docs) {
+    const result = (
+      await client.query("select public.save_person($1::jsonb) result", [doc])
+    ).rows[0].result;
+    revision = String(result.rev);
+    changed ||= result.status !== "unchanged";
+  }
+  const projected =
+    options.mode === "live"
+      ? await applyProjection(client, before.id, revision, before)
+      : { projected: false, semanticChanged: false };
+  return {
+    candidateId: before.id,
+    changed: changed || projected.projected,
+    revision,
+    ...projected,
+  };
+}
+/** Owns BEGIN/COMMIT on an idle connection. */
 export async function savePersonOnConnection(
   client: PersonConnection,
   doc: PersonDoc,
   options: SavePersonOptions,
 ): Promise<SavePersonResult> {
-  if (!["shadow", "live"].includes(options.mode))
-    throw Error("invalid_person_mode");
   try {
-    const before = await begin(client, doc.candidate_id);
-    const result = (
-      await client.query("select public.save_person($1::jsonb) result", [doc])
-    ).rows[0].result;
-    const revision = String(result.rev);
-    const projected =
-      options.mode === "live"
-        ? await applyProjection(client, doc.candidate_id, revision, before)
-        : { projected: false, semanticChanged: false };
+    await beginPersonTransaction(client);
+    const before = await lockPerson(client, doc.candidate_id);
+    const result = await savePersonLocked(client, [doc], options, before);
     await client.query("commit");
-    return {
-      candidateId: doc.candidate_id,
-      changed: result.status !== "unchanged" || projected.projected,
-      revision,
-      ...projected,
-    };
+    return result;
   } catch (error) {
     await client.query("rollback").catch(() => {});
     throw error;
@@ -382,7 +404,8 @@ export async function undoPersonProjectionOnConnection(
   revision: string,
 ): Promise<{ status: "restored" | "conflict" | "missing" }> {
   try {
-    const current = await begin(client, id);
+    await beginPersonTransaction(client);
+    const current = await lockPerson(client, id);
     const history = (
       await client.query(
         "select * from public.person_projection_history where candidate_id=$1 and revision=$2 and restored_at is null order by id desc limit 1",
@@ -427,10 +450,9 @@ const errorCode = (error: unknown): string =>
     : "operation_failed";
 /** Uses the WEBSITE project's server-only pooled PostgreSQL URL. Never falls
  * back to COMMS_DATABASE_URL. Disabled feature paths never open a connection. */
-export async function savePerson(
-  doc: PersonDoc,
-  options: SavePersonOptions,
-): Promise<SavePersonResult> {
+export async function withPersonConnection<T>(
+  operation: (client: PersonConnection) => Promise<T>,
+): Promise<T> {
   if (typeof window !== "undefined") throw Error("server_only");
   const url = process.env.PERSON_DATABASE_URL;
   if (!url) throw Error("PERSON_DATABASE_URL is required for atomic saves");
@@ -458,11 +480,20 @@ export async function savePerson(
   let client: import("pg").PoolClient | undefined;
   try {
     client = await (await poolPromise).connect();
-    return await savePersonOnConnection(client, doc, options);
+    return await operation(client);
   } catch (error) {
     // Driver messages/details can contain candidate data; expose codes only.
     throw Error(`person_save_failed:${errorCode(error)}`);
   } finally {
     client?.release();
   }
+}
+
+export async function savePerson(
+  doc: PersonDoc,
+  options: SavePersonOptions,
+): Promise<SavePersonResult> {
+  return withPersonConnection((client) =>
+    savePersonOnConnection(client, doc, options),
+  );
 }

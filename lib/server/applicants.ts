@@ -1,5 +1,7 @@
 import { sbRest, sbRpc } from "./supabase";
 import { embed } from "./matcher";
+import { personWriteMode, saveApplicationPerson } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
 
 // ---------- Harvest enrichment (LinkedIn full profile; costs credits — one
 // call per applicant, and failure never blocks the application) ----------
@@ -180,6 +182,10 @@ export async function tenantPersonId(
 }
 
 export async function promoteToCandidatePool(args: {
+  organizationId: string;
+  applicationId: string;
+  harvestLedgerId?: string | null;
+  resumeContacts?: {phone?:string|null;email?:string|null;emails?:string[]};
   name: string;
   email: string;
   linkedinUrl: string | null;
@@ -187,11 +193,21 @@ export async function promoteToCandidatePool(args: {
   parsed: ParsedProfile | null;
   allSkills?: string[]; // full uncapped skill list (Harvest), preferred over parsed top 12
 }): Promise<{ candidateId: string | null; vector: number[] | null }> {
+  if (args.organizationId !== TT_ORG_ID) throw Error("person_intake_tenant");
   const { name, email, linkedinUrl, resumeText, parsed, allSkills } = args;
   const username = linkedinUrl ? linkedinUsername(linkedinUrl) : null;
   if (!username) return { candidateId: null, vector: null };
 
   const vector = await applicantVector(parsed, resumeText);
+  const mode = personWriteMode();
+  if (mode !== "legacy") {
+    const result = await saveApplicationPerson({
+      organizationId: args.organizationId, applicationId: args.applicationId,
+      linkedinUsername: username, name, parsed, resumeText, matchingVector: vector,
+      harvestLedgerId: args.harvestLedgerId, resumeContacts: args.resumeContacts, mode,
+    });
+    return { candidateId: result.candidateId, vector };
+  }
 
   const fields: Record<string, unknown> = {
     source: "website_applicant",

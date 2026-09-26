@@ -101,3 +101,6 @@ export {
 export { isSideRoleTitle } from "./person/role-selection";
 export type * from "./person/types";
 export { savePerson, savePersonOnConnection, undoPersonProjectionOnConnection, semanticProfileHash, readPersonProjection } from './person/save';
+export { personWriteMode, saveApplicationPerson, saveApplicationPersonOnConnection, applicationProfileDoc } from './person/intake';
+
+export { runApplicantPipeline } from './applicant-pipeline';

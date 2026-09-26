@@ -19,7 +19,7 @@ import { getRoles } from "@/lib/roles";
 import { passesHardGates, passesProfileGates, screenRolesWithCache } from "./screening";
 import { loadOrgRoles, matchOrgRolesForApplicant, type BoardRole } from "./org-board";
 import { llamaParsePdf } from "./llamaparse";
-import { extractEmails, extractPhone, fillExtractedContact, normalizePhone, pdfText } from "./contact-extract";
+import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "./contact-extract";
 import {
   recordEnrichment,
   syncExperiences,
@@ -35,6 +35,8 @@ import { attachVerdictToMatch } from "./verdict-store";
 import { getOrgId } from "./spine";
 import { takeReview } from "./review-budget";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
+import { personWriteMode } from "./person/intake";
+import { cachedApplicationHarvest, storeApplicationHarvest, applicationIntakeReceipt, applicationResumeContacts } from "./person/application-sources";
 
 export type ApplicantPipelineInput = {
   submissionId: string;
@@ -87,7 +89,7 @@ function nameFromProfile(
   return [first, last].filter(Boolean).join(" ") || fallback;
 }
 
-export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<void> {
+export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"processed" | "queued" | "failed"> {
   const {
     submissionId, email, linkedin, visa, preferredLocations,
     roleIds, speculative, resumeBuf, resumeSafeName, resumePath, boardOrg, orgId,
@@ -97,8 +99,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   // Whose applicant this is: a client company's board or page, or the site's
   // own (Transformer Talent). Decided on the organization, not the surface.
   const ttOrgId = await getOrgId();
-  const tenantOrgId: string | null =
-    boardOrg?.id ?? (orgId && ttOrgId && orgId !== ttOrgId ? orgId : null);
+  const effectiveOrgId = boardOrg?.id ?? orgId ?? ttOrgId;
+  if (!effectiveOrgId || !ttOrgId) throw Error("application_organization_unavailable");
+  const tenantOrgId = effectiveOrgId === ttOrgId ? null : effectiveOrgId;
+  const personMode = personWriteMode();
+  const normalizedIntake = !tenantOrgId && personMode !== "legacy";
 
   const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
   const roles = boardRoles ?? (await getRoles());
@@ -153,7 +158,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       prefer: "return=minimal",
     }).catch(() => {});
     await notifyArrival();
-    return;
+    return "queued";
   }
 
   // Resume text (when a resume exists).
@@ -177,6 +182,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   }
 
   let matches: { jobId: string; title: string; salary: string }[] = [];
+  let pipelineFailed = false;
   let screenedSummary: string | undefined;
   let applicationFit: string | undefined;
   try {
@@ -184,18 +190,32 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     let harvest: unknown | null = null;
     let harvestCache: "hit" | "miss" = "miss";
     const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-    const prior = await sbRest(
-      `website_applications?linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
-    );
-    if (prior.ok) {
-      const rows = await prior.json();
-      if (rows.length) {
-        harvest = rows[0].harvest_profile;
-        harvestCache = "hit";
+    let harvestLedgerId: string | null = null;
+    const intakeReceipt = normalizedIntake ? await applicationIntakeReceipt(effectiveOrgId, submissionId) : null;
+    if (intakeReceipt) {
+      harvestLedgerId = intakeReceipt.harvest_ledger_id;
+      if (harvestLedgerId) {
+        const cached = await cachedApplicationHarvest(effectiveOrgId, username || "", since, harvestLedgerId);
+        if (!cached) throw Error("person_intake_receipt_source_missing");
+        harvest = cached.raw_payload; harvestCache = "hit";
       }
+    } else if (normalizedIntake) {
+      const cached = await cachedApplicationHarvest(effectiveOrgId, username || "", since);
+      if (cached) { harvest = cached.raw_payload; harvestLedgerId = cached.id; harvestCache = "hit"; }
+      else {
+        harvest = await harvestProfile(linkedin);
+        if (harvest) harvestLedgerId = await storeApplicationHarvest(effectiveOrgId, username || "", harvest);
+      }
+    } else {
+      const prior = await sbRest(
+        `website_applications?organization_id=eq.${effectiveOrgId}&linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
+      );
+      if (!prior.ok) throw Error("application_cache_read_failed");
+      const rows = await prior.json();
+      if (rows.length) { harvest = rows[0].harvest_profile; harvestCache = "hit"; }
+      if (!harvest) harvest = await harvestProfile(linkedin);
     }
-    if (!harvest) harvest = await harvestProfile(linkedin);
-    const parsed = await parseProfile(resumeText || "", harvest);
+    const parsed = intakeReceipt ? intakeReceipt.application_snapshot.parsed_profile : await parseProfile(resumeText || "", harvest);
 
     // Referrals arrive with no name — take it from the profile.
     if (!name) {
@@ -223,6 +243,10 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
           vector: username ? await applicantVector(parsed, resumeText) : null,
         }
       : await promoteToCandidatePool({
+          organizationId: effectiveOrgId,
+          applicationId: submissionId,
+          harvestLedgerId,
+          resumeContacts: applicationResumeContacts(parsed, resumeText, email),
           name,
           email,
           linkedinUrl: linkedin,
@@ -232,7 +256,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         });
 
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
-    if (harvest) {
+    if (harvest && !normalizedIntake) {
       await recordEnrichment(
         tenantOrgId
           ? { orgId: tenantOrgId, candidateId: null, linkedinUsername: username, provider: "harvest", operation: "full_profile", cacheStatus: harvestCache, costCredits: harvestCache === "miss" ? 1 : 0 }
@@ -258,7 +282,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       });
     }
     if (candidateId && !tenantOrgId) {
-      await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
+      if (!normalizedIntake) await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
       await syncCandidateEmbeddings(candidateId, {
         linkedin_profile: linkedinProfileText(harvest as Record<string, unknown> | null),
         resume: resumeText || undefined,
@@ -403,7 +427,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         .map((r) => ({ jobId: r.jobId, title: r.title, salary: r.salary }));
     }
 
-    await sbRest(`website_applications?id=eq.${submissionId}`, {
+    const finalized = await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
       method: "PATCH",
       body: JSON.stringify({
         harvest_profile: harvest,
@@ -414,7 +438,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         status: "processed",
       }),
       prefer: "return=minimal",
-    }).catch(() => {});
+    });
+    if (!finalized.ok && normalizedIntake) throw Error("person_intake_finalize_failed");
 
     // Contact details off the resume — written AFTER the profile above so
     // the drawer never shows a phone before the LinkedIn history is there.
@@ -426,13 +451,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     // failure), plus one narrow backstop: a phone in the contact block the
     // model missed. Fills gaps only — never overwrites a typed value.
     if (resumeText) {
-      const foundPhone = parsed
-        ? normalizePhone(parsed.phone) || extractPhone(resumeText.slice(0, 1500))
-        : extractPhone(resumeText);
-      const modelEmail = (parsed?.email || "").trim();
-      const found = parsed
-        ? { phone: foundPhone, email: modelEmail && modelEmail.toLowerCase() !== email.toLowerCase() ? modelEmail : null }
-        : { phone: foundPhone, emails: extractEmails(resumeText, email) };
+      const found = applicationResumeContacts(parsed, resumeText, email);
       if (found.phone || found.email || (found.emails && found.emails.length)) {
         await fillExtractedContact(`app_${submissionId}`, found).catch((err) =>
           console.error("contact fill failed", err)
@@ -473,10 +492,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       });
     }
   } catch (err) {
-    console.error("applicant pipeline failed", err);
+    pipelineFailed = true;
+    console.error("applicant pipeline failed", normalizedIntake ? "person_intake_retry_required" : err);
     await sbRest(`website_applications?id=eq.${submissionId}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: "received" }),
+      body: JSON.stringify({ status: normalizedIntake ? "queued" : "received" }),
       prefer: "return=minimal",
     }).catch(() => {});
     // Enrichment fell over (Harvest / model outage): the deterministic
@@ -517,4 +537,5 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
 
   // The queue already told them when the application arrived.
   if (!p.fromQueue) await notifyArrival();
+  return pipelineFailed ? "failed" : "processed";
 }
