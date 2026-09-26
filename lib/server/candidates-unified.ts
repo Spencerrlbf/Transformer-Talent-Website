@@ -20,6 +20,10 @@ import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
+import { publishedPoolContacts } from "./person/contacts";
+import { saveRecruiterContact } from "./person/recruiter";
+import { personWriteMode } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
 import { poolDisplayPositions, poolEducation } from "./pool/profile";
 import type { Scorecard } from "./scorecard";
 import {
@@ -1451,6 +1455,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     }[];
     if (!p) return null;
 
+    const published = await publishedPoolContacts([id]);
     const [enrRes, vRes, emailMap] = await Promise.all([
       sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
@@ -1460,7 +1465,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]])),
+      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published),
     ]);
     const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
@@ -1549,6 +1554,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       // contact overlay). otherEmails: user-curated list once saved; until
       // then, the verification tables' addresses minus the primary.
       contact: (() => {
+        if (published.has(id)) return published.get(id)!.contact;
         const primary = str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null;
         const curated = Array.isArray(p.contact?.otherEmails) ? p.contact!.otherEmails! : null;
         const fallback = (emailMap.get(id) || [])
@@ -1777,10 +1783,31 @@ const cleanContact = (c: UnifiedContact): UnifiedContact | { error: string } => 
 export async function saveUnifiedContact(
   orgId: string,
   key: string,
-  contact: UnifiedContact
+  contact: UnifiedContact,
+  edit?: { actorId: string; requestId: string }
 ): Promise<{ contact?: UnifiedContact; error?: string }> {
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
+
+  // Enforce pool ownership in the service as well as the HTTP route.
+  if (key.startsWith("net_")) {
+    if (orgId !== TT_ORG_ID) return { error: "not_found" };
+    if (personWriteMode() !== "legacy") {
+      if (!edit) return { error: "member_required" };
+      try {
+        const saved = await saveRecruiterContact({ organizationId: orgId,
+          candidateId: key.slice(4), actorId: edit.actorId, requestId: edit.requestId,
+          contact: cleaned, mode: personWriteMode() as "shadow" | "live" });
+        return { contact: saved.contact };
+      } catch (error) {
+        const reason = (error as Error).message;
+        if (["invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable"].includes(reason)) return { error: reason };
+        if (reason === "person_not_found") return { error: "not_found" };
+        if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
+        return { error: "save_failed" };
+      }
+    }
+  }
 
   // net_ = pool candidate (TT-internal; the API route gates org access).
   const target = key.startsWith("src_")

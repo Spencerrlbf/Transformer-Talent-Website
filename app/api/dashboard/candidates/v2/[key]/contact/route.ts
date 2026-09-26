@@ -24,6 +24,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
     return NextResponse.json({ error: "bad_json" }, { status: 400 });
   }
 
+  const requestId = req.headers.get("idempotency-key") || crypto.randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))
+    return NextResponse.json({ error: "bad_request_id" }, { status: 400 });
   const result = await saveUnifiedContact(member.org.id, key, {
     email: body.email ?? null,
     phone: body.phone ?? null,
@@ -31,7 +34,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
     otherEmails: Array.isArray(body.otherEmails)
       ? body.otherEmails.filter((e): e is string => typeof e === "string")
       : [],
-  });
+  }, { actorId: member.userId, requestId });
   if (result.error)
     return NextResponse.json({ error: result.error }, { status: result.error === "not_found" ? 404 : 400 });
   return NextResponse.json({ contact: result.contact });

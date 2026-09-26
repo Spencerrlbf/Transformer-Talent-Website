@@ -64,6 +64,8 @@ export interface ProjectionInput {
   header_provenance?: Partial<Record<keyof PersonHeader, { source: string; at: string }>> | null;
   jobs_source?: { source: string; fetched_at: string } | null;
   contacts?: ProjectContactIn[] | null;
+  /** Persisted ranks, including an entirely unranked set, are authoritative. */
+  contact_ranks_authoritative?: boolean;
 }
 
 export interface ProjectedPosition {
@@ -119,9 +121,9 @@ const line = (v: unknown, cap?: number): string | null => {
   return t && cap ? t.slice(0, cap) : t;
 };
 
-function ranked(contacts: ProjectContactIn[], kind: "email" | "phone"): string[] {
+function ranked(contacts: ProjectContactIn[], kind: "email" | "phone", authoritative = false): string[] {
   const mine = contacts.filter((c) => c.kind === kind);
-  if (mine.some((c) => c.rank != null)) {
+  if (authoritative || mine.some((c) => c.rank != null)) {
     return mine
       .filter((c) => c.rank != null && (c.status ?? "active") === "active")
       .sort((a, b) => (a.rank as number) - (b.rank as number))
@@ -234,8 +236,8 @@ export function project(tables: ProjectionInput): Projection {
   const todayYears = todayRows.length ? computeFacts(todayRows, [], poolSkills(columns), poolEducation(columns)).careerYears : null;
 
   const contacts = tables.contacts || [];
-  const emails = ranked(contacts, "email");
-  const phones = ranked(contacts, "phone");
+  const emails = ranked(contacts, "email", tables.contact_ranks_authoritative);
+  const phones = ranked(contacts, "phone", tables.contact_ranks_authoritative);
   const h = tables.header || {};
   const currentFact = (key: "current_title" | "current_company", fallback: string | null): string | null => {
     const value = txt(h[key]);

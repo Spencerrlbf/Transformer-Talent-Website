@@ -128,6 +128,7 @@ export async function readPersonProjection(
     educations,
     skills,
     contacts,
+    contact_ranks_authoritative: true,
     header: Object.fromEntries(
       Object.entries(state.header ?? {}).map(([k, v]) => [
         k,

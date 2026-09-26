@@ -7,6 +7,7 @@
 // normal website_applications row marked source=transformer_talent, which
 // renders in the job's pipeline as an applicant with the Via-TT badge.
 import { sbRest, sbInsert } from "./supabase";
+import { publishedPoolContacts, type ResolvedPoolContact } from "./person/contacts";
 import { clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
 
 export const TT_ORG_SLUG = "transformer-talent";
@@ -95,11 +96,14 @@ function emailScore(r: EmailRow): number {
 /** candidateId -> usable emails, best first. knownEmail (candidates.email) leads. */
 export async function poolEmails(
   candidateIds: string[],
-  knownEmails: Map<string, string | null>
+  knownEmails: Map<string, string | null>,
+  published?: Map<string, ResolvedPoolContact>
 ): Promise<Map<string, RankedEmail[]>> {
+  const normalized = published ?? await publishedPoolContacts(candidateIds);
+  const legacyIds = candidateIds.filter(id => !normalized.has(id));
   const rows: EmailRow[] = [];
-  for (let i = 0; i < candidateIds.length; i += 100) {
-    const chunk = candidateIds.slice(i, i + 100).map((x) => `"${x}"`).join(",");
+  for (let i = 0; i < legacyIds.length; i += 100) {
+    const chunk = legacyIds.slice(i, i + 100).map((x) => `"${x}"`).join(",");
     const [a, b] = await Promise.all([
       sbRest(
         `candidate_emails?candidate_id=in.(${chunk})&select=candidate_id,email:email_address,email_type,is_primary,quality,result`
@@ -122,7 +126,7 @@ export async function poolEmails(
   }
 
   const out = new Map<string, RankedEmail[]>();
-  for (const id of candidateIds) {
+  for (const id of legacyIds) {
     const seenEmails = new Set<string>();
     const ranked: RankedEmail[] = [];
     const known = str(knownEmails.get(id) ?? null);
@@ -138,6 +142,7 @@ export async function poolEmails(
     }
     if (ranked.length) out.set(id, ranked);
   }
+  for (const [id, value] of normalized) out.set(id, value.emails);
   return out;
 }
 
@@ -297,7 +302,8 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
     const res = await sbRest(`candidates?id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=${POOL_COLS}`);
     for (const r of (res.ok ? await res.json() : []) as PoolRow[]) pool.set(r.id, r);
   }
-  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])));
+  const published = await publishedPoolContacts(ids);
+  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])), published);
 
   const people: NetworkPerson[] = [];
   for (const r of rows) {
@@ -332,7 +338,7 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
       linkedinUrl: str(p.linkedin_url),
       email: emails[0]?.email ?? null,
       emails,
-      phone: str(p.contact?.phone) ?? str(p.phone),
+      phone: published.has(r.candidate_id) ? published.get(r.candidate_id)!.contact.phone ?? null : str(p.contact?.phone) ?? str(p.phone),
       years: p.calculated_experience_years ?? p.total_experience_years ?? null,
       latestMatchAt: r.latest_match_at,
       matches,
@@ -381,9 +387,11 @@ export async function sendNetworkCandidate(
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
   const [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
   if (!cand) return { ok: false, error: "candidate_not_found" };
+  const published = await publishedPoolContacts([candidateId]);
+  const bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : str(cand.contact?.phone) ?? str(cand.phone);
   const bestEmail =
     (
-      await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]))
+      await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published)
     ).get(candidateId)?.[0]?.email ?? null;
 
   // One send per (person, target job) — pipelines never grow duplicates.
@@ -441,8 +449,8 @@ export async function sendNetworkCandidate(
       harvest_profile: enr?.raw_payload ?? null,
       screening: carried ? [{ ...carried, job_id: target.jobId }] : null,
       contact:
-        bestEmail || str(cand.contact?.phone) || str(cand.phone)
-          ? { email: bestEmail, phone: str(cand.contact?.phone) ?? str(cand.phone) }
+        bestEmail || bestPhone
+          ? { email: bestEmail, phone: bestPhone }
           : null,
     },
     true
