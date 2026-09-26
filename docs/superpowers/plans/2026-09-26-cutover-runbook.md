@@ -183,7 +183,14 @@ dispatch judge or refresh for storage-only changes.
 - Rollback: `node scripts/person-publish-undo.mjs --run-id=publish-<date>` (count), then `--apply`; `conflict` rows are people edited since publish and are left alone.
 
 ### Step 17: audit and enable the guard
-1. Run the post-cutover audit evidence snapshot on a bounded sample (from #21) and confirm `ready` outcomes; anything `review` is added to the review bucket.
+1. Run the post-cutover auditor over the published pool, dry first, then recording:
+```
+PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-audit.mjs --run-id=audit-<date> --limit=1000 --batch-size=10
+PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-audit.mjs --run-id=audit-<date> --record --limit=1000000 --batch-size=10 --max-seconds=3600
+# repeat with --resume until audit_scan_paused reports processed = the pool, then:
+PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-finalize.mjs --run-id=audit-<date> --external-stable=<true|false from the last directory reconciliation>
+```
+   Expected: `verified` for published people; `review` for the known review bucket (holds, mutated snapshots) and for anything with an unexplained edit; `pending` for raw facts or receipts no writer has admitted yet. Finalize reports `audited`, `catchup_pending` (with which fence moved) or `review_required`. Anything `review` outside the known bucket stops the sitting.
 2. `node scripts/person-guard.mjs --test-rejected=<one published id>` must print `outcome: rejected` (guard still disabled prints `allowed`, which is expected before enabling) and `--test-allowed=<same id>` must print `allowed`. Both roll back.
 3. `node scripts/person-guard.mjs --enable --note="cutover <date>"`, then repeat both tests: rejected and allowed.
 
