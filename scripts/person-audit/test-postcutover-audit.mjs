@@ -203,3 +203,42 @@ test("a receipt-created application person is verified from its receipt and crea
   assert.equal(plan.status, "verified", JSON.stringify(plan));
   assert.equal(plan.checks.creation_event, true);
 });
+
+test("a done refresh receipt on an anchored person is admitted and the person stays verified", async () => {
+  const F = id(6), queueId = id(1006), ledgerId = id(2006);
+  await seed(6);
+  await pool.query("insert into refresh_queue(id,candidate_id,organization_id) values($1,$2,$3)", [queueId, F, org]);
+  await pool.query("insert into candidate_enrichments(id,candidate_id,organization_id,linkedin_username,raw_payload) values($1,$2,$3,$4,$5)", [ledgerId, F, org, "synthetic-audit-6", { headline: "Refreshed headline" }]);
+  const c = await pool.connect();
+  try {
+    const claim = await lib.claimRefreshOnConnection(c, { organizationId: org, queueId, dailyCap: 0, allowPaid: false });
+    assert.equal(claim.status, "claimed");
+    const saved = await lib.saveRefreshOnConnection(c, { organizationId: org, queueId, token: claim.token, mode: "shadow" });
+    assert.ok(saved, "refresh saved in shadow mode");
+  } finally { c.release(); }
+  const plan = await planOf(F);
+  assert.equal(plan.status, "verified", JSON.stringify(plan));
+  assert.ok(plan.checks.sources.expected >= 2, "the legacy document plus the refresh receipt document");
+  assert.equal(plan.checks.sources.not_yet_stored, 0);
+  assert.equal(plan.checks.raw_facts.pending_ledgers, 0, "the ledger row is admitted by the done attempt");
+});
+
+test("a done directory receipt creates a receipt-anchored person that is verified", async () => {
+  const workspaceId = id(3007), contactId = id(1007), username = "synthetic-audit-dir-7";
+  const c = await pool.connect();
+  let saved;
+  try {
+    const claim = await lib.claimDirectoryScanOnConnection(c, { organizationId: org, workspaceId });
+    const staged = await lib.stageDirectoryOnConnection(c, { organizationId: org, workspaceId, token: claim.token, snapshot: {
+      board: { contact_id: contactId, name: "Synthetic Audit Directory", linkedin_url: `https://www.linkedin.com/in/${username}`, updated_at: "2026-09-26" },
+      harvest: null, exps: [], edus: [], emails: [], phones: [], facts: [], identifiers: [] } });
+    saved = await lib.saveDirectoryOnConnection(c, { organizationId: org, receiptId: staged.receiptId, mode: "shadow" });
+  } finally { c.release(); }
+  const created = (await pool.query("select candidate_id from person_directory_receipts where contact_id=$1 and phase='done' order by id desc limit 1", [contactId])).rows[0]?.candidate_id;
+  assert.ok(created, `the directory save created a person (${JSON.stringify(saved)})`);
+  const plan = await planOf(created);
+  assert.equal(plan.status, "verified", JSON.stringify(plan));
+  assert.equal(plan.checks.creation_event, true);
+  assert.equal(plan.checks.directory.pending, 0);
+  assert.equal(plan.checks.sources.not_yet_stored, 0);
+});
