@@ -1,17 +1,17 @@
 # Candidate storage unification: handoff and remaining runbook
 
-Written 2026-09-26 17:20 UTC for any agent picking this work up remotely.
+Updated 2026-09-26 17:25 UTC for any agent continuing this work.
 Plan: `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Release prerequisites and per-writer notes: `docs/person-storage-release.md`.
 
 ## Where things stand
 
 **Code.** Parent integration branch `feat/person-00-storage-unification`,
-draft PR #2 to main. Eighteen child PRs (#1, #3 to #18) are merged into the
-parent. PR #19 (`feat/person-21-audit-writers`, audit guard) is open against
-the parent with a green Vercel preview; its 913-call tenancy sweep has not
-been run. Main is unchanged at 0c2b9a8 apart from the dispatch-only person
-trial workflow file. `PERSON_WRITE_MODE` defaults to `legacy` everywhere.
+draft PR #2 to main. Child PRs #1 and #3–#19 are merged into the parent. PR #19
+(`feat/person-21-audit-writers`, audit guard) passed its exact-commit hosted
+preview and all 913 tenancy calls in 236 seconds, with full fixture cleanup.
+The parent is at `63bc2ec998117c58ef71267aa0459359d0dcd4c3`. Main remains unchanged at `0c2b9a8463f902737fd6e7e35aea724fa31755a8`
+(which already contains the dispatch-only person trial workflow). `PERSON_WRITE_MODE` defaults to `legacy` everywhere.
 Nothing new is deployed.
 
 **Database (website Supabase project kmuihequfurvjxpnugxf).**
@@ -29,7 +29,7 @@ run outside a transaction), `20260926065300_person_recruiter_contacts`,
 `20260926072840_person_derivative_jobs`, `20260926074407_person_audit_evidence`,
 `20260926080238` (anchors), `20260926082012` (audit guard, PR #19).
 
-**Shadow backfill: COMPLETE.** Run `person-full-phones-20260926`, pinned commit
+**Historical baseline copy: COMPLETE for unheld candidates.** Run `person-full-phones-20260926`, pinned commit
 `c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc` (branch `fix/person-13-phone-audit`),
 parser `person-v3`, status `baseline_complete` at 2026-09-26 17:04:41 UTC
 (GitHub Actions runs 36221894748, 36223417225, 36244794998).
@@ -50,7 +50,9 @@ Candidate rows and IDs are unchanged. Two earlier full runs
 (`person-full-20260926`, `person-full-bulk-20260926`) failed safely and are
 retained as records; do not resume them.
 
-**Reconciliation.** Only a 500-person saving pilot has run
+**Reconciliation.** Queue catch-up is now running as GitHub Actions
+`36258797364`, run `person-reconcile-queue-20260926`, same reviewed pin.
+Do not duplicate this active run. Previously only a 500-person saving pilot ran
 (`person-reconcile-save500-20260926`, paused, source scan complete, external
 directory fingerprint stable at 54c56e296a2a744d00e07bc196a8afca). Full
 reconciliation has NOT run.
@@ -59,7 +61,9 @@ reconciliation has NOT run.
 active for all five: `build-shortlists.yml`, `compute-signals.yml`,
 `judge-shortlists.yml`, `refresh-queue.yml`, `sync-candidates.yml`.
 `review-queue.yml`, `sourcing-resumer.yml`, `draft-open-roles.yml` and
-`person-trial.yml` were left active. Restore in plan task 11.
+`person-trial.yml` were left active. Restore their original active states once migration load ends, including if
+remaining work is waiting for release approval. Do not leave them disabled
+through the approval wait or manually dispatch their paid work.
 
 **Holds.** Two people are held because the original fetch date of their cached
 Harvest payload cannot be proven. Do not clear a hold without provenance.
@@ -81,18 +85,19 @@ gh workflow run person-trial.yml --repo Spencerrlbf/Transformer-Talent-Website \
   --ref fix/person-13-phone-audit -f dry_run=false \
   -f backfill='{"run-id":"person-reconcile-queue-20260926","reconcile":true,"scope":"queue","limit":1000000,"batch-size":500,"max-db-bytes":34000000000,"max-seconds":18000}'
 
-# Full reconciliation source scan (about an hour; two directory fingerprints
-# of roughly six minutes each dominate). Add "resume":true to continue a
-# paused scan under the same run-id.
+# Full reconciliation source scan. Run only after the queue pass finishes
+# and after checking Actions/checkpoints again. Measure its own throughput;
+# the 500-person pilot is not evidence that the whole scan takes one hour.
+# Add "resume":true to continue a paused scan under the same run-id.
 gh workflow run person-trial.yml --repo Spencerrlbf/Transformer-Talent-Website \
   --ref fix/person-13-phone-audit -f dry_run=false \
   -f backfill='{"run-id":"person-reconcile-full-20260926","reconcile":true,"scope":"all","limit":1000000,"batch-size":500,"max-db-bytes":34000000000,"max-seconds":18000}'
 
 # Finalize after the scan pauses with source_scan_complete=true. Runs locally
-# through the linked Supabase CLI workdir (on the Mac Mini:
-# ~/Mac-Mini-Projects/Recruitment-Matching is linked to the website project).
+# through a verified website-linked Supabase CLI workdir. Check the local
+# project-ref; the finalizer explicitly refuses a different project.
 node scripts/person-reconcile-finalize.mjs --run-id=person-reconcile-full-20260926 \
-  --workdir=/Users/spencerbarton-fisher/Mac-Mini-Projects/Recruitment-Matching
+  --workdir=../audit-db
 ```
 
 Rules: only one saving run at a time (they share the `person-trial`
@@ -108,34 +113,46 @@ from public.backfill_runs order by started_at desc limit 5;
 
 ## Remaining steps in order
 
-1. **Catch-up** (`scope: queue`). Expected near no-op; captured events read 0 all day.
-2. **Full reconciliation** (`scope: all`) then finalize. Expect `review_required`
-   because of the two holds and the 5,007 review records, not `reconciled`.
-3. **Spencer's decisions**: how the 5,007 review people publish (mostly jobs
-   with no identifiable employer, ambiguous company matches); what to do with
-   the two holds; review of parent PR #2. PR #19 needs its tenancy sweep and
-   merge into the parent first. The post-cutover audit tool designed in
-   `.superpowers` notes was never built; it is not a cutover blocker.
-4. **Merge parent to main**, apply the nine prepared migrations plus the
-   concurrent lookup index. Verify the production deployment is green.
-5. **Writers live**: set the server-only pooled `PERSON_DATABASE_URL` on Vercel
-   and worker secrets (website project, never the communications database).
-   Drain in-flight old workers. Set `PERSON_WRITE_MODE=live` on a bounded
-   canary, then everywhere. Rerun catch-up immediately before the switch.
-6. **Publish projections** in controlled batches with before-images and
-   revision checks; verify Network and Send snapshots; recompute unpaid signals
-   only. Then enable the legacy-write guard after testing allowed and rejected
-   writes. Do not mass-trigger paid embedding or judging for storage-only
-   differences.
-7. **Restore** the five paused workflows in dependency order, run
-   `scripts/test-tenancy.mjs` and bounded live read checks, rotate the exposed
-   token, and write the completion report (plan task 12) stating separately:
-   historical data copied, live writers switched, projections published,
-   derived data refreshed.
+1. **Catch-up** (`scope: queue`). Monitor the existing run above; do not duplicate it.
+2. **Full reconciliation** (`scope: all`) then bounded finalize. The two source-date
+   holds prevent `reconciled`. Report eligible, verified, pending, review and open
+   conflict counts separately. The 5,007 baseline people with conflicts and 5,483
+   conflict rows are different measures; do not treat them as reconciliation totals.
+3. **Complete application preparation**: finish and test the separate post-cutover
+   auditor. It must understand frozen anchors, actual receipt documents and exact
+   captured-event attribution. The historical reconciler cannot certify newly
+   published profiles. This remains a release prerequisite; flags stay off.
+4. **Restore schedules** as soon as migration load ends, preserving the five
+   original active states and existing budget limits. Leave a precise accounting
+   report, remaining holds and release prerequisites for Spencer.
+5. **Spencer's release approval** covers parent PR #2, deployment, profile
+   publication and restrictive write guards. Child integration and additive shadow
+   database work remain authorized. Retain unresolved identity/source conflicts;
+   do not merge people or guess source dates.
+6. **Approved release sequencing**: provision the website-only pooled
+   `PERSON_DATABASE_URL`, apply the complete reviewed prepared migration chain
+   and concurrent lookup index, finish historical catch-up, then prepare verified
+   immutable anchors before enabling any normalized intake. Install all three
+   audit migrations before preparing anchors so timestamp proofs agree. Missing
+   or stale anchors refuse writes and are not a reason to bypass the guard.
+   Deploy the approved feature with flags initially off and verify deployment.
+7. **Writers live and publication**: drain in-flight old workers while keeping
+   public submissions durably accepted. Enable a bounded canary, audit it using
+   the new receipt-aware auditor, then progressively expand. Publish existing
+   profiles in controlled batches with before-images/revision checks; verify
+   Network and Send snapshots and preserve unresolved holds. Only then enable
+   the restrictive legacy-write guard after testing allowed and rejected writes.
+   Do not mass-trigger paid embedding/judging for storage-only changes.
+8. **Release checks and reporting**: verify preview/production tenancy and bounded
+   intake/read checks, schedules, source receipts/queues and query health. Arrange
+   rotation of the exposed MCP token with its owner without breaking active access.
+   State separately: historical copy, source reconciliation, switched writers,
+   published projections and derivative refresh. None implies the others.
 
 ## Constraints that still apply
 
-No direct commits to main. No merges without Spencer's word. No deletion of
+No direct commits or merges to main without Spencer's release approval.
+Sequential tested child merges into the feature parent remain authorized. No deletion of
 April tables, legacy JSON or legacy emails. No writes to the communications
 database. No paid Harvest pulls, bulk embedding or bulk judging as part of the
 migration. Preserve candidate IDs, verdicts, signals and read contracts.
