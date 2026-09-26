@@ -17,6 +17,9 @@ q -d person_audit_test -1 -f supabase/migrations/20260926072840_person_derivativ
 q -d person_audit_test -1 -f supabase/migrations/20260926054500_person_refresh_intake.sql
 q -d person_audit_test -c "insert into candidates(id,full_name,linkedin_username) values('d5000000-0000-4000-8000-000000000900','Synthetic Pre-migration','audit-before-migration')"
 q -d person_audit_test -1 -f supabase/migrations/20260926074407_person_audit_evidence.sql
+q -d person_audit_test -1 -f supabase/migrations/20260926080238_person_audit_anchor_preparation.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_audit_test" node --test scripts/person-audit/test-evidence.mjs
 q -d person_audit_test -c "create table refresh_queue(id uuid primary key default gen_random_uuid(),organization_id uuid not null,candidate_id uuid not null,linkedin_url text,linkedin_username text,priority int not null default 100,reason text,status text not null default 'queued',queued_at timestamptz not null default now(),processed_at timestamptz,unique(candidate_id,status))"
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_audit_test" node --test --test-concurrency=1 scripts/person-intake/test-applications.mjs scripts/person-refresh/test-refresh.mjs scripts/person-directory/test-directory.mjs scripts/person-recruiter/test-recruiter.mjs
+
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_audit_test" node --test --test-concurrency=1 scripts/person-audit/test-anchors.mjs scripts/person-audit/test-anchor-cli.mjs
