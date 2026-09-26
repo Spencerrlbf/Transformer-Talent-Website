@@ -41,6 +41,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
+import { mapBounded, createLimiter, retryTransient } from "./person-backfill/engine.mjs";
 
 try {
   const envFile = fs.readFileSync(new URL("../.env.scripts", import.meta.url), "utf8");
@@ -176,23 +177,29 @@ function sqlFilter([col, op, val], params) {
 export function restSite(url, key) {
   const base = `${url.trim().replace(/\/+$/, "")}/rest/v1/`;
   const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const transportCode=error=>error?.name==='TimeoutError'?'TimeoutError':error?.cause?.code??error?.code??error?.name;
   async function request(path, init = {}) {
     let res;
     try {
       res = await fetch(base + path, { ...init, headers: { ...headers, ...(init.headers || {}) }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     } catch (err) {
-      throw new Error(`${init.method || "GET"} ${path.split("?")[0]}: ${err?.cause?.message || err?.message || err}`);
+      throw Object.assign(new Error(`${init.method || "GET"} ${path.split("?")[0]}: ${err?.cause?.message || err?.message || err}`),{code:transportCode(err)});
     }
     if (!res.ok) {
       // PostgREST's "details" can quote the failing row, which is personal data: never logged.
       const raw = await res.text();
-      let msg = raw.slice(0, 200);
-      try { const j = JSON.parse(raw); msg = [j.code, j.message, j.hint].filter(Boolean).join(" | "); } catch {}
-      throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${msg}`);
+      let msg = raw.slice(0, 200),code=`HTTP_${res.status}`;
+      try { const j = JSON.parse(raw); msg = [j.code, j.message, j.hint].filter(Boolean).join(" | "); if(j.code)code=j.code; } catch {}
+      throw Object.assign(new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${msg}`),{code});
     }
     return res;
   }
   const json = async (res) => { const t = await res.text(); return t ? JSON.parse(t) : null; };
+  const limited=createLimiter(4);
+  const requestJson=(path,init)=>limited(async()=>{
+    try{return await json(await request(path,init));}
+    catch(error){throw Object.assign(new Error(error?.message??'Request failed'),{code:transportCode(error)});}
+  });
   return {
     kind: "rest",
     // The host locally; on GitHub Actions only that it is the SUPABASE_URL secret's database.
@@ -201,13 +208,13 @@ export function restSite(url, key) {
       const q = [`select=${columnsOf(columns)}`, ...filters.map(restFilter), `order=${orderOf(order).map(([c, d]) => `${c}.${d}`).join(",")}`].join("&");
       const out = [];
       for (let offset = 0; ; offset += PAGE) {
-        const rows = await json(await request(`${name(table)}?${q}&limit=${PAGE}&offset=${offset}`));
+        const rows = await retryTransient(()=>requestJson(`${name(table)}?${q}&limit=${PAGE}&offset=${offset}`));
         out.push(...rows);
         if (rows.length < PAGE) return out;
       }
     },
     async rpc(fn, args) {
-      return json(await request(`rpc/${name(fn)}`, { method: "POST", body: JSON.stringify(args) }));
+      return requestJson(`rpc/${name(fn)}`, { method: "POST", body: JSON.stringify(args) });
     },
     async remove(table, filters) {
       if (!filters.length) throw new Error("refusing a delete without a filter");
@@ -259,12 +266,10 @@ export async function openSite() {
 
 /** select with a long `in` list split into chunks (URL length); rows in chunk order. */
 export async function selectIn(site, table, col, values, { columns = "*", filters = [], order, chunk = 40 } = {}) {
-  const out = [];
   const uniq = [...new Set(values.filter((v) => v !== null && v !== undefined))];
-  for (let i = 0; i < uniq.length; i += chunk) {
-    out.push(...(await site.select(table, { columns, filters: [[col, "in", uniq.slice(i, i + chunk)], ...filters], order })));
-  }
-  return out;
+  const chunks=[];for(let i=0;i<uniq.length;i+=chunk)chunks.push(uniq.slice(i,i+chunk));
+  const rows=await mapBounded(chunks,4,part=>site.select(table,{columns,filters:[[col,"in",part],...filters],order}));
+  return rows.flat();
 }
 
 // ---------------------------------------------------------------- the directory (read-only)
@@ -337,7 +342,7 @@ export function missingComms(cols) {
 /** Runs fn inside a READ ONLY transaction (rolled back): the directory is never written, even
  *  if the session's read-only default were changed. */
 async function readOnly(db, fn) {
-  await db.query("begin transaction read only");
+  await db.query("begin transaction isolation level repeatable read read only");
   try {
     return await fn();
   } finally {
@@ -425,21 +430,18 @@ export async function otherExperienceHashes(site, ids) {
 }
 
 async function readSources(site, ids, rows) {
-  const legacy = await selectIn(site, "candidate_emails", "candidate_id", ids, { order: "id.asc" });
-  const v2 = await selectIn(site, "candidate_emails_v2", "candidate_id", ids, { order: "id.asc" });
-  const ledger = await selectIn(site, "candidate_enrichments", "candidate_id", ids, {
-    columns: "id,organization_id,candidate_id,linkedin_username,provider,operation,status,created_at,raw_payload",
-    filters: [["organization_id", "eq", TT_ORG], ["provider", "eq", "harvest"], ["status", "eq", "ok"]],
-    order: "created_at.asc,id.asc",
-    chunk: 10,
-  });
-  const apps = await selectIn(site, "website_applications", "candidate_id", ids, { filters: [["organization_id", "eq", TT_ORG]], order: "created_at.asc,id.asc" });
-  // Outreach outcomes: a bounce or a reply to a candidate_emails row (never the message text).
-  const comms = await selectIn(site, "candidate_communications", "candidate_id", ids, {
-    columns: "id,candidate_id,communication_type,status,email_used,communication_date,response_date",
-    filters: [["communication_type", "eq", "email"], ["status", "in", ["bounced", "replied"]]],
-    order: "candidate_id.asc,id.asc",
-  });
+  const [legacy,v2,ledger,apps,comms] = await mapBounded([
+   ()=>selectIn(site,"candidate_emails","candidate_id",ids,{order:"id.asc"}),
+   ()=>selectIn(site,"candidate_emails_v2","candidate_id",ids,{order:"id.asc"}),
+   ()=>selectIn(site,"candidate_enrichments","candidate_id",ids,{
+    columns:"id,organization_id,candidate_id,linkedin_username,provider,operation,status,created_at,raw_payload",
+    filters:[["organization_id","eq",TT_ORG],["provider","eq","harvest"],["status","eq","ok"]],order:"created_at.asc,id.asc",chunk:10}),
+   ()=>selectIn(site,"website_applications","candidate_id",ids,{filters:[["organization_id","eq",TT_ORG]],order:"created_at.asc,id.asc"}),
+   // Outreach outcomes only, never message text.
+   ()=>selectIn(site,"candidate_communications","candidate_id",ids,{
+    columns:"id,candidate_id,communication_type,status,email_used,communication_date,response_date",
+    filters:[["communication_type","eq","email"],["status","in",["bounced","replied"]]],order:"candidate_id.asc,id.asc"})
+  ],4,fn=>fn());
   const L = groupBy(legacy, "candidate_id");
   const V = groupBy(v2, "candidate_id");
   const H = groupBy(ledger, "candidate_id");
@@ -557,26 +559,27 @@ const docCounts = (d) => ({ jobs: arr(d.jobs).length, educations: arr(d.educatio
 // ---------------------------------------------------------------- reading the new tables back
 
 export async function readNew(site, ids, { globalCounts = true } = {}) {
-  const sources = await selectIn(site, "candidate_sources", "candidate_id", ids, { order: "candidate_id.asc,fetched_at.asc,id.asc" });
-  const state = await selectIn(site, "candidate_profile_state", "candidate_id", ids, { order: "candidate_id.asc" });
-  const identities = await selectIn(site, "candidate_identities", "candidate_id", ids, { order: "candidate_id.asc,kind.asc,value.asc" });
-  const jobs = await selectIn(site, "candidate_experiences", "candidate_id", ids, { filters: [["source", "eq", "person"]], order: "candidate_id.asc,sort_order.asc,id.asc" });
-  const educations = await selectIn(site, "candidate_educations", "candidate_id", ids, { order: "candidate_id.asc,sort_order.asc,id.asc" });
-  const cskills = await selectIn(site, "candidate_skills", "candidate_id", ids, { order: "candidate_id.asc,skill_id.asc" });
-  const contacts = await selectIn(site, "candidate_contacts", "candidate_id", ids, { order: "candidate_id.asc,kind.asc,value_normalized.asc" });
-  const summary = await selectIn(site, "candidate_contact_summary", "candidate_id", ids, { order: "candidate_id.asc" });
-  const conflictsById = new Map();
-  for (let i = 0; i < ids.length; i += 40) {
-    for (const c of await site.select("identity_conflicts", { filters: [["candidate_ids", "ov", ids.slice(i, i + 40)]], order: "id.asc" })) conflictsById.set(c.id, c);
-  }
-  const companies = await selectIn(site, "companies", "id", jobs.map((j) => j.company_id), {
-    columns: "id,name,linkedin_id,linkedin_username,linkedin_url,logo_url,normalized_name,linkedin_url_normalized,identity_basis,is_placeholder,tier,tier_list_version,merged_into,created_from",
-    order: "id.asc",
-  });
-  const schools = await selectIn(site, "schools", "id", educations.map((e) => e.school_id), { order: "id.asc" });
-  const skills = await selectIn(site, "skills", "id", cskills.map((s) => s.skill_id), { order: "id.asc" });
-  const writerCompanies = globalCounts ? await site.select("companies", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" }) : [];
-  const writerSchools = globalCounts ? await site.select("schools", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" }) : [];
+  const [sources,state,identities,jobs,educations,cskills,contacts,summary] = await mapBounded([
+   ()=>selectIn(site,"candidate_sources","candidate_id",ids,{order:"candidate_id.asc,fetched_at.asc,id.asc"}),
+   ()=>selectIn(site,"candidate_profile_state","candidate_id",ids,{order:"candidate_id.asc"}),
+   ()=>selectIn(site,"candidate_identities","candidate_id",ids,{order:"candidate_id.asc,kind.asc,value.asc"}),
+   ()=>selectIn(site,"candidate_experiences","candidate_id",ids,{filters:[["source","eq","person"]],order:"candidate_id.asc,sort_order.asc,id.asc"}),
+   ()=>selectIn(site,"candidate_educations","candidate_id",ids,{order:"candidate_id.asc,sort_order.asc,id.asc"}),
+   ()=>selectIn(site,"candidate_skills","candidate_id",ids,{order:"candidate_id.asc,skill_id.asc"}),
+   ()=>selectIn(site,"candidate_contacts","candidate_id",ids,{order:"candidate_id.asc,kind.asc,value_normalized.asc"}),
+   ()=>selectIn(site,"candidate_contact_summary","candidate_id",ids,{order:"candidate_id.asc"})
+  ],4,fn=>fn());
+  const conflictParts=[];for(let i=0;i<ids.length;i+=40)conflictParts.push(ids.slice(i,i+40));
+  const [conflictRows,companies,schools,skills,writerCompanies,writerSchools]=await mapBounded([
+   async()=>(await mapBounded(conflictParts,4,part=>site.select("identity_conflicts",{filters:[["candidate_ids","ov",part]],order:"id.asc"}))).flat(),
+   ()=>selectIn(site,"companies","id",jobs.map(j=>j.company_id),{
+    columns:"id,name,linkedin_id,linkedin_username,linkedin_url,logo_url,normalized_name,linkedin_url_normalized,identity_basis,is_placeholder,tier,tier_list_version,merged_into,created_from",order:"id.asc"}),
+   ()=>selectIn(site,"schools","id",educations.map(e=>e.school_id),{order:"id.asc"}),
+   ()=>selectIn(site,"skills","id",cskills.map(s=>s.skill_id),{order:"id.asc"}),
+   ()=>globalCounts?site.select("companies",{columns:"id",filters:[["created_from","eq","person_writer"]],order:"id.asc"}):[],
+   ()=>globalCounts?site.select("schools",{columns:"id",filters:[["created_from","eq","person_writer"]],order:"id.asc"}):[]
+  ],4,fn=>fn());
+  const conflictsById=new Map(conflictRows.map(c=>[c.id,c]));
   const conflicts = [...conflictsById.values()];
   return {
     sources: groupBy(sources, "candidate_id"),

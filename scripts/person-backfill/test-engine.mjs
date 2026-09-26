@@ -28,3 +28,10 @@ test('failed integrity validation never acknowledges a page',async()=>{
  const f=fixture('audit');await assert.rejects(executePage(['a','b'],f.hooks));
  assert.equal(f.state.audited.size,0);assert.deepEqual(f.state.checkpoint,[]);
 });
+test('bulk save and audit retain the same all-verified-before-checkpoint boundary',async()=>{
+ const f=fixture();let saves=0,audits=0;
+ f.hooks.saveMany=async ids=>{saves++;ids.forEach(id=>f.state.saved.add(id));return ids;};
+ f.hooks.auditMany=async ids=>{audits++;ids.forEach(id=>f.state.audited.add(id));};
+ await executePage(['a','b'],f.hooks,4);
+ assert.equal(saves,1);assert.equal(audits,1);assert.deepEqual(f.state.checkpoint,['a','b']);
+});

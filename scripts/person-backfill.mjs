@@ -2,7 +2,7 @@
 // Bounded, pinned, resumable shadow-only migration. No enrichment or application writes.
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { executePage } from './person-backfill/engine.mjs';
+import { executePage, retryTransient, safeErrorCode } from './person-backfill/engine.mjs';
 import { openSite, openComms, commsColumns, readAll, buildDocs, readNew, candidatesRows,
  selectIn, groupBy, hashOf, Tally, checkDocs, checkStored, sourceNeedsReview, truthy } from './person-trial.mjs';
 
@@ -16,7 +16,7 @@ export function options(argv=process.argv.slice(2), env=process.env) {
  const run=get('run-id','BACKFILL_RUN_ID');if(!/^[a-zA-Z0-9_-]{1,100}$/.test(run??''))throw Error('Explicit run-id required');
  if((get('mode','BACKFILL_MODE')??'shadow')!=='shadow')throw Error('Only shadow mode is authorized');
  const cohort=get('cohort','BACKFILL_COHORT')??'all';if(!['all','pilot'].includes(cohort))throw Error('Invalid cohort');
- return {run,cohort,limit:positive(get('limit','BACKFILL_LIMIT'),'limit',1000000),batch:positive(get('batch-size','BACKFILL_BATCH_SIZE'),'batch-size',500),
+ return {run,cohort,bulk:truthy(get('bulk','BACKFILL_BULK')??'true'),limit:positive(get('limit','BACKFILL_LIMIT'),'limit',1000000),batch:positive(get('batch-size','BACKFILL_BATCH_SIZE'),'batch-size',500),
   concurrency:positive(get('concurrency','BACKFILL_CONCURRENCY')??1,'concurrency',4),
   dry:truthy(get('dry-run','BACKFILL_DRY_RUN')??'true'),resume:truthy(get('resume','BACKFILL_RESUME')),
   commit:get('commit','GITHUB_SHA')??execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
@@ -24,6 +24,7 @@ export function options(argv=process.argv.slice(2), env=process.env) {
   maxSeconds:positive(get('max-seconds','BACKFILL_MAX_SECONDS')??18000,'max-seconds',20000)};
 }
 export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
+ const rpc=(fn,args)=>retryTransient(()=>site.rpc(fn,args));
  const ids=page.map(x=>x.id);const versions=new Map(page.map(x=>[x.id,Number(x.captured_version)]));
  let before;
  const hooks={
@@ -44,7 +45,7 @@ export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
   },
   async save(id,docs){
    if(config.dry)return null;
-   const result=await site.rpc('person_backfill_save',{p_run:config.run,p_candidate:id,p_docs:docs.get(id),p_version:versions.get(id)});
+   const result=await rpc('person_backfill_save',{p_run:config.run,p_candidate:id,p_docs:docs.get(id),p_version:versions.get(id)});
    if(afterSave)await afterSave(id,result);
    return result;
   },
@@ -67,14 +68,36 @@ export async function processPage({site,lib,comms,cols,config,page,afterSave}) {
    if(config.dry)return;
    const {_projection,...checks}=verified.checked.get(id);
    if(_docs.get(id).some(d=>(d.jobs??[]).some(j=>j.company.is_placeholder&&j.company.normalized_name==='unknown employer')))
-    await site.rpc('person_backfill_flag_missing_employers',{p_candidate:id});
-   await site.rpc('person_backfill_audit',{p_run:config.run,p_candidate:id,p_revision:saved.revision,p_version:versions.get(id),p_checks:{...checks,concurrent_legacy_change:verified.changed.includes(id)}});
+    await rpc('person_backfill_flag_missing_employers',{p_candidate:id});
+   await rpc('person_backfill_audit',{p_run:config.run,p_candidate:id,p_revision:saved.revision,p_version:versions.get(id),p_checks:{...checks,concurrent_legacy_change:verified.changed.includes(id)}});
   },
   async checkpoint(){
    if(config.dry)return null;
    return site.rpc('person_backfill_checkpoint',{p_run:config.run,p_ids:ids});
   }
  };
+ if(config.bulk){
+  hooks.saveMany=async (_ids,docs)=>{
+   if(config.dry)return _ids.map(()=>null);
+   const saved=[];
+   // Only one mini-batch is in flight; its database gate precedes all row locks.
+   for(let i=0;i<_ids.length;i+=10){
+    const chunk=_ids.slice(i,i+10);
+    const results=await rpc('person_backfill_save_many',{p_run:config.run,p_items:chunk.map(id=>({candidate_id:id,docs:docs.get(id),version:versions.get(id)}))});
+    if(results.length!==chunk.length||results.some((r,n)=>r.candidate_id!==chunk[n]))throw Error('source_bulk_result_mismatch');
+    saved.push(...results);
+    if(afterSave)for(let n=0;n<chunk.length;n++)await afterSave(chunk[n],results[n]);
+   }
+   return saved;
+  };
+  hooks.auditMany=async (_ids,_docs,saved,verified)=>{
+   if(config.dry)return;
+   for(let i=0;i<_ids.length;i+=100)await rpc('person_backfill_audit_many',{p_run:config.run,p_items:_ids.slice(i,i+100).map((id,n)=>{
+    const {_projection,...checks}=verified.checked.get(id);
+    return {candidate_id:id,revision:saved[i+n].revision,version:versions.get(id),checks:{...checks,concurrent_legacy_change:verified.changed.includes(id)}};
+   })});
+  };
+ }
  return executePage(ids,hooks,config.concurrency);
 }
 export async function main(){
@@ -92,7 +115,7 @@ export async function main(){
    const state=await site.rpc('person_backfill_start',{p_run:config.run,p_commit:config.commit,p_parser:'person-v3',p_limit:config.limit,p_batch:config.batch,p_resume:config.resume,p_cohort:config.cohort});
    started=true;processed=state.processed??0;
   }
-  console.log(JSON.stringify({phase:'start',run:config.run,dry_run:config.dry,commit:config.commit,limit:config.limit,batch:config.batch,concurrency:config.concurrency,baseline_query_ms:normalLatency,...metrics}));
+  console.log(JSON.stringify({phase:'start',run:config.run,dry_run:config.dry,bulk:config.bulk,commit:config.commit,limit:config.limit,batch:config.batch,concurrency:config.concurrency,baseline_query_ms:normalLatency,...metrics}));
   while(processed<config.limit){
    if((Date.now()-start)/1000>config.maxSeconds){exitStatus='paused';break;}
    const page=config.dry?await site.rpc('person_backfill_preview_page',{p_after:after,p_size:Math.min(config.batch,config.limit-processed),p_directory_only:false,p_cohort:config.cohort,p_limit:config.limit})
@@ -111,7 +134,7 @@ export async function main(){
   console.log(JSON.stringify({phase:config.dry?'dry_run_complete':exitStatus,processed,seconds:Math.round((Date.now()-start)/1000),catchup_pending:!config.dry}));
  }catch(error){
   // Never emit database error bodies or source payloads into public Actions logs.
-  const reason=/^(source_|pre_save_|post_save_|uncaptured_|concurrent_|capacity_)/.test(error.message)?error.message:'operation_failed';
+  const reason=/^(source_|pre_save_|post_save_|uncaptured_|concurrent_|capacity_)/.test(error.message)?error.message:`operation_failed:${safeErrorCode(error)}`;
   if(started)await site.rpc('person_backfill_status',{p_run:config.run,p_status:'failed',p_notes:{error_code:reason,processed}}).catch(()=>{});
   console.error(JSON.stringify({phase:'stopped',run:config.run,reason,processed}));throw Error(reason);
  }finally{await comms?.end();await site.end();}
