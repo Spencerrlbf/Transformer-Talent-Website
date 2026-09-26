@@ -1,194 +1,167 @@
-# Candidate storage unification: handoff and remaining runbook
+# Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-26 21:23 UTC for any agent continuing this work.
-Plan: `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
-Release prerequisites and per-writer notes: `docs/person-storage-release.md`.
+Updated 2026-09-26 22:46 UTC. Plan:
+`docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
+Use the corrected cutover runbook and review worklist beside this document.
 
-## Where things stand
+## Safe current state
 
-**Code.** Parent integration branch `feat/person-00-storage-unification`,
-draft PR #2 to main. Children through PR #28 are integrated at parent
-`e29ddbd` (query GitHub for the full current SHA). PR #25 corrected publication,
-exact-history undo, durable accounting and deferred attribution guards. PR #27
-preserves complete directory snapshots across connection failures. PR #28 fixes
-preview drift, explicit-ID coverage, completion labels and time/load gates.
-Their exact hosted previews passed 913 tenancy calls in 252, 261 and 248 seconds
-respectively, with exact-run fixture cleanup verified empty. The combined PR27
-parent was retested after the other task integrated PR23/24/26.
+The historical normalized copy and bounded source catch-up have completed their
+traversal. Latest accounting is **422,925 verified plus 125 unresolved source
+reviews**, including two date holds. This is not a completed live cutover.
 
-The source-aware post-cutover audit planner/accounting/finalization/CLI is still
-unfinished. A tested isolated canary and queue-only/drain transition also remain
-required. Read the corrected `2026-09-26-cutover-runbook.md`; the earlier version
-incorrectly treated these prerequisites as ready. Main remains unchanged at
-`0c2b9a8463f902737fd6e7e35aea724fa31755a8`, and production write flags remain legacy.
-No application activation, profile publication or restrictive guard was performed.
+Production still serves the legacy candidate fields. Main remains
+`0c2b9a8463f902737fd6e7e35aea724fa31755a8`; no application activation, compatible
+profile publication or restrictive guard was performed. Candidate IDs, links,
+legacy fields and original source evidence remain preserved.
 
-**Database (website Supabase project kmuihequfurvjxpnugxf).**
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR32
+at `58e34f0e708696a44ee03ca6abf45dfc74a3c407`. Read GitHub for the latest full SHA
+before release. The corrected review worklist/handoff is a subsequent docs child.
 
-Applied live, all additive, none touching candidate profile columns:
-`20260926011500_072_person_tables`, `20260926025355_person_writer_corrections`,
-`20260926031057_person_backfill_capture`, `20260926032752_person_missing_employer_review`,
-`20260926040300_person_backfill_bulk`, `20260926042200_person_reconcile`,
-`20260926050355_person_source_date_holds`.
+## Exact database accounting
 
-Prepared in the branch, NOT applied: `20260926033900_person_atomic_projection`,
-`20260926044800_person_application_intake`, `20260926054500_person_refresh_intake`,
-`20260926061600_person_directory_intake` (plus `scripts/person-directory/prepare-lookup.sql`,
-run outside a transaction), `20260926065300_person_recruiter_contacts`,
-`20260926072840_person_derivative_jobs`, `20260926074407_person_audit_evidence`,
-`20260926080238` (anchors), `20260926082012` (audit guard, PR #19),
-`20260926172608` (post-cutover snapshots, PR #21), `20260926183000`
-(publish runbook), `20260926201342` (exact attribution enforcement, disabled).
+Website Supabase project: `kmuihequfurvjxpnugxf`. No communications or `_v2`
+writes were performed.
 
-**Historical baseline copy: COMPLETE for unheld candidates.** Run `person-full-phones-20260926`, pinned commit
-`c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc` (branch `fix/person-13-phone-audit`),
-parser `person-v3`, status `baseline_complete` at 2026-09-26 17:04:41 UTC
-(GitHub Actions runs 36221894748, 36223417225, 36244794998).
-
-| Measure | Value |
-|---|---|
-| Candidates in pool | 423,050 |
-| Processed and audited | 423,048 |
-| Excluded by design | 2 (unresolved source-date holds) |
-| Rows in candidate_profile_state | 423,049 |
-| Rows in candidate_sources | 491,056 |
-| Backfill runner’s own reviewed-person count | 5,007 |
-| Rows in identity_conflicts | 5,483 |
-| Blocked sessions / pending queue / captured events at finish | 0 / 0 / 0 |
-| Database size | 31.2 GB (runner cap 34 GB, disk 40 GB) |
-
-Candidate rows and IDs are unchanged. Two earlier full runs
-(`person-full-20260926`, `person-full-bulk-20260926`) failed safely and are
-retained as records; do not resume them.
-
-**Reconciliation.** Queue catch-up `36258797364` completed with zero pending
-people. The full source scan `person-reconcile-full-20260926` completed at the
-same reviewed pin through GHA `36259479370` and safe resume `36266729979`.
-Finalized at 19:52:54 UTC with **review_required**, not reconciled:
-
-| Measure | Final value |
+| Latest observation at 22:39:19 UTC | Count |
 |---|---:|
-| Pool / scanned | 423,050 / 423,050 |
-| Verified / source review / unscanned | 422,963 / 87 / 0 |
-| Same-snapshot mutations / unknown Harvest dates | 85 / 2 |
-| Open identity/contact/employer conflict rows | 5,483 |
+| Pool candidates | 423,050 |
+| Verified at the current normalized revision | 422,925 |
+| Same-snapshot source mutation reviews | 123 |
+| Unknown original Harvest date holds | 2 |
+| Missing / pending checks | 0 / 0 |
+| Normalized profile states | 423,049 |
+| Open identity/contact/employer conflict records | 5,483 |
 | Distinct pool people with open conflicts | 9,346 |
-| People in both source review and open conflicts | 3 |
-| Captured events / queue / blocked sessions after fixture cleanup | 0 / 0 / 0 |
-| Database bytes | 31,881,792,659 |
+| People in both source review and open conflicts | 5 |
 
-The external directory fingerprint changed during the scan. Stable source
-catch-up remains necessary; a finished scan does not establish a consistent
-external boundary. No people were merged and no source dates were invented.
-Do not redispatch or refinalize these completed run IDs.
+Both holds are included in the 125 source reviews. One held person already has
+normalized state; the other does not. The 124 review checks without a matching
+normalized revision are an overlapping subset of reviews, not extra people.
+All verified checks match their observed normalized revision.
 
-**Restored workflows.** Restored at 19:53 UTC and verified active after migration
-load ended. Prior state was active for all five: `build-shortlists.yml`, `compute-signals.yml`,
-`judge-shortlists.yml`, `refresh-queue.yml`, `sync-candidates.yml`.
-`review-queue.yml`, `sourcing-resumer.yml`, `draft-open-roles.yml` and
-`person-trial.yml` were left active. No paid workflow was manually dispatched.
-The private restoration ledger retains original states and timestamps. Future
-pauses must be separately recorded and restored after the relevant load ends.
+Open conflict records comprise 4,515 identity-taken, 511 email-owned-by-other,
+416 missing-employer, 40 job-identity and one company-identity record. No people
+were merged. Duplicate email ownership records review without automatically
+changing contact eligibility; explicitly shared/ineligible contacts cannot rank.
 
-**Holds.** Two people are held because the original fetch date of their cached
-Harvest payload cannot be proven. Do not clear a hold without provenance.
-Final accounting cannot report `reconciled` while they stand.
+**Historical copy:** `person-full-phones-20260926`, frozen runtime
+`c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc`, parser `person-v3`, completed at
+17:04:41 UTC: 423,048 copied/audited, two held, 491,056 catalog rows at that
+boundary. Prior failed full runs remain records and must not be resumed.
 
-**Security note.** During the overnight session a process listing exposed the
-Supabase MCP access token in private tool output. It was not used or committed.
-Rotate it after the runner no longer depends on it; coordinate dependent access.
+**Full reconciliation:** `person-reconcile-full-20260926`, same frozen runtime,
+finalized at 19:52:54 UTC: 423,050 scanned, 422,963 verified, 85 source mutations
+plus two date holds. Its external fingerprint changed; status `review_required`.
 
-## How to run things
+**Later directory catch-up:** `person-reconcile-directory-20260926-evening`,
+same frozen runtime, batch 500, 900-second slices, 34 GB database cap. Actions
+36272786709, 36273846591, 36274733400 and 36275707737 completed successfully.
+All 62,208 directory-linked people were traversed: 62,083 verified, 125 reviews
+including both holds. Source traversal finished 22:32:03 UTC. Finalized once at
+22:38:55 UTC, status `review_required`, zero queue pending.
 
-All production runs go through the dispatch-only workflow `person-trial.yml`,
-dispatched with `--ref` pointing at the branch whose scripts should run. Logs
-show IDs, hashes and counts only. Never log names, contacts or payloads.
-The commands below document the completed historical runs, not instructions to
-dispatch them again. A further pass needs a reviewed source plan, fresh run ID
-and verified idle Actions/database checkpoints.
+The directory fingerprint changed from `9ad8fa890b1ef85711f4364fe882f543` to
+`7ba8c0068fada0e9ba497ada50fca6ca`. These runs do not establish a stable external
+boundary. Do not resume or refinalize any of these completed IDs. A later bounded
+pass requires a fresh run ID, accepted runtime, idle-run check and retained config.
 
-```bash
-# Queue catch-up: drain captured old-writer changes and pending revisions.
-gh workflow run person-trial.yml --repo Spencerrlbf/Transformer-Talent-Website \
-  --ref fix/person-13-phone-audit -f dry_run=false \
-  -f backfill='{"run-id":"person-reconcile-queue-20260926","reconcile":true,"scope":"queue","limit":1000000,"batch-size":500,"max-db-bytes":34000000000,"max-seconds":18000}'
+The first directory finalization attempt rolled back at its eight-second limit.
+Read-only query-plan diagnosis found an expensive incremental-sort/index path.
+The identical aggregation with transaction-local `enable_incremental_sort=off`
+completed in 2.37 seconds; the unchanged finalizer then succeeded with that local
+setting and the original eight-second statement/two-second lock limits. No schema,
+global configuration, code pin or timeout was relaxed. Private metadata artifacts
+`directory-finalization.json` and `directory-final-accounting.json` retain evidence.
 
-# Full reconciliation source scan. Run only after the queue pass finishes
-# and after checking Actions/checkpoints again. Measure its own throughput;
-# the 500-person pilot is not evidence that the whole scan takes one hour.
-# Add "resume":true to continue a paused scan under the same run-id.
-gh workflow run person-trial.yml --repo Spencerrlbf/Transformer-Talent-Website \
-  --ref fix/person-13-phone-audit -f dry_run=false \
-  -f backfill='{"run-id":"person-reconcile-full-20260926","reconcile":true,"scope":"all","limit":1000000,"batch-size":500,"max-db-bytes":34000000000,"max-seconds":18000}'
+## Applied and prepared migrations
 
-# Finalize after the scan pauses with source_scan_complete=true. Runs locally
-# through a verified website-linked Supabase CLI workdir. Check the local
-# project-ref; the finalizer explicitly refuses a different project.
-node scripts/person-reconcile-finalize.mjs --run-id=person-reconcile-full-20260926 \
-  --workdir=../audit-db
-```
+Seven additive migrations are live:
 
-Rules: only one saving run at a time (they share the `person-trial`
-concurrency group); a dry run with `reconcile:true` uses the read-only group
-and may overlap. Do not run a full reconciliation while preview tenancy
-fixtures are active. GitHub hides Actions logs until a run finishes; watch
-progress in `public.backfill_runs` instead:
+- `20260926011500_072_person_tables`
+- `20260926025355_person_writer_corrections`
+- `20260926031057_person_backfill_capture`
+- `20260926032752_person_missing_employer_review`
+- `20260926040300_person_backfill_bulk`
+- `20260926042200_person_reconcile`
+- `20260926050355_person_source_date_holds`
 
-```sql
-select run_id, status, processed, conflicts, notes->'metrics'
-from public.backfill_runs order by started_at desc limit 5;
-```
+Application, atomic projection, receipts, derivative queue, audit anchors,
+snapshots, publication and restrictive-guard migrations remain **prepared only**.
+The exact 13-file chain through PR32 and separate concurrent directory lookup
+index are listed in the cutover runbook. Add future reviewed transition migrations
+before release; do not install an incomplete chain or enable guards prematurely.
 
-## Remaining steps in order
+## Verification and recovery evidence
 
-1. **Stable source catch-up.** The queue and full historical scan completed;
-   the external boundary was unstable. Retain the 85 same-snapshot source
-   reviews and two date holds until real provenance supports a reviewed repair.
-   Recheck Actions/checkpoints before any additional bounded run.
-2. **Reviewed repairs are integrated.** PR #25 fixes publish/undo/guard defects;
-   PR #27 fixes whole-snapshot reconnect; PR #28 adds safe preview coverage and
-   load/time controls. The preview requires the prepared projection-state schema.
-   Historical anchor policy still accepts only the frozen c4 runtime; do not
-   repin a catch-up run merely because the connection fix exists on the parent.
-3. **Complete application preparation**: finish and test the separate post-cutover
-   auditor. It must understand frozen anchors, actual receipt documents and exact
-   captured-event attribution. The historical reconciler cannot certify newly
-   published profiles. Complete an isolated canary and a tested queue-only/drain
-   transition preserving submissions before the anchor-to-activation window.
-   All three workflow modes share one repository variable; draining Actions
-   alone does not stop Vercel legacy writes. These remain release prerequisites;
-   flags stay off.
-4. **Maintain schedules and accounting.** The original five schedules are
-   restored. Keep exact review/hold/conflict counts separate and preserve
-   existing budget limits; restore any future temporary pauses promptly.
-5. **Spencer's release approval** covers parent PR #2, deployment, profile
-   publication and restrictive write guards. Child integration and additive shadow
-   database work remain authorized. Retain unresolved identity/source conflicts;
-   do not merge people or guess source dates.
-6. **Approved release sequencing**: provision the website-only pooled
-   `PERSON_DATABASE_URL`, apply the complete reviewed prepared migration chain
-   and concurrent lookup index, finish historical catch-up, then prepare verified
-   immutable anchors before enabling any normalized intake. Install all three
-   audit migrations before preparing anchors so timestamp proofs agree. Missing
-   or stale anchors refuse writes and are not a reason to bypass the guard.
-   Deploy the approved feature with flags initially off and verify deployment.
-7. **Writers live and publication**: drain in-flight old workers while keeping
-   public submissions durably accepted. Enable a bounded canary, audit it using
-   the new receipt-aware auditor, then progressively expand. Publish existing
-   profiles in controlled batches with before-images/revision checks; verify
-   Network and Send snapshots and preserve unresolved holds. Only then enable
-   the restrictive legacy-write guard after testing allowed and rejected writes.
-   Do not mass-trigger paid embedding/judging for storage-only changes.
-8. **Release checks and reporting**: verify preview/production tenancy and bounded
-   intake/read checks, schedules, source receipts/queues and query health. Arrange
-   rotation of the exposed MCP token with its owner without breaking active access.
-   State separately: historical copy, source reconciliation, switched writers,
-   published projections and derivative refresh. None implies the others.
+PR25 corrected publication, exact-history undo and deferred attribution; PR27
+fixed silent loss of a directory read snapshot; PR28 fixed preview drift, target
+coverage and load/time limits. Their exact previews passed 913 tenancy calls each.
 
-## Constraints that still apply
+PR32 corrected the post-cutover auditor, immutable receipt reconstruction,
+recruiter prior-contact proof, historical calculation dates, source checks,
+commit-order fencing, bounded restart and full-population finalization. Validation:
+66 auditor tests, 39 publish/preview tests, 23 isolated recruiter tests, eight
+connection-failure tests, 51 translator checks and a production build passed.
+A local 423,050-person synthetic accounting probe finalized in 4.1 seconds under
+the eight-second bound; it tests scale, not real-person source correctness.
 
-No direct commits or merges to main without Spencer's release approval.
-Sequential tested child merges into the feature parent remain authorized. No deletion of
-April tables, legacy JSON or legacy emails. No writes to the communications
-database. No paid Harvest pulls, bulk embedding or bulk judging as part of the
-migration. Preserve candidate IDs, verdicts, signals and read contracts.
+Exact PR32 preview `ee55ee10044dff5048a588bb9570b5834aca23ad` passed all 913 tenancy
+calls in 265 seconds. Run `z2me73366` was fully cleaned, leftovers verified empty.
+Default cleanup hit the existing organization-delete timeout; a bounded fallback
+removed only that run's synthetic organizations and children. Afterwards the DB
+was 31,940,775,059 bytes, with zero blocked sessions, queue entries or capture events.
+No source scan overlapped the hosted fixtures.
+
+Retain the private recovery exports (12 JSON files, approximately 441 MB),
+row-restoration proof `RECOVERY_CHECK_PASSED`, and the known physical backup from
+2026-09-25 23:52:51. The physical backup was available but was not restore-tested.
+Do not use the old destructive trial undo against the migrated normalized store.
+
+## Schedules and security
+
+The five originally paused workflows were restored at 19:53 UTC and reverified
+active after catch-up: build-shortlists, compute-signals, judge-shortlists,
+refresh-queue and sync-candidates. No paid workflow was manually dispatched.
+Other schedules remain active. Record and restore exact original states for any
+future pause; do not blindly dispatch jobs to test restoration.
+
+The independent session recorded a separate one-shot nightly check; inspect it
+before creating any duplicate. This task's heartbeat stays active while authorized
+preparation remains unfinished.
+
+A Supabase MCP token appeared in private tool output earlier. It was not used or
+committed. Spencer owns rotation and coordination of dependent access; never
+reproduce the token in reports.
+
+## Remaining work before release approval
+
+1. **Implement and test an isolated canary and queue/drain transition.** All
+   three Actions workers currently share one write-mode variable. A shared flag
+   is not a single-worker canary, and draining Actions does not drain Vercel or
+   recruiter writes. The private `transition-preparation-findings.md` inventory
+   identifies public submission crash/retry, resume persistence, duplicate
+   future-interest, contact extraction, worker staging and paid-reservation gaps.
+   Root owns the next sequential implementation; no such transition is active.
+2. **Retain explicit source-proof policy.** Publish identity-review people only
+   when their immutable anchor and evidence chain are valid. The 123 same-snapshot
+   source mutations and two date holds are unresolved; `--review=publish` does
+   not supply proof. A fresh pull does not prove an old cache date. Further source
+   repair requires reviewed provenance handling, never invented dates/anchors.
+3. **Keep historical and post-cutover runtimes separate.** Anchor preparation
+   accepts the frozen c4 verification. Do not relabel a newer runtime or use the
+   historical reconciler after compatible profile publication. The new auditor
+   measures complete external observations and verifies actual receipt chains.
+4. **Verify the final combined release.** Complete remaining code children,
+   review/tests/build and required preview tenancy, then update draft PR #2 with
+   the exact commit, counts, prepared migration chain and rollback sequence.
+5. **Obtain Spencer's release approval.** Main merge/deployment, application and
+   worker activation, profile publication and restrictive guards remain held.
+   Follow the corrected runbook's approval and expansion order. Continue durable
+   public acceptance and restore any temporarily paused schedules promptly.
+
+Report historical copying, source reconciliation, writer activation, profile
+publication and derivative refresh separately. None implies the others. No paid
+migration enrichment, bulk judging, duplicate-person merges, communications writes,
+`_v2` writes, old JSON deletion or destructive retirement is authorized here.

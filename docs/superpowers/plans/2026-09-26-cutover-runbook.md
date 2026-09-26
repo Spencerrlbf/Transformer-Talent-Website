@@ -9,20 +9,28 @@ A snapshot marked `ready` means inputs were collected; it is not an audit pass.
 
 The historical backfill completed at its frozen runtime
 `c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc`, parser `person-v3`. The full source
-scan finished and was finalized once, at 2026-09-26 19:52:54 UTC:
+scan finalized at 19:52:54 UTC. A later directory catch-up checked all 62,208
+linked people and finalized once at 22:38:55 UTC. Latest per-person accounting
+at 22:39:19 UTC is:
 
 | Measure | Retained result |
 |---|---|
-| Pool candidates scanned | 423,050 |
-| Verified at that observed boundary | 422,963 |
-| Source reviews | 87: 85 same-snapshot mutations and 2 unknown cache dates |
-| Unscanned candidates | 0 |
+| Pool candidates accounted for | 423,050 |
+| Verified at the observed normalized revision | 422,925 |
+| Source reviews | 125: 123 same-snapshot mutations and 2 unknown cache dates |
+| Missing or pending checks | 0 |
 | Normalized profile states | 423,049 |
 | Open identity/contact conflict rows | 5,483, affecting 9,346 distinct pool people |
-| Overlap of source-review and identity-conflict populations | 3 people |
+| Overlap of source-review and identity-conflict populations | 5 people |
 | Captured queue pending at finalization | 0 |
-| External source fingerprint | Changed between scan start and end |
+| External source fingerprint | Changed during both scans |
 | Final historical status | `review_required`, not `reconciled` |
+
+The earlier full scan reported 422,963 verified and 87 reviews (85 mutations
+plus two holds). Those are historical observations, not extra people to add to
+the latest totals. The directory run itself reported 62,083 verified and 125
+reviews, including both holds. Review checks without matching revisions are
+already inside that review population, not another unresolved population.
 
 Counts are observations, not a guarantee that live sources stopped changing.
 The five temporarily paused workflows were restored to their original active
@@ -37,15 +45,17 @@ enrichment or duplicate-person merges were performed.
 
 ## Prerequisites before asking for release approval
 
-1. Integrate the reviewed corrections to the post-cutover auditor on child31,
-   including its final preview tenancy gate. PR30 supplied the first draft;
-   source proof, commit-order fencing, restart and capacity defects required
-   corrections. PR21's snapshot `ready` status cannot replace an audit result.
-2. Finish and review all corrective children on the feature parent. The directory
-   snapshot-loss repair is PR27. The projection-preview correctness/load repair
-   is PR28. Run the relevant suites, build, hosted tenancy gate and exact fixture
-   cleanup. Read the current parent and deployment SHAs rather than relying on
-   this document's historical branch names.
+1. The post-cutover auditor corrections are integrated through PR32 at parent
+   `58e34f0e708696a44ee03ca6abf45dfc74a3c407`. Exact preview `ee55ee1` passed 913
+   tenancy calls, with synthetic cleanup verified empty. The auditor now requires
+   complete receipt/source evidence, measured external observations, committed
+   boundary fencing and bounded restart/accounting. A snapshot marked `ready`
+   remains insufficient; run and finalize the actual audit after activation.
+2. Read the current parent and deployment SHAs before release. PR27 repaired
+   whole-directory-snapshot reconnect, PR28 repaired projection-preview coverage
+   and load gates, and PR32 repaired the auditor. All passed local suites/build
+   and exact-preview tenancy. Complete the remaining transition/canary work
+   below and verify that final combined code before seeking release approval.
 3. Prove a canary and drain procedure that isolates one surface. All three
    Actions workers currently read the same repository `vars.PERSON_WRITE_MODE`;
    changing it is a shared rollout, not a review-queue-only canary. Use a reviewed
@@ -68,12 +78,14 @@ enrichment or duplicate-person merges were performed.
 6. Preserve the distinction between identity reviews and source-proof failures.
    Spencer's recorded preference is to publish identity-review people while
    retaining their reviews. `--review=publish` only bypasses that identity filter;
-   it does not provide an anchor for the 85 source-review people, clear a hold or
+   it does not provide an anchor for the 123 source-mutation people, clear a hold or
    bypass a broken evidence chain. Those people remain `audit_blocked` until a
    separately reviewed provenance/replay policy supports them. Report them as such.
 
-Two source-date holds stay excluded. Fresh Harvest pulls and duplicate resolution
-are separate owner-directed work after cutover, outside the overnight scope.
+Two source-date holds stay excluded and are already included in the 125 reviews.
+Fresh evidence does not prove the old cache payload’s missing date. Hold resolution
+and anchor eligibility need separately reviewed provenance handling. Fresh Harvest
+pulls and duplicate resolution remain outside the overnight scope.
 
 ## Projection comparison and expected changes
 
@@ -137,8 +149,8 @@ prepared chain is:
 20260926201342_person_publish_review_guards.sql
 ```
 
-This list is incomplete until the remaining audit implementation is reviewed;
-append its actual migrations before execution. Apply each reviewed file atomically
+This is the reviewed chain through PR32. Append any subsequently reviewed
+transition migrations before execution. Apply each reviewed file atomically
 and record its exact version. Run the reviewed directory lookup index preparation
 outside a transaction. Verify installed objects, service-only permissions and site
 health after each stage. Only call `person_write_guard_status()` after the migration
