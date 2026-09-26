@@ -148,9 +148,10 @@ export async function updateTemplate(args: {
   name: string;
   subject: string;
   bodyHtml: string;
-}): Promise<boolean> {
-  const res = await sbRest(`email_templates?id=eq.${args.id}&organization_id=eq.${args.orgId}`, {
+}): Promise<boolean | null> {
+  const res = await sbRest(`email_templates?id=eq.${args.id}&organization_id=eq.${args.orgId}&select=id`, {
     method: "PATCH",
+    prefer: "return=representation",
     body: JSON.stringify({
       name: args.name.trim().slice(0, 80),
       subject: args.subject.slice(0, 300),
@@ -158,14 +159,17 @@ export async function updateTemplate(args: {
       updated_at: new Date().toISOString(),
     }),
   });
-  return res.ok;
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0 ? true : null;
 }
 
-export async function deleteTemplate(orgId: string, id: string): Promise<boolean> {
-  const res = await sbRest(`email_templates?id=eq.${id}&organization_id=eq.${orgId}`, {
+export async function deleteTemplate(orgId: string, id: string): Promise<boolean | null> {
+  const res = await sbRest(`email_templates?id=eq.${id}&organization_id=eq.${orgId}&select=id`, {
     method: "DELETE",
+    prefer: "return=representation",
   });
-  return res.ok;
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0 ? true : null;
 }
 
 // ---- candidate contact ------------------------------------------------

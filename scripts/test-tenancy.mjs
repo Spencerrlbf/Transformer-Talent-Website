@@ -500,5 +500,5 @@ if (!findings.length) {
   console.log(`\n${findings.length} finding(s):`);
   for (const f of findings) console.log(`${f.kind.padEnd(11)} ${f.what}  ->  ${f.detail}`);
 }
-// NOT REFUSED and ERROR are reported for follow-up; leaks and crashes fail the run.
-process.exit(findings.some((f) => !["NOT REFUSED", "ERROR"].includes(f.kind)) ? 1 : 0);
+// Every unmet access check blocks release, including unexpected success/errors.
+process.exit(findings.length ? 1 : 0);
