@@ -317,10 +317,35 @@ export async function openComms(url) {
   const dsn = new URL(url);
   for (const k of ["sslrootcert", "sslcert", "sslkey", "sslmode"]) dsn.searchParams.delete(k);
   const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(dsn.hostname);
-  const db = new pg.Client({ connectionString: dsn.toString(), ssl: local ? false : { rejectUnauthorized: false }, application_name: "tt-website-person-trial", statement_timeout: 120_000 });
-  await db.connect();
-  await db.query("set default_transaction_read_only = on");
-  return db;
+  const config = { connectionString: dsn.toString(), ssl: local ? false : { rejectUnauthorized: false }, application_name: "tt-website-person-trial", statement_timeout: 120_000 };
+  // The directory connection sits idle between pages for hours. A server-side
+  // disconnect used to surface as an unhandled 'error' event and kill the run
+  // (reconciliation 2026-09-26 at 412,500 of 423,050). Absorb it, mark the
+  // connection dead and reopen on the next statement. A statement that dies
+  // mid-flight still fails to its caller, which decides whether to retry.
+  let client = null, dead = true, reconnects = 0;
+  const open = async () => {
+    const db = new pg.Client(config);
+    db.on("error", () => { if (client === db) dead = true; });
+    await db.connect();
+    await db.query("set default_transaction_read_only = on");
+    client = db; dead = false;
+  };
+  await open();
+  return {
+    get reconnects() { return reconnects; },
+    async query(sql, params) {
+      if (dead) { await client?.end().catch(() => {}); reconnects += 1; await open(); }
+      try { return await client.query(sql, params); }
+      catch (error) {
+        // Server FATAL ("terminating connection ..."), socket loss ("Connection
+        // terminated unexpectedly", ECONNRESET, EPIPE) or a client already closed.
+        if (/terminat|ECONNRESET|EPIPE|Connection ended|not queryable/i.test(error?.message ?? "")) dead = true;
+        throw error;
+      }
+    },
+    async end() { await client?.end().catch(() => {}); client = null; dead = true; },
+  };
 }
 
 /** Table -> column names for everything the runner reads, plus any directory table about
@@ -351,7 +376,7 @@ export function missingComms(cols) {
 
 /** Runs fn inside a READ ONLY transaction (rolled back): the directory is never written, even
  *  if the session's read-only default were changed. */
-async function readOnly(db, fn) {
+export async function readOnly(db, fn) {
   await db.query("begin transaction isolation level repeatable read read only");
   try {
     return await fn();
