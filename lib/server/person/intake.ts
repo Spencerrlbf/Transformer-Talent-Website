@@ -137,6 +137,17 @@ export function applicationProfileDoc(
 export async function saveApplicationPersonOnConnection(
   client: PersonConnection,
   args: ApplicationPersonInput,
+  // Trusted in-process rehearsal hooks, never accepted through application input.
+  // The normal entrypoint still owns BEGIN/COMMIT. A verifier can throw to roll
+  // back setup and admission together before any change becomes visible.
+  transactionHooks?: {
+    afterBegin?: (client: PersonConnection) => Promise<void>;
+    beforeCommit?: (client: PersonConnection, result: {
+      candidateId: string;
+      created: boolean;
+      applicationSnapshot: ApplicationSnapshot;
+    }) => Promise<void>;
+  },
 ) {
   if (args.organizationId !== TT_ORG_ID) throw Error("person_intake_tenant");
   const username = args.linkedinUsername.trim().toLowerCase();
@@ -144,6 +155,7 @@ export async function saveApplicationPersonOnConnection(
     throw Error("person_intake_linkedin");
   try {
     await beginPersonTransaction(client);
+    await transactionHooks?.afterBegin?.(client);
     // Serializes new identity resolution, before any candidate lock. Claimed
     // email is never a lookup key. The unique legacy username is a backstop.
     await client.query("select pg_advisory_xact_lock(72007,hashtext($1))", [
@@ -382,8 +394,10 @@ export async function saveApplicationPersonOnConnection(
           ],
         ),
     );
+    const outcome = { ...result, created, applicationSnapshot };
+    await transactionHooks?.beforeCommit?.(client, outcome);
     await client.query("commit");
-    return { ...result, created, applicationSnapshot };
+    return outcome;
   } catch (error) {
     await client.query("rollback").catch(() => {});
     throw error;
