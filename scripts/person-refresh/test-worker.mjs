@@ -39,14 +39,10 @@ async function run({
       return { status: "done", semanticChanged: true };
     },
     failRefresh: async (a) => calls.push(["fail", a]),
-    claimRefreshDerivatives: async (a) => {
-      calls.push(["derivativeClaim", a]);
-      return mode === "live" ? { candidateId: "person" } : null;
-    },
-    poolProfileText: (c) => c.headline,
-    syncCandidateEmbeddings: async (id, payload) => {
-      calls.push(["embed", { id, payload }]);
-      if (derivativeFails) throw Error("private source detail");
+    drainPersonDerivatives: async (a) => {
+      calls.push(['drain',a]);
+      if(derivativeFails)throw Error('private source detail');
+      return {processed:1,retry:0};
     },
   };
   const rest = async (path) => {
@@ -84,9 +80,7 @@ test("free cached work still saves with no paid budget and scopes the queue", as
   const { calls, stats } = await run();
   assert.equal(stats.refreshed, 1);
   assert.equal(calls.filter((c) => c[0] === "harvest").length, 0);
-  assert.deepEqual(calls.find((c) => c[0] === "embed")[1].payload, {
-    linkedin_profile: "Canonical winning profile",
-  });
+  assert.deepEqual(calls.find((c) => c[0] === 'drain')[1],{organizationId:org,limit:50});
 });
 test("fresh payload persists before normalization, and failed saves use durable recovery", async () => {
   const { calls, stats } = await run({ needsHarvest: true, saveFails: true });
@@ -106,15 +100,16 @@ test("uncertain enrichment requests do not retry the paid call in orchestration"
   assert.equal(calls.filter((c) => c[0] === "harvest").length, 1);
   assert.equal(calls.filter((c) => c[0] === "fail").length, 1);
 });
-test("completed and shadow receipts avoid repeated paid derivative work", async () => {
+test("completed receipts still recover durable work; shadow never drains", async () => {
   assert.equal(
     (await run({ phase: "done" })).calls.some(
       (c) => c[0] === "save" || c[0] === "embed",
     ),
     false,
   );
+  assert.equal((await run({phase:'done'})).calls.filter(c=>c[0]==='drain').length,1);
   assert.equal(
-    (await run({ mode: "shadow" })).calls.some((c) => c[0] === "embed"),
+    (await run({ mode: "shadow" })).calls.some((c) => c[0] === "drain"),
     false,
   );
 });

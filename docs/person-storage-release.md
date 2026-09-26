@@ -280,3 +280,20 @@ This change requires no database migration. The pooled connection wrapper
 preserves a fixed allowlist of application error codes needed for contact
 validation and unavailable-profile handling; all other driver messages remain
 redacted. Main deployment and live activation are still separate release gates.
+# Canonical derivative activation
+
+The prepared `20260926072840_person_derivative_jobs.sql` adds a service-only
+durable queue. Apply it before enabling the live application/refresh/directory
+writers. Historical backfill does not enqueue or purchase embeddings.
+
+Applications and workers derive chunk vectors from the checked current profile
+and retained resume, with bounded claims, retries and HTTP deadlines. Refresh
+invocations also recover pending work when no Harvest work exists. Inspect
+`person_derivative_jobs.status='review'` for exhausted or unavailable profiles;
+repeated identical writes cannot silently reset the attempt budget.
+
+Drain older deployed application and worker embedding writes before enabling
+the new live path: the legacy REST updater does not participate in the new
+transaction locks. Keep public submissions accepted and durably queued during
+this transition. Main merge, flag activation and existing profile publication
+remain separately gated by Spencer's approval.

@@ -4,6 +4,7 @@
 // promotion, spine records, screening, and the Airtable mirrors. One pipeline
 // for every way a person enters the system.
 import { sbRest } from "./supabase";
+import { processPersonDerivatives } from './person/derivatives';
 import {
   harvestProfile,
   parseProfile,
@@ -305,12 +306,16 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       });
     }
     if (candidateId && !tenantOrgId) {
-      if (!normalizedIntake) await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
-      await syncCandidateEmbeddings(candidateId, {
+      if (normalizedIntake) {
+        if(personWriteMode() === 'live') await processPersonDerivatives({organizationId:orgId!,candidateId}).catch(()=>console.error('person_derivative_retry_required'));
+      } else {
+       await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
+       await syncCandidateEmbeddings(candidateId, {
         linkedin_profile: linkedinProfileText(harvest as Record<string, unknown> | null),
         resume: resumeText || undefined,
         summary: parsed?.profile_summary || undefined,
-      });
+       });
+      }
     }
 
     let matchedIds: string[] = [];

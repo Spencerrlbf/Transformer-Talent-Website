@@ -122,29 +122,18 @@ export async function runNormalizedRefresh({
       warn("person_refresh_retry_required");
       return;
     }
-    // Derivatives are independently best-effort, claimed once after a successful
-    // semantic live change. A failure here does not relabel a committed save.
-    try {
-      const derivative = await lib.claimRefreshDerivatives(key);
-      if (derivative) {
-        const [canonical] = await rest(
-          `candidates?id=eq.${derivative.candidateId}&select=id,headline,current_title,current_company,location,profile_summary,work_experience,education,education_schools,top_skills,all_skills_text`,
-        );
-        if (!canonical) throw Error("person_refresh_derivative_missing");
-        await lib.syncCandidateEmbeddings(derivative.candidateId, {
-          linkedin_profile: lib.poolProfileText(canonical),
-        });
-      }
-    } catch {
-      stats.derivativeFailed++;
-      warn("person_refresh_derivative_failed");
-    }
   }
   await Promise.all(
     Array.from({ length: Math.min(8, Math.max(1, concurrency)) }, async () => {
       while (work.length) await process(work.shift());
     }),
   );
+  // Recover pending/expired canonical work even if this invocation had no
+  // Harvest rows. The durable queue owns the per-person attempt/lease budget.
+  if(mode === 'live'){
+    try{const result=await lib.drainPersonDerivatives({organizationId,limit:50});stats.derivativeFailed+=result.retry}
+    catch{stats.derivativeFailed++;warn('person_refresh_derivative_failed')}
+  }
   log(JSON.stringify({ phase: "normalized_refresh_complete", ...stats }));
   return stats;
 }

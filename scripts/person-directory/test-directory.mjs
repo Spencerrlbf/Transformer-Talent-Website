@@ -337,7 +337,11 @@ await test("same receipt in shadow can be projected on live replay", async () =>
     ).rows[0].current_title,
     "Original",
   );
+  assert.equal((await pool.query('select 1 from person_derivative_jobs where candidate_id=$1',[id(10)])).rows.length,0);
   await save(r.receiptId, "live");
+  const job=(await pool.query('select sources from person_derivative_jobs where candidate_id=$1',[id(10)])).rows[0];
+  assert.match(job.sources.linkedin_profile,/Staff Engineer/);
+  assert.deepEqual(Object.keys(job.sources).sort(),['linkedin_profile','resume','summary']);
   assert.equal(
     (
       await pool.query("select current_title from candidates where id=$1", [

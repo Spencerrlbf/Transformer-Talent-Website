@@ -20,6 +20,7 @@ import {
 } from "./save";
 import type { PersonDoc } from "./types";
 import type { ParsedProfile } from "../applicants";
+import { enqueuePersonDerivativesLocked } from './derivatives';
 
 export function applicationMatchingText(
   parsed: Partial<ParsedProfile> | null,
@@ -307,10 +308,14 @@ export async function saveApplicationPersonOnConnection(
         "update public.candidates set resume_text=$2 where id=$1",
         [id, applicationSnapshot.resume_text.slice(0, 50000)],
       );
+    const canonical = (await client.query('select * from public.candidates where id=$1',[id])).rows[0];
+    if (args.mode === 'live')
+      await enqueuePersonDerivativesLocked(client,{organizationId:TT_ORG_ID,candidateId:id,receiptRef:`application:${args.applicationId}`});
     if (
-      !receipt &&
+      !receipt && (args.mode === 'live' || created) &&
       args.matchingVector &&
       !before.matching_embedding &&
+      applicationMatchingText(args.parsed,args.resumeText) === applicationMatchingText(canonical,canonical.resume_text) &&
       applicationMatchingText(args.parsed, args.resumeText) ===
         applicationMatchingText(
           applicationSnapshot.parsed_profile,

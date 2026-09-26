@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { TT_ORG_ID } from "./normalize";
 import { fromHarvest } from "./fromHarvest";
 import { poolSignals } from "../pool/profile";
+import { enqueuePersonDerivativesLocked } from './derivatives';
 import {
   beginPersonTransaction,
   lockPerson,
@@ -371,6 +372,8 @@ export async function saveRefreshOnConnection(
         ],
       );
     }
+    if(args.mode === 'live')
+      await enqueuePersonDerivativesLocked(c,{organizationId:TT_ORG_ID,candidateId:row.candidate_id,receiptRef:`refresh:${row.id}`});
     await c.query(
       "update public.person_refresh_attempts set phase='done',lease_until=null,documents=$2,result=$3,updated_at=clock_timestamp() where queue_id=$1",
       [row.id, JSON.stringify([doc]), JSON.stringify(result)],
@@ -399,25 +402,6 @@ export async function failRefreshOnConnection(
   });
 }
 
-export async function claimRefreshDerivativesOnConnection(
-  c: PersonConnection,
-  args: Key,
-) {
-  return transaction(c, args, async (_row, a) => {
-    if (
-      !a ||
-      a.phase !== "done" ||
-      !a.result?.semanticChanged ||
-      a.derivatives_claimed_at
-    )
-      return null;
-    await c.query(
-      "update public.person_refresh_attempts set derivatives_claimed_at=clock_timestamp() where queue_id=$1",
-      [a.queue_id],
-    );
-    return { candidateId: a.candidate_id as string };
-  });
-}
 export const claimRefresh = (
   args: Parameters<typeof claimRefreshOnConnection>[1],
 ) => withPersonConnection((c) => claimRefreshOnConnection(c, args));
@@ -433,6 +417,3 @@ export const saveRefresh = (
 export const failRefresh = (
   args: Parameters<typeof failRefreshOnConnection>[1],
 ) => withPersonConnection((c) => failRefreshOnConnection(c, args));
-export const claimRefreshDerivatives = (
-  args: Parameters<typeof claimRefreshDerivativesOnConnection>[1],
-) => withPersonConnection((c) => claimRefreshDerivativesOnConnection(c, args));

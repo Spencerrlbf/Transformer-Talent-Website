@@ -99,7 +99,7 @@ await test("normalized refresh has explicit claim/save/retry interfaces", () => 
     "storeRefreshPayloadOnConnection",
     "saveRefreshOnConnection",
     "failRefreshOnConnection",
-    "claimRefreshDerivativesOnConnection",
+    "preparePersonDerivativesOnConnection",
   ])
     assert.equal(typeof lib[k], "function", k);
 });
@@ -334,17 +334,11 @@ await test("the immutable cache snapshot survives a later ledger edit and termin
     1,
   );
 });
-await test("derivative reservation occurs at most once and never for a shadow receipt", async () => {
-  const reserve = (n) =>
-    use((c) =>
-      lib.claimRefreshDerivativesOnConnection(c, {
-        organizationId: org,
-        queueId: id(n + 1000),
-      }),
-    );
-  const claims = await Promise.all([reserve(1), reserve(1)]);
-  assert.equal(claims.filter(Boolean).length, 1);
-  assert.equal(await reserve(4), null);
+await test("live refresh queues canonical work once, shadow queues none",async()=>{
+ const rows=(await pool.query('select candidate_id,status,attempts,sources from person_derivative_jobs where candidate_id=any($1::uuid[])',[[id(1),id(4)]])).rows;
+ assert.equal(rows.length,1);assert.equal(rows[0].candidate_id,id(1));assert.equal(rows[0].status,'pending');assert.equal(rows[0].attempts,0);
+ assert.match(rows[0].sources.linkedin_profile,/Staff Engineer/);
+ assert.deepEqual(Object.keys(rows[0].sources).sort(),['linkedin_profile','resume','summary']);
 });
 await test("attempt evidence remains private to the service role", async () => {
   const r = (
