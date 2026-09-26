@@ -467,6 +467,12 @@ bash scripts/person-audit/run-postcutover-audit-tests.sh LOCAL_PORT
 LOCAL_DATABASE_URL=postgresql://postgres@127.0.0.1:LOCAL_PORT/person_postcutover_test node scripts/person-audit/test-audit-scale.mjs
 ```
 
+Local accounting probes must insert synthetic candidates in batches of a few
+thousand rows: the capture trigger takes one advisory lock per row, so a single
+INSERT of hundreds of thousands of `candidates` rows in one transaction exhausts
+the lock table ("out of shared memory"). The writers insert one row at a time;
+never bulk-load `candidates` in one transaction.
+
 Production use requires the reviewed prepared migration chain, anchors, source
 catch-up and Spencer's release approval. The isolated canary and queue/drain
 transition remain separate release prerequisites in the cutover runbook.
