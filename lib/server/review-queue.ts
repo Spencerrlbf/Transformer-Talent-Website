@@ -97,7 +97,7 @@ export async function reviewQueued(opts: {
     const resumeSafeName =
       (a.resume_path || "").split("/").pop()?.replace(/^[0-9a-f-]{36}-/i, "") || "resume.pdf";
     try {
-      await runApplicantPipeline({
+      const outcome = await runApplicantPipeline({
         submissionId: a.id,
         name: a.name || "",
         email: a.email,
@@ -118,7 +118,8 @@ export async function reviewQueued(opts: {
         salaryFloor: isFuture ? a.comp_expectation : null,
         fromQueue: true,
       });
-      reviewed++;
+      if (outcome === "processed") reviewed++;
+      else failed++;
     } catch (err) {
       failed++;
       console.error(`queued review failed for application ${a.id}`, err);

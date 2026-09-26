@@ -11,3 +11,8 @@ next-env.d.ts
 .env.scripts
 scripts/dist/
 .claude/
+
+supabase/.temp/
+
+# Private migration recovery evidence and local test dependencies
+.superpowers/

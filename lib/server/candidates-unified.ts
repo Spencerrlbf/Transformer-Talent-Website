@@ -20,6 +20,10 @@ import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
+import { publishedPoolProfiles } from "./person/profile-view";
+import { saveRecruiterContact } from "./person/recruiter";
+import { personWriteMode } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
 import { poolDisplayPositions, poolEducation } from "./pool/profile";
 import type { Scorecard } from "./scorecard";
 import {
@@ -1429,10 +1433,11 @@ const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export async function unifiedCandidateDetail(orgId: string, key: string): Promise<UnifiedDetail | null> {
+  if (key.startsWith("net_") && orgId !== TT_ORG_ID) return null;
   const { byId: roleIdx, byExternal } = await orgRoleIndex(orgId);
 
   // Pool person from the internal Network page. Profile comes from the
-  // newest raw Harvest full_profile in the enrichment ledger; the pipeline
+  // checked published profile, else the legacy enrichment ledger; the pipeline
   // section shows their nightly network matches (display-only — no stages).
   if (key.startsWith("net_")) {
     const id = key.slice(4);
@@ -1441,7 +1446,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `email,phone,contact,profile_picture_url,current_title,current_company,created_at,` +
         `work_experience,education,profile_summary,top_skills,source,linkedin_enrichment_date&limit=1`
     );
-    const [p] = (res.ok ? await res.json() : []) as {
+    let [p] = (res.ok ? await res.json() : []) as {
       id: string; full_name: string | null; headline: string | null; location: string | null;
       linkedin_url: string | null; linkedin_username: string | null; email: string | null;
       phone: string | null; contact: UnifiedContact | null; profile_picture_url: string | null;
@@ -1451,8 +1456,11 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     }[];
     if (!p) return null;
 
+    const published = await publishedPoolProfiles([id]);
+    const canonical = published.get(id);
+    if (canonical) p = canonical.profile as typeof p;
     const [enrRes, vRes, emailMap] = await Promise.all([
-      sbRest(
+      canonical ? Promise.resolve(null) : sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
           `&raw_payload=not.is.null&select=raw_payload,created_at&order=created_at.desc&limit=1`
       ),
@@ -1460,9 +1468,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]])),
+      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published),
     ]);
-    const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
+    const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
       verdict: { scorecard?: Scorecard; v2?: VerdictView } | null;
@@ -1499,9 +1507,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     // the judge read. Either way it says where it came from and when.
     const monthDay = (iso: string | null | undefined) =>
       iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
-    let bits = profileBits(enr?.raw_payload ?? null);
-    let profileSource: string | null = enr?.raw_payload ? `Refreshed from LinkedIn, ${monthDay(enr.created_at)}` : null;
-    if (!enr?.raw_payload) {
+    let bits = profileBits(canonical?.harvest ?? enr?.raw_payload ?? null);
+    let profileSource: string | null = canonical ? "From the current stored profile" : enr?.raw_payload ? `Refreshed from LinkedIn, ${monthDay(enr.created_at)}` : null;
+    if (!canonical && !enr?.raw_payload) {
       const positions = poolDisplayPositions(p);
       const education = poolEducation(p);
       bits = {
@@ -1549,6 +1557,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       // contact overlay). otherEmails: user-curated list once saved; until
       // then, the verification tables' addresses minus the primary.
       contact: (() => {
+        if (published.has(id)) return published.get(id)!.contact;
         const primary = str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null;
         const curated = Array.isArray(p.contact?.otherEmails) ? p.contact!.otherEmails! : null;
         const fallback = (emailMap.get(id) || [])
@@ -1671,7 +1680,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
 
     await appendAttached(orgId, key, pipeline, byExternal);
     await attachStages(orgId, key, pipeline);
-    const bits = profileBits(sourced?.profile || (a.harvest_profile as HarvestProfile | null));
+    const sentSnapshot = a.source === "transformer_talent" &&
+      (a.harvest_profile as Record<string, unknown> | null)?.profileStorageVersion === "tt-published-1";
+    const bits = profileBits(sentSnapshot ? a.harvest_profile as HarvestProfile : sourced?.profile || (a.harvest_profile as HarvestProfile | null));
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
     const resumePath = a.resume_path || sourced?.resume_path || null;
     return {
@@ -1697,7 +1708,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
           return `Asked to hear from you later, via your page · ${fmtDate(a.created_at)}`;
         return `Applied via your board · ${fmtDate(a.created_at)}`;
       })(),
-      contact: { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
+      contact: sentSnapshot
+        ? { ...(a.contact || {}), email: a.contact?.email ?? null, phone: a.contact?.phone ?? null }
+        : { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: a.status === "processing" || a.status === "queued",
@@ -1777,10 +1790,31 @@ const cleanContact = (c: UnifiedContact): UnifiedContact | { error: string } => 
 export async function saveUnifiedContact(
   orgId: string,
   key: string,
-  contact: UnifiedContact
+  contact: UnifiedContact,
+  edit?: { actorId: string; requestId: string }
 ): Promise<{ contact?: UnifiedContact; error?: string }> {
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
+
+  // Enforce pool ownership in the service as well as the HTTP route.
+  if (key.startsWith("net_")) {
+    if (orgId !== TT_ORG_ID) return { error: "not_found" };
+    if (personWriteMode() !== "legacy") {
+      if (!edit) return { error: "member_required" };
+      try {
+        const saved = await saveRecruiterContact({ organizationId: orgId,
+          candidateId: key.slice(4), actorId: edit.actorId, requestId: edit.requestId,
+          contact: cleaned, mode: personWriteMode() as "shadow" | "live" });
+        return { contact: saved.contact };
+      } catch (error) {
+        const reason = (error as Error).message;
+        if (["invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable"].includes(reason)) return { error: reason };
+        if (reason === "person_not_found") return { error: "not_found" };
+        if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
+        return { error: "save_failed" };
+      }
+    }
+  }
 
   // net_ = pool candidate (TT-internal; the API route gates org access).
   const target = key.startsWith("src_")

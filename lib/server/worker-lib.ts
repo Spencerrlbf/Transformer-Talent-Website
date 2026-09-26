@@ -58,3 +58,73 @@ export { JEV_MODEL } from "./rolecard/jev";
 // Applications over their company's daily review allowance, reviewed
 // nightly (scripts/review-queue.mjs).
 export { reviewQueued, queuedCount } from "./review-queue";
+
+// The person writer's translators (lib/server/person/): every source's data
+// as one PersonDoc for save_person, and the projection back to today's
+// candidates columns (the 50-person trial's before/after page and checks).
+export { fromLegacyImport, legacyRaw, legacyFetchedAt, legacyUntouched, LEGACY_IMPORT_END } from "./person/fromLegacy";
+export type { LegacyCandidateRow, LegacyEmailRow, LegacyEmailV2Row, LegacyCommunicationRow, LegacyRaw } from "./person/fromLegacy";
+export { fromHarvest } from "./person/fromHarvest";
+export { pickRefreshRows, pickRefreshRowsOnConnection, claimRefresh, storeRefreshPayload, saveRefresh, failRefresh, claimRefreshOnConnection, storeRefreshPayloadOnConnection, saveRefreshOnConnection, failRefreshOnConnection } from "./person/refresh";
+export type { HarvestLedgerRow } from "./person/fromHarvest";
+export { fromDirectory, directoryCheck, directoryPhoneValue, unmappedDirectoryStatuses, DIRECTORY_STATUSES } from "./person/fromDirectory";
+export type { DirectoryBoardRow, DirectoryHarvestRow, DirectoryExperienceRow, DirectoryEducationRow, DirectoryEmailRow, DirectoryPhoneRow } from "./person/fromDirectory";
+export { fromApplication } from "./person/fromApplication";
+export type { ApplicationRow } from "./person/fromApplication";
+export { project } from "./person/project";
+export type { Projection, ProjectionInput, ProjectedPosition } from "./person/project";
+export {
+  PARSER_VERSION,
+  TT_ORG_ID,
+  jobRowKey,
+  eduRowKey,
+  skillKeyOf,
+  splitSkill,
+  normalizeEmail,
+  normalizePhone,
+  normalizedName,
+  placeholderKey,
+  parseLinkedinOrgUrl,
+  companyOf,
+  schoolOf,
+  companyIdentity,
+  degreeLevel,
+  isSideRole,
+  realJobFirst,
+  mergeContacts,
+  rankedContacts,
+  checkClass,
+  emailsInText,
+  websiteContact,
+  spanYears,
+  stableStringify,
+} from "./person/normalize";
+export { isSideRoleTitle } from "./person/role-selection";
+export type * from "./person/types";
+export { savePerson, savePersonOnConnection, undoPersonProjectionOnConnection, semanticProfileHash, readPersonProjection } from './person/save';
+export { personWriteMode, saveApplicationPerson, saveApplicationPersonOnConnection, applicationProfileDoc } from './person/intake';
+
+export { runApplicantPipeline } from './applicant-pipeline';
+export {
+  directoryDocuments, directoryIdentities, directorySnapshotHash, directoryPrimary,
+} from './person/directory-sources';
+export {
+  claimDirectoryScan, stageDirectory, saveDirectory, checkpointDirectoryScan,
+  claimDirectoryScanOnConnection, stageDirectoryOnConnection,
+  saveDirectoryOnConnection, checkpointDirectoryScanOnConnection,
+  pendingDirectoryEmbeddings, claimDirectoryEmbedding, saveDirectoryEmbedding,
+  claimDirectoryEmbeddingOnConnection, saveDirectoryEmbeddingOnConnection,
+  inspectDirectoryPage, inspectDirectoryPageOnConnection,
+  pendingDirectoryReceipts, pendingDirectoryReceiptsOnConnection,
+} from './person/directory';
+
+export { saveRecruiterContact, saveRecruiterContactOnConnection } from './person/recruiter';
+export { publishedPoolContacts, publishedPoolContactsOnConnection, effectivePoolContact } from './person/contacts';
+
+export { poolEmails, listNetworkMatches, sendNetworkCandidate } from './network';
+export { saveUnifiedContact, unifiedCandidateDetail } from './candidates-unified';
+
+export { publishedPoolProfiles,publishedPoolProfilesOnConnection,canonicalProfileSnapshot } from './person/profile-view';
+export { enqueuePersonDerivativesLocked, preparePersonDerivativesOnConnection, completePersonDerivativesOnConnection, failPersonDerivativesOnConnection, personDerivativeChunks, embedPersonDerivativeChunks, processPersonDerivatives, drainPersonDerivatives } from './person/derivatives';
+export { prepareLegacyAuditAnchor } from './person/audit-anchor';
+export { beginGuardedAuditOperationLocked, attributeAuditMutation, createReceiptAuditAnchorLocked } from './person/audit';

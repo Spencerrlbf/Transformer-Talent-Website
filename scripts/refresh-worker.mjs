@@ -30,6 +30,7 @@ try {
   }
 } catch {}
 
+const workerLib = await import("./dist/worker-lib.mjs");
 const {
   computeFacts,
   formatFacts,
@@ -39,7 +40,8 @@ const {
   recordEnrichment,
   syncExperiences,
   syncCandidateEmbeddings,
-} = await import("./dist/worker-lib.mjs");
+} = workerLib;
+const PERSON_MODE = workerLib.personWriteMode();
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,12 +49,17 @@ const HARVEST = process.env.HARVEST_API_KEY;
 const CAP = Math.max(0, parseInt(process.env.REFRESH_DAILY_CAP || "50", 10) || 0);
 const CONCURRENCY = Math.min(8, Math.max(1, parseInt(process.env.CONCURRENCY || "1", 10) || 1));
 if (!SUPABASE_URL || !KEY) throw new Error("Supabase creds required");
-if (!HARVEST && !process.env.PRECOMPUTE_BACKFILL) throw new Error("HARVEST_API_KEY required");
+if (!HARVEST && PERSON_MODE === "legacy" && !process.env.PRECOMPUTE_BACKFILL) throw new Error("HARVEST_API_KEY required");
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
 async function rest(path, init = {}) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { ...headers, ...init.headers } });
-  if (!res.ok) throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}: ${await res.text()}`);
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { signal: AbortSignal.timeout(60_000), ...init, headers: { ...headers, ...init.headers } });
+  if (!res.ok) {
+    // Database errors may quote a person's full record. Log only status/code.
+    const error = await res.json().catch(() => ({}));
+    const code = typeof error.code === "string" && /^[A-Z0-9_]+$/.test(error.code) ? ` (${error.code})` : "";
+    throw new Error(`${init.method || "GET"} ${path.split("?")[0]} ${res.status}${code}`);
+  }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
@@ -60,6 +67,25 @@ async function rest(path, init = {}) {
 const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("organization not found");
 
+if (PERSON_MODE !== "legacy") {
+  const { runNormalizedRefresh } = await import("./person-refresh/worker.mjs");
+  const stats = await runNormalizedRefresh({
+    lib: workerLib, rest, organizationId: org.id, mode: PERSON_MODE,
+    dailyCap: CAP, allowPaid: !!HARVEST && !process.env.PRECOMPUTE_BACKFILL,
+    noTopup: !!process.env.NO_TOPUP || !!process.env.PRECOMPUTE_BACKFILL,
+    concurrency: CONCURRENCY,
+    harvestProfile: async (url) => {
+      const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
+        headers: { "X-API-Key": HARVEST }, signal: AbortSignal.timeout(25000),
+      });
+      // The durable reservation fences an uncertain response. A later worker
+      // must not repeat a potentially paid call without a recorded payload.
+      if (!res.ok) throw Error(`harvest_${res.status}`);
+      return (await res.json()).element;
+    },
+  });
+  if (stats.failed || stats.review) process.exitCode = 1;
+} else {
 // Budget: paid Harvest calls already made today (site + worker share the cap).
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
 const spentRes = await fetch(
@@ -69,7 +95,12 @@ const spentRes = await fetch(
 const spent = parseInt((spentRes.headers.get("content-range") || "/0").split("/")[1], 10) || 0;
 const remaining = Math.max(0, CAP - spent);
 console.log(`cap ${CAP}, spent today ${spent}, remaining ${remaining}`);
-if (!remaining && !process.env.PRECOMPUTE_BACKFILL) process.exit(0);
+// A paid-budget stop must not stop the free recovery of a saved payload.
+const retrySince = new Date(Date.now() - 30 * 86400_000).toISOString();
+const patchRetries = await rest(
+  `refresh_queue?status=eq.patch_failed&or=(reason.is.null,reason.neq.patch_retry)&processed_at=gte.${retrySince}&select=id,candidate_id,linkedin_url,linkedin_username,priority,reason&order=processed_at.asc&limit=50`
+);
+const retryIds = new Set(patchRetries.map((r) => r.candidate_id));
 
 // ---- Verdict precompute: retrieval is worker-specific, everything after ----
 // ---- (facts, evidence, LLM, cache) is the shared library.               ----
@@ -80,9 +111,9 @@ if (!remaining && !process.env.PRECOMPUTE_BACKFILL) process.exit(0);
 
 // ---- Nightly drain ----
 
-const queued = await rest(
+const queued = remaining ? await rest(
   `refresh_queue?status=eq.queued&select=id,candidate_id,linkedin_url,linkedin_username,priority&order=priority.asc,queued_at.asc&limit=${remaining}`
-);
+) : [];
 if (queued.length < remaining && !process.env.NO_TOPUP) {
   const needed = remaining - queued.length;
   const everQueued = new Set((await rest("refresh_queue?select=candidate_id")).map((r) => r.candidate_id));
@@ -141,11 +172,11 @@ if (queued.length < remaining && !process.env.NO_TOPUP) {
     );
   }
 }
-console.log(`processing ${Math.min(queued.length, remaining)} of ${queued.length} queued`);
+console.log(`processing ${Math.min(queued.length, remaining)} of ${queued.length} queued; ${patchRetries.length} free save retries`);
 
 async function finishQueueRow(row, status) {
   // unique(candidate_id, status): clear any previous terminal row first.
-  await rest(`refresh_queue?candidate_id=eq.${row.candidate_id}&status=eq.${status}`, {
+  await rest(`refresh_queue?candidate_id=eq.${row.candidate_id}&status=eq.${status}&id=neq.${row.id}`, {
     method: "DELETE",
     headers: { Prefer: "return=minimal" },
   }).catch(() => {});
@@ -173,10 +204,21 @@ async function harvestProfile(url) {
   }
 }
 
-let refreshed = 0, failed = 0, skipped = 0, reused = 0;
-const work = queued.slice(0, remaining);
+let refreshed = 0, failed = 0, skipped = 0, reused = 0, patchFailed = 0;
+const work = [...patchRetries.map((r) => ({ ...r, patchRetry: true })),
+  ...queued.filter((r) => !retryIds.has(r.candidate_id)).slice(0, remaining)];
 async function refreshOne(row) {
+  let ledgerWritten = false;
+  let savingProfile = !!row.patchRetry;
   try {
+    if (row.patchRetry) {
+      // Claim this one free retry before doing work, including when two runs overlap.
+      // Keep patch_failed until the save succeeds, so interruption cannot report done.
+      const claimed = await rest(`refresh_queue?id=eq.${row.id}&status=eq.patch_failed&or=(reason.is.null,reason.neq.patch_retry)&select=id`, {
+        method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ reason: "patch_retry" }),
+      });
+      if (!claimed?.length) { skipped++; return; }
+    }
     let { linkedin_url: url, linkedin_username: username } = row;
     if (!url || !username) {
       const [cand] = await rest(`candidates?id=eq.${row.candidate_id}&select=linkedin_url,linkedin_username`);
@@ -202,25 +244,30 @@ async function refreshOne(row) {
     if (recent) {
       h = recent.raw_payload;
       reused++;
-      console.log(`  reusing ledgered profile for ${username || row.candidate_id} (no Harvest spend)`);
+      console.log(`  reusing ledgered profile for ${row.candidate_id} (no Harvest spend)`);
     } else {
+      if (row.patchRetry) throw new Error("save retry has no cached profile from the last 30 days");
       const data = await harvestProfile(url);
       h = data.element; // Harvest wraps errors in 200s — element only
     }
     if (!h || typeof h !== "object" || (!h.experience && !h.headline)) throw new Error("harvest empty profile");
 
     // Shared spine writes: ledger, per-position experiences, embeddings.
-    await recordEnrichment({
-      candidateId: row.candidate_id,
-      linkedinUsername: username,
-      provider: "harvest",
-      operation: "full_profile",
-      cacheStatus: recent ? "hit" : "miss",
-      raw: recent ? null : h, // don't re-store a payload the ledger already holds
-      costCredits: recent ? 0 : 1,
-    });
-    await syncExperiences(row.candidate_id, h);
-    await syncCandidateEmbeddings(row.candidate_id, { linkedin_profile: linkedinProfileText(h) });
+    if (!row.patchRetry) {
+      await recordEnrichment({
+        candidateId: row.candidate_id,
+        linkedinUsername: username,
+        provider: "harvest",
+        operation: "full_profile",
+        cacheStatus: recent ? "hit" : "miss",
+        raw: recent ? null : h, // don't re-store a payload the ledger already holds
+        costCredits: recent ? 0 : 1,
+      });
+      ledgerWritten = true;
+      await syncExperiences(row.candidate_id, h);
+      await syncCandidateEmbeddings(row.candidate_id, { linkedin_profile: linkedinProfileText(h) });
+    }
+    savingProfile = true;
 
     // The whole candidates row from the profile: jobs, education, summary,
     // skills, headline, place, current job, and the years the Network tab
@@ -230,22 +277,45 @@ async function refreshOne(row) {
       const years = poolSignals({ ...patch, calculated_experience_years: null, total_experience_years: null }).years;
       if (Number.isFinite(years)) patch.calculated_experience_years = Math.round(years);
     }
-    if (Object.keys(patch).length) patch.linkedin_enrichment_date = recent?.created_at || new Date().toISOString();
-    if (Object.keys(patch).length) {
-      await rest(`candidates?id=eq.${row.candidate_id}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify(patch),
-      }).catch((e) => console.error(`candidate patch failed for ${row.candidate_id}:`, e.message));
+    if (!Object.keys(patch).length) throw new Error("profile produced no candidate fields");
+    patch.linkedin_enrichment_date = recent?.created_at || new Date().toISOString();
+    patch.updated_at = new Date().toISOString();
+    // Recovery may run a day later, after a newer directory copy was saved.
+    const freshnessGuard = row.patchRetry
+      ? `&or=(linkedin_enrichment_date.is.null,linkedin_enrichment_date.lte.${encodeURIComponent(patch.linkedin_enrichment_date)})`
+      : "";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const saved = await rest(`candidates?id=eq.${row.candidate_id}${freshnessGuard}&select=id`, {
+          method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch),
+        });
+        if (!saved?.length) {
+          if (row.patchRetry) {
+            const [current] = await rest(`candidates?id=eq.${row.candidate_id}&select=linkedin_enrichment_date`);
+            if (Date.parse(current?.linkedin_enrichment_date) > Date.parse(patch.linkedin_enrichment_date)) {
+              await finishQueueRow(row, "done");
+              skipped++;
+              console.log(`save retry superseded by newer profile for ${row.candidate_id}`);
+              return;
+            }
+          }
+          throw new Error("candidate save matched no row");
+        }
+        break;
+      } catch (err) {
+        if (attempt === 1) throw err;
+      }
     }
 
     await finishQueueRow(row, "done");
     refreshed++;
-    if (refreshed % 100 === 0 || CONCURRENCY === 1) console.log(`refreshed ${username || row.candidate_id} (priority ${row.priority}); ${refreshed} done, ${failed} failed`);
+    if (refreshed % 100 === 0 || CONCURRENCY === 1) console.log(`refreshed ${row.candidate_id} (priority ${row.priority}); ${refreshed} done, ${failed} failed`);
   } catch (err) {
     failed++;
-    console.error(`refresh failed for ${row.candidate_id}:`, err.message);
-    await recordEnrichment({
+    const status = savingProfile ? "patch_failed" : "failed";
+    if (savingProfile) patchFailed++;
+    console.error(`${status} for ${row.candidate_id}:`, err.message);
+    if (!ledgerWritten && !row.patchRetry) await recordEnrichment({
       candidateId: row.candidate_id,
       linkedinUsername: row.linkedin_username,
       provider: "harvest",
@@ -254,10 +324,11 @@ async function refreshOne(row) {
       status: "failed",
       costCredits: 0,
     }).catch(() => {});
-    await finishQueueRow(row, "failed").catch(() => {});
+    await finishQueueRow(row, status);
   }
 }
 await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
   while (work.length) await refreshOne(work.shift());
 }));
-console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed, ${skipped} skipped`);
+console.log(`done: ${refreshed} refreshed (${reused} via ledger reuse, no spend), ${failed} failed (${patchFailed} patch_failed), ${skipped} skipped`);
+}

@@ -6,8 +6,8 @@ name: Person writer trial
 # The log shows ids, counts and check results; never a name, email, phone or
 # date (the repository is public, and so are its Actions logs).
 # dry_run (ticked by default) saves nothing; only an unticked box saves.
-# A run after a translator change needs scripts/person-trial-undo.mjs --apply
-# for the same ids first (the run refuses otherwise: sources_current).
+# Reviewed parser corrections use allow_parser_replay; exact replays are no-ops.
+# Do not use destructive trial undo after concurrent shadow writes exist.
 # GitHub dispatches only workflows whose file is on the default branch: with
 # this file on main, dispatch with --ref <the trial branch> to run its scripts.
 
@@ -31,6 +31,15 @@ on:
         description: "Only print the directory's table and column names the trial reads"
         type: boolean
         default: false
+      allow_parser_replay:
+        description: "Allow the reviewed person-v2 to person-v3 source replay"
+        type: boolean
+        default: false
+      backfill:
+        description: 'Optional shadow backfill JSON: run-id, limit, batch-size, resume, concurrency'
+        type: string
+        required: false
+        default: ''
       undo:
         description: "Undo the trial for these ids (scripts/person-trial-undo.mjs); with dry_run ticked it only counts"
         type: boolean
@@ -40,11 +49,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: person-trial
+  # A bounded read-only reconciliation check can run during the baseline.
+  # Every saving trial/backfill/reconciliation still shares the same group.
+  group: ${{ inputs.dry_run && fromJSON(inputs.backfill || '{}').reconcile == true && 'person-source-readonly' || 'person-trial' }}
   cancel-in-progress: false
 
 jobs:
   trial:
+    if: ${{ inputs.backfill == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -57,6 +69,7 @@ jobs:
       - if: ${{ !inputs.undo }}
         run: node scripts/person-trial.mjs
         env:
+          ALLOW_PARSER_REPLAY: ${{ inputs.allow_parser_replay && '1' || '' }}
           TRIAL_IDS: ${{ inputs.ids }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           REPEAT: ${{ inputs.repeat && '1' || '' }}
@@ -69,5 +82,24 @@ jobs:
         env:
           TRIAL_IDS: ${{ inputs.ids }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  backfill:
+    if: ${{ inputs.backfill != '' && !inputs.undo && !inputs.describe }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --no-audit --no-fund pg@8
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/person-backfill.mjs
+        env:
+          BACKFILL_CONFIG: ${{ inputs.backfill }}
+          BACKFILL_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
