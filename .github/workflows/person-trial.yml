@@ -35,6 +35,11 @@ on:
         description: "Allow the reviewed person-v2 to person-v3 source replay"
         type: boolean
         default: false
+      backfill:
+        description: 'Optional shadow backfill JSON: run-id, limit, batch-size, resume, concurrency'
+        type: string
+        required: false
+        default: ''
       undo:
         description: "Undo the trial for these ids (scripts/person-trial-undo.mjs); with dry_run ticked it only counts"
         type: boolean
@@ -49,6 +54,7 @@ concurrency:
 
 jobs:
   trial:
+    if: ${{ inputs.backfill == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -74,5 +80,24 @@ jobs:
         env:
           TRIAL_IDS: ${{ inputs.ids }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  backfill:
+    if: ${{ inputs.backfill != '' && !inputs.undo && !inputs.describe }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --no-audit --no-fund pg@8
+      - run: node scripts/build-worker-lib.mjs
+      - run: node scripts/person-backfill.mjs
+        env:
+          BACKFILL_CONFIG: ${{ inputs.backfill }}
+          BACKFILL_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

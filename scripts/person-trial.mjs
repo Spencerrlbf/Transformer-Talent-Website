@@ -411,14 +411,14 @@ async function describe() {
 // ---------------------------------------------------------------- reading the sources
 
 /** Full candidates rows, and a hash of each (the "live site untouched" proof). */
-async function candidatesRows(site, ids) {
+export async function candidatesRows(site, ids) {
   const rows = await selectIn(site, "candidates", "id", ids, { order: "id.asc", chunk: 10 });
   return new Map(rows.map((r) => [r.id, r]));
 }
 const hashRows = (rows) => new Map([...rows].map(([id, r]) => [id, hashOf(r)]));
 
 /** candidate_experiences rows from every other writer (syncExperiences): they must not move. */
-async function otherExperienceHashes(site, ids) {
+export async function otherExperienceHashes(site, ids) {
   const rows = await selectIn(site, "candidate_experiences", "candidate_id", ids, { filters: [["source", "neq", "person"]], order: "candidate_id.asc,id.asc" });
   const by = groupBy(rows, "candidate_id");
   return new Map(ids.map((id) => [id, hashOf(by.get(id) ?? [])]));
@@ -519,7 +519,7 @@ export function knownPhones({ row, apps, dir }) {
 /** A doc's label in the log: its source and date; on GitHub Actions (public logs) the source only. */
 const docLabel = (d) => (IN_CI ? `${d.source?.source ?? "?"}` : `${d.source?.source ?? "?"}@${String(d.source?.fetched_at ?? "").slice(0, 10) || "?"}`);
 
-async function buildDocs(lib, id, inp) {
+export async function buildDocs(lib, id, inp) {
   const docs = [];
   const errors = [];
   const add = async (label, fn) => {
@@ -556,7 +556,7 @@ const docCounts = (d) => ({ jobs: arr(d.jobs).length, educations: arr(d.educatio
 
 // ---------------------------------------------------------------- reading the new tables back
 
-async function readNew(site, ids) {
+export async function readNew(site, ids, { globalCounts = true } = {}) {
   const sources = await selectIn(site, "candidate_sources", "candidate_id", ids, { order: "candidate_id.asc,fetched_at.asc,id.asc" });
   const state = await selectIn(site, "candidate_profile_state", "candidate_id", ids, { order: "candidate_id.asc" });
   const identities = await selectIn(site, "candidate_identities", "candidate_id", ids, { order: "candidate_id.asc,kind.asc,value.asc" });
@@ -575,8 +575,8 @@ async function readNew(site, ids) {
   });
   const schools = await selectIn(site, "schools", "id", educations.map((e) => e.school_id), { order: "id.asc" });
   const skills = await selectIn(site, "skills", "id", cskills.map((s) => s.skill_id), { order: "id.asc" });
-  const writerCompanies = await site.select("companies", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" });
-  const writerSchools = await site.select("schools", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" });
+  const writerCompanies = globalCounts ? await site.select("companies", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" }) : [];
+  const writerSchools = globalCounts ? await site.select("schools", { columns: "id", filters: [["created_from", "eq", "person_writer"]], order: "id.asc" }) : [];
   const conflicts = [...conflictsById.values()];
   return {
     sources: groupBy(sources, "candidate_id"),
@@ -611,7 +611,7 @@ async function readNew(site, ids) {
 }
 
 /** What project() gets: the person's current rows, joined to their companies, schools and skills. */
-function projectionInput(id, t) {
+export function projectionInput(id, t) {
   const active = (rows) => (rows ?? []).filter((r) => !r.removed_at);
   const state = t.state.get(id) ?? null;
   // The state's header is {field: {value, source, at}}; project() reads plain values.
@@ -653,14 +653,14 @@ export const CHECKS = {
   summary_view_agrees: ["extra", "candidate_contact_summary names the rank-1 email"],
   other_experience_rows_untouched: ["extra", "candidate_experiences rows from other writers unchanged"],
   directory_read: ["extra", "every directory person's directory records were read"],
-  sources_current: ["extra", "no stored source of the same record differs from its rebuilt doc (else undo first)"],
+  sources_current: ["extra", "rebuilt sources match stored snapshots or have explicit reviewed parser replay"],
   docs_deterministic: ["extra", "the same sources give the same docs (payload hashes) on the second run"],
   projection_runs: ["extra", "project() runs on every person's stored rows"],
   docs_cover_known_emails: ["extra", "the docs carry every known email"],
   doc_jobs_named: ["extra", "every job in every doc names a company or a placeholder"],
 };
 
-class Tally {
+export class Tally {
   constructor() { this.fail = new Map(); this.ran = new Set(); this.notes = new Map(); this.skipped = new Set(); }
   run(check) { this.ran.add(check); }
   /** A check this run cannot make (a local test without the directory): reported, never a pass. */
@@ -674,7 +674,7 @@ class Tally {
 }
 
 /** Doc-level checks: what the translators produced, before anything is saved. */
-function checkDocs(tally, id, inp, docs) {
+export function checkDocs(tally, id, inp, docs) {
   tally.run("docs_cover_known_emails");
   tally.run("doc_jobs_named");
   const inDocs = new Set(docs.flatMap((d) => arr(d.contacts).filter((c) => c.kind === "email").map((c) => c.value_normalized)));
@@ -697,7 +697,7 @@ export function outranks(a, b) {
 const LISTS = [["jobs", "jobs_source_id"], ["educations", "educations_source_id"], ["skills", "skills_source_id"]];
 
 /** Checks over the stored rows of one person. Returns the counts printed for them. */
-function checkStored(tally, id, inp, docs, t, lib) {
+export function checkStored(tally, id, inp, docs, t, lib) {
   const active = (rows) => (rows ?? []).filter((r) => !r.removed_at);
   const state = t.state.get(id);
   const docOf = (sourceId) => {
@@ -831,7 +831,7 @@ async function applyDocs(site, perPerson, concurrency = 4) {
   return results;
 }
 
-async function readAll(site, ids, commsDb, commsCols, skipDirectory = false) {
+export async function readAll(site, ids, commsDb, commsCols, skipDirectory = false) {
   const rows = await candidatesRows(site, ids);
   const inputs = await readSources(site, ids, rows);
   const dirIds = [...inputs.values()].map((i) => i.row.directory_contact_id).filter(Boolean);
