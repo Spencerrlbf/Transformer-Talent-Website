@@ -26,6 +26,9 @@ export interface PersonSource {
   raw_in: RawIn;
   enrichment_id: string | null;
   parser_version: string;
+  // Extra: the lists.ts LISTS_VERSION that graded the tiers in this doc (save_person
+  // stores it as tier_list_version next to a tier it sets). Not in the payload hash.
+  tier_list_version?: string | null;
 }
 
 export type IdentityKind = "linkedin_urn" | "linkedin_username" | "directory_contact_id" | "airtable_id" | "tt_application_id";

@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { cleanText, SIDE_ROLE } from "../spine";
 import { skillKey } from "../facts";
 import { normalise, topEmployerOf, topUniversityOf } from "../signals/match";
+import { LISTS_VERSION } from "../signals/lists";
 import type {
   ContactLabel,
   ContactStatus,
@@ -664,7 +665,10 @@ export function assembleDoc(args: {
     skills: args.skills ?? [],
     contacts: args.contacts ?? [],
   };
-  const source: PersonSource = { ...args.source, payload_hash: payloadHash(content, args.source), parser_version: PARSER_VERSION };
+  // tier_list_version: which lists.ts version graded the company and school tiers in this doc
+  // (save_person stamps it on the companies/schools rows it tiers). Not part of the payload hash:
+  // a list edit that changes no tier leaves the doc the same.
+  const source: PersonSource = { ...args.source, payload_hash: payloadHash(content, args.source), parser_version: PARSER_VERSION, tier_list_version: LISTS_VERSION };
   return { candidate_id: content.candidate_id, mode: content.mode, source, identities, header: content.header, jobs: content.jobs, educations: content.educations, skills: content.skills, contacts: content.contacts };
 }
 
