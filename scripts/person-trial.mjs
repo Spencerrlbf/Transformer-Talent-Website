@@ -361,13 +361,13 @@ async function readOnly(db, fn) {
 }
 
 /** Everything the directory holds for these contacts, grouped by contact id. Read-only. */
-export async function readDirectory(db, contactIds, cols) {
+export async function readDirectory(db, contactIds, cols, { provenance = false } = {}) {
   const missing = missingComms(cols);
   if (missing.length) throw new Error(`the directory has no ${missing.join(", ")}; run with --describe and update the runner`);
-  return readOnly(db, () => readDirectoryIn(db, contactIds, cols));
+  return readOnly(db, () => readDirectoryIn(db, contactIds, cols, provenance));
 }
 
-async function readDirectoryIn(db, contactIds, cols) {
+async function readDirectoryIn(db, contactIds, cols, provenance) {
   const q = async (sql, params = [contactIds]) => (await db.query(sql, params)).rows;
   const board = await q("select * from board.candidates where contact_id = any($1::uuid[])");
   const harvest = await q("select * from comms.harvest_profiles where contact_id = any($1::uuid[])");
@@ -385,6 +385,8 @@ async function readDirectoryIn(db, contactIds, cols) {
   const harvestBy = new Map(harvest.map((h) => [h.contact_id, { ...h, raw: versionBy.get(h.source_version_id)?.payload ?? null, raw_captured_at: versionBy.get(h.source_version_id)?.captured_at ?? null }]));
   const boardBy = new Map(board.map((b) => [b.contact_id, b]));
   const [expsBy, edusBy, emailsBy, phonesBy] = [exps, edus, emails, phones].map((rs) => groupBy(rs, "contact_id"));
+  const facts = provenance ? groupBy(await q("select * from comms.profile_facts where contact_id = any($1::uuid[]) order by contact_id, recorded_at, id"), "contact_id") : null;
+  const identifiers = provenance ? groupBy(await q("select * from comms.identifiers where contact_id = any($1::uuid[]) order by contact_id, kind, value"), "contact_id") : null;
   const out = new Map();
   for (const cid of contactIds) {
     if (!boardBy.has(cid)) continue;
@@ -395,6 +397,7 @@ async function readDirectoryIn(db, contactIds, cols) {
       edus: edusBy.get(cid) ?? [],
       emails: emailsBy.get(cid) ?? [],
       phones: phonesBy.get(cid) ?? [],
+      ...(provenance ? { facts: facts.get(cid) ?? [], identifiers: identifiers.get(cid) ?? [] } : {}),
     });
   }
   return out;

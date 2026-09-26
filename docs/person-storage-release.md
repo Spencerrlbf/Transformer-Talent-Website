@@ -28,8 +28,9 @@ The writer preserves engagement/source labels, workflow state, notes, curated
 contact visibility and existing computed experience fields. It uses the same
 `project()` calculation and source precedence already exercised by the trial.
 Absent lists retain existing columns; explicitly owned empty lists clear them.
-A legacy unique email collision retains the old compatibility address and adds a
-review item rather than merging people. Newer unprojected legacy changes fail
+A legacy unique email collision retains a usable old compatibility address and
+adds a review item rather than merging people. If the old address was explicitly
+invalidated, it is cleared even when the replacement collides. Newer unprojected legacy changes fail
 closed and must be reconciled.
 
 `undoPersonProjectionOnConnection` restores only the profile fields in its
@@ -134,9 +135,8 @@ receipt and application, including unpaired values. No dates or associations
 are invented. Structured Harvest education retains its full relationships.
 
 Tenant applicants and tenant resume uploads remain in their organization-owned
-application/sourcing tables. This branch does not enable all pool writers:
-directory sync and recruiter contact integration must
-also be completed before a live cutover. Post-cutover audit must include intake
+application/sourcing tables. Recruiter contact integration and the remaining writer
+coverage checks must also be completed before a live cutover. Post-cutover audit must include intake
 receipts rather than reconstructing these new sources as historical legacy
 imports. The overnight reconciliation runner is pinned to the shadow sources.
 
@@ -181,3 +181,49 @@ remains preserved in shadow storage; it must not be published. Resolve a hold
 only after establishing original fetch provenance and reviewing the affected
 normalized facts. Merely clearing the hold or changing a timestamp is not a
 repair. Hold counts are separate from migrated/verified counts.
+
+
+## Directory intake preparation
+
+Normalized directory sync needs the prepared
+`20260926061600_person_directory_intake.sql` after the projection migration.
+Before enabling normalized intake, run
+`scripts/person-directory/prepare-lookup.sql` against the website database with
+`psql -v ON_ERROR_STOP=1 -f` outside a transaction. It creates and validates the
+case-folded LinkedIn lookup index concurrently, avoiding a long write lock on
+the pool. This operational prerequisite has not been applied in production.
+
+The legacy mode is still the default. Shadow/live modes read complete bounded
+pages in a read-only repeatable-read communications transaction. Email and
+identifier rows have no reliable change clock, so these modes always use a
+resumable full scan; the legacy `SINCE` shortcut does not apply. A workspace
+lease fences concurrent scanners. Unchanged completed snapshots are checked
+in batches. Pending immutable receipts are recovered before reading the
+external directory, including when a contact has subsequently disappeared.
+
+Admission uses directory, LinkedIn, URN and Airtable identities, never email.
+Conflicting owners are held for review; a final ownership check also catches
+older writers racing admission. DNC is sticky and works for an existing person
+even when their profile is held or not migrated. New suppressed contacts do not
+create pool people. Source saves, projection, linkage and workflow metadata
+commit together; a failed transaction leaves its original input retryable.
+
+Historical snapshots already saved by the backfill keep their original owners
+and row IDs. New Harvest facts use the original fetch date. Only proven manual
+board edits receive their own fact clock; a generic board update or imported
+fact's recorded time is not evidence of a newer profile. Changed components
+with uncertain chronology stay in scoped review while safe contact/workflow
+changes proceed. Reviews survive subsequent workflow-only snapshots.
+Enrichment metadata advances only for exact admitted source evidence, and
+experience years are recomputed from the canonical profile.
+
+Directory primary selection is tracked independently from email verification.
+It does not renew verification or profile dates. Invalid, bounced or suppressed
+contacts remain ineligible, and usable manual choices still rank first. An
+undated current negative places that contact on hold for review while retaining
+its older dated verification evidence. Curated contact JSON remains intact.
+
+Optional matching embeddings are queued in receipts and capped at 50 requests
+per invocation. They commit only if the receipt, canonical text and person
+revision remain current. A retry keeps unfinished work; three failed attempts
+require review. No Harvest calls or migration embedding fanout are introduced.
