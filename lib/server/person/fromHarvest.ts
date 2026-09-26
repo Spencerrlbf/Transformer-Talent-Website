@@ -46,6 +46,7 @@ export interface HarvestLedgerRow {
   created_at: string;
   provider?: string | null;
   operation?: string | null;
+  cache_status?: string | null;
 }
 
 /** The Harvest skills list and topSkills, first-seen order. */
@@ -134,6 +135,7 @@ export function harvestHeader(payload: Obj) {
 const hasItems = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
 
 export function fromHarvest(payload: Record<string, unknown>, ledgerRow: HarvestLedgerRow, candidateId?: string): PersonDoc {
+  if (ledgerRow.cache_status === "hit") throw new Error("harvest_cache_date_unknown");
   const p = (obj(payload) ?? {}) as Obj;
   const bag = new SkillBag();
   harvestSkills(p, bag);

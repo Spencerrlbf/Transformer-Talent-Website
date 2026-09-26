@@ -135,3 +135,21 @@ directory sync, refresh claims/retries and recruiter contact integration must
 also be completed before a live cutover. Post-cutover audit must include intake
 receipts rather than reconstructing these new sources as historical legacy
 imports. The overnight reconciliation runner is pinned to the shadow sources.
+
+
+## Uncertain cached source dates
+
+Legacy Harvest cache-hit rows store when a payload was reused, which does not
+prove when its facts were fetched. Migration
+`20260926050355_person_source_date_holds.sql` retains these rows in the private,
+service-only `person_source_holds` table. Holds survive deletion of the ledger
+row. New successful TT cache-hit payloads automatically create a hold. Tenant
+application data is excluded.
+
+The baseline skips held people, the normalized writer refuses their updates,
+and reconciliation records them for review. Final accounting cannot report
+`reconciled` while any hold is unresolved. Previously normalized held evidence
+remains preserved in shadow storage; it must not be published. Resolve a hold
+only after establishing original fetch provenance and reviewing the affected
+normalized facts. Merely clearing the hold or changing a timestamp is not a
+repair. Hold counts are separate from migrated/verified counts.
