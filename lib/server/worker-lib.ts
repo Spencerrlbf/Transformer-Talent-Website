@@ -105,3 +105,15 @@ export { savePerson, savePersonOnConnection, undoPersonProjectionOnConnection, s
 export { personWriteMode, saveApplicationPerson, saveApplicationPersonOnConnection, applicationProfileDoc } from './person/intake';
 
 export { runApplicantPipeline } from './applicant-pipeline';
+export {
+  directoryDocuments, directoryIdentities, directorySnapshotHash, directoryPrimary,
+} from './person/directory-sources';
+export {
+  claimDirectoryScan, stageDirectory, saveDirectory, checkpointDirectoryScan,
+  claimDirectoryScanOnConnection, stageDirectoryOnConnection,
+  saveDirectoryOnConnection, checkpointDirectoryScanOnConnection,
+  pendingDirectoryEmbeddings, claimDirectoryEmbedding, saveDirectoryEmbedding,
+  claimDirectoryEmbeddingOnConnection, saveDirectoryEmbeddingOnConnection,
+  inspectDirectoryPage, inspectDirectoryPageOnConnection,
+  pendingDirectoryReceipts, pendingDirectoryReceiptsOnConnection,
+} from './person/directory';

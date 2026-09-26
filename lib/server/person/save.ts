@@ -257,6 +257,7 @@ async function applyProjection(
   for (const key of ["current_title", "current_company"])
     if (!header[key] && !tables.jobs.length && !state.jobs_source_id)
       after[key] = before[key] ?? null;
+  const invalidatedKinds = new Set<string>();
   for (const kind of ["email", "phone"]) {
     const current =
       kind === "email"
@@ -273,6 +274,7 @@ async function applyProjection(
     );
     // A claim or an unrelated contact provides no authority to erase an
     // incumbent address. Explicit negative evidence for that value does.
+    if (invalidated) invalidatedKinds.add(kind);
     if (!after[kind] && !invalidated) after[kind] = before[kind] ?? null;
   }
   const companyIds = [
@@ -312,7 +314,7 @@ async function applyProjection(
       )
     ).rows.length
   ) {
-    after.email = before.email ?? null;
+    after.email = invalidatedKinds.has("email") ? null : before.email ?? null;
     await recordEmailCollision();
   }
   if (hash(original) === hash(after)) {
@@ -331,7 +333,7 @@ async function applyProjection(
     )
       throw error;
     await client.query("rollback to savepoint person_email");
-    after.email = before.email ?? null;
+    after.email = invalidatedKinds.has("email") ? null : before.email ?? null;
     await updateProfile(client, id, after);
     await recordEmailCollision();
   }

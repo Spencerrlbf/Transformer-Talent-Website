@@ -185,6 +185,9 @@ const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, 
 const inList = (values) => encodeURIComponent(`(${values.map((v) => `"${String(v).replace(/"/g, "")}"`).join(",")})`);
 
 async function main() {
+  const mode = process.env.PERSON_WRITE_MODE || 'legacy';
+  if (!['legacy', 'shadow', 'live'].includes(mode)) throw Error('invalid_person_write_mode');
+  if (mode !== 'legacy') return (await import('./person-directory/worker.mjs')).main();
   const { COMMS_DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY } = process.env;
   const DRY_RUN = !!process.env.DRY_RUN;
   const LIMIT = Math.max(0, parseInt(process.env.LIMIT || "0", 10) || 0);
