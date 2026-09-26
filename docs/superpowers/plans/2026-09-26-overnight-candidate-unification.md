@@ -144,12 +144,19 @@ Tasks 1, 2, 3, 6 and 7 passed. Task 5 baseline/capture and its restart checks pa
 
 ### Task 8: Backfill the remaining TT pool
 
-- [ ] Run resumable shadow batches using the pilot's safe settings; report progress without personal data.
-- [ ] Audit contacts, jobs/company links, education, skills and source ownership throughout; quarantine recorded conflicts and keep an exact unresolved count.
-- [ ] Catch up arrivals and edits since the starting watermark, then drain/reconcile the shadow retry queue.
-- [ ] Require every eligible candidate to be accounted for as completed or explicitly unresolved. Any unresolved item prevents claiming a complete migration or switching that person's projection.
+- [x] Run resumable shadow batches using the pilot's safe settings; report progress without personal data.
+- [x] Audit contacts, jobs/company links, education, skills and source ownership throughout; quarantine recorded conflicts and keep an exact unresolved count.
+- [x] Catch up arrivals and edits since the starting watermark, then drain/reconcile the shadow retry queue.
+- [x] Require every eligible candidate to be accounted for as completed or explicitly unresolved. Any unresolved item prevents claiming a complete migration or switching that person's projection.
 
 **Gate:** Source coverage and accounting reconcile; zero unexplained omissions. **Undo:** Stop; normalized copies are retained and the existing app remains active.
+
+Task 8 accounting update (2026-09-26 22:39 UTC): the baseline and both source
+scans traversed their full scopes. Latest global results are 422,925 verified,
+123 same-snapshot source reviews and two date holds, with no missing/pending
+checks. These explicit unresolved outcomes block those people's publication.
+The external fingerprint was unstable; this is `review_required`, not a fully
+reconciled/live migration. See the handoff for exact runs and conflict overlap.
 
 ### Task 9: Verify app behavior against the completed data
 
@@ -183,10 +190,14 @@ Tasks 1, 2, 3, 6 and 7 passed. Task 5 baseline/capture and its restart checks pa
 
 ### Task 12: Leave a morning completion report and next checkpoint
 
-- [ ] Record released commit/deployment, migrations applied, exact processed/remaining/conflict counts, checks run, schedules restored, costs triggered and rollback locations.
-- [ ] State separately whether historical data was copied, every live writer was switched, compatibility projections were published, and derived data was refreshed. "Backfill done" must not imply all four are done.
-- [ ] If unfinished, give the safe current mode, exact checkpoint and remaining blocker. Leave no unmonitored non-resumable operation running.
-- [ ] Keep April tables, old JSON, legacy email references and the external `legacy_pull.py` dependency intact. Their retirement is a separate later operation with exports, restore proof and the brief's observation/approval period.
+- [x] Record released commit/deployment, migrations applied, exact processed/remaining/conflict counts, checks run, schedules restored, costs triggered and rollback locations.
+- [x] State separately whether historical data was copied, every live writer was switched, compatibility projections were published, and derived data was refreshed. "Backfill done" must not imply all four are done.
+- [x] If unfinished, give the safe current mode, exact checkpoint and remaining blocker. Leave no unmonitored non-resumable operation running.
+- [x] Keep April tables, old JSON, legacy email references and the external `legacy_pull.py` dependency intact. Their retirement is a separate later operation with exports, restore proof and the brief's observation/approval period.
+
+Task 12 update: the 22:46 UTC handoff records the current safe state and remaining
+canary/drain preparation. This checkpoint does not complete tasks 9–11 or authorize
+a release; the heartbeat continues while implementation remains unfinished.
 
 ## Self-review
 
