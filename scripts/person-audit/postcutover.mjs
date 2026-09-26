@@ -10,14 +10,15 @@
 //   profile still matches its projection; the directory has nothing pending.
 // pending: a raw fact or receipt exists that no writer has admitted yet.
 // review: anything that cannot be explained from the evidence. No repair.
+import {collectEvidence,sameSource as witnessedSource,same} from "./evidence.mjs";
+import {creationEvidence,metadataEvidence} from './mutations.mjs';
+import {exactStored} from "./integrity.mjs";
 import { createHash } from "node:crypto";
 import { Tally, checkStored, stable } from "../person-trial.mjs";
 
 const hashOf = (v) => createHash("md5").update(JSON.stringify(stable(v))).digest("hex");
 const arr = (v) => (Array.isArray(v) ? v : []);
-const sameSource = (a, b) =>
-  a && b && a.source === b.source && a.source_ref === b.source_ref && a.payload_hash === b.payload_hash &&
-  a.parser_version === b.parser_version && Date.parse(a.fetched_at) === Date.parse(b.fetched_at);
+const sameSource = witnessedSource;
 const sortedEq = (a, b) => JSON.stringify([...arr(a)].sort()) === JSON.stringify([...arr(b)].sort());
 
 /** Documents whose facts may legitimately be in normalized storage. */
@@ -34,7 +35,7 @@ export function expectedDocuments(snapshot) {
   return docs;
 }
 
-function candidateChain(snapshot, scopes, guardVersion, out) {
+function candidateChain(snapshot, scopes, guardVersion, lib, out) {
   const anchor = snapshot.anchor;
   const events = arr(snapshot.events).filter((e) => e.source_table === "candidates").sort((a, b) => Number(BigInt(a.id) - BigInt(b.id)));
   const opById = new Map(arr(snapshot.operations).map((o) => [o.id, o]));
@@ -47,6 +48,7 @@ function candidateChain(snapshot, scopes, guardVersion, out) {
     const a = creator.attribution;
     const op = a && opById.get(a.operation_id);
     if (!a || a.scope !== "creation" || a.event_hash !== creator.actual_event_hash || !op || !["application", "directory"].includes(op.writer) || op.receipt_ref !== anchor.creator_ref) return out.review("creation_event");
+    if(!creationEvidence(snapshot,creator,op,lib))return out.review('creation_evidence_invalid');
     out.checks.creation_event = true;
   }
   let attributed = 0, unchanged = 0;
@@ -63,6 +65,19 @@ function candidateChain(snapshot, scopes, guardVersion, out) {
     if (a.event_hash !== e.actual_event_hash || !sortedEq(a.changed_fields, e.actual_changed_fields)) return out.review("attribution_invalid");
     if (arr(e.actual_changed_fields).some((k) => !rule.fields.includes(k)) || (rule.writer && rule.writer !== op.writer)) return out.review("attribution_invalid");
     if (op.transaction_id !== e.transaction_id || op.evidence?.guard?.anchor_hash !== anchor.anchor_hash || op.evidence?.guard?.version !== guardVersion) return out.review("attribution_invalid");
+    if (a.event_id !== e.id || e.candidate_id !== snapshot.candidate_id) return out.review("attribution_invalid");
+    if(a.scope==='profile'){
+      const matching=arr(snapshot.history).filter(h=>h.candidate_id===snapshot.candidate_id);
+      if(op.writer==='undo'){
+        const h=matching.find(h=>String(h.id)===op.evidence.history_id);
+        if(!h||!h.restored_at||lib.projectionProfileHash(e.previous_payload)!==h.after_hash||lib.projectionProfileHash(e.payload)!==lib.projectionProfileHash(h.before_profile))return out.review('undo_history_invalid');
+      }else if(!matching.some(h=>lib.projectionProfileHash(h.before_profile)===lib.projectionProfileHash(e.previous_payload)&&h.after_hash===lib.projectionProfileHash(e.payload)))return out.review('projection_history_invalid');
+    }
+    if(['refresh_metadata','directory_metadata'].includes(a.scope)&&!metadataEvidence(snapshot,e,op,lib))return out.review('metadata_unwitnessed');
+    if(a.scope==='recruiter_contact'){
+      const r=arr(snapshot.recruiter_receipts).find(r=>`recruiter:${r.id}`===op.receipt_ref);
+      if(!r||!same(e.payload.contact,r.requested_contact,lib))return out.review('recruiter_mutation_invalid');
+    }
     attributed++;
     current = e.after_contract_hash;
   }
@@ -71,7 +86,7 @@ function candidateChain(snapshot, scopes, guardVersion, out) {
   return true;
 }
 
-function rawFacts(snapshot, out) {
+function rawFacts(snapshot,lib,out) {
   const id = snapshot.candidate_id;
   const admittedLedgers = new Set([
     ...arr(snapshot.refresh_receipts).filter((r) => r.phase === "done" && r.ledger_id).map((r) => r.ledger_id),
@@ -87,17 +102,28 @@ function rawFacts(snapshot, out) {
       case "candidate_emails":
         return out.review("legacy_source_edited");
       case "candidate_communications":
-        break; // covered by the auxiliary proof comparison
+        if([e.payload,e.previous_payload].some(r=>r?.communication_type==='email'&&['bounced','replied'].includes(r.status)))return out.review('communication_source_edited');
+        break;
       case "candidate_enrichments":
         if (e.operation === "DELETE") return out.review("ledger_deleted");
+        if(e.operation==='UPDATE'){
+          const keys=['organization_id','linkedin_username','provider','status','cache_status','raw_payload','created_at'];
+          if(keys.some(k=>!same(e.previous_payload?.[k],e.payload?.[k],lib)))return out.review('ledger_edited');
+          if(e.previous_payload?.candidate_id&&e.previous_payload.candidate_id!==e.payload?.candidate_id)return out.review('ledger_owner_changed');
+          if(e.previous_payload?.candidate_id!==e.payload?.candidate_id&&!admittedLedgers.has(row.id))return out.review('ledger_owner_unproved');
+        }
         if (row.provider === "harvest" && row.status === "ok" && e.operation === "INSERT" && !admittedLedgers.has(row.id)) pendingLedgers++;
         break;
       case "website_applications":
         if (e.operation === "DELETE") return out.review("application_deleted");
         if (e.operation === "INSERT" && !admittedApplications.has(row.id)) pendingApplications++;
         if (e.operation === "UPDATE") {
-          const a = e.attribution;
-          if (!a || a.scope !== "application_finalize" || a.event_hash !== e.actual_event_hash) return out.review("application_edit_unattributed");
+          const keys=['candidate_id','pool_created_person','parsed_profile','name','email','contact','organization_id','linkedin_username','created_at','location','source'];
+          const changed=keys.filter(k=>!same(e.previous_payload?.[k],e.payload?.[k],lib));
+          if(changed.length){
+            const a=e.attribution,op=arr(snapshot.operations).find(o=>o.id===a?.operation_id),r=arr(snapshot.application_receipts).find(r=>r.application_id===row.id);
+            if(!a||a.scope!=='application_finalize'||a.event_id!==e.id||a.candidate_id!==id||a.event_hash!==e.actual_event_hash||!sortedEq(a.changed_fields,e.actual_changed_fields)||!op||op.writer!=='application'||op.candidate_id!==id||op.transaction_id!==e.transaction_id||op.receipt_ref!==`application:${row.id}`||changed.some(k=>!lib.AUDIT_SCOPES.application_finalize.fields.includes(k))||!r||row.candidate_id!==id||row.pool_created_person!==r.created_person||!same(row.parsed_profile,r.application_snapshot.parsed_profile,lib))return out.review('application_edit_unattributed');
+          }
         }
         break;
       default:
@@ -138,7 +164,7 @@ function integrity(snapshot, docs, lib, out) {
     skillById: new Map(arr(n.skill_lookup).map((s) => [String(s.id), s])),
   };
   const inp = {
-    row: snapshot.candidate,
+    row: snapshot.anchor.before_image,
     legacy: [], v2: [],
     ledger: arr(snapshot.ledger).filter((l) => l.provider === "harvest" && l.status === "ok"),
     apps: arr(snapshot.applications),
@@ -147,7 +173,7 @@ function integrity(snapshot, docs, lib, out) {
   const tally = new Tally();
   let result;
   try { result = checkStored(tally, id, inp, docs, t, lib); }
-  catch (error) { out.checks.integrity_error = String(error?.message ?? error).slice(0, 80); return out.review("integrity_check_failed"); }
+  catch (error) { out.checks.integrity_error = "stored_check_failed"; return out.review("integrity_check_failed"); }
   const { _projection, ...checks } = result ?? {};
   out.checks.integrity = { ...checks, failed: [...tally.fail.keys()] };
   if (tally.fail.size) return out.review(`integrity:${[...tally.fail.keys()].sort().join(",")}`);
@@ -160,11 +186,12 @@ function published(snapshot, lib, out) {
   const revOk = String(p.revision) === String(snapshot.normalized?.state?.rev);
   const hashOk = lib.projectionProfileHash(snapshot.candidate) === p.profile_hash;
   out.checks.published = { revision_matches: revOk, profile_hash_matches: hashOk };
-  if (!revOk || !hashOk) return out.review("published_drift");
+  if (!hashOk) return out.review("published_drift");
+  if (!revOk) out.pending("publication_pending");
   return true;
 }
 
-function directory(snapshot, out) {
+function directory(snapshot,lib,external,out) {
   const states = arr(snapshot.directory_state);
   const receipts = new Map(arr(snapshot.directory_receipts).map((r) => [String(r.id), r]));
   let pending = 0, review = 0, sourceReviews = 0;
@@ -175,6 +202,14 @@ function directory(snapshot, out) {
     const applied = receipts.get(String(s.applied_receipt_id));
     if (arr(applied?.source_reviews).length) sourceReviews++;
   }
+  const links=arr(snapshot.boundary?.directory_epochs);
+  if(links.length&&!external?.complete)out.pending('external_unavailable');
+  else for(const link of links){
+    const current=external?.rows?.get(link.contact_id);
+    if(!current){out.pending('external_unavailable');continue;}
+    const state=states.find(x=>x.contact_id===link.contact_id),latest=state&&receipts.get(String(state.latest_receipt_id));
+    if(!latest||latest.candidate_id!==snapshot.candidate_id||!['done','review'].includes(latest.phase)||latest.snapshot_hash!==lib.directorySnapshotHash(current))out.pending('directory_snapshot_not_admitted');
+  }
   out.checks.directory = { linked: states.length, pending, review, source_reviews: sourceReviews };
   if (review || sourceReviews) return out.review("directory_review");
   if (pending) out.pending("directory_pending");
@@ -182,7 +217,7 @@ function directory(snapshot, out) {
 }
 
 /** Plan one person. `lib` is the built worker library (scopes, hashes, project). */
-export function planAudit(snapshot, lib) {
+export function planAudit(snapshot, lib, external = {complete:false,rows:new Map()}) {
   const id = snapshot.candidate_id;
   const out = {
     candidate_id: id, status: "verified", reason: null, checks: {},
@@ -208,14 +243,16 @@ export function planAudit(snapshot, lib) {
   // creator event) that the live proof never has.
   if (!Object.keys(aux).length || Object.keys(aux).some((k) => aux[k] !== anchor.external_proof?.[k])) { out.review("auxiliary_changed"); return finish(); }
   out.checks.auxiliary = true;
-  if (!candidateChain(snapshot, lib.AUDIT_SCOPES, lib.AUDIT_GUARD_VERSION, out)) return finish();
-  if (!rawFacts(snapshot, out)) return finish();
-  const expected = expectedDocuments(snapshot);
+  const evidence=collectEvidence(snapshot,lib,external,out);if(!evidence)return finish();
+  if (!candidateChain(snapshot, lib.AUDIT_SCOPES, lib.AUDIT_GUARD_VERSION, lib, out)) return finish();
+  if (!rawFacts(snapshot,lib,out)) return finish();
+  const expected = evidence.docs;
   if (!sources(snapshot, expected, out)) return finish();
   if (!n.state) { out.review("normalized_state_missing"); return finish(); }
   if (!integrity(snapshot, expected.map((x) => x.doc), lib, out)) return finish();
+  if (!exactStored(snapshot,expected.map(x=>x.doc),lib,out)) return finish();
   if (!published(snapshot, lib, out)) return finish();
-  if (!directory(snapshot, out)) return finish();
+  if (!directory(snapshot,lib,external,out)) return finish();
   out.checks.open_conflicts = arr(n.conflicts).filter((c) => c.status === "open").length;
   return finish();
 }

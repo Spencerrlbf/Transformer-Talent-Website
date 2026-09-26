@@ -7,7 +7,7 @@ import { pgSite, readNew, checkStored, Tally } from "../person-trial.mjs";
 import { anchorDatabaseConfig } from "./database.mjs";
 export async function prepareAuditFixture(
   candidateId,
-  { directory = null } = {},
+  { directory = null, additionalDocuments = [] } = {},
 ) {
   const url = process.env.LOCAL_DATABASE_URL;
   if (!url) throw Error("local_database_required");
@@ -55,6 +55,7 @@ export async function prepareAuditFixture(
     const doc = lib.fromLegacyImport(row, input.legacy, input.v2, input.comms);
     const docs = [
       doc,
+      ...additionalDocuments,
       ...(directory
         ? [
             lib.fromDirectory(

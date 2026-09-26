@@ -37,10 +37,10 @@ enrichment or duplicate-person merges were performed.
 
 ## Prerequisites before asking for release approval
 
-1. Finish the separate post-cutover evidence planner, durable audit accounting,
-   timed record/finalize RPCs and CLI. Test the actual writer receipts, full
-   captured-event chain, shared lookup changes and receipt-only mutations. PR21
-   supplied the snapshot reader only. Its `ready` status cannot replace this gate.
+1. Integrate the reviewed corrections to the post-cutover auditor on child31,
+   including its final preview tenancy gate. PR30 supplied the first draft;
+   source proof, commit-order fencing, restart and capacity defects required
+   corrections. PR21's snapshot `ready` status cannot replace an audit result.
 2. Finish and review all corrective children on the feature parent. The directory
    snapshot-loss repair is PR27. The projection-preview correctness/load repair
    is PR28. Run the relevant suites, build, hosted tenancy gate and exact fixture
@@ -132,13 +132,13 @@ prepared chain is:
 20260926080238_person_audit_anchor_preparation.sql
 20260926082012_person_audit_writer_guards.sql
 20260926172608_person_postcutover_snapshots.sql
+20260926213000_person_postcutover_audit.sql
 20260926183000_person_publish_runbook.sql
 20260926201342_person_publish_review_guards.sql
-20260926213000_person_postcutover_audit.sql
 ```
 
-The last file is the post-cutover auditor's accounting (runs, results, lookup
-markers, witness, record and finalize RPCs). Apply each reviewed file atomically
+This list is incomplete until the remaining audit implementation is reviewed;
+append its actual migrations before execution. Apply each reviewed file atomically
 and record its exact version. Run the reviewed directory lookup index preparation
 outside a transaction. Verify installed objects, service-only permissions and site
 health after each stage. Only call `person_write_guard_status()` after the migration
@@ -233,23 +233,25 @@ Do not mass-trigger paid enrichment, embeddings or judging for storage-only chan
 
 ### 6. Audit and restrictive guard
 
-Run the completed audit and its fenced finalization; retain verified/pending/review
-counts, shared-lookup and source-boundary results. Preserve unresolved reviews.
+Run the reviewed receipt-aware audit with the website session/direct URL in
+`PERSON_PUBLISH_DATABASE_URL` and read-only `COMMS_DATABASE_URL`. Start, resume
+and pending passes must retain the exact reviewed runtime and batch size:
 
-```
-PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-audit.mjs --run-id=audit-<date> --limit=1000 --batch-size=10
-PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-audit.mjs --run-id=audit-<date> --record --limit=1000000 --batch-size=10 --max-seconds=3600
-# repeat with --resume (same commit, scope and batch) until audit_scan_paused reports the whole pool, then:
-PERSON_PUBLISH_DATABASE_URL=... node scripts/person-postcutover-finalize.mjs --run-id=audit-<date> --external-stable=<true|false from the last directory reconciliation>
+```sh
+node scripts/person-postcutover-audit.mjs --run-id=audit-DATE-full --record --limit=1000000 --batch-size=10 --max-seconds=3600
+# Resume a bounded unfinished pass:
+node scripts/person-postcutover-audit.mjs --run-id=audit-DATE-full --record --resume --limit=1000000 --batch-size=10 --max-seconds=3600
+# Only after traversal and complete end-source observation:
+node scripts/person-postcutover-finalize.mjs --run-id=audit-DATE-full
+# Revisit remaining, stale or externally invalidated results in a new pass:
+node scripts/person-postcutover-audit.mjs --run-id=audit-DATE-full --record --resume --scope=pending --limit=1000000 --batch-size=10 --max-seconds=3600
 ```
 
-Expected: `verified` for published people; `review` for the known review bucket
-(holds, mutated snapshots) and for any unexplained edit; `pending` for raw facts
-or receipts no writer has admitted yet, or for a person whose boundary moved
-between snapshot and record (revisit with `--scope=pending --resume`). Finalize
-reports `audited`, `catchup_pending` (naming which fence moved: stale, directory,
-lookup, holds, directory pending, external) or `review_required`. Any `review`
-outside the known bucket stops the sitting.
+The runner measures complete start/end source fingerprints; no external-stable
+assertion is accepted. Finalization reports distinct verified/pending/review and
+stale-boundary counts. Partial scans, unavailable sources and unresolved reviews
+remain explicit. New communications changes can require another pass after the
+observed boundary. Preserve unresolved reviews.
 Test allowed/rejected guard behavior on a local/isolated fixture first; production
 probe commands roll back. A rejected probe while the guard is disabled is not an
 expected success assertion: report the actual guard state.

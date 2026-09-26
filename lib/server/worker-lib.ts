@@ -74,6 +74,7 @@ export type { ApplicationRow } from "./person/fromApplication";
 export { project } from "./person/project";
 export type { Projection, ProjectionInput, ProjectedPosition } from "./person/project";
 export {
+  assembleDoc, makeHeader, emailContact, phoneContact, githubContact,
   PARSER_VERSION,
   TT_ORG_ID,
   jobRowKey,
@@ -107,7 +108,7 @@ export { personWriteMode, saveApplicationPerson, saveApplicationPersonOnConnecti
 
 export { runApplicantPipeline } from './applicant-pipeline';
 export {
-  directoryDocuments, directoryIdentities, directorySnapshotHash, directoryPrimary,
+  directoryDocuments, directoryIdentities, directorySnapshotHash, directoryPrimary, directoryCanonicalUsername,
 } from './person/directory-sources';
 export {
   claimDirectoryScan, stageDirectory, saveDirectory, checkpointDirectoryScan,

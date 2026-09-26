@@ -409,47 +409,64 @@ Missing IDs in an explicit list are counted without hiding later valid IDs.
 
 ## Post-cutover auditor: planner, accounting, finalization
 
-Prepared migration `20260926213000_person_postcutover_audit.sql` adds the
-service-only `person_postcutover_audit_runs` and `person_postcutover_audit_results`
-tables, append-only `person_postcutover_lookup_epochs` markers on `companies`,
-`schools` and `skills` (so a shared lookup change after a person was checked is
-visible), a lookup witness, `person_postcutover_audit_inputs_with_witness`
-(the existing snapshot plus the witness from one database snapshot), and the
-timed run RPCs: start, page, `record_many`, checkpoint and `finalize`. It is
-not applied in production and writes nothing outside its own tables.
+Prepared migration `20260926213000_person_postcutover_audit.sql` adds service-only
+audit runs/results, append-only shared-lookup markers, bounded snapshots and
+fenced record/finalize RPCs. This schema has not been applied in production.
+The auditor writes its own bookkeeping; source, candidate and communications
+records remain unchanged.
 
-`scripts/person-audit/postcutover.mjs` is the pure planner. From one person's
-snapshot it decides `verified`, `pending` or `review` with a reason: the anchor
-must be valid and its auxiliary proof unchanged; every candidate change since
-the anchor must be exactly attributed (event hash, changed fields, scope,
-writer, transaction, guard checkpoint) to an audited operation; raw facts
-(Harvest ledgers, TT applications) must be admitted by a receipt or remain
-`pending`; legacy email rows must be unchanged; every stored normalized source
-must be owned by the frozen legacy document, an admitted receipt or a retained
-generic-save document, and every admitted receipt must be stored; the stored
-rows must pass the trial's `checkStored` against that exact document set; a
-published profile must match its projection state; linked directory contacts
-must have nothing pending or in review. Open identity conflicts are counted,
-not failed (Spencer's decision to publish and deduplicate afterwards).
+The pure planner reconstructs documents from the frozen legacy anchor, raw
+sources and exact immutable writer receipts. It checks the complete captured
+candidate chain and transient source changes, tenant ownership, document hashes,
+list owners and content, header winners, contacts and identities. Recruiter edits
+retain their requested contacts' prior eligibility flags in the immutable audit
+operation, captured after the person lock. This input survives later historical
+replays and transactions whose start predates their actual admission. Missing
+prior evidence requires review. Request hashes and retries remain unchanged.
+Metadata checks use the captured event clock, so running the audit in a later
+year does not change the meaning of an earlier experience calculation.
 
-`scripts/person-postcutover-audit.mjs` reads snapshots in batches of at most 20
-under an armed 15-second statement timeout, plans, and with `--record` calls
-`record_many`, which retakes the writer and capture gates (shared), recomputes
-the compact boundary (anchor hash, revision, capture, candidate epoch,
-directory epochs, lookup witness) and stores the outcome only when it still
-matches; otherwise `pending/boundary_moved`. Runs are resumable from a cursor
-with the same commit, scope and batch. `scripts/person-postcutover-finalize.mjs`
-takes the writer gate then the capture gate exclusively inside an 8-second
-statement, and reports `audited` only when every current candidate has a
-verified result at its current boundary, no directory or lookup marker was
-committed after its check, no hold is open, nothing is pending in the
-directory and the operator states the external fingerprint was stable.
-Otherwise `catchup_pending`, or `review_required` when any review remains.
+The runner reads full communications provenance, including facts, identifiers
+and source-version payloads. It records complete start/end fingerprints over
+all linked contacts and the website scope and `_v2` witness. Missing access or
+coverage stays pending. There is no operator boolean that can substitute for
+source observations. This is an observed cross-database boundary, not a
+transaction locking both projects; new source changes still require catch-up.
 
-Local proof: `bash scripts/person-audit/run-postcutover-audit-tests.sh <port>`
-(13 cases on real writer paths: anchored people, an audited publish, an
-unattributed edit, a legacy email row, a hold, a missing anchor, a receipt
-created application person, boundary moved between snapshot and record, a
-lookup rename after a record, unbounded and repeatable-read callers, client
-roles, and resume without double counting). The auditor has not run against
-production; it needs the prepared chain applied and anchors prepared first.
+Snapshot and recording calls use an armed 15-second statement timeout. The
+record RPC takes gates 72005 then 72006 exclusively, checks committed candidate,
+directory and shared-lookup boundaries, and turns changed evidence into
+`pending/boundary_moved`. Overflow snapshots stay compact review results and do
+not trigger uncapped follow-up calculations. Three baseline load probes precede
+scanning; size, blocking, sustained latency and duration gates stop safely.
+Communications startup and queries have bounded timeouts that URL parameters
+cannot disable. A session mutex prevents concurrent invocations of one audit run.
+
+Resuming retains the commit, batch and durable cursor. A new pending pass gets a
+new generation and revisits stale results, including a changed external
+fingerprint. Old checkpoints and observations cannot mutate the new generation.
+Counts are distinct durable outcomes; limits and suffix scans report partial
+coverage explicitly. Finalization uses one set-based statement with an eight-
+second timeout, checking current candidates against verified results and exact
+boundaries. It reports `audited`, `catchup_pending` or `review_required` with the
+remaining counts. Open identity conflicts are retained and counted separately;
+they do not override source-proof failures or holds.
+
+Local verification includes actual first writes and retries for all four intake
+paths in both modes, receipt-created candidates, publication and undo, source
+and content counterexamples, delayed commits, restart generations, external
+proof, capacity limits and a stalled PostgreSQL endpoint. A separate accounting
+load test used 423,050 synthetic empty candidates and finished finalization in
+4.1 seconds under the eight-second bound. That synthetic accounting test is not
+a production data audit. Run the disposable PostgreSQL suite with:
+
+```sh
+node scripts/build-worker-lib.mjs
+bash scripts/person-audit/run-postcutover-audit-tests.sh LOCAL_PORT
+# Optional local-only full-size accounting probe, after installing the suite:
+LOCAL_DATABASE_URL=postgresql://postgres@127.0.0.1:LOCAL_PORT/person_postcutover_test node scripts/person-audit/test-audit-scale.mjs
+```
+
+Production use requires the reviewed prepared migration chain, anchors, source
+catch-up and Spencer's release approval. The isolated canary and queue/drain
+transition remain separate release prerequisites in the cutover runbook.

@@ -316,14 +316,19 @@ export const COMMS_NEEDS = {
 /** Read when present: the raw Harvest JSON behind comms.harvest_profiles (it carries the LinkedIn account id). */
 const COMMS_OPTIONAL = { "comms.source_versions": ["id", "payload", "captured_at"] };
 
-export async function openComms(url) {
+export async function openComms(url, options = {}) {
+  for (const key of ['connectionTimeoutMillis','statementTimeoutMillis']) if (options[key] != null && (!Number.isSafeInteger(options[key]) || options[key] < 1 || options[key] > 120000)) throw Error('comms_timeout_option');
   const { default: pg } = await import("pg");
   // As in sync-directory.mjs: the string may name a CA file from another
   // machine, so TLS is on without that check. A local test database has no TLS.
   const dsn = new URL(url);
   for (const k of ["sslrootcert", "sslcert", "sslkey", "sslmode"]) dsn.searchParams.delete(k);
+  // pg merges URL settings after config. An audit's bounds must survive a
+  // DSN copied from another process with disabled or excessive timeouts.
+  if (options.connectionTimeoutMillis != null || options.statementTimeoutMillis != null)
+    for (const k of ['statement_timeout','query_timeout','connect_timeout','options']) dsn.searchParams.delete(k);
   const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(dsn.hostname);
-  const config = { connectionString: dsn.toString(), ssl: local ? false : { rejectUnauthorized: false }, application_name: "tt-website-person-trial", statement_timeout: 120_000 };
+  const config = { connectionString: dsn.toString(), ssl: local ? false : { rejectUnauthorized: false }, application_name: "tt-website-person-trial", statement_timeout: options.statementTimeoutMillis ?? 120_000, ...(options.connectionTimeoutMillis == null ? {} : {connectionTimeoutMillis: options.connectionTimeoutMillis}), ...(options.statementTimeoutMillis == null ? {} : {query_timeout: options.statementTimeoutMillis + 1000}) };
   // The directory connection sits idle between pages for hours. A server-side
   // disconnect used to surface as an unhandled 'error' event and kill the run
   // (reconciliation 2026-09-26 at 412,500 of 423,050). Absorb it, mark the

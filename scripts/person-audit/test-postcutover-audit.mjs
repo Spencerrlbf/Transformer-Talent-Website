@@ -15,7 +15,7 @@ import { finalizeAudit, SPEC as FINALIZE_SPEC } from "../person-postcutover-fina
 import { parseOptions, databaseConfig } from "../person-publish/lib.mjs";
 
 const url = process.env.LOCAL_DATABASE_URL;
-if (!url || new URL(url).pathname !== "/person_postcutover_audit_test" || !["127.0.0.1", "localhost"].includes(new URL(url).hostname))
+if (!url || new URL(url).pathname !== "/person_postcutover_test" || !["127.0.0.1", "localhost"].includes(new URL(url).hostname))
   throw Error("audit_test_database");
 const pool = new pg.Pool(databaseConfig({ LOCAL_DATABASE_URL: url }, "tt-postcutover-audit-test"));
 const quiet = () => {};
@@ -116,7 +116,7 @@ test("record stores outcomes after rechecking the boundary; finalize reports rev
   assert.equal(summary.boundary_moved, 0);
   const rows = (await pool.query("select status,count(*)::int n from person_postcutover_audit_results where run_id='audit-1' group by status order by status")).rows;
   assert.deepEqual(rows, [{ status: "review", n: 3 }, { status: "verified", n: 2 }]);
-  const fin = await finalizeAudit({ pool, options: parseOptions(["--run-id=audit-1", "--external-stable=true"], FINALIZE_SPEC), onProgress: quiet });
+  const fin = await finalizeAudit({ pool, options: parseOptions(["--run-id=audit-1"], FINALIZE_SPEC), onProgress: quiet });
   assert.equal(fin.status, "review_required");
   assert.equal(fin.eligible, 5);
   assert.equal(fin.unresolved_review, 3);
@@ -144,7 +144,7 @@ test("a shared lookup change after a verified record makes finalize report looku
   const companyId = plan.lookup_ids.find((l) => l.startsWith("companies:")).split(":")[1];
   await pool.query("update companies set name=name||' (renamed)' where id=$1", [companyId]);
   assert.ok((await pool.query("select count(*)::int n from person_postcutover_lookup_epochs where table_name='companies' and row_id=$1", [companyId])).rows[0].n >= 2, "creation and rename markers");
-  const fin = await finalizeAudit({ pool, options: parseOptions(["--run-id=audit-3", "--external-stable=true"], FINALIZE_SPEC), onProgress: quiet });
+  const fin = await finalizeAudit({ pool, options: parseOptions(["--run-id=audit-3"], FINALIZE_SPEC), onProgress: quiet });
   assert.equal(fin.status, "catchup_pending");
   assert.equal(fin.lookup_stale, 1);
   const again = await planOf(A);
@@ -163,12 +163,12 @@ test("record and finalize refuse unbounded or repeatable-read callers; client ro
     await c.query("rollback");
     await c.query("begin");
     await c.query("set local statement_timeout='20s'");
-    await assert.rejects(c.query("select public.person_postcutover_audit_finalize('audit-3',true)"), /audit_statement_timeout/);
+    await assert.rejects(c.query("select public.person_postcutover_audit_finalize('audit-3')"), /audit_statement_timeout/);
     await c.query("rollback");
   } finally { c.release(); }
-  const grants = (await pool.query(`select has_function_privilege('anon','public.person_postcutover_audit_record_many(text,jsonb)','execute') anon_record,
-    has_function_privilege('authenticated','public.person_postcutover_audit_finalize(text,boolean)','execute') auth_finalize,
-    has_function_privilege('service_role','public.person_postcutover_audit_record_many(text,jsonb)','execute') service_record,
+  const grants = (await pool.query(`select has_function_privilege('anon','public.person_postcutover_audit_record_many(text,jsonb,integer)','execute') anon_record,
+    has_function_privilege('authenticated','public.person_postcutover_audit_finalize(text,integer)','execute') auth_finalize,
+    has_function_privilege('service_role','public.person_postcutover_audit_record_many(text,jsonb,integer)','execute') service_record,
     has_table_privilege('anon','public.person_postcutover_audit_results','select') anon_results`)).rows[0];
   assert.deepEqual(grants, { anon_record: false, auth_finalize: false, service_record: true, anon_results: false });
   await assert.rejects(pool.query("delete from person_postcutover_lookup_epochs"), /audit_evidence_immutable/);
@@ -176,7 +176,7 @@ test("record and finalize refuse unbounded or repeatable-read callers; client ro
 
 test("a paused run resumes from its cursor and counts each person once", async () => {
   const first = await runAudit({ pool, lib, options: opts(["--run-id=audit-4", "--record", "--limit=2", "--batch-size=1"]), onProgress: quiet });
-  assert.equal(first.phase, "audit_scan_paused");
+  assert.equal(first.status, "limit_reached");
   assert.equal(first.processed, 2);
   await assert.rejects(runAudit({ pool, lib, options: opts(["--run-id=audit-4", "--record", "--resume", "--limit=100", "--batch-size=5"]), onProgress: quiet }), /audit_run_config_differs/);
   const rest = await runAudit({ pool, lib, options: opts(["--run-id=audit-4", "--record", "--resume", "--limit=100", "--batch-size=1"]), onProgress: quiet });
