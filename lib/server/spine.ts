@@ -72,6 +72,8 @@ function monthNum(m: unknown): number | null {
 }
 
 interface HarvestExperience {
+  /** Only trusted for the explicitly marked canonical website snapshot. */
+  is_current?: boolean;
   position?: string;
   title?: string;
   companyName?: string;
@@ -112,7 +114,8 @@ export function harvestToExperiences(harvest: Record<string, unknown> | null) {
       start_year: e.startDate?.year ?? null,
       end_month: monthNum(e.endDate?.month),
       end_year: e.endDate?.year ?? null,
-      is_current: /present/i.test(e.endDate?.text || "") || (!e.endDate?.year && i === 0),
+      is_current: harvest?.profileStorageVersion === "tt-published-1" && typeof e.is_current === "boolean"
+        ? e.is_current : /present/i.test(e.endDate?.text || "") || (!e.endDate?.year && i === 0),
       duration_text: e.duration || null,
       description: (e.description || "").slice(0, 8000) || null,
       skills,
