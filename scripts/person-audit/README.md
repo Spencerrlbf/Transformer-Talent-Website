@@ -141,3 +141,40 @@ creation, shadow admission, retries, missing evidence, unknown edits, rollback,
 source/contact/finalization scopes, generic saves and conditional undo. The
 standalone writer runners install missing audit prerequisites only in their
 explicitly named disposable localhost databases.
+
+## Prepared post-cutover snapshot reader
+
+`20260926172608_person_postcutover_snapshots.sql` adds only a read-only,
+service-role evidence reader and a directory receipt lookup index. It is not
+applied in production. `person_postcutover_audit_inputs` accepts 1–20 distinct
+candidate IDs and requires an already active statement timeout of at most 15
+seconds. The STABLE UTC/ISO function reads one consistent database snapshot.
+
+A `ready` result means bounded inputs were collected, **not that a candidate
+passed an audit**. It contains the immutable anchor and its hash validation,
+current candidate/auxiliary proof, retained events from all five source tables,
+actual event hashes and attribution links, receipts, raw TT facts, directory
+state, normalized rows, shared lookup rows and conflict evidence. The creator
+INSERT is included for receipt-created people. Bigint evidence IDs, revisions,
+epoch counts and skill IDs cross JSON as strings.
+
+Collections fail closed at their configured row limits. Cumulative source bytes
+are checked before aggregation, including inputs to the auxiliary hash helper;
+the final serialized result also has an 8 MB cap. Company lookup rows include
+only the columns used by the existing integrity checker. Resumes, embeddings,
+notes and outreach message bodies are omitted. Event hashes cover the retained
+original event; message-body redaction does not alter that stored evidence.
+Never print snapshot payloads in runner or Actions logs.
+
+The planner, audit result/checkpoint tables, timed record/finalize RPCs and CLI
+remain separate unfinished stages. They must validate full source/receipt/event
+provenance and compare fresh boundaries under the writer/capture gates, including
+changes to relevant shared company/school/skill lookups. Historical reconciliation
+records are not modified or acknowledged by this reader. Do not activate the
+application writers until that audit path and the release gates are complete.
+
+Local verification (resets only `person_postcutover_test`):
+
+```sh
+PSQL=/path/to/psql bash scripts/person-audit/run-snapshot-tests.sh 55487
+```
