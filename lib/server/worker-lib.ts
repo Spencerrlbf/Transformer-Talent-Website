@@ -136,3 +136,4 @@ export { saveCertifiedDirectoryOnConnection, saveCertifiedDirectory } from './pe
 export { readCertifiedDirectoryCurrentOnConnection, readCertifiedDirectoryCurrent } from './person/directory-current';
 export { claimCertifiedRefreshOnConnection, startCertifiedRefreshProviderOnConnection, storeCertifiedRefreshPayloadOnConnection, failCertifiedRefreshOnConnection, claimCertifiedRefresh, startCertifiedRefreshProvider, storeCertifiedRefreshPayload, failCertifiedRefresh } from './person/refresh-lifecycle';
 export { saveCertifiedRefreshOnConnection, saveCertifiedRefresh } from './person/refresh-save';
+export { pickCertifiedRefreshOnConnection, topUpCertifiedRefreshOnConnection, recoverCertifiedRefreshOnConnection, pickCertifiedRefresh, topUpCertifiedRefresh, recoverCertifiedRefresh } from './person/refresh-worker';
