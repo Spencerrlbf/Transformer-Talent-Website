@@ -33,7 +33,7 @@ try {
 
 // No configuration lookup, reservation, top-up or provider work may precede
 // the admission support check, including legacy and precompute invocations.
-requireRefreshExecution();
+requireRefreshExecution({ certified: true });
 const workerLib = await import("./dist/worker-lib.mjs");
 const {
   computeFacts,
@@ -72,15 +72,17 @@ const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("organization not found");
 
 if (PERSON_MODE !== "legacy") {
-  const { runNormalizedRefresh } = await import("./person-refresh/worker.mjs");
-  const stats = await runNormalizedRefresh({
+  const runRefresh = process.env.PERSON_TRANSITION_SUPPORT === "on"
+    ? (await import("./person-refresh-worker/worker.mjs")).runCertifiedRefresh
+    : (await import("./person-refresh/worker.mjs")).runNormalizedRefresh;
+  const stats = await runRefresh({
     lib: workerLib, rest, organizationId: org.id, mode: PERSON_MODE,
     dailyCap: CAP, allowPaid: !!HARVEST && !process.env.PRECOMPUTE_BACKFILL,
     noTopup: !!process.env.NO_TOPUP || !!process.env.PRECOMPUTE_BACKFILL,
     concurrency: CONCURRENCY,
     harvestProfile: async (url) => {
       const res = await fetch(`https://api.harvestapi.io/linkedin/profile?url=${encodeURIComponent(url)}`, {
-        headers: { "X-API-Key": HARVEST }, signal: AbortSignal.timeout(25000),
+        headers: { "X-API-Key": HARVEST }, signal: AbortSignal.timeout(25000), redirect: "error",
       });
       // The durable reservation fences an uncertain response. A later worker
       // must not repeat a potentially paid call without a recorded payload.
@@ -88,7 +90,7 @@ if (PERSON_MODE !== "legacy") {
       return (await res.json()).element;
     },
   });
-  if (stats.failed || stats.review) process.exitCode = 1;
+  if (stats.failed || stats.review || stats.uncertain) process.exitCode = 1;
 } else {
 // Budget: paid Harvest calls already made today (site + worker share the cap).
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";

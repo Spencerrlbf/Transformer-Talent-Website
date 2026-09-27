@@ -1,8 +1,16 @@
 // Bounded orchestration for the opt-in normalized worker. Persistence and claims
 // are in the shared server library; no paid call runs inside a DB transaction.
-export function requireRefreshExecution() {
+export function requireRefreshExecution({ certified = false } = {}) {
   const support = process.env.PERSON_TRANSITION_SUPPORT;
-  if (support === "on") throw Error("person_refresh_execution_unavailable");
+  if (support === "on") {
+    if (!certified || !["shadow", "live"].includes(process.env.PERSON_WRITE_MODE) || process.env.PRECOMPUTE_BACKFILL)
+      throw Error("person_refresh_execution_unavailable");
+    const cap = process.env.REFRESH_DAILY_CAP ?? "50";
+    const concurrency = process.env.CONCURRENCY ?? "1";
+    if (!/^\d+$/.test(cap) || Number(cap) > 10000 || !/^\d+$/.test(concurrency) || Number(concurrency) < 1 || Number(concurrency) > 8)
+      throw Error("person_refresh_configuration");
+    return;
+  }
   if (support !== undefined && support !== "off")
     throw Error("transition_configuration");
 }
