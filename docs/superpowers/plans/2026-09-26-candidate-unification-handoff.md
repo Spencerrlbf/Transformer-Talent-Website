@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-27 (application normalization boundary prepared). Plan:
+Updated 2026-09-27 (application audit authority prepared). Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,10 +15,10 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR40
-at `7dc7354c641504b5480f0e9b6ef43cdc3b9ac086`. The current sequential child
-`feat/person-39-normalized-write-fence` requires exact receipt documents and a
-private execution frame for claimed normalized writes. Read GitHub for the latest full SHA before release;
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR41
+at `694f5dda023bf18ab1acc60205dca1888548a324`. The current sequential child
+`feat/person-40-audit-proof-boundary` makes application audit authority database-derived
+and protects captured proof. Read GitHub for the latest full SHA before release;
 no production transition or queue integration is enabled.
 
 ## Exact database accounting
@@ -101,6 +101,12 @@ The application normalization boundary is described in
 shared lookup mutations, preserves disabled legacy behavior, and does not yet
 fence candidates, source/projection/audit proof rows, conflicts or derivatives.
 All other writer families still need admission before controller activation.
+
+The application proof boundary in `scripts/person-application-proof/README.md`
+adds privately certified anchors/checkpoints, scoped attribution, genuine-trigger
+proof markers and owner/service DML protections. Previously unregistered anchors
+are not silently certified. Source statement hooks establish lock ordering only;
+typed candidate/projection/source authorization remains unfinished.
 
 ## Verification and recovery evidence
 

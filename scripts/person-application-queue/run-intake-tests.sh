@@ -26,6 +26,9 @@ fi
 if test -f supabase/migrations/20260927023000_person_normalization_fence.sql; then
  q -d $DB -1 -f supabase/migrations/20260927023000_person_normalization_fence.sql
 fi
+if test -f supabase/migrations/20260927025000_person_application_proof.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927025000_person_application_proof.sql
+fi
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-queue/processing-entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-queue/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-queue/test-intake.mjs

@@ -163,7 +163,8 @@ back to legacy writers without coordinating guard state and queued work.
 
 Use the verified website project `kmuihequfurvjxpnugxf`, an active statement/lock
 budget, and the exact migration inventory from the released commit. The currently
-prepared chain is:
+prepared chain is listed below in dependency order. Later migrations replace
+earlier function bodies; do not move publication/review helpers to the end:
 
 ```
 20260926033900_person_atomic_projection.sql
@@ -176,6 +177,8 @@ prepared chain is:
 20260926080238_person_audit_anchor_preparation.sql
 20260926082012_person_audit_writer_guards.sql
 20260926172608_person_postcutover_snapshots.sql
+20260926183000_person_publish_runbook.sql
+20260926201342_person_publish_review_guards.sql
 20260926213000_person_postcutover_audit.sql
 20260926233000_person_audit_reference_ownership.sql
 20260926235140_person_transition_foundation.sql
@@ -184,8 +187,7 @@ prepared chain is:
 20260927013100_person_application_finalization.sql
 20260927020700_person_application_ownership.sql
 20260927023000_person_normalization_fence.sql
-20260926183000_person_publish_runbook.sql
-20260926201342_person_publish_review_guards.sql
+20260927025000_person_application_proof.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -318,7 +320,9 @@ Prepared ownership migration `20260927020700` supplies the claimed application
 candidate/Harvest bridges and protects their receipts. It is insufficient to
 arm a drain by itself. Prepared normalization migration `20260927023000` adds
 exact-receipt save admission and private execution frames for normalized facts
-and shared lookups. Both remain uninstalled. General candidate/source mutations,
+and shared lookups. Prepared proof migration `20260927025000` makes claimed audit
+authority database-derived and protects capture/anchor/operation/attribution evidence.
+All remain uninstalled. General candidate/source mutations,
 projection/audit proof rows, conflicts, recruiter/directory/refresh/derivative writers and historical
 maintenance still require complete admission coverage. Do not use existing
 mutable identities or old unbound receipts as standalone write authorization.
