@@ -17,8 +17,8 @@ draining; existing scanners may retain an observation, but cannot advance the
 cursor or complete a cycle while held. Tokens and lease expiry are checked after
 waits. Exact mutation frames and readback detect altered or suppressed scan,
 receipt, state and certificate writes. Certified immutable fields stay protected
-when enforcement is disabled. Snapshot limits are 2 MiB and 10,000 objects per
-list; page inspection is limited to 100 snapshots and 16 MiB. Oversize input
+when enforcement is disabled. Snapshot limits are 2 MiB and 10,000 entries per
+list (phone rows retain their existing string-or-object form); page inspection is limited to 100 snapshots and 16 MiB. Oversize input
 fails without advancing a scan.
 
 This is **not directory save admission**. `PERSON_TRANSITION_SUPPORT=on` stops the

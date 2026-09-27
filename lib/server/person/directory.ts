@@ -1,3 +1,4 @@
+import { evaluateDirectoryAdmission } from "./directory-admission";
 import { transitionSupport } from "../person-transition/context";
 import {
   beginGuardedAuditOperationLocked,
@@ -232,118 +233,51 @@ async function finish(
  * retain their owners. Changed unprovable components remain in the receipt
  * for review while unrelated safe contacts/workflow can be admitted. */
 async function admittedDocuments(c: PersonConnection, r: any, id: string) {
+  // Compatibility only: admitted execution must reconstruct from privately
+  // certified decision evidence, never infer authority from this public cache.
   if (r.documents)
     return {
       docs: r.documents as PersonDoc[],
       reviews: r.source_reviews as any[],
     };
-  const s = r.snapshot as DirectorySnapshot,
-    all = directoryDocuments(s, id);
   const sources = (
     await c.query(
-      "select * from public.candidate_sources where candidate_id=$1 and source='directory' and source_ref=$2",
-      [id, s.board.contact_id],
+      "select id,payload_hash,parser_version,fetched_at from public.candidate_sources where candidate_id=$1 and source='directory' and source_ref=$2",
+      [id, r.snapshot.board.contact_id],
     )
   ).rows;
-  const baseline = fromDirectory(
-    s.board,
-    s.harvest,
-    s.exps,
-    s.edus,
-    s.emails,
-    s.phones,
-    id,
-  );
-  const exact = sources.some(
-    (x) =>
-      x.payload_hash === baseline.source.payload_hash &&
-      x.parser_version === baseline.source.parser_version &&
-      new Date(x.fetched_at).toISOString() === baseline.source.fetched_at,
-  );
   const state = (
     await c.query(
       "select header from public.candidate_profile_state where candidate_id=$1",
       [id],
     )
   ).rows[0];
+  // Preserve the historical candidate-wide selection, including other contacts
+  // and every phase with a non-null documents field.
   const prior = (
     await c.query(
-      "select snapshot,source_reviews from public.person_directory_receipts where candidate_id=$1 and id<$2 and documents is not null order by id desc limit 1",
+      "select id,candidate_id,snapshot,source_reviews from public.person_directory_receipts where candidate_id=$1 and id<$2 and documents is not null order by id desc limit 1",
       [id, r.id],
     )
   ).rows[0];
-  const reviews = new Map<string, any>(
-    (prior?.source_reviews ?? []).map((x: any) => [x.component, x]),
-  );
-  const hold = (component: string, reason: string) =>
-    reviews.set(component, { component, reason });
-  for (const d of all)
-    for (const contact of d.contacts)
-      if (contact.source_detail === "directory_contact_chronology")
-        hold(
-          `email:${contact.value_normalized}`,
-          "directory_contact_chronology",
-        );
-  const previous = new Map(
-    prior
-      ? directoryDocuments(prior.snapshot, id).map((d) => [
-          d.source.source_ref,
-          d,
-        ])
-      : [],
-  );
-  const docs = all.filter((d) => {
-    const ref = d.source.source_ref!,
-      old = previous.get(ref);
-    const history = ref.endsWith(":harvest"),
-      board = ref.includes(":board:");
-    if ((history || board) && exact) return false;
-    // An unchanged rejected component is still rejected, not an accepted
-    // predecessor. Its scoped review remains until proven newer input arrives.
-    if (
-      (history || board) &&
-      old?.source.payload_hash === d.source.payload_hash
-    )
-      return false;
-    if (
-      history &&
-      ((old && d.source.fetched_at <= old.source.fetched_at) ||
-        (!prior &&
-          sources.some(
-            (x) => new Date(x.fetched_at).toISOString() >= d.source.fetched_at,
-          )))
-    ) {
-      hold("harvest", "directory_history_chronology");
-      return false;
-    }
-    if (history) reviews.delete("harvest");
-    if (board) {
-      const field = Object.keys(d.header).find(
-        (k) => d.header[k as keyof typeof d.header] != null,
-      )!;
-      const current = state?.header?.[field];
-      if (current?.value === d.header[field as keyof typeof d.header])
-        return false;
-      const baselineBlocked =
-        current &&
-        sources.some((x) => x.id === current.source_id) &&
-        d.source.fetched_at <= new Date(current.at).toISOString();
-      if (
-        current &&
-        (d.mode === "fill_gaps" ||
-          baselineBlocked ||
-          (old && d.source.fetched_at <= old.source.fetched_at))
-      ) {
-        hold(field, "directory_header_chronology");
-        return false;
-      }
-      if (!current || d.source.fetched_at > new Date(current.at).toISOString())
-        reviews.delete(field);
-    }
-    return true;
+  return evaluateDirectoryAdmission({
+    version: "directory-admission-1",
+    parserVersion: "person-v3",
+    candidateId: id,
+    receiptId: String(r.id),
+    snapshot: r.snapshot,
+    sources,
+    header: state?.header ?? {},
+    prior: prior
+      ? {
+          receiptId: String(prior.id),
+          candidateId: prior.candidate_id,
+          hasDocuments: true,
+          snapshot: prior.snapshot,
+          sourceReviews: prior.source_reviews,
+        }
+      : null,
   });
-  if (!docs.length) docs.push(all[0]);
-  return { docs, reviews: [...reviews.values()] };
 }
 export async function saveDirectoryOnConnection(
   c: PersonConnection,

@@ -746,3 +746,11 @@ test("certificate binding with altered numeric representation is rejected", asyn
     () => assert.rejects(stage(l, s), /directory_input_certificate/),
   );
 });
+test("checked stage accepts the existing string-phone snapshot form", async () => {
+  const l = await claim(),
+    s = snap();
+  s.phones = ["+12025550123"];
+  const r = await stage(l, s);
+  assert.equal(r.phase, "ready");
+  assert.equal((await stage(l, s)).receiptId, r.receiptId);
+});

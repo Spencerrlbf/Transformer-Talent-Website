@@ -127,7 +127,7 @@ begin
  coalesce(jsonb_typeof(p_snapshot->'harvest'),'missing') not in ('object','null') then raise exception 'directory_input_shape';end if;
  foreach k in array array['exps','edus','emails','phones','facts','identifiers'] loop
   if jsonb_typeof(p_snapshot->k) is distinct from 'array' then raise exception 'directory_input_shape';end if;
-  if jsonb_array_length(p_snapshot->k)>10000 or exists(select 1 from jsonb_array_elements(p_snapshot->k) x where jsonb_typeof(x)<>'object') then raise exception 'directory_input_shape';end if;
+  if jsonb_array_length(p_snapshot->k)>10000 or exists(select 1 from jsonb_array_elements(p_snapshot->k) x where not (jsonb_typeof(x)='object' or (k='phones' and jsonb_typeof(x)='string'))) then raise exception 'directory_input_shape';end if;
  end loop;
  return (p_snapshot->'board'->>'contact_id')::uuid;
 end$$;
