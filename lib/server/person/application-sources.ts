@@ -1,5 +1,5 @@
 import { applicationProcessing, assertApplicationIdentity, acceptedApplicationInput } from '../person-transition/application';
-import { transitionSupport } from '../person-transition/context';
+import { transitionSupport, transitionUuid } from '../person-transition/context';
 // Strict, tenant-scoped cached Harvest access. Cached reads retain the original
 // ledger id/date, and a fresh paid result is durable before resume processing.
 import { sbRest, sbRpc } from "../supabase";
@@ -63,6 +63,17 @@ export async function storeApplicationHarvest(
   const id = (await result.json())[0]?.id;
   if (!id) throw Error("person_intake_cache_write");
   return id;
+}
+
+/** Optional spend telemetry; identity and accepted resume proof come from the
+ * active database work. Never fall back to a raw ledger write on RPC failure. */
+export async function recordApplicationParser(org: string, username: string, parser: "llamaparse" | "pdf-parse"): Promise<void> {
+  if (org !== TT_ORG_ID || !applicationProcessing()) throw Error('transition_admission');
+  assertApplicationIdentity(org, username);
+  try {
+    const result = await sbRpc<{id: string}>('person_application_parser_record', {p_parser: parser});
+    if (!transitionUuid(result?.id)) throw Error('person_intake_parser_record');
+  } catch { console.error('person_intake_parser_record_failed'); }
 }
 
 export async function applicationIntakeReceipt(

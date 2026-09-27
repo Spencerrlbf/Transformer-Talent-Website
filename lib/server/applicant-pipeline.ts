@@ -41,7 +41,7 @@ import { takeReview } from "./review-budget";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
 import { personWriteMode } from "./person/intake";
 import { TT_ORG_ID } from "./person/normalize";
-import { cachedApplicationHarvest, storeApplicationHarvest, applicationIntakeReceipt, applicationResumeContacts } from "./person/application-sources";
+import { cachedApplicationHarvest, storeApplicationHarvest, recordApplicationParser, applicationIntakeReceipt, applicationResumeContacts } from "./person/application-sources";
 
 export type ApplicantPipelineInput = {
   submissionId: string;
@@ -311,7 +311,9 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       );
     }
     if (resumeParser) {
-      await recordEnrichment({
+      if (!tenantOrgId && applicationProcessing()) {
+        await recordApplicationParser(effectiveOrgId, username || "", resumeParser);
+      } else await recordEnrichment({
         ...(tenantOrgId ? { orgId: tenantOrgId, candidateId: null } : { candidateId }),
         linkedinUsername: username,
         provider: resumeParser,
