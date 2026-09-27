@@ -132,3 +132,4 @@ export { prepareLegacyAuditAnchor } from './person/audit-anchor';
 export { beginGuardedAuditOperationLocked, attributeAuditMutation, createReceiptAuditAnchorLocked, AUDIT_SCOPES, AUDIT_GUARD_VERSION } from './person/audit';
 
 export { captureDirectoryAdmissionEvidence,evaluateDirectoryAdmission,directoryAdmissionMatches } from './person/directory-admission';
+export { saveCertifiedDirectoryOnConnection, saveCertifiedDirectory } from './person/directory-execution';

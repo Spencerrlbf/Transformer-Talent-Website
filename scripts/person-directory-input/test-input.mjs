@@ -9,7 +9,7 @@ import {
 } from "../person-directory/worker.mjs";
 const url = process.env.LOCAL_DATABASE_URL;
 if (
-  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_input_test$/.test(
+  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:input|execution)_test$/.test(
     url || "",
   )
 )
@@ -509,10 +509,15 @@ test("checked inspect matches completed retained input independently of legacy h
   const l = await claim(),
     s = snap(),
     a = await stage(l, s);
-  await pool.query(
-    "update person_directory_receipts set phase='done',projected=true where id=$1",
-    [a.receiptId],
-  );
+  // Seed a legacy completed cache with enforcement disabled. This test proves
+  // retained input equivalence only, not genuine execution completion.
+  await phase(false);
+  try {
+    await pool.query(
+      "update person_directory_receipts set phase='done',projected=true where id=$1",
+      [a.receiptId],
+    );
+  } finally { await phase(); }
   const inspect = (snapshot) =>
     use((c) =>
       rpc(c, "inspect", [
