@@ -8,6 +8,7 @@ globalThis.fetch=async(input,init={})=>{
  if(fn==='person_application_work_claim')args=[b.p_application,b.p_org,b.p_token,b.p_lease];
  else if(fn==='person_application_work_start')args=[b.p_id,b.p_token];
  else if(fn==='person_transition_renew')args=[b.p_id,b.p_token,b.p_lease];
+ else if(fn==='person_application_work_complete')args=[b.p_result];
  else if(fn==='person_application_work_finish')args=[b.p_id,b.p_token,b.p_outcome];
  else if(fn==='person_application_work_defer')args=[b.p_id,b.p_token,b.p_delay];
  else if(fn==='person_application_harvest_store')args=[b.p_payload];
@@ -31,7 +32,7 @@ async function processApp(id,{mutate,queryHook,harvest,sourceCheck,parsed={curre
   const wrapped={query:async(sql,values)=>{if(queryHook)await queryHook(sql,values,c);return c.query(sql,values);}};
   try{result=await lib.saveApplicationPersonOnConnection(wrapped,{organizationId:TT,applicationId:id,linkedinUsername:source.linkedin_username,name:'Resolved Synthetic',parsed,resumeText,resumeContacts:contacts,harvestLedgerId,mode,matchingVector:vector});}
   catch(e){error=e;throw e;}finally{c.release();}
-  if(afterIntake)await afterIntake(result);await pool.query("update website_applications set status='processed' where id=$1",[id]);return 'processed';
+  if(afterIntake)await afterIntake(result);lib.stageApplicationResult({version:1,matched_role_ids:[],screening:null});return 'processed';
  });return{status,result,error};
 }
 async function roleQuery(sql,args=[]){const c=await pool.connect();try{await c.query('begin');await c.query('set local role service_role');return await c.query(sql,args);}finally{await c.query('rollback');c.release();}}
@@ -43,7 +44,7 @@ const filled=randomUUID();await pool.query("insert into candidates(id,full_name,
 test('arm intake mutations',async()=>{await pool.query("select person_private.transition_set('arm',1,1,'synthetic_test')");});
 test('raw candidate INSERT cannot create an unbound person',async()=>{await assert.rejects(pool.query("insert into candidates(full_name,linkedin_username) values('Synthetic','synthetic-unbound')"),/candidate_mutation_frame/);});
 for(const patch of ["resume_text='forged'","total_experience_years=999","follow_up_at='2099-01-01'","visa_status='forged'","embedding_type='forged'"])test(`raw candidate mutation denied: ${patch.split('=')[0]}`,async()=>{await assert.rejects(pool.query(`update candidates set ${patch} where id=$1`,[incumbent]),/candidate_mutation_frame/);});
-test('raw TT application receipt-field update is refused',async()=>{const id=await app();await assert.rejects(pool.query("update website_applications set resume_text='forged' where id=$1",[id]),/application_finalize_frame/);});
+test('raw TT application receipt-field update is refused',async()=>{const id=await app();await assert.rejects(pool.query("update website_applications set resume_text='forged' where id=$1",[id]),/application_finalize_frame|application_result_frame/);});
 test('actual first intake uses typed details, finalization and preferences',async()=>{
  const seen=new Set();const r=await processApp(await app(),{parsed:{current_title:'Engineer',total_experience_years:0},queryHook:async sql=>{for(const fn of ['person_application_candidate_details','person_application_finalize','person_application_preferences'])if(sql.includes(fn+'('))seen.add(fn);}});assert.equal(r.status,'processed',r.error?.message);assert.equal(seen.size,3);const row=(await pool.query('select * from candidates where id=$1',[r.result.candidateId])).rows[0];assert.equal(row.total_experience_years,0);assert.equal(row.resume_text,'Synthetic resume');
 });
@@ -86,7 +87,7 @@ test('checked finalization rejects a late unrelated field change',async()=>{
   if(!sql.includes('person_application_finalize('))return;
   replayed=true;
   await c.query("create function person_private.synthetic_late_finalize() returns trigger language plpgsql as $$begin if exists(select 1 from person_private.intake_mutation_frames where backend_pid=pg_backend_pid() and kind='finalize') then new.status:='forged';end if;return new;end$$;create trigger z_synthetic_late_finalize before update on website_applications for each row execute function person_private.synthetic_late_finalize()");
- }});assert.ok(replayed);assert.equal(r.status,'failed');assert.match(r.error?.message||'',/application_finalize_frame/);
+ }});assert.ok(replayed);assert.equal(r.status,'failed');assert.match(r.error?.message||'',/application_finalize_frame|application_result_frame/);
 });
 test('identical metadata replay retains exactly one checked witness',async()=>{
  let operation;const r=await processApp(await app(),{vector:v(),queryHook:async(sql,values,c)=>{if(!sql.includes('person_application_candidate_details('))return;operation=values[0];await c.query(sql,values);}});assert.equal(r.status,'processed',r.error?.message);assert.equal((await pool.query('select count(*)::int n from person_private.intake_metadata_witnesses where operation_id=$1',[operation])).rows[0].n,1);

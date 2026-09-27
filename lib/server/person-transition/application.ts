@@ -8,12 +8,23 @@ import type { ApplicantPipelineInput } from '../applicant-pipeline';
 
 type Outcome = 'processed' | 'queued' | 'failed';
 type Snapshot = Record<string, unknown> & { id: string; organization_id: string };
-type Runtime = { admission: TransitionAdmission; snapshot: Snapshot; started: boolean };
+export type ApplicationResult = {
+  version: 1; matched_role_ids: string[]; screening: unknown;
+  name?: string; harvest_profile?: unknown; parsed_profile?: unknown; resume_text?: string | null;
+  resume_contacts?: { phone: string | null; emails: string[] };
+};
+type Runtime = { admission: TransitionAdmission; snapshot: Snapshot; started: boolean; result?: ApplicationResult };
 const processing = new AsyncLocalStorage<Runtime>();
 const MAX_RESUME = 8 * 1024 * 1024;
 class AlreadyStarted extends Error {}
 class InputReview extends Error { constructor(readonly reason: 'resume_content_mismatch' | 'resume_input_invalid') { super(reason); } }
 export const applicationProcessing = () => Boolean(processing.getStore());
+/** Computation is staged once; only the final checked RPC may persist it. */
+export function stageApplicationResult(result: ApplicationResult): void {
+  const runtime = processing.getStore();
+  if (!runtime?.started || runtime.result) throw Error('application_result_stage');
+  runtime.result = JSON.parse(JSON.stringify(result)) as ApplicationResult;
+}
 export function acceptedApplicationInput(applicationId: string, organizationId: string): Snapshot | null {
   const s = processing.getStore()?.snapshot;
   if (!s) return null;
@@ -139,10 +150,10 @@ export async function runApplicationWork(p: ApplicantPipelineInput, process: (in
     return await withTransitionWork(active.admission, () => processing.run(active, async (): Promise<Outcome> => {
       const retained = await retainedInput(active.snapshot, p);
       const outcome = await process(retained);
-      if (outcome !== 'processed' || !active.started) throw Error('application_processing_incomplete');
+      if (outcome !== 'processed' || !active.started || !active.result) throw Error('application_processing_incomplete');
       await renewApplicationWork();
-      const completed = await lifecycle('person_application_work_finish', active, { p_outcome: 'completed' });
-      if (completed.status !== 'completed') throw Error('application_work_response');
+      const completed = await sbRpc<Record<string, unknown>>('person_application_work_complete', { p_result: active.result });
+      if (!completed || completed.status !== 'completed' || completed.work_id !== active.admission.workId) throw Error('application_work_response');
       return 'processed';
     }));
   } catch (error) {

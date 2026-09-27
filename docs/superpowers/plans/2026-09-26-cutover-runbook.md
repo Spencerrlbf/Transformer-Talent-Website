@@ -192,6 +192,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927052000_person_intake_mutations.sql
 20260927060000_person_intake_ready.sql
 20260927065000_person_tenant_binding.sql
+20260927070000_person_application_completion.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -358,3 +359,10 @@ Both current and retained anchor ownership are rechecked under locks, and work
 must be admitted, started and unexpired. TT-held processing does not hold client
 applications. This migration is uninstalled; atomic results/contact completion
 must consume this binding before release. See `scripts/person-tenant-binding/README.md`.
+
+Prepared atomic completion migration `20260927070000` must follow tenant binding
+and TT readiness. Its private completion witness is required by all completed
+claim/finish/replay paths. Claimed workers stage one result and commit results,
+tenant contact additions and work completion together. General source fences,
+other families, derivatives, maintenance and complete canary/drain coverage remain
+unfinished. Do not install or activate this partial chain before release approval.

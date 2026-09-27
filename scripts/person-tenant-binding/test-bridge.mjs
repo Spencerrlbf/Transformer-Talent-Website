@@ -8,13 +8,14 @@ globalThis.fetch=async(input,init={})=>{const u=new URL(String(input));assert.eq
  if(fn==='organizations')return Response.json([{id:org,slug:'synthetic',name:'Synthetic'}]);
  if(fn==='person_application_work_start')return Response.json({status:'started',work_id:work});
  if(fn==='person_transition_renew')return Response.json({status:'admitted',work_id:work,lease_until:new Date(Date.now()+60000).toISOString()});
+ if(fn==='person_application_work_complete')return Response.json({status:'completed',work_id:work});
  if(fn==='person_application_work_finish')return Response.json({status:body.p_outcome,work_id:work});
  if(fn==='person_application_tenant_bind'){assert.equal(new Headers(init.headers).get('x-person-work-id'),work);if(rpcFailure)return Response.json({message:'synthetic_binding_failure'},{status:409});return Response.json({work_id:work,application_id:app,organization_id:org,person_key:key,...response});}
  if(fn==='website_applications')return Response.json([{id:key}]);throw Error('unexpected_path');
 };
 const lib=await import('./dist/processing.mjs');
 test.beforeEach(()=>{calls=[];username='synthetic';response={};rpcFailure=false;});
-async function run(args=[org,username,app]){let person;const status=await lib.runApplicationWork({submissionId:app,orgId:org,boardOrg:null,fromQueue:true},async()=>{await lib.startApplicationEffects();person=await lib.tenantPersonId(...args);return 'processed';});return{status,person};}
+async function run(args=[org,username,app]){let person;const status=await lib.runApplicationWork({submissionId:app,orgId:org,boardOrg:null,fromQueue:true},async()=>{await lib.startApplicationEffects();person=await lib.tenantPersonId(...args);lib.stageApplicationResult({version:1,matched_role_ids:[],screening:null,name:'Synthetic',harvest_profile:null,parsed_profile:null,resume_text:null,resume_contacts:{phone:null,emails:[]}});return 'processed';});return{status,person};}
 for(const missing of [false,true])test(`claimed ${missing?'missing':'present'} username uses the checked bridge`,async()=>{username=missing?null:'synthetic';const r=await run();assert.equal(r.status,'processed');assert.equal(r.person,key);assert.ok(calls.includes('person_application_tenant_bind'));assert.ok(!calls.includes('website_applications'));});
 for(const field of [0,1,2])test(`mismatched argument ${field} cannot reach the RPC`,async()=>{const args=[org,username,app];args[field]='cc000000-0000-4000-8000-000000000099';assert.equal((await run(args)).status,'failed');assert.ok(!calls.includes('person_application_tenant_bind'));});
 for(const patch of [{work_id:key},{application_id:key},{organization_id:key},{person_key:'invalid'}])test(`malformed ${Object.keys(patch)[0]} response cannot fall back to REST`,async()=>{response=patch;assert.equal((await run()).status,'failed');assert.ok(!calls.includes('website_applications'));});

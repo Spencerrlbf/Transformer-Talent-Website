@@ -8,6 +8,7 @@ globalThis.fetch=async(input,init={})=>{
  if(fn==='person_application_work_claim')args=[b.p_application,b.p_org,b.p_token,b.p_lease];
  else if(fn==='person_application_work_start')args=[b.p_id,b.p_token];
  else if(fn==='person_transition_renew')args=[b.p_id,b.p_token,b.p_lease];
+ else if(fn==='person_application_work_complete')args=[b.p_result];
  else if(fn==='person_application_work_finish')args=[b.p_id,b.p_token,b.p_outcome];
  else if(fn==='person_application_work_defer')args=[b.p_id,b.p_token,b.p_delay];
  else if(fn==='person_application_harvest_store')args=[b.p_payload];
@@ -31,7 +32,7 @@ async function processApp(id,{mutate,queryHook,harvest,sourceCheck,parsed={curre
   const wrapped={query:async(sql,values)=>{if(queryHook){const override=await queryHook(sql,values,c);if(override)return override;}return c.query(sql,values);}};
   try{result=await lib.saveApplicationPersonOnConnection(wrapped,{organizationId:TT,applicationId:id,linkedinUsername:source.linkedin_username,name:'Resolved Synthetic',parsed,resumeText,resumeContacts:contacts,harvestLedgerId,mode,matchingVector:vector});}
   catch(e){error=e;throw e;}finally{c.release();}
-  if(afterIntake)await afterIntake(result);await pool.query("update website_applications set status='processed' where id=$1",[id]);return 'processed';
+  if(afterIntake)await afterIntake(result);lib.stageApplicationResult({version:1,matched_role_ids:[],screening:null});return 'processed';
  });return{status,result,error};
 }
 async function roleQuery(sql,args=[]){const c=await pool.connect();try{await c.query('begin');await c.query('set local role service_role');return await c.query(sql,args);}finally{await c.query('rollback');c.release();}}

@@ -1,6 +1,6 @@
 import { notifyAcceptedApplication } from './person-transition/application-notify';
 import { transitionSupport } from './person-transition/context';
-import { runApplicationWork, applicationProcessing, startApplicationEffects, renewApplicationWork } from './person-transition/application';
+import { runApplicationWork, applicationProcessing, startApplicationEffects, renewApplicationWork, stageApplicationResult } from './person-transition/application';
 // The applicant enrichment pipeline, shared by /api/apply (applications) and
 // /api/referral (referred people). Runs AFTER the HTTP response via after():
 // resume parsing (when there is one), Harvest enrichment, candidate-pool
@@ -20,10 +20,10 @@ import {
   linkedinUsername,
 } from "./applicants";
 import { getRoles } from "@/lib/roles";
-import { passesHardGates, passesProfileGates, screenRolesWithCache } from "./screening";
+import { passesHardGates, passesProfileGates, screenRolesWithCache, type RoleVerdict } from "./screening";
 import { loadOrgRoles, matchOrgRolesForApplicant, type BoardRole } from "./org-board";
 import { llamaParsePdf } from "./llamaparse";
-import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "./contact-extract";
+import { extractEmails, extractPhone, fillExtractedContact, normalizePhone, pdfText } from "./contact-extract";
 import {
   recordEnrichment,
   syncExperiences,
@@ -334,7 +334,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     }
 
     let matchedIds: string[] = [];
-    let screening: unknown = null;
+    let screening: RoleVerdict[] | null = null;
     if (vector) {
       const skillTerms = harvestSkills.length ? harvestSkills : parsed?.top_skills || [];
       const expRows = harvestToExperiences(harvest as Record<string, unknown> | null);
@@ -474,30 +474,40 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     }
 
     async function finalizeApplication() {
+      if (applicationProcessing()) {
+        const found = tenantOrgId && resumeText ? applicationResumeContacts(parsed, resumeText, email) : {};
+        const emails = [...(found.emails || []), ...(found.email ? [found.email] : [])]
+          .map(e => e.trim()).filter(e => e.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).slice(0, 200);
+        // Cached verdicts also carry facts/origin metadata; persist the declared
+        // review result shape, without promoting cache metadata into this API.
+        const resultScreening = screening?.map(v => ({ job_id: v.job_id, qualified: v.qualified,
+          fit_score: v.fit_score, answers: v.answers.map(({question, answer, evidence}) => ({question, answer, evidence})), cached: v.cached,
+          ...(v.inferred_signals ? { inferred_signals: v.inferred_signals.map(({signal, basis, probe}) => ({signal, basis, probe})) } : {}),
+          ...(v.scorecard ? { scorecard: v.scorecard } : {}) })) ?? null;
+        stageApplicationResult({ version: 1, matched_role_ids: matchedIds, screening: resultScreening,
+          ...(tenantOrgId ? { name, harvest_profile: harvest, parsed_profile: parsed, resume_text: resumeText,
+            resume_contacts: { phone: normalizePhone(found.phone), emails } } : {}) });
+        return;
+      }
       const finalized = await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({
           harvest_profile: harvest,
           parsed_profile: parsed,
-          ...(normalizedIntake || applicationProcessing() ? { resume_text: resumeText } : {}),
-          ...(applicationProcessing() && tenantOrgId ? { name } : {}),
+          ...(normalizedIntake ? { resume_text: resumeText } : {}),
           candidate_id: candidateId,
           matched_role_ids: matchedIds,
           screening,
           status: "processed",
         }),
-        prefer: applicationProcessing() ? "return=representation" : "return=minimal",
+        prefer: "return=minimal",
       });
-      if (!finalized.ok && (normalizedIntake || applicationProcessing())) throw Error("person_intake_finalize_failed");
-      if (applicationProcessing()) {
-        const rows = await finalized.json();
-        if (!Array.isArray(rows) || rows.length !== 1 || rows[0].id !== submissionId) throw Error('application_finalize_scope');
-      }
+      if (!finalized.ok && normalizedIntake) throw Error("person_intake_finalize_failed");
     }
     if (!applicationProcessing()) await finalizeApplication();
 
-    // Legacy callers retain profile-before-contact ordering. Opted-in work
-    // persists required contacts before marking processing complete.
+    // Legacy callers retain profile-before-contact ordering. Claimed work stages
+    // its extraction proposal for the atomic result/contact/completion operation.
     // The model's read is authoritative
     // when it was consulted: a null phone means the resume shows none, and
     // the primary email back means there is no second address — the regex
@@ -505,12 +515,11 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     // regex only decides when the model wasn't asked at all (no key, parse
     // failure), plus one narrow backstop: a phone in the contact block the
     // model missed. Fills gaps only — never overwrites a typed value.
-    if (resumeText && !(normalizedIntake && applicationProcessing())) {
+    if (resumeText && !applicationProcessing()) {
       await renewApplicationWork();
       const found = applicationResumeContacts(parsed, resumeText, email);
       if (found.phone || found.email || (found.emails && found.emails.length)) {
-        if (applicationProcessing()) await fillExtractedContact(`app_${submissionId}`, found, effectiveOrgId, { strict: true });
-        else await fillExtractedContact(`app_${submissionId}`, found).catch(() => console.error("contact fill failed", "application_contact_retry"));
+        await fillExtractedContact(`app_${submissionId}`, found).catch(() => console.error("contact fill failed", "application_contact_retry"));
       }
     }
 
