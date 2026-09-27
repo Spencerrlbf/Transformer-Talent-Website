@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-for (const mode of [undefined, "legacy", "shadow", "live"])
+for (const mode of [undefined, "legacy"])
   test(`actual directory CLI support-on stops before network: ${mode ?? "default"}`, () => {
     const out = spawnSync(
       process.execPath,
@@ -26,5 +26,29 @@ for (const mode of [undefined, "legacy", "shadow", "live"])
     );
     assert.equal(out.status, 1);
     assert.match(out.stderr, /person_directory_execution_unavailable/);
+    assert.doesNotMatch(out.stderr, /unexpected_network_effect/);
+  });
+
+for (const mode of ["shadow", "live"])
+  test(`certified directory CLI validates missing source configuration before network: ${mode}`, () => {
+    const out = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "./scripts/person-directory-input/no-network.mjs",
+        "scripts/sync-directory.mjs",
+      ],
+      {
+        encoding: "utf8",
+        timeout: 5000,
+        env: {
+          PATH: process.env.PATH,
+          PERSON_TRANSITION_SUPPORT: "on",
+          PERSON_WRITE_MODE: mode,
+        },
+      },
+    );
+    assert.equal(out.status, 1);
+    assert.match(out.stderr, /person_directory_comms_required/);
     assert.doesNotMatch(out.stderr, /unexpected_network_effect/);
   });

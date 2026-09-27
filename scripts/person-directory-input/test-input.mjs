@@ -9,7 +9,7 @@ import {
 } from "../person-directory/worker.mjs";
 const url = process.env.LOCAL_DATABASE_URL;
 if (
-  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:input|execution|publication|creation|outcomes|suppression|readmission)_test$/.test(
+  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:input|execution|publication|creation|outcomes|suppression|readmission|worker)_test$/.test(
     url || "",
   )
 )
@@ -414,7 +414,7 @@ test("lease expires during actual contact lock wait without a receipt", async ()
     waiting.release();
   }
 });
-test("support-on directory worker and paid drain stop before any effect", async () => {
+test("support-on legacy directory mode and paid drain stop before any effect", async () => {
   process.env.PERSON_TRANSITION_SUPPORT = "on";
   const effects = new Proxy(
     { TT_ORG_ID: org },
@@ -429,7 +429,7 @@ test("support-on directory worker and paid drain stop before any effect", async 
       lib: effects,
       reader: effects,
       workspaceId: randomUUID(),
-      mode: "live",
+      mode: "legacy",
     }),
     /person_directory_execution_unavailable/,
   );
