@@ -4,6 +4,12 @@
 the checked published profile and retained candidate resume. Only live intake
 transactions enqueue work. Backfill and shadow updates do not enqueue it.
 
+With `PERSON_TRANSITION_SUPPORT=on`, the legacy consumer entry points refuse
+before database or provider access. Invalid support configuration also refuses.
+The application keeps its admitted enqueue and completes without entering this
+consumer. Independent derivative admission is still required before these jobs
+can be processed in transition mode. The behavior below describes support-off.
+
 The server and refresh worker share durable ten-minute claims, three attempts
 per content generation, and a 90-second embedding request deadline. New text
 invalidates an old claim; a contact-only revision can rebase an otherwise exact

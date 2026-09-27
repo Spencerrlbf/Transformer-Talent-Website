@@ -65,7 +65,76 @@ test('parser records derive exact accepted identity and replay without duplicate
 for(const altered of ['null','hash'])test(`private parser ${altered} alteration cannot leave public telemetry`,async()=>{const id=await app({resume:true});await pool.query(`create function person_private.synthetic_parser() returns trigger language plpgsql as $$begin ${altered==='null'?'return null;':"new.evidence_hash:=repeat('0',64);return new;"}end$$;create trigger synthetic_parser before insert on person_private.application_parser_records for each row execute function person_private.synthetic_parser()`);try{const out=await processApp(id,{afterIntake:async()=>{await assert.rejects(rpc('person_application_parser_record',['llamaparse']),/enrichment_parser_actual/);}});assert.equal(out.status,'processed',out.error?.message);assert.equal((await pool.query("select count(*)::int n from candidate_enrichments where candidate_id=$1 and operation='resume_parse'",[out.result.candidateId])).rows[0].n,0);}finally{await pool.query('drop trigger synthetic_parser on person_private.application_parser_records;drop function person_private.synthetic_parser()');}});
 test('no accepted resume means no parser telemetry authority',async()=>{const out=await processApp(await app(),{afterIntake:async()=>{await assert.rejects(rpc('person_application_parser_record',['llamaparse']),/enrichment_parser_ready/);}});assert.equal(out.status,'processed',out.error?.message);});
 
-test('actual TT PDF pipeline sends parser telemetry through the checked RPC',async()=>{const id=await app({resume:true});pipelineFixture=true;pipelineCalls=[];process.env.LLAMA_CLOUD_API_KEY='synthetic';try{assert.equal(await lib.runApplicantPipeline({submissionId:id,orgId:TT,boardOrg:null,fromQueue:true,resumePath:'synthetic/resume.pdf',resumeBuf:Buffer.from('synthetic PDF')}),'processed');assert.equal(pipelineCalls.filter(c=>c.path.endsWith('/person_application_parser_record')).length,1);assert.equal(pipelineCalls.filter(c=>c.path.endsWith('/candidate_enrichments')).length,0);const e=(await pool.query('select e.* from candidate_enrichments e join person_private.application_parser_records p on p.ledger_id=e.id join person_private.application_work w on w.work_id=p.work_id where w.application_id=$1',[id])).rows[0];assert.equal(e.provider,'llamaparse');assert.equal(e.operation,'resume_parse');assert.equal(Number(e.cost_credits),0);assert.equal((await plan(e.candidate_id)).status,'verified');}finally{pipelineFixture=false;delete process.env.LLAMA_CLOUD_API_KEY;}});
+test("actual TT PDF pipeline completes with checked parser telemetry and defers the legacy derivative consumer", async () => {
+  const id = await app({ resume: true });
+  pipelineFixture = true;
+  pipelineCalls = [];
+  process.env.LLAMA_CLOUD_API_KEY = "synthetic";
+  const oldError = console.error,
+    errors = [];
+  console.error = (...args) => errors.push(args);
+  try {
+    assert.equal(
+      await lib.runApplicantPipeline({
+        submissionId: id,
+        orgId: TT,
+        boardOrg: null,
+        fromQueue: true,
+        resumePath: "synthetic/resume.pdf",
+        resumeBuf: Buffer.from("synthetic PDF"),
+      }),
+      "processed",
+    );
+    assert.equal(
+      pipelineCalls.filter((c) =>
+        c.path.endsWith("/person_application_parser_record"),
+      ).length,
+      1,
+    );
+    assert.equal(
+      pipelineCalls.filter((c) => c.path.endsWith("/candidate_enrichments"))
+        .length,
+      0,
+    );
+    const e = (
+      await pool.query(
+        "select e.* from candidate_enrichments e join person_private.application_parser_records p on p.ledger_id=e.id join person_private.application_work w on w.work_id=p.work_id where w.application_id=$1",
+        [id],
+      )
+    ).rows[0];
+    assert.equal(e.provider, "llamaparse");
+    assert.equal(e.operation, "resume_parse");
+    assert.equal(Number(e.cost_credits), 0);
+    assert.equal((await plan(e.candidate_id)).status, "verified");
+    assert.equal(
+      errors.some((args) => args.includes("person_derivative_retry_required")),
+      false,
+      "legacy derivative consumer must not be entered",
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          "select status,attempts,claim_token from person_derivative_jobs where candidate_id=$1",
+          [e.candidate_id],
+        )
+      ).rows,
+      [{ status: "pending", attempts: 0, claim_token: null }],
+    );
+    assert.equal(
+      (
+        await pool.query(
+          "select status from website_applications where id=$1",
+          [id],
+        )
+      ).rows[0].status,
+      "processed",
+    );
+  } finally {
+    console.error = oldError;
+    pipelineFixture = false;
+    delete process.env.LLAMA_CLOUD_API_KEY;
+  }
+});
 
 test('first private selection cannot weaken a known candidate owner',async()=>{const username='synthetic-pin-'+randomUUID(),one=await processApp(await app({},username));assert.equal(one.status,'processed');await legacy(username,one.result.candidateId);const out=await processApp(await app({preferred_roles:['New']},username),{afterIntake:async()=>{await pool.query("create function person_private.synthetic_pin() returns trigger language plpgsql as $$begin new.original_candidate_id:=null;return new;end$$;create trigger synthetic_pin before insert on person_private.application_harvest_selections for each row execute function person_private.synthetic_pin()");try{await assert.rejects(rpc('person_application_harvest_cache',['1970-01-01',null]),/enrichment_selection_actual/);}finally{await pool.query('drop trigger synthetic_pin on person_private.application_harvest_selections;drop function person_private.synthetic_pin()');}}});assert.equal(out.status,'processed',out.error?.message);});
 test('a retained historical cache survives another work completing its legitimate attachment',async()=>{const username='synthetic-shared-'+randomUUID(),ledger=await legacy(username),id=await app({},username);let other;const out=await processApp(id,{harvest:'cached',afterCache:async()=>{other=await processApp(await app({preferred_roles:['Other']},username),{harvest:'cached'});assert.equal(other.status,'processed',other.error?.message);assert.equal((await rpc('person_application_harvest_cache',['2100-01-01',null])).id,ledger);}});assert.equal(out.status,'processed',out.error?.message);assert.equal(out.result.candidateId,other.result.candidateId);assert.equal((await plan(out.result.candidateId)).status,'verified');});
