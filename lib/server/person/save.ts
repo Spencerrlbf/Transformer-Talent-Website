@@ -862,6 +862,7 @@ export async function withPersonConnection<T>(
       "person_not_found",
       "person_recruiter_not_migrated",
       "person_recruiter_source_hold",
+      "person_recruiter_unavailable",
     ]);
     if (safeCodes.has((error as Error)?.message))
       throw Error((error as Error).message);
