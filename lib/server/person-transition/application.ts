@@ -25,6 +25,16 @@ export function assertApplicationIdentity(organizationId: string, username: stri
   const s = processing.getStore()?.snapshot;
   if (!s || s.organization_id !== organizationId || s.linkedin_username !== username) throw Error('application_scope');
 }
+/** Freeze the tenant verdict identity before any candidate-keyed side effects. */
+export async function bindTenantApplicationPerson(orgId: string, username: string | null, applicationId: string): Promise<string> {
+  const runtime = processing.getStore();
+  if (!runtime || !runtime.started || orgId === TT_ORG_ID || runtime.snapshot.organization_id !== orgId ||
+      runtime.snapshot.id !== applicationId || (runtime.snapshot.linkedin_username || null) !== username) throw Error('application_scope');
+  const result = await sbRpc<Record<string, unknown>>('person_application_tenant_bind', {});
+  if (!result || result.work_id !== runtime.admission.workId || result.application_id !== applicationId ||
+      result.organization_id !== orgId || !transitionUuid(result.person_key)) throw Error('tenant_binding_response');
+  return result.person_key;
+}
 async function lifecycle(fn: string, runtime: Runtime, args: Record<string, unknown> = {}) {
   let result: Record<string, unknown>;
   try { result = await sbRpc(fn, { p_id: runtime.admission.workId, p_token: runtime.admission.token, ...args }); }

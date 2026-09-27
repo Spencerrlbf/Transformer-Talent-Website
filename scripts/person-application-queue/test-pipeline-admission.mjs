@@ -3,7 +3,7 @@ for(const key of ['OPENAI_API_KEY','HARVEST_API_KEY','AIRTABLE_API_TOKEN','RESEN
 Object.assign(process.env,{PERSON_TRANSITION_SUPPORT:'on',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://queue.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic'});
 const TT='801865a7-6533-41d2-9c45-e4a90e6ad51a',TENANT='cf000000-0000-4000-8000-000000000001',id='cf000000-0000-4000-8000-000000000002',work='cf000000-0000-4000-8000-000000000003';
 let calls=[],claimResult,startStatus='started',failFinalize=false,notifications=false,sent=0,failRenew=false,emptyFinalize=false,contactFixture=false,failContact=false,resumeSize=null,queueRows=null;
-const snapshot={id,organization_id:TENANT,name:'Synthetic',email:'synthetic@example.test',linkedin_url:'https://www.linkedin.com/in/synthetic',visa_status:null,preferred_locations:[],role_ids:[],resume_path:null,person_resume_sha256:null,source:'future',follow_up_at:null,preferred_roles:[],preferred_workplace:[],comp_expectation:null,input_version:1};
+const snapshot={id,organization_id:TENANT,name:'Synthetic',email:'synthetic@example.test',linkedin_username:'synthetic',linkedin_url:'https://www.linkedin.com/in/synthetic',visa_status:null,preferred_locations:[],role_ids:[],resume_path:null,person_resume_sha256:null,source:'future',follow_up_at:null,preferred_roles:[],preferred_workplace:[],comp_expectation:null,input_version:1};
 const input={submissionId:id,name:'untrusted callback copy',email:'ignored@example.test',linkedin:'ignored',visa:'',preferredLocations:[],roleIds:['ignored'],speculative:false,resumeBuf:null,resumeSafeName:'synthetic.pdf',resumePath:null,boardOrg:null,orgId:TENANT,applicationType:'Applied',fromQueue:true};
 function admitted(patch={}){return{status:'admitted',work_id:work,generation:0,lease_until:new Date(Date.now()+60000).toISOString(),review_reserved:true,input_hash:'a'.repeat(64),snapshot:{...snapshot,...patch}};}
 globalThis.fetch=async(input,init={})=>{
@@ -12,6 +12,7 @@ globalThis.fetch=async(input,init={})=>{
  const body=init.body?JSON.parse(init.body):null;calls.push({path:u.pathname,method:init.method||'GET',body});
  if(u.pathname.endsWith('/person_application_work_queue'))return Response.json({applications:(queueRows??[{id,organization_id:TENANT}]).slice(0,body.p_limit),waiting:queueRows?.length??1,review_required:0});
  if(u.pathname.endsWith('/person_application_work_claim'))return Response.json(queueRows&&body.p_org===TT?{status:'budget'}:claimResult);
+ if(u.pathname.endsWith('/person_application_tenant_bind'))return Response.json({work_id:work,application_id:id,organization_id:TENANT,person_key:id});
  if(u.pathname.endsWith('/person_application_work_start'))return Response.json({status:startStatus,work_id:work});
  if(u.pathname.endsWith('/person_application_work_review'))return Response.json({status:'input_review',work_id:work});
  if(u.pathname.endsWith('/person_application_work_defer'))return Response.json({status:'deferred',work_id:work});

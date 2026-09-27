@@ -519,3 +519,19 @@ proof on replay. Missing historical readiness fails closed. The deferred binding
 check prevents the first intake from committing with a skipped required stage.
 The later workflow result/completion operation still needs to consume this proof;
 tenant binding/results and the broader release prerequisites remain unfinished.
+
+
+## Prepared tenant application identity
+
+`20260927065000_person_tenant_binding.sql` freezes the organization-owned person
+key for admitted tenant processing. Concurrent applications with the same LinkedIn
+username share the first eligible visible application, ordered by date then ID.
+Late commits cannot change a retained key, companies never share keys, and missing
+usernames use their own application. No tenant data enters the TT candidate pool.
+
+The checked bridge validates current and anchor ownership, source and work lease
+after waits. Changed anchors fail closed without silently moving historical
+verdicts. Transition support requires admission even when no username exists; the
+legacy path remains available with support off. This is prepared only. Atomic
+results/contact completion, broader source/other-writer/derivative admission,
+maintenance and complete canary/drain coverage remain release prerequisites.

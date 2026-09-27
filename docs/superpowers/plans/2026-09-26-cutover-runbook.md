@@ -191,6 +191,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927035000_person_application_projection.sql
 20260927052000_person_intake_mutations.sql
 20260927060000_person_intake_ready.sql
+20260927065000_person_tenant_binding.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -348,3 +349,12 @@ Report historical copying, source reconciliation, writer activation, publication
 and derivative refresh separately, each with its actual run/commit/count. Include
 unresolved source reviews, identity conflicts and both holds. Keep April retirement,
 legacy deletion, duplicate-person merging and paid follow-up work outside this release.
+
+Prepared tenant binding migration `20260927065000` freezes a company-owned
+application key per company/LinkedIn identity. The first eligible application
+visible at binding wins, with deterministic date/ID ordering; subsequent late
+commits cannot retarget it. Missing identities stay on their own application.
+Both current and retained anchor ownership are rechecked under locks, and work
+must be admitted, started and unexpired. TT-held processing does not hold client
+applications. This migration is uninstalled; atomic results/contact completion
+must consume this binding before release. See `scripts/person-tenant-binding/README.md`.
