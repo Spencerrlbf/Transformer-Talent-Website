@@ -2,6 +2,8 @@ import { sbRest, sbRpc } from "./supabase";
 import { embed } from "./matcher";
 import { personWriteMode, saveApplicationPerson, applicationMatchingText } from "./person/intake";
 import { TT_ORG_ID } from "./person/normalize";
+import { applicationProcessing, bindTenantApplicationPerson } from "./person-transition/application";
+import { transitionSupport } from "./person-transition/context";
 
 // ---------- Harvest enrichment (LinkedIn full profile; costs credits — one
 // call per applicant, and failure never blocks the application) ----------
@@ -171,6 +173,8 @@ export async function tenantPersonId(
   username: string | null,
   submissionId: string
 ): Promise<string> {
+  if (applicationProcessing()) return bindTenantApplicationPerson(orgId, username, submissionId);
+  if (transitionSupport()) throw Error("transition_admission");
   if (!username) return submissionId;
   const res = await sbRest(
     `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(username)}` +
