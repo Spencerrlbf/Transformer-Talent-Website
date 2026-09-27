@@ -113,14 +113,20 @@ Tasks 1, 2, 3, 6 and 7 passed. Task 5 baseline/capture and its restart checks pa
 
 **Interfaces:** Backfill CLI requires `--run-id`, `--limit`, `--batch-size` and `--mode=shadow|project`; supports `--resume` and `--dry-run`. Use `backfill_runs` for durable progress. The audit reports eligible/completed/pending/failed/conflicted candidates, source coverage, expected contacts, list ownership, projection differences and integrity failures.
 
-- [ ] Add failure-injection tests for interruption before commit, after commit/before checkpoint, and during source retrieval; resumption processes every candidate without duplicates.
-- [ ] Read bounded keyset pages, at most 500 candidates per batch; pin commit/parser/source watermarks. Start with one worker. Retry transient failures with bounded backoff; do not advance past an unrecorded failure.
-- [ ] Include legacy profiles and emails, cached website Harvest payloads, directory history/contacts, TT applications and recruiter overlays. Failure to read a required source blocks that batch instead of marking it complete.
-- [ ] Capture changes during the run using durable shadow writes and a final catch-up pass. A single initial candidate count or `updated_at` watermark is not sufficient.
-- [ ] Stop on any lost-contact, wrong-source, broken-link, duplicate-active-job or tenancy invariant. Pause on repeated batch timeout/lock failures or sustained application latency above twice the measured baseline; collect diagnostics before resuming.
-- [ ] Test dry-run, bounded execution, restart and idempotency locally; commit and verify dispatch access without logging personal data.
+- [x] Add failure-injection tests for interruption before commit, after commit/before checkpoint, and during source retrieval; resumption processes every candidate without duplicates.
+- [x] Read bounded keyset pages, at most 500 candidates per batch; pin commit/parser/source watermarks. Start with one worker. Retry transient failures with bounded backoff; do not advance past an unrecorded failure.
+- [x] Include legacy profiles and emails, cached website Harvest payloads, directory history/contacts, TT applications and recruiter overlays. Failure to read a required source blocks that batch instead of marking it complete.
+- [x] Capture changes during the run using durable shadow writes and a final catch-up pass. A single initial candidate count or `updated_at` watermark is not sufficient.
+- [x] Stop on any lost-contact, wrong-source, broken-link, duplicate-active-job or tenancy invariant. Pause on repeated batch timeout/lock failures or sustained application latency above twice the measured baseline; collect diagnostics before resuming.
+- [x] Test dry-run, bounded execution, restart and idempotency locally; commit and verify dispatch access without logging personal data.
 
 **Gate:** A killed/restarted synthetic run converges to the uninterrupted result. **Undo:** Stop the runner; completed shadow batches remain usable and restartable.
+
+Task 5 checklist reconciled 2026-09-27 against the recorded runner/restart
+proof in PR4 and subsequent bulk/reconciliation corrections. Fault injection,
+bounded source reads, retry/capture and the completed production scans are
+recorded in the ledger and handoff. This marks the historical runner complete;
+it does not complete the newer all-writer transition or tasks 9–11.
 
 ### Task 6: Rerun the same 50-person production trial
 

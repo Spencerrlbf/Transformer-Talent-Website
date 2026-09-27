@@ -14,6 +14,7 @@
 // (the website) and OPENAI_API_KEY (embeddings for new or changed people; not for a
 // dry run). The workflow installs `pg` before running this.
 import crypto from "node:crypto";
+import { requireDirectoryExecution } from "./person-directory/worker.mjs";
 import { pathToFileURL } from "node:url";
 
 const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -185,6 +186,7 @@ const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, 
 const inList = (values) => encodeURIComponent(`(${values.map((v) => `"${String(v).replace(/"/g, "")}"`).join(",")})`);
 
 async function main() {
+  requireDirectoryExecution();
   const mode = process.env.PERSON_WRITE_MODE || 'legacy';
   if (!['legacy', 'shadow', 'live'].includes(mode)) throw Error('invalid_person_write_mode');
   if (mode !== 'legacy') return (await import('./person-directory/worker.mjs')).main();

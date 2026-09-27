@@ -1,3 +1,11 @@
+// Execution is a later admitted operation; input certification alone never
+// authorizes legacy profile writes or paid embeddings.
+export function requireDirectoryExecution() {
+  const support = process.env.PERSON_TRANSITION_SUPPORT;
+  if (support === "on") throw Error("person_directory_execution_unavailable");
+  if (support !== undefined && support !== "off")
+    throw Error("transition_configuration");
+}
 // Sequential source observations under a fenced website lease. No outbound
 // messages or Harvest requests. Optional embeddings have a separate hard cap.
 export async function runDirectory({
@@ -9,6 +17,7 @@ export async function runDirectory({
   limit = 100000,
   pageSize = 100,
 }) {
+  requireDirectoryExecution();
   if (!["shadow", "live"].includes(mode)) throw Error("person_directory_mode");
   if (!Number.isInteger(limit) || limit < 1 || limit > 100000)
     throw Error("person_directory_limit");
@@ -16,7 +25,8 @@ export async function runDirectory({
   const lease = dry
     ? { token: null, cursor: "0" }
     : await lib.claimDirectoryScan(key);
-  if (lease.status === "busy") return { status: "busy" };
+  if (lease.status === "busy" || lease.status === "held")
+    return { status: lease.status };
   let cursor = lease.cursor,
     complete = false;
   const stats = {
@@ -141,9 +151,11 @@ export async function runDirectory({
   }
 }
 export async function main() {
+  requireDirectoryExecution();
   const lib = await import("../dist/worker-lib.mjs");
-  const { openComms, commsColumns, readDirectory, missingComms } =
-    await import("../person-trial.mjs");
+  const { openComms, commsColumns, readDirectory, missingComms } = await import(
+    "../person-trial.mjs"
+  );
   const mode = lib.personWriteMode();
   if (mode === "legacy") throw Error("person_directory_legacy_entry");
   if (!process.env.COMMS_DATABASE_URL)
@@ -213,6 +225,7 @@ export async function drainDirectoryEmbeddings({
   workspaceId,
   limit = 50,
 }) {
+  requireDirectoryExecution();
   if (!Number.isInteger(limit) || limit < 0 || limit > 50)
     throw Error("person_directory_derivative_limit");
   const result = { embedded: 0, stale: 0, failed: 0 };
