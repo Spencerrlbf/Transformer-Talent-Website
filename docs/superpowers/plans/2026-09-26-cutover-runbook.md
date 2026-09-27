@@ -196,6 +196,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927080000_person_application_acceptance.sql
 20260927090000_person_application_enrichment.sql
 20260927100000_person_legacy_source_fence.sql
+20260927110000_person_conflict_evidence.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -336,10 +337,10 @@ Prepared intake migration `20260927052000` adds exact seed/metadata/preferences
 frames and receipt-derived application finalization, including actual-row validation
 and private metadata replay witnesses. Prepared readiness migration `20260927060000`
 requires private metadata/projection/finalization/preference proof before a first
-binding commits and retains original preference ordering on replay. All remain uninstalled. Later pipeline
-completion and public/tenant source admission, remaining proof rows, conflicts,
-recruiter/directory/refresh/derivative writers and historical
-maintenance still require complete admission coverage. Do not use existing
+binding commits and retains original preference ordering on replay. All remain uninstalled. The subsequent prepared migrations described below cover
+pipeline completion, public/tenant acceptance and conflict evidence. Remaining
+shared lookup provenance, recruiter/directory/refresh/derivative writers and
+historical maintenance still require complete admission coverage. Do not use existing
 mutable identities or old unbound receipts as standalone write authorization.
 
 ### 7. Release report and follow-up
@@ -399,3 +400,14 @@ valid. No external communications project or _v2 schema changes occur. Disabled
 legacy upserts and tenant completion remain compatible. See
 `scripts/person-legacy-sources/README.md`; other admissions and complete canaries
 remain prerequisites. Do not install this partial chain before release approval.
+
+Prepared conflict migration `20260927110000` follows the legacy-source boundary.
+Required writes must prove their exact normalized source or synchronous checked
+application projection. Raw conflict insertion/resolution/deletion and truncate
+are refused. Genuine global kind/hash dedup preserves the existing row and
+returns zero, retaining conflict counters; suppressed inserts without retained
+evidence fail. Missing-employer maintenance remains compatible while disabled
+and refused while required until maintenance admission is implemented. No
+existing conflicts are resolved or removed. This remains an uninstalled partial
+chain; shared lookups, other writers, derivatives, maintenance and full canaries
+still block activation. See `scripts/person-conflict-evidence/README.md`.

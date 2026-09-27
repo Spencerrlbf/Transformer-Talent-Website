@@ -597,3 +597,13 @@ through BEFORE/AFTER checks; replacement and soft-removal preserve provenance.
 The external communications project and _v2 tables are untouched. Disabled legacy
 upserts, tenant application completion and role/lookup reads remain compatible.
 This migration is uninstalled. See `scripts/person-legacy-sources/README.md`.
+
+## Prepared conflict evidence boundary
+
+`20260927110000_person_conflict_evidence.sql` protects conflict evidence from raw
+insertion, resolution and deletion while normalization is required. Existing
+writers and checked application projection retain exact source/projection proof,
+real inserted-row verification and original global dedup/counter semantics.
+Suppressed inserts cannot silently lose evidence. Disabled legacy handling stays
+compatible; existing conflicts are retained. This migration is uninstalled.
+See `scripts/person-conflict-evidence/README.md` for verified boundaries and tests.
