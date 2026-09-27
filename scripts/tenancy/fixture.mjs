@@ -472,11 +472,8 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
 
   // The fake TT job and the TT test login's own traces.
   if (tt) {
-    const roles = (await svc(`org_roles?organization_id=eq.${tt.id}&title=like.*${tokenLike}&select=id`, {}, { soft: true })) || [];
-    for (const { id } of roles) {
-      await del(`match_verdicts?org_role_id=eq.${id}`);
-      await del(`org_roles?id=eq.${id}`);
-    }
+    const roles = (await svc(`org_roles?organization_id=eq.${tt.id}&title=like.*${tokenLike}&select=id,external_id`, {}, { soft: true })) || [];
+    const jobIds = [...new Set(roles.map((r) => String(r.external_id || "")).filter((id) => /^\d+$/.test(id)))];
     const ttMembers = (await svc(`org_members?organization_id=eq.${tt.id}&email=like.${emailLike}&select=id,email,user_id`, {}, { soft: true })) || [];
     for (const m of ttMembers) {
       for (const t of ["inbox_items", "attention_snoozes", "goal_targets", "email_accounts", "verdict_feedback"])
@@ -488,11 +485,18 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
       await del(`org_members?id=eq.${m.id}`);
     }
     // Rows a probe may have written into TT's company about the test people
-    // (by candidate key) or the test job (TT test jobs are numbered 99000-99999).
+    // (by candidate key) or this run's exact test jobs. A reserved number range
+    // is not ownership proof: another fixture or incumbent can share that range.
     const keyTables = ["candidate_role_statuses", "stage_events", "candidate_notes", "tasks", "candidate_list_members", "role_attachments", "tracked_links", "no_reply_marks", "inbox_items", "candidate_email_log", "verdict_feedback", "candidate_profiles", "verdict_cache"];
     for (const t of keyTables) for (const k of keys) await del(`${t}?organization_id=eq.${tt.id}&candidate_key=eq.${k}`);
     for (const t of ["candidate_role_statuses", "stage_events", "tasks", "role_attachments", "no_reply_marks"])
-      await del(`${t}?organization_id=eq.${tt.id}&job_id=like.99___`);
+      for (const jobId of jobIds) await svc(`${t}?organization_id=eq.${tt.id}&job_id=eq.${jobId}`, { method: "DELETE" });
+    // Keep ownership proof until every job child has been removed. A failed
+    // deletion must stop here so a later cleanup can rediscover the same IDs.
+    for (const { id } of roles) {
+      await svc(`match_verdicts?org_role_id=eq.${id}`, { method: "DELETE" });
+      await svc(`org_roles?id=eq.${id}`, { method: "DELETE" });
+    }
   }
 
   // The client companies: children without ON DELETE CASCADE first.

@@ -32,7 +32,7 @@ export async function sbRest(
   // Initial claims and later lifecycle RPCs carry the token in JSON, even
   // before/without an async admission context. Never redirect those bodies.
   const carriesWork = !!admission['x-person-work-id'] ||
-    /^rpc\/person_transition_(claim|renew|finish)(?:\?|$)/.test(path);
+    /^rpc\/person_(?:transition|application_work)_/.test(path);
   return fetch(`${url()}/rest/v1/${path}`, {
     // A socket killed by machine sleep otherwise hangs its await forever —
     // observed holding a sourcing run's lease hostage overnight. No PostgREST

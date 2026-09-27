@@ -69,8 +69,13 @@ enrichment or duplicate-person merges were performed.
 4. The disabled controller/admission foundation is documented in
    `scripts/person-transition/README.md`. It has no production source-table
    triggers or route opt-in; its presence is not a drain guarantee. Do not arm it
-   until atomic application review reservations, all writer fences, recovery and
+   until application processing integration, all writer fences, recovery and
    maintenance-runtime handling are implemented and tested.
+   The application-specific claim/reservation/snapshot primitive is prepared in
+   `scripts/person-application-work/README.md`; no route uses it yet. Legacy files
+   missing a content witness stay `input_review` without an allowance charge.
+   Existing unlocked budget writers, provider interruption and callback intent
+   compatibility remain integration gates. Never enable this partial chain alone.
    Prove a queue-only/drain transition for source mutations while public
    submissions remain durably accepted. Draining Actions does not drain Vercel
    requests or recruiter/contact writes. Legacy source edits after an immutable
@@ -174,6 +179,7 @@ prepared chain is:
 20260926213000_person_postcutover_audit.sql
 20260926233000_person_audit_reference_ownership.sql
 20260926235140_person_transition_foundation.sql
+20260927001258_person_application_work.sql
 20260926183000_person_publish_runbook.sql
 20260926201342_person_publish_review_guards.sql
 ```
