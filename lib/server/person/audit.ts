@@ -1,5 +1,6 @@
 // Server-only guards. Candidate locking and shared writer gate belong to caller.
 import { randomUUID } from "node:crypto";
+import { applicationProcessing } from "../person-transition/application";
 import type { PersonConnection } from "./save";
 import { directoryCanonicalUsername } from "./directory-sources";
 export type AuditWriter =
@@ -243,6 +244,12 @@ export async function beginGuardedAuditOperationLocked(
   },
 ): Promise<AuditOperation> {
   const id = before.id;
+  if (applicationProcessing()) {
+    if (args.writer !== 'application') throw Error('audit_application_scope');
+    const operation = (await c.query('select public.person_application_audit_begin(false) operation')).rows[0].operation as AuditOperation;
+    if (operation.candidateId !== id || operation.receiptRef !== args.receiptRef) throw Error('audit_application_scope');
+    return operation;
+  }
   if (
     ![
       "application",
@@ -418,6 +425,12 @@ export async function createReceiptAuditAnchorLocked(
   args: { writer: "application" | "directory"; receiptRef: string },
 ): Promise<AuditOperation> {
   const id = before.id;
+  if (applicationProcessing()) {
+    if (args.writer !== 'application') throw Error('audit_application_scope');
+    const operation = (await c.query('select public.person_application_audit_begin(true) operation')).rows[0].operation as AuditOperation;
+    if (operation.candidateId !== id || operation.receiptRef !== args.receiptRef) throw Error('audit_application_scope');
+    return operation;
+  }
   if (
     (
       await c.query(
