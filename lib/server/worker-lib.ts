@@ -130,3 +130,5 @@ export { publishedPoolProfiles,publishedPoolProfilesOnConnection,canonicalProfil
 export { enqueuePersonDerivativesLocked, preparePersonDerivativesOnConnection, completePersonDerivativesOnConnection, failPersonDerivativesOnConnection, personDerivativeChunks, embedPersonDerivativeChunks, processPersonDerivatives, drainPersonDerivatives } from './person/derivatives';
 export { prepareLegacyAuditAnchor } from './person/audit-anchor';
 export { beginGuardedAuditOperationLocked, attributeAuditMutation, createReceiptAuditAnchorLocked, AUDIT_SCOPES, AUDIT_GUARD_VERSION } from './person/audit';
+
+export { captureDirectoryAdmissionEvidence,evaluateDirectoryAdmission,directoryAdmissionMatches } from './person/directory-admission';

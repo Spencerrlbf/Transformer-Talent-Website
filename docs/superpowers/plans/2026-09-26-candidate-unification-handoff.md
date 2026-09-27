@@ -15,9 +15,12 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR52
-at `4acb8568edf58df4dcbab9fb7888d6ed0a7d087a`. The directory input child based on
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR53
+at `8509df2d9a8f95f77bd722fcd6f7c57c7bd718c0`. The directory input child based on
 that parent adds checked scan/staging APIs and private immutable input certificates.
+The decision evaluator also reconstructs admitted components and complete source
+reviews from explicit retained inputs. This comparison does not certify which
+source rows or prior receipt were selected; private execution remains required.
 Its support-on directory command, save and embedding paths explicitly refuse
 execution until the full directory family is admitted. Read GitHub for the latest
 full SHA before release; no production transition or queue integration is enabled.
