@@ -189,6 +189,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927023000_person_normalization_fence.sql
 20260927025000_person_application_proof.sql
 20260927035000_person_application_projection.sql
+20260927052000_person_intake_mutations.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -325,7 +326,11 @@ and shared lookups. Prepared proof migration `20260927025000` makes claimed audi
 authority database-derived and protects capture/anchor/operation/attribution evidence.
 Prepared projection migration `20260927035000` binds claimed compatibility updates,
 audit attribution and projection history/state to one synchronous operation.
-All remain uninstalled. General candidate/source mutations, remaining proof rows, conflicts, recruiter/directory/refresh/derivative writers and historical
+Prepared intake migration `20260927052000` adds exact seed/metadata/preferences
+frames and receipt-derived application finalization, including actual-row validation
+and private metadata replay witnesses. All remain uninstalled. Later pipeline
+completion and public/tenant source admission, remaining proof rows, conflicts,
+recruiter/directory/refresh/derivative writers and historical
 maintenance still require complete admission coverage. Do not use existing
 mutable identities or old unbound receipts as standalone write authorization.
 

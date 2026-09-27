@@ -493,3 +493,20 @@ using immutable sequence evidence. Required source writes and lease renewal must
 succeed before processing completes. The pipeline's auxiliary mirrors retain
 best-effort behavior. All source/normalized/derivative writer fences and the
 historical-runner maintenance policy are still required before activation.
+
+
+## Prepared checked intake mutations
+
+The uninstalled `20260927052000_person_intake_mutations.sql` moves claimed TT
+metadata, receipt finalization and future preferences into checked operations.
+Minimal candidate seeds and subsequent mutations use private transaction frames;
+actual row results and immutable metadata witnesses prevent a suppressed update
+or changed replay from being recorded as success. Incumbent resumes/vectors are
+preserved, and UTF-16 truncation/text comparisons match existing intake behavior.
+See `scripts/person-intake-mutations/README.md` for scope and local verification.
+
+This does not finish pipeline workflow completion or source admission. The later
+application result write still requires its own private completion proof; public
+acceptance, tenant finalization, other writer families, maintenance and complete
+canary/drain coverage remain release prerequisites. No new migration or guard is
+installed by preparing this child.
