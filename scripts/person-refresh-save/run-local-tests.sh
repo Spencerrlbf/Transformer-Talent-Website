@@ -1,10 +1,10 @@
 #!/bin/bash
-# Resets only the caller-owned loopback person_refresh_lifecycle_test fixture database.
+# Resets only the caller-owned loopback person_refresh_save_test fixture database.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
-DB=person_refresh_lifecycle_test
+DB=person_refresh_save_test
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 q -d postgres -c "drop database if exists $DB" -c "create database $DB"
 q -d $DB -f scripts/person-trial/local-schema.sql
@@ -87,8 +87,4 @@ if test -f supabase/migrations/20260927220000_person_refresh_save.sql; then
  q -d $DB -1 -f supabase/migrations/20260927220000_person_refresh_save.sql
 fi
 node scripts/build-worker-lib.mjs
-q -d $DB -c "update person_private.transition_control set enabled=false,phase='open' where singleton"
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-refresh/test-refresh.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-refresh/test-cli.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-refresh-lifecycle/test-lifecycle.mjs
-node --test scripts/person-refresh-admission/test-entry.mjs scripts/person-refresh/test-worker.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-refresh-save/test-save.mjs
