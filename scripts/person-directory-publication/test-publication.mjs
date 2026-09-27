@@ -452,7 +452,7 @@ for (const corrupt of ["documents='[]'", "result='{}'", "source_reviews='[]'"])
         ...f,
         args: { ...f.args, mode: "live", executionId: randomUUID() },
       }),
-      /directory_shadow_proof/,
+      /directory_shadow_proof|directory_head_receipt/,
     );
   });
 test("superseded shadow receipt cannot publish under a new execution", async () => {
