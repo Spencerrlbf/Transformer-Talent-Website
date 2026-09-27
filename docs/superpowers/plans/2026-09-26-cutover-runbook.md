@@ -66,7 +66,12 @@ enrichment or duplicate-person merges were performed.
    per-dispatch override or an isolated worker invocation with explicit synthetic
    targets and cost controls before changing the shared variable. Do not describe
    a normal scheduled workflow as isolated when it uses that shared setting.
-4. Prove a queue-only/drain transition for source mutations while public
+4. The disabled controller/admission foundation is documented in
+   `scripts/person-transition/README.md`. It has no production source-table
+   triggers or route opt-in; its presence is not a drain guarantee. Do not arm it
+   until atomic application review reservations, all writer fences, recovery and
+   maintenance-runtime handling are implemented and tested.
+   Prove a queue-only/drain transition for source mutations while public
    submissions remain durably accepted. Draining Actions does not drain Vercel
    requests or recruiter/contact writes. Legacy source edits after an immutable
    anchor can block later guarded writes; waiting through nightly cycles between
@@ -92,6 +97,8 @@ and anchor eligibility need separately reviewed provenance handling. Fresh Harve
 pulls and duplicate resolution remain outside the overnight scope.
 
 ## Final-auditor capacity gate
+
+PR36 integrated the reference-ownership correction at parent `d335638a6e52735b2e7af3a34e513e1a06125d38`; its exact preview passed all 913 tenancy calls with cleanup verified empty.
 
 The reference-correction branch passed 85 local auditor cases and 15 rollback
 canary cases. Its 423,050-person synthetic accounting probe initially reached
@@ -166,6 +173,7 @@ prepared chain is:
 20260926172608_person_postcutover_snapshots.sql
 20260926213000_person_postcutover_audit.sql
 20260926233000_person_audit_reference_ownership.sql
+20260926235140_person_transition_foundation.sql
 20260926183000_person_publish_runbook.sql
 20260926201342_person_publish_review_guards.sql
 ```
