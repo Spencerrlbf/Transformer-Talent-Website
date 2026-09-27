@@ -34,6 +34,17 @@ receipt-proven output on deterministic replay. Contact, resolved name, normalize
 facts and receipt commit together. Tenant contact filling uses organization scope
 and a complete contact-block compare-and-swap; a race fails closed.
 
+The next prepared ownership migration freezes each claimed application's candidate
+under the canonical identity lock. New candidate seed, binding, immutable receipt
+and its exact normalized source witnesses must commit together. Existing state
+alone cannot satisfy that proof. Harvest persistence derives its organization and
+username from the work, preserves an exact ledger on replay and rejects changed
+payloads. Unfinished evidence belongs to its original application; another
+application may reuse it only after finalized receipt proof, without rewriting
+its ID, date or raw payload. Bound receipts and owned ledgers cannot be retargeted
+through legacy writes. Scope and lease are checked again after contested locks.
+This establishes ownership bridges, not complete source/normalized write fences.
+
 Future preferences serialize with future acceptance using the username lock.
 Only the newest accepted intent may update the candidate. A private sequence
 journal and immutable decision proof let the separate auditor check historical
@@ -61,7 +72,8 @@ migration chain and runs claimed normalized intake, historical audit evidence,
 contact rollback, tenant isolation and real two-session ordering/timeout tests.
 
 Prepared migrations `20260927004931` and `20260927013100` follow the application
-work primitive `20260927001258`. They are not installed in production. Remaining
+work primitive `20260927001258`; ownership migration `20260927020700` follows
+both. They are not installed in production. Remaining
 release gates include every writer's source/normalized/derivative fences,
 maintenance for the frozen historical runtime, isolated website/worker canaries,
 combined release checks and Spencer's approval. Installing this partial chain

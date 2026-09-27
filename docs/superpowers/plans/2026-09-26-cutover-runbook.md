@@ -312,6 +312,13 @@ writer rollout and publication gates have passed. Then verify both the rejected
 legacy write and allowed attributed write with the guard enabled. Report failures
 immediately and follow the approved guard/queue rollback procedure.
 
+Prepared ownership migration `20260927020700` supplies the claimed application
+candidate/Harvest bridges and protects their receipts. It is insufficient to
+arm a drain by itself: general candidate/source mutations, normalized rows,
+shared lookups, recruiter/directory/refresh/derivative writers and historical
+maintenance still require complete admission coverage. Do not use existing
+mutable identities or old unbound receipts as standalone write authorization.
+
 ### 7. Release report and follow-up
 
 Verify the exact production commit, public application intake, tenancy cleanup,

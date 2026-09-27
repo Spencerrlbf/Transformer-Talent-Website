@@ -162,7 +162,7 @@ export async function saveApplicationPersonOnConnection(
     await beginPersonTransaction(client, applicationProcessing() ? async () => {
       await bindTransitionWork(client);
       await client.query("set local timezone='UTC'");
-      await client.query("select public.person_transition_assert('tt_person',$1,'application',$2)", [TT_ORG_ID, args.applicationId]);
+      await client.query("select public.person_application_intake_lock($1)", [args.applicationId]);
     } : undefined);
     await transactionHooks?.afterBegin?.(client);
     // Serializes new identity resolution, before any candidate lock. Claimed
@@ -205,50 +205,55 @@ export async function saveApplicationPersonOnConnection(
       application = { ...application, ...retained };
       delete application.accepted_input;
     }
-    const ids = (
-      await client.query(
-        `select id from public.candidates where linkedin_username=$1
-   union select candidate_id from public.candidate_identities where kind='linkedin_username' and value=$1`,
-        [username],
-      )
-    ).rows;
-    if (ids.length > 1) throw Error("person_intake_identity_conflict");
-    let id = receipt?.candidate_id ?? ids[0]?.id;
-    if (receipt && ids.length && ids[0].id !== id)
-      throw Error("person_intake_identity_conflict");
-    let created = receipt?.created_person ?? false;
-    let insertedNow = false;
-    if (!id) {
-      id = randomUUID();
-      await client.query("select pg_advisory_xact_lock(hashtext($1))", [id]);
-      const inserted = (
+    let id: string, created = false, insertedNow = false;
+    if (retained) {
+      const binding = (await client.query('select public.person_application_candidate_bind($1,$2) binding', [args.applicationId, args.name])).rows[0].binding;
+      id = binding.candidate_id; created = binding.created_person; insertedNow = binding.inserted_now;
+    } else {
+      const ids = (
         await client.query(
-          `insert into public.candidates(id,full_name,first_name,last_name,linkedin_username,linkedin_url,source,status)
-    values($1,$2,$3,$4,$5,$6,'website_applicant','applicant') on conflict(linkedin_username) do nothing returning id`,
-          [
-            id,
-            application.name || args.name || username,
-            (application.name || args.name || username).split(/\s+/)[0],
-            (application.name || args.name || "")
-              .split(/\s+/)
-              .slice(1)
-              .join(" ") || null,
-            username,
-            `https://www.linkedin.com/in/${encodeURIComponent(username)}`,
-          ],
+          `select id from public.candidates where linkedin_username=$1
+     union select candidate_id from public.candidate_identities where kind='linkedin_username' and value=$1`,
+          [username],
         )
-      ).rows[0];
-      if (inserted) {
-        created = true;
-        insertedNow = true;
-      } else {
-        id = (
+      ).rows;
+      if (ids.length > 1) throw Error("person_intake_identity_conflict");
+      id = receipt?.candidate_id ?? ids[0]?.id;
+      if (receipt && ids.length && ids[0].id !== id)
+        throw Error("person_intake_identity_conflict");
+      created = receipt?.created_person ?? false;
+      if (!id) {
+        id = randomUUID();
+        await client.query("select pg_advisory_xact_lock(hashtext($1))", [id]);
+        const inserted = (
           await client.query(
-            "select id from public.candidates where linkedin_username=$1",
-            [username],
+            `insert into public.candidates(id,full_name,first_name,last_name,linkedin_username,linkedin_url,source,status)
+      values($1,$2,$3,$4,$5,$6,'website_applicant','applicant') on conflict(linkedin_username) do nothing returning id`,
+            [
+              id,
+              application.name || args.name || username,
+              (application.name || args.name || username).split(/\s+/)[0],
+              (application.name || args.name || "")
+                .split(/\s+/)
+                .slice(1)
+                .join(" ") || null,
+              username,
+              `https://www.linkedin.com/in/${encodeURIComponent(username)}`,
+            ],
           )
-        ).rows[0]?.id;
-        if (!id) throw Error("person_intake_identity_race");
+        ).rows[0];
+        if (inserted) {
+          created = true;
+          insertedNow = true;
+        } else {
+          id = (
+            await client.query(
+              "select id from public.candidates where linkedin_username=$1",
+              [username],
+            )
+          ).rows[0]?.id;
+          if (!id) throw Error("person_intake_identity_race");
+        }
       }
     }
     const before = await lockPerson(client, id);
@@ -290,7 +295,7 @@ export async function saveApplicationPersonOnConnection(
         // including referral/future applications whose earlier name patch failed.
         name: application.name || args.name || username,
         contact,
-        created_at: new Date(application.created_at).toISOString(),
+        created_at: retained ? application.created_at : new Date(application.created_at).toISOString(),
         parsed_profile: args.parsed ?? application.parsed_profile ?? null,
         resume_text: args.resumeText ?? application.resume_text ?? null,
         harvest_profile: null,
@@ -322,7 +327,8 @@ export async function saveApplicationPersonOnConnection(
             id,
           ),
         );
-        await client.query(
+        if (retained) await client.query('select public.person_application_harvest_attach($1)', [ledger.id]);
+        else await client.query(
           "update public.candidate_enrichments set candidate_id=$2 where id=$1 and candidate_id is null",
           [ledger.id, id],
         );
