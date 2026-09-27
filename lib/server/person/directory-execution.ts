@@ -88,18 +88,20 @@ export async function saveCertifiedDirectoryOnConnection(
     await c.query("select pg_advisory_xact_lock(72011,hashtext($1))", [
       snapshot.board.contact_id,
     ]);
+    const terminal = (
+      await c.query("select person_private.directory_outcome($1,$2) result", [
+        a.executionId,
+        JSON.stringify(identities),
+      ])
+    ).rows[0].result;
+    if (terminal) {
+      await c.query("commit");
+      return terminal;
+    }
     const owners = (
       await c.query(
-        `select id from public.candidates where lower(linkedin_username)=any($1::text[]) or directory_contact_id=$2 or airtable_id=any($3::text[])
-      union select candidate_id id from public.candidate_identities i join jsonb_to_recordset($4::jsonb) x(kind text,value text) on i.kind=x.kind and i.value=x.value`,
-        [
-          usernames,
-          snapshot.board.contact_id,
-          identities
-            .filter((x) => x.kind === "airtable_id")
-            .map((x) => x.value),
-          JSON.stringify(identities),
-        ],
+        "select id from person_private.directory_identity_owners($1,$2)",
+        [snapshot.board.contact_id, JSON.stringify(identities)],
       )
     ).rows;
     const ids = [...new Set(owners.map((x) => x.id))];

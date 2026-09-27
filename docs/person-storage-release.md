@@ -617,3 +617,16 @@ frame. Existing resolver choices, tier rules, defaults, conflict counters and
 skill dedup remain intact. Typed primary-key readback and compatible target
 locks avoid table scans and unnecessary blocking. This migration is uninstalled.
 See `scripts/person-lookup-mutations/README.md` for tests and remaining gates.
+
+## Prepared directory outcomes
+
+`20260927170000_person_directory_outcomes.sql` adds private nonmutating outcome
+proof and indexed identity-owner resolution. It is uninstalled. Ordinary creation
+of its nonunique lower-username index blocks candidate writes until migration
+commit: schedule an approved quiet window or prepare a separately validated
+concurrent build before applying this migration. Bound timeouts are not an online
+build guarantee. No full-pool throughput measurement is claimed.
+
+Existing-person suppression, same-source review/suppression re-admission under a
+new UUID, worker integration and consumers remain release prerequisites. See
+`scripts/person-directory-outcomes/README.md` for exact scope and checks.
