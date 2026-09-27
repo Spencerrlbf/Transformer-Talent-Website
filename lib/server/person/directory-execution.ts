@@ -17,6 +17,7 @@ import { fromDirectory } from "./fromDirectory";
 import { directoryDocuments } from "./directory-sources";
 import { TT_ORG_ID, isoOf } from "./normalize";
 import {
+  directoryCanonicalUsername,
   directoryIdentities,
   directoryPrimary,
   type DirectorySnapshot,
@@ -102,21 +103,27 @@ export async function saveCertifiedDirectoryOnConnection(
       )
     ).rows;
     const ids = [...new Set(owners.map((x) => x.id))];
-    if (ids.length !== 1)
-      throw Error(
-        ids.length
-          ? "directory_identity_conflict"
-          : "directory_creation_unavailable",
-      );
+    if (ids.length > 1) throw Error("directory_identity_conflict");
+    if (!ids.length) {
+      const created = (
+        await c.query("select person_private.directory_seed($1,$2,$3) id", [
+          a.executionId,
+          directoryCanonicalUsername(snapshot),
+          JSON.stringify(identities),
+        ])
+      ).rows[0].id;
+      ids.push(created);
+    }
     const input = (
       await c.query(
         "select person_private.directory_bind($1,$2,$3::jsonb) result",
         [a.executionId, ids[0], JSON.stringify(identities)],
       )
     ).rows[0].result;
+    const { createdPerson, ...decisionInput } = input;
     const evidence = input.adopted
         ? input.evidence
-        : captureDirectoryAdmissionEvidence(input),
+        : captureDirectoryAdmissionEvidence(decisionInput),
       decision = input.adopted
         ? input.decision
         : evaluateDirectoryAdmission(evidence);
@@ -138,7 +145,7 @@ export async function saveCertifiedDirectoryOnConnection(
         a.executionId,
         i,
       ]);
-    if (a.mode === "live") {
+    if (a.mode === "live" || createdPerson) {
       const id = ids[0];
       const before = (
         await c.query("select person_private.publication_candidate($1) value", [

@@ -153,8 +153,10 @@ export async function readPersonProjection(
 }
 export async function beginPersonTransaction(client: PersonConnection, beforeLocks?: () => Promise<void>) {
   await client.query("begin");
+  // pg's timestamp parser expects ISO output. Pooled connections can retain a
+  // caller's DateStyle/time zone; normalize only this transaction's source reads.
   await client.query(
-    "set local lock_timeout='3s'; set local statement_timeout='20s'; set local idle_in_transaction_session_timeout='30s'",
+    "set local lock_timeout='3s'; set local statement_timeout='20s'; set local idle_in_transaction_session_timeout='30s'; set local timezone='UTC'; set local datestyle='ISO,YMD'",
   );
   await beforeLocks?.();
   // Same normalized-writer lock first as save_person, then take the strongest

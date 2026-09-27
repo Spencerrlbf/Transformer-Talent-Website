@@ -10,7 +10,7 @@ import {
 } from "../person-application-enrichment/test-tt-enrichment.mjs";
 const url = process.env.LOCAL_DATABASE_URL;
 if (
-  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:execution|publication)_test$/.test(
+  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:execution|publication|creation)_test$/.test(
     url || "",
   )
 )
