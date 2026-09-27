@@ -1,5 +1,11 @@
 // Bounded orchestration for the opt-in normalized worker. Persistence and claims
 // are in the shared server library; no paid call runs inside a DB transaction.
+export function requireRefreshExecution() {
+  const support = process.env.PERSON_TRANSITION_SUPPORT;
+  if (support === "on") throw Error("person_refresh_execution_unavailable");
+  if (support !== undefined && support !== "off")
+    throw Error("transition_configuration");
+}
 export async function runNormalizedRefresh({
   lib,
   rest,
@@ -13,6 +19,7 @@ export async function runNormalizedRefresh({
   log = console.log,
   warn = console.error,
 }) {
+  requireRefreshExecution();
   if (organizationId !== lib.TT_ORG_ID || !["shadow", "live"].includes(mode))
     throw Error("person_refresh_scope");
   if (!Number.isInteger(dailyCap) || dailyCap < 0 || dailyCap > 10000)
