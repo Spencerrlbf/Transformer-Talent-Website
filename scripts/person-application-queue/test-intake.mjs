@@ -54,9 +54,11 @@ test('resume contact persistence never replaces a typed phone and resolves blank
  const row=(await pool.query('select contact,name from website_applications where id=$1',[id])).rows[0];assert.equal(row.contact.phone,'+12025550999');assert.equal(row.name,'Resolved Synthetic');
 });
 test('required contact write failure rolls back person and receipt and keeps work uncertain',async()=>{
- const id=await app(),out=await processApp(id,{queryHook:async sql=>{if(sql.includes('update public.website_applications')&&sql.includes('contact'))throw Error('synthetic_contact_failure');}});
+ await pool.query("create function person_private.synthetic_contact_failure() returns trigger language plpgsql as $$begin if new.contact is distinct from old.contact then raise exception 'synthetic_contact_failure';end if;return new;end$$;create trigger synthetic_contact_failure before update on website_applications for each row execute function person_private.synthetic_contact_failure()");
+ try{const id=await app(),out=await processApp(id);
  assert.equal(out.status,'failed');assert.match(out.error?.message||'',/synthetic_contact_failure/);assert.equal((await pool.query('select count(*)::int n from person_application_receipts where application_id=$1',[id])).rows[0].n,0);
  assert.equal((await pool.query('select w.status from person_private.transition_work w join person_private.application_work a on a.work_id=w.id where a.application_id=$1',[id])).rows[0].status,'uncertain');
+ }finally{await pool.query('drop trigger synthetic_contact_failure on website_applications;drop function person_private.synthetic_contact_failure()');}
 });
 const auditLib=await import('../dist/worker-lib.mjs'),{planAudit}=await import('../person-audit/postcutover.mjs');
 async function snapshot(id){const c=await pool.connect();try{await c.query('begin read only');await c.query("set local statement_timeout='15s'");const s=(await c.query('select person_postcutover_audit_inputs_with_witness($1) r',[JSON.stringify([id])])).rows[0].r[0];await c.query('rollback');return s;}finally{await c.query('rollback');c.release();}}

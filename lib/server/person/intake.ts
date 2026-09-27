@@ -7,7 +7,7 @@ import {
   attributeAuditMutation,
 } from "./audit";
 // Server-only entry point for TT's shared application/referral/future pipeline.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { fromApplication, type ApplicationRow } from "./fromApplication";
 import { fromHarvest } from "./fromHarvest";
 import {
@@ -334,7 +334,7 @@ export async function saveApplicationPersonOnConnection(
         );
       }
       if (
-        created &&
+        !retained && created &&
         Number.isInteger(args.parsed?.total_experience_years) &&
         (args.parsed!.total_experience_years ?? -1) >= 0
       )
@@ -371,7 +371,11 @@ export async function saveApplicationPersonOnConnection(
       audit,
     );
     // Resume text and workflow labels are not normalized profile projection fields.
-    if (!receipt && applicationSnapshot.resume_text && !before.resume_text)
+    if (retained) await client.query('select public.person_application_candidate_details($1,$2,$3,$4)', [
+      audit.id, args.mode, args.matchingVector ? JSON.stringify(args.matchingVector) : null,
+      createHash('sha256').update(Buffer.from(applicationMatchingText(args.parsed, args.resumeText), 'utf16le')).digest('hex'),
+    ]);
+    if (!retained && !receipt && applicationSnapshot.resume_text && !before.resume_text)
       await client.query(
         "update public.candidates set resume_text=$2 where id=$1",
         [id, applicationSnapshot.resume_text.slice(0, 50000)],
@@ -386,7 +390,7 @@ export async function saveApplicationPersonOnConnection(
         receiptRef: `application:${args.applicationId}`,
       });
     if (
-      !receipt &&
+      !retained && !receipt &&
       (args.mode === "live" || created) &&
       args.matchingVector &&
       !before.matching_embedding &&
@@ -408,7 +412,8 @@ export async function saveApplicationPersonOnConnection(
         [id, JSON.stringify(args.matchingVector)],
       );
     }
-    await attributeAuditMutation(
+    if (retained) await client.query("select public.person_application_finalize($1)", [audit.id]);
+    else await attributeAuditMutation(
       client,
       audit,
       {

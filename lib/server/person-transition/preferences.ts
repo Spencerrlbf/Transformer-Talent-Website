@@ -1,9 +1,14 @@
+import { applicationProcessing } from './application';
 import type { PersonConnection } from '../person/save';
 import { attributeAuditMutation, type AuditOperation } from '../person/audit';
 import type { ApplicationSnapshot } from '../person/intake';
 
 /** Caller retains the username lock from input admission through COMMIT. */
 export async function applyApplicationPreferences(client: PersonConnection, audit: AuditOperation, snapshot: ApplicationSnapshot) {
+  if (applicationProcessing()) {
+    await client.query('select public.person_application_preferences($1)', [audit.id]);
+    return;
+  }
   if (snapshot.source !== 'future' || !snapshot.person_intent_hash || !snapshot.follow_up_at) return;
   const latest = (await client.query('select person_private.application_future_latest($1) latest', [snapshot.id])).rows[0].latest;
   if (!latest) return;

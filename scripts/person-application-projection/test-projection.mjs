@@ -78,11 +78,18 @@ test('unchanged replay creates no extra history and frame cannot be reused',asyn
  await assert.rejects(pool.query('update person_projection_state set revision=revision where false'),/projection_frame/);
 });
 function chooseEmail(v,email){const e=v[2],after=JSON.parse(e.after),semantic=JSON.parse(e.semanticAfter);after.email=email;semantic.email=email;e.after=serialize(after);e.semanticAfter=serialize(semantic);const evidence=JSON.parse(e.collision);evidence[1]=email;e.collision=serialize(evidence);}
+// Local fixture owner only: create an exact synthetic competitor without opening
+// a public candidate-write path. The racing fixture retains its uncommitted row.
+async function seedCompetitor(c,id,username,email){
+ const seed={id,full_name:'Synthetic',linkedin_username:username,email,status:'Active'};
+ await c.query("select person_private.intake_frame_open($1,$2,$3,'seed',null,$4)",[randomUUID(),randomUUID(),id,seed]);
+ await c.query("insert into candidates(id,full_name,linkedin_username,email) values($1,'Synthetic',$2,$3)",[id,username,email]);
+ await c.query('select person_private.intake_frame_clear()');
+}
 for(const racing of [false,true])test(`${racing?'concurrent':'preexisting'} email collision selects fallback hash atomically`,async()=>{
  const email=`${randomUUID()}@example.test`,owner=randomUUID(),competitor=await pool.connect();let waiting,waitObserved=false;
- if(racing)await competitor.query('begin');
- await competitor.query("insert into candidates(id,full_name,linkedin_username,email) values($1,'Synthetic',$2,$3)",[owner,`collision-${owner}`,email]);
- const id=await app();try{const r=await processApp(id,{queryHook:async(sql,v,c)=>{
+ try{await competitor.query('begin');await seedCompetitor(competitor,owner,`collision-${owner}`,email);if(!racing)await competitor.query('commit');
+ const id=await app();const r=await processApp(id,{queryHook:async(sql,v,c)=>{
   if(!sql.startsWith('select public.person_application_project('))return;chooseEmail(v,email);
   if(racing){const pid=(await c.query('select pg_backend_pid() pid')).rows[0].pid;
    waiting=(async()=>{for(let i=0;i<100;i++){const x=(await pool.query("select wait_event_type='Lock' waiting from pg_stat_activity where pid=$1",[pid])).rows[0];if(x?.waiting){waitObserved=true;break;}await new Promise(r=>setTimeout(r,5));}await competitor.query('commit');})();
@@ -108,7 +115,7 @@ test('no-op projection still rejects a newly recorded source hold',()=>projectio
  makeNoop(v);await c.query("select person_private.audit_proof_frame('person_source_holds')");await c.query("insert into person_source_holds(candidate_id,ledger_id,evidence_hash,reason,evidence) select candidate_id,$1,'synthetic','harvest_cache_date_unknown','{}' from person_private.application_candidates where transaction_id=pg_current_xact_id()",[randomUUID()]);await c.query("select person_private.audit_proof_clear('person_source_holds')");
 },/audit_source_hold/));
 test('no-op projection verifies intermediate unattributed edits even if reverted',()=>projectionProbe(async(v,c)=>{
- makeNoop(v);const b=JSON.parse(v[2].before);await c.query('alter table candidates disable trigger person_application_profile');await c.query("update candidates set current_title='Synthetic unproved' where id=(select candidate_id from person_private.application_candidates where transaction_id=pg_current_xact_id())");await c.query('update candidates set current_title=$1 where id=(select candidate_id from person_private.application_candidates where transaction_id=pg_current_xact_id())',[b.current_title]);await c.query('alter table candidates enable trigger person_application_profile');
+ makeNoop(v);const b=JSON.parse(v[2].before);for(const trigger of ['person_application_profile','person_intake_mutation','person_intake_mutation_after'])await c.query(`alter table candidates disable trigger ${trigger}`);await c.query("update candidates set current_title='Synthetic unproved' where id=(select candidate_id from person_private.application_candidates where transaction_id=pg_current_xact_id())");await c.query('update candidates set current_title=$1 where id=(select candidate_id from person_private.application_candidates where transaction_id=pg_current_xact_id())',[b.current_title]);for(const trigger of ['person_application_profile','person_intake_mutation','person_intake_mutation_after'])await c.query(`alter table candidates enable trigger ${trigger}`);
 },/audit_unattributed_change/));
 test('unrelated unique errors are not treated as email collisions',async()=>{
  await pool.query("create function person_private.synthetic_projection_unique() returns trigger language plpgsql as $$begin if exists(select 1 from person_private.application_projection_frames where backend_pid=pg_backend_pid()) then raise unique_violation using constraint='synthetic_other_key';end if;return new;end$$;create trigger synthetic_projection_unique before update on candidates for each row execute function person_private.synthetic_projection_unique()");
@@ -132,6 +139,6 @@ test('lease expiry behind a projection state lock rolls back the complete mutati
 });
 
 for(const [i,id] of emailIncumbents.entries())test(`email collision ${i?'clears an invalidated':'preserves a usable'} incumbent address`,async()=>{
- const email=`${randomUUID()}@example.test`,owner=randomUUID();await pool.query("insert into candidates(id,full_name,linkedin_username,email) values($1,'Synthetic',$2,$3)",[owner,`owner-${owner}`,email]);
+ const email=`${randomUUID()}@example.test`,owner=randomUUID(),c=await pool.connect();try{await c.query('begin');await seedCompetitor(c,owner,`owner-${owner}`,email);await c.query('commit');}finally{await c.query('rollback');c.release();}
  const r=await processApp(await app({},`retained-${id}`),{queryHook:async(sql,v)=>{if(sql.startsWith('select public.person_application_project('))chooseEmail(v,email);}});assert.equal(r.status,'processed',r.error?.message);const row=(await pool.query('select * from candidates where id=$1',[id])).rows[0];assert.equal(row.email,i?null:`retained-${id}@example.test`);assert.equal((await pool.query('select profile_hash from person_projection_state where candidate_id=$1',[id])).rows[0].profile_hash,lib.projectionProfileHash(row));
 });
