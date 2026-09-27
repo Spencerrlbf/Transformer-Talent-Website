@@ -182,6 +182,8 @@ prepared chain is:
 20260927001258_person_application_work.sql
 20260927004931_person_application_queue.sql
 20260927013100_person_application_finalization.sql
+20260927020700_person_application_ownership.sql
+20260927023000_person_normalization_fence.sql
 20260926183000_person_publish_runbook.sql
 20260926201342_person_publish_review_guards.sql
 ```
@@ -314,8 +316,10 @@ immediately and follow the approved guard/queue rollback procedure.
 
 Prepared ownership migration `20260927020700` supplies the claimed application
 candidate/Harvest bridges and protects their receipts. It is insufficient to
-arm a drain by itself: general candidate/source mutations, normalized rows,
-shared lookups, recruiter/directory/refresh/derivative writers and historical
+arm a drain by itself. Prepared normalization migration `20260927023000` adds
+exact-receipt save admission and private execution frames for normalized facts
+and shared lookups. Both remain uninstalled. General candidate/source mutations,
+projection/audit proof rows, conflicts, recruiter/directory/refresh/derivative writers and historical
 maintenance still require complete admission coverage. Do not use existing
 mutable identities or old unbound receipts as standalone write authorization.
 
