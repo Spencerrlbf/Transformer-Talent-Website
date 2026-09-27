@@ -373,6 +373,19 @@ export async function compatibilityProjection(
     projectionEmail: projection.email ?? null,
   };
 }
+/** Shared frozen compatibility serialization for checked intake writers. */
+export function projectionEnvelope(id: string, before: Record<string, any>, computed: ComputedProjection) {
+  const { original, after, invalidatedKinds } = computed;
+  const fallback = { ...after, email: invalidatedKinds.has('email') ? null : (before.email ?? null) };
+  const serialize = (value: unknown) => JSON.stringify(stable(value));
+  return {
+    before: serialize(original), after: serialize(after), fallback: serialize(fallback),
+    semanticBefore: serialize(semanticProfileValue(original)),
+    semanticAfter: serialize(semanticProfileValue(after)),
+    semanticFallback: serialize(semanticProfileValue(fallback)),
+    collision: serialize([id, after.email ?? null]),
+  };
+}
 /** Writes a computed projection inside the caller's audited transaction and
  * keeps the before-image. runId marks history rows written by a publish run. */
 async function writeProjection(
@@ -388,14 +401,7 @@ async function writeProjection(
   if (applicationProcessing()) {
     if (audit.writer !== 'application' || runId !== null) throw Error('projection_application_scope');
     const fallback = { ...after, email: invalidatedKinds.has('email') ? null : (before.email ?? null) };
-    const serialize = (value: unknown) => JSON.stringify(stable(value));
-    const envelope = {
-      before: serialize(original), after: serialize(after), fallback: serialize(fallback),
-      semanticBefore: serialize(semanticProfileValue(original)),
-      semanticAfter: serialize(semanticProfileValue(after)),
-      semanticFallback: serialize(semanticProfileValue(fallback)),
-      collision: serialize([id, after.email ?? null]),
-    };
+    const envelope = projectionEnvelope(id, before, computed);
     const result = (await client.query('select public.person_application_project($1,$2,$3) result',
       [audit.id, revision, envelope])).rows[0].result;
     if (result.revision !== revision) throw Error('projection_revision');

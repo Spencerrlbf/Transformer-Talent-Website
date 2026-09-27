@@ -10,7 +10,7 @@ import {
 } from "../person-application-enrichment/test-tt-enrichment.mjs";
 const url = process.env.LOCAL_DATABASE_URL;
 if (
-  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_execution_test$/.test(
+  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:execution|publication)_test$/.test(
     url || "",
   )
 )
@@ -45,7 +45,10 @@ async function use(fn) {
 const row = async (id) =>
   (await pool.query("select to_jsonb(c) r from candidates c where id=$1", [id]))
     .rows[0]?.r;
-async function fixture() {
+async function fixture(
+  patchSnapshot = () => {},
+  prepareCandidate = async () => {},
+) {
   await phase(false);
   delete process.env.PERSON_TRANSITION_SUPPORT;
   const id = randomUUID(),
@@ -56,6 +59,7 @@ async function fixture() {
     "insert into candidates(id,full_name,linkedin_username,linkedin_url,created_at) values($1,'Synthetic', $2::text,'https://www.linkedin.com/in/'||$2::text,'2025-01-01')",
     [id, username],
   );
+  await prepareCandidate(pool, id);
   const before = await row(id),
     doc = lib.fromLegacyImport(before, [], [], []);
   await rpc(pool, "public.save_person", [doc]);
@@ -108,6 +112,7 @@ async function fixture() {
     facts: [],
     identifiers: [],
   };
+  patchSnapshot(snapshot);
   const staged = await rpc(pool, "public.person_directory_stage", [
     org,
     workspaceId,
@@ -718,3 +723,5 @@ for (const key of ["document", "candidate_id", "work_id"])
       /directory_normalization_frame|foreign key constraint/,
     );
   });
+
+export { pool, org, phase, rpc, use, row, fixture, run, stageExisting };
