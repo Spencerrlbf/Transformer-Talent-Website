@@ -123,7 +123,7 @@ function rawFacts(snapshot,lib,out) {
           const changed=keys.filter(k=>!same(e.previous_payload?.[k],e.payload?.[k],lib));
           if(changed.length){
             const a=e.attribution,op=arr(snapshot.operations).find(o=>o.id===a?.operation_id),r=arr(snapshot.application_receipts).find(r=>r.application_id===row.id);
-            if(!a||a.scope!=='application_finalize'||a.event_id!==e.id||a.candidate_id!==id||a.event_hash!==e.actual_event_hash||!sortedEq(a.changed_fields,e.actual_changed_fields)||!op||op.writer!=='application'||op.candidate_id!==id||op.transaction_id!==e.transaction_id||op.receipt_ref!==`application:${row.id}`||changed.some(k=>!lib.AUDIT_SCOPES.application_finalize.fields.includes(k))||!r||row.candidate_id!==id||row.pool_created_person!==r.created_person||!same(row.parsed_profile,r.application_snapshot.parsed_profile,lib))return out.review('application_edit_unattributed');
+            if(!a||a.scope!=='application_finalize'||a.event_id!==e.id||a.candidate_id!==id||a.event_hash!==e.actual_event_hash||!sortedEq(a.changed_fields,e.actual_changed_fields)||!op||op.writer!=='application'||op.candidate_id!==id||op.transaction_id!==e.transaction_id||op.receipt_ref!==`application:${row.id}`||changed.some(k=>!lib.AUDIT_SCOPES.application_finalize.fields.includes(k))||!r||row.candidate_id!==id||row.pool_created_person!==r.created_person||!same(row.parsed_profile,r.application_snapshot.parsed_profile,lib)||['name','contact'].some(k=>changed.includes(k)&&!same(row[k],r.application_snapshot[k],lib)))return out.review('application_edit_unattributed');
           }
         }
         break;

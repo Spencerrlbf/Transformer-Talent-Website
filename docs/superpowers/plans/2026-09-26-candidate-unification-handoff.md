@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-27 00:24 UTC. Plan:
+Updated 2026-09-27 (queued application integration prepared). Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,9 +15,11 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR37
-at `1f7c601271ab4ef6ea6efdafd5cae2e7af10bb74`. The next sequential child prepares
-atomic application work/reservations. Read GitHub for the latest full SHA before
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR38
+at `88354169e21638fa73867558c187602da48ee601`. The current sequential child
+`feat/person-37-queued-application-intake` integrates queued public acceptance,
+shared callback/worker admission, safe pre-effects recovery and transactional
+application finalization. Read GitHub for the latest full SHA before
 release; no production transition or queue integration is enabled.
 
 ## Exact database accounting
@@ -92,7 +94,7 @@ Application, atomic projection, receipts, derivative queue, audit anchors,
 snapshots, publication and restrictive-guard migrations remain **prepared only**.
 The reviewed chain, including reference ownership, disabled transition support
 and application work primitives, plus the separate concurrent directory lookup
-index, is listed in the cutover runbook. Route/fence integration and runtime
+index, is listed in the cutover runbook. All-writer fences, website/worker canaries and runtime
 maintenance remain unfinished. Do not install or enable an incomplete chain.
 
 ## Verification and recovery evidence
@@ -128,9 +130,23 @@ PR37's disabled controller/admission foundation passed 19 PostgreSQL checks,
 12 HTTP/PG bridge checks, 15 canary checks, 27 intake regressions, production build,
 and exact 913-call preview tenancy in 250 seconds. Run `25aasa84a` cleanup was
 verified empty. It installs no production source-table triggers or route opt-in.
-The following application-work primitive passes 26 database checks and extends
-token-bearing redirect protection; callers and safe recovery are still to follow.
-Its allowance/input snapshot is not evidence that paid processing completed.
+PR38's application-work primitive passed 26 database checks, 13 transport checks,
+15 canary checks and build. Exact head `186a9f66c94b96ba95d8de8e9746f8f3a4de4fcb`
+passed 913 preview tenancy calls in 252 seconds; completed and earlier stopped
+fixture runs both cleared 18 strict cleanup checks. The cleanup harness now
+uses exact owned job IDs, retains ownership on failures and has two regressions.
+
+The current child adds queued public acceptance, resume hashes, semantic future
+intent dedupe, shared atomic allowance/claim, stage renewal, input-review holds
+and safe pre-effects owner recovery. TT contact/name/preferences commit with
+normalized facts and immutable receipts; the audit proves historical preference
+ordering, including pending unlinked requests. Required tenant contact writes
+and source finalization fail closed. Legacy queued work with unknown prior effects
+remains in explicit review. Support remains off; no new migration is live.
+Local coverage includes lifecycle/queue concurrency, actual bundled public routes
+and processing with mocked network, real claimed intake/rollback/ordering, the
+85-check auditor, 27 existing intake checks, 15 local canary checks and build.
+See `scripts/person-application-queue/README.md` for the boundary and commands.
 
 Retain the private recovery exports (12 JSON files, approximately 441 MB),
 row-restoration proof `RECOVERY_CHECK_PASSED`, and the known physical backup from
@@ -158,15 +174,16 @@ reproduce the token in reports.
 1. **Finish website canary and queue/drain integration.** Local canary,
    disabled controller and application reservation primitives are prepared.
    Public queued acceptance, file verification, shared processing claims,
-   pre-effects recovery, late-writer fences and maintenance remain to finish. All
+   pre-effects recovery and receipt-bound finalization are prepared in the current
+   child. Late-writer fences, whole-worker canaries and maintenance remain. All
    three Actions workers currently share one write-mode variable. A shared flag
    is not a single-worker canary, and draining Actions does not drain Vercel or
    recruiter writes. The private `transition-preparation-findings.md` inventory
    identifies public submission crash/retry, resume persistence, duplicate
    future-interest, contact extraction, worker staging and paid-reservation gaps.
    Root owns sequential implementation; no such transition is active. Current
-   stored application fields must be reconciled with original callback intent.
-   Legacy files without content hashes need verification, and old unlocked budget
+   processing uses its retained first input instead of mutable callback fields.
+   Legacy queued rows require prior-effect review (files also need hashes), and old unlocked budget
    writers must be replaced/drained before claiming a strict system-wide cap.
    Preserve best-effort acceptance notifications without retry-driven resends.
 2. **Retain explicit source-proof policy.** Publish identity-review people only

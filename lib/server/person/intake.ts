@@ -1,3 +1,6 @@
+import { acceptedApplicationInput, applicationProcessing } from '../person-transition/application';
+import { bindTransitionWork, transitionSupport } from '../person-transition/context';
+import { applyApplicationPreferences } from '../person-transition/preferences';
 import {
   beginGuardedAuditOperationLocked,
   createReceiptAuditAnchorLocked,
@@ -13,6 +16,7 @@ import {
   SkillBag,
   TT_ORG_ID,
   schoolOf,
+  stableStringify,
   makeEducation,
   finishEducations,
 } from "./normalize";
@@ -149,21 +153,28 @@ export async function saveApplicationPersonOnConnection(
     }) => Promise<void>;
   },
 ) {
+  if (transitionSupport() && !applicationProcessing()) throw Error('transition_admission');
   if (args.organizationId !== TT_ORG_ID) throw Error("person_intake_tenant");
   const username = args.linkedinUsername.trim().toLowerCase();
   if (!/^[\p{L}\p{N}\p{M}._-]{1,200}$/u.test(username))
     throw Error("person_intake_linkedin");
   try {
-    await beginPersonTransaction(client);
+    await beginPersonTransaction(client, applicationProcessing() ? async () => {
+      await bindTransitionWork(client);
+      await client.query("set local timezone='UTC'");
+      await client.query("select public.person_transition_assert('tt_person',$1,'application',$2)", [TT_ORG_ID, args.applicationId]);
+    } : undefined);
     await transactionHooks?.afterBegin?.(client);
     // Serializes new identity resolution, before any candidate lock. Claimed
     // email is never a lookup key. The unique legacy username is a backstop.
     await client.query("select pg_advisory_xact_lock(72007,hashtext($1))", [
       username,
     ]);
-    const application = (
+    let application = (
       await client.query(
-        "select * from public.website_applications where id=$1 and organization_id=$2 for update",
+        applicationProcessing()
+          ? "select x.*,person_private.application_work_input(to_jsonb(x)) accepted_input from public.website_applications x where id=$1 and organization_id=$2 for update"
+          : "select * from public.website_applications where id=$1 and organization_id=$2 for update",
         [args.applicationId, TT_ORG_ID],
       )
     ).rows[0];
@@ -178,6 +189,22 @@ export async function saveApplicationPersonOnConnection(
         [args.applicationId],
       )
     ).rows[0];
+    const retained = acceptedApplicationInput(args.applicationId, TT_ORG_ID);
+    if (retained) {
+      // A replay may see only its own receipt-proven name/contact outputs.
+      // Every other accepted input still has to match the locked source.
+      const comparison = { ...application.accepted_input };
+      if (receipt) {
+        for (const key of ['name', 'contact']) {
+          if (stableStringify(comparison[key]) !== stableStringify(receipt.application_snapshot[key])) throw Error('application_input_changed');
+          comparison[key] = retained[key];
+        }
+      }
+      const matches = (await client.query('select $1::jsonb=$2::jsonb matches', [JSON.stringify(comparison), JSON.stringify(retained)])).rows[0].matches;
+      if (!matches) throw Error('application_input_changed');
+      application = { ...application, ...retained };
+      delete application.accepted_input;
+    }
     const ids = (
       await client.query(
         `select id from public.candidates where linkedin_username=$1
@@ -248,7 +275,8 @@ export async function saveApplicationPersonOnConnection(
       receipt?.application_snapshot;
     if (!docs) {
       const contact = { ...(application.contact ?? {}) };
-      if (!contact.phone && args.resumeContacts?.phone)
+      const linkedContact = retained ? (await client.query('select contact from public.sourced_candidates where organization_id=$1 and linkedin_username=$2 limit 1 for share', [TT_ORG_ID, username])).rows[0]?.contact : null;
+      if (!contact.phone && !linkedContact?.phone && args.resumeContacts?.phone)
         contact.phone = args.resumeContacts.phone;
       const extras = [
         ...(contact.otherEmails ?? []),
@@ -384,16 +412,17 @@ export async function saveApplicationPersonOnConnection(
       },
       () =>
         client.query(
-          "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4,resume_text=$5 where id=$1 returning id",
-          [
-            args.applicationId,
-            id,
-            created,
-            applicationSnapshot.parsed_profile,
-            applicationSnapshot.resume_text,
-          ],
+          retained
+            ? "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4,resume_text=$5,name=$6,contact=$7 where id=$1 returning id"
+            : "update public.website_applications set candidate_id=$2,pool_created_person=$3,parsed_profile=$4,resume_text=$5 where id=$1 returning id",
+          [args.applicationId, id, created, applicationSnapshot.parsed_profile, applicationSnapshot.resume_text,
+            ...(retained ? [applicationSnapshot.name, applicationSnapshot.contact] : [])],
         ),
     );
+    if (retained) {
+      await applyApplicationPreferences(client, audit, applicationSnapshot);
+      await client.query("select public.person_transition_assert('tt_person',$1,'application',$2)", [TT_ORG_ID, args.applicationId]);
+    }
     const outcome = { ...result, created, applicationSnapshot };
     await transactionHooks?.beforeCommit?.(client, outcome);
     await client.query("commit");

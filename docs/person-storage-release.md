@@ -470,3 +470,26 @@ LOCAL_DATABASE_URL=postgresql://postgres@127.0.0.1:LOCAL_PORT/person_postcutover
 Production use requires the reviewed prepared migration chain, anchors, source
 catch-up and Spencer's release approval. The isolated canary and queue/drain
 transition remain separate release prerequisites in the cutover runbook.
+
+
+## Queued public application processing (prepared)
+
+The public apply/referral/future routes and nightly review queue now share the
+optional `PERSON_TRANSITION_SUPPORT` path described in
+`scripts/person-application-queue/README.md`. Support stays off by default.
+Apply the complete reviewed chain only at the approved release stage; these
+queued-intake migrations have not been installed in the production database.
+
+New submissions remain durable when TT processing is held or an organization's
+allowance is exhausted. Supplied resumes must be stored with verified content
+hashes. Original acceptance notices stay independent of paid processing, and
+queue recovery never resends them. A reservation alone does not prove completion.
+Only pre-effects work can automatically recover; uncertain paid attempts and
+legacy queued rows with unknown processing history remain visible for review.
+
+TT normalized admission persists contact/name and current future preferences
+with the receipt. Future intent ordering is serialized and independently auditable
+using immutable sequence evidence. Required source writes and lease renewal must
+succeed before processing completes. The pipeline's auxiliary mirrors retain
+best-effort behavior. All source/normalized/derivative writer fences and the
+historical-runner maintenance policy are still required before activation.

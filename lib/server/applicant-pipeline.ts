@@ -1,3 +1,6 @@
+import { notifyAcceptedApplication } from './person-transition/application-notify';
+import { transitionSupport } from './person-transition/context';
+import { runApplicationWork, applicationProcessing, startApplicationEffects, renewApplicationWork } from './person-transition/application';
 // The applicant enrichment pipeline, shared by /api/apply (applications) and
 // /api/referral (referred people). Runs AFTER the HTTP response via after():
 // resume parsing (when there is one), Harvest enrichment, candidate-pool
@@ -92,6 +95,11 @@ function nameFromProfile(
 }
 
 export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"processed" | "queued" | "failed"> {
+  if (transitionSupport()) {
+    const outcome = await runApplicationWork(p, runApplicantPipelineInternal);
+    await notifyAcceptedApplication(p);
+    return outcome;
+  }
   try {
     return await runApplicantPipelineInternal(p);
   } catch {
@@ -180,6 +188,8 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
 
   // Admission receipts fix the inputs for every retry, before any PDF/API call.
   const intakeReceipt = normalizedIntake ? await applicationIntakeReceipt(effectiveOrgId, submissionId) : null;
+  await startApplicationEffects();
+  await renewApplicationWork();
   let resumeText: string | null = intakeReceipt?.application_snapshot.resume_text ?? null;
   let resumeParser: "llamaparse" | "pdf-parse" | null = null;
   if (resumeBuf && !intakeReceipt) {
@@ -190,7 +200,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       resumeText = (await pdfText(resumeBuf)) || null;
       if (resumeText) resumeParser = "pdf-parse";
     }
-    if (resumeText && !normalizedIntake) {
+    if (resumeText && !normalizedIntake && !applicationProcessing()) {
       await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({ resume_text: resumeText }),
@@ -204,6 +214,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
   let screenedSummary: string | undefined;
   let applicationFit: string | undefined;
   try {
+    await renewApplicationWork();
     const username = linkedinUsername(linkedin);
     let harvest: unknown | null = null;
     let harvestCache: "hit" | "miss" = "miss";
@@ -230,12 +241,13 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       if (rows.length) { harvest = rows[0].harvest_profile; harvestCache = "hit"; }
       if (!harvest) harvest = await harvestProfile(linkedin);
     }
+    await renewApplicationWork();
     let parsed = intakeReceipt ? intakeReceipt.application_snapshot.parsed_profile : await parseProfile(resumeText || "", harvest);
 
     // Referrals arrive with no name — take it from the profile.
     if (!name) {
       name = nameFromProfile(harvest as Record<string, unknown> | null, username || email);
-      await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
+      if (!applicationProcessing()) await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
         prefer: "return=minimal",
@@ -252,6 +264,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     // no pool enrichment, experiences or embeddings, no TT Airtable. They
     // are judged under the company's own person key; the ledger keeps only
     // the spend, under the company.
+    await renewApplicationWork();
     const promotion = tenantOrgId
       ? {
           candidateId: await tenantPersonId(tenantOrgId, username, submissionId),
@@ -279,6 +292,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       harvestSkills = (((harvest as Record<string, unknown> | null)?.skills as {name?:string}[] | undefined) || []).map(s=>s?.name||"").filter(Boolean);
     }
 
+    await renewApplicationWork();
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
     if (harvest && !normalizedIntake) {
       await recordEnrichment(
@@ -305,6 +319,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
         cacheStatus: "miss",
       });
     }
+    await renewApplicationWork();
     if (candidateId && !tenantOrgId) {
       if (normalizedIntake) {
         if(personWriteMode() === 'live') await processPersonDerivatives({organizationId:orgId!,candidateId}).catch(()=>console.error('person_derivative_retry_required'));
@@ -329,6 +344,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       const careerYears = computeFacts(expRows, [], [], eduList).careerYears;
       // Suggestions never leave the board's company: tenant boards search
       // only that org's roles; the site searches its own.
+      await renewApplicationWork();
       const roleMatches = boardOrg
         ? await matchOrgRolesForApplicant(vector, boardOrg.id)
         : await matchRolesForApplicant(vector, skillTerms, orgId);
@@ -377,6 +393,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       ]
         .filter(Boolean)
         .join("\n\n");
+      await renewApplicationWork();
       const results = await screenRolesWithCache({
         candidateId,
         evidence,
@@ -418,6 +435,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       // The verdict the recruiter reads: the roles they applied to, plus the
       // best two matches. Stored beside the scorecard on the same verdict row;
       // best effort, never fails the application.
+      await renewApplicationWork();
       try {
         const storeOrg = orgId || (await getOrgId());
         const wantIds = [...new Set([...roleIds, ...ranked.map((m) => m.job_id)])].slice(0, 3);
@@ -455,23 +473,31 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
         .map((r) => ({ jobId: r.jobId, title: r.title, salary: r.salary }));
     }
 
-    const finalized = await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        harvest_profile: harvest,
-        parsed_profile: parsed,
-        ...(normalizedIntake ? { resume_text: resumeText } : {}),
-        candidate_id: candidateId,
-        matched_role_ids: matchedIds,
-        screening,
-        status: "processed",
-      }),
-      prefer: "return=minimal",
-    });
-    if (!finalized.ok && normalizedIntake) throw Error("person_intake_finalize_failed");
+    async function finalizeApplication() {
+      const finalized = await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          harvest_profile: harvest,
+          parsed_profile: parsed,
+          ...(normalizedIntake || applicationProcessing() ? { resume_text: resumeText } : {}),
+          ...(applicationProcessing() && tenantOrgId ? { name } : {}),
+          candidate_id: candidateId,
+          matched_role_ids: matchedIds,
+          screening,
+          status: "processed",
+        }),
+        prefer: applicationProcessing() ? "return=representation" : "return=minimal",
+      });
+      if (!finalized.ok && (normalizedIntake || applicationProcessing())) throw Error("person_intake_finalize_failed");
+      if (applicationProcessing()) {
+        const rows = await finalized.json();
+        if (!Array.isArray(rows) || rows.length !== 1 || rows[0].id !== submissionId) throw Error('application_finalize_scope');
+      }
+    }
+    if (!applicationProcessing()) await finalizeApplication();
 
-    // Contact details off the resume — written AFTER the profile above so
-    // the drawer never shows a phone before the LinkedIn history is there.
+    // Legacy callers retain profile-before-contact ordering. Opted-in work
+    // persists required contacts before marking processing complete.
     // The model's read is authoritative
     // when it was consulted: a null phone means the resume shows none, and
     // the primary email back means there is no second address — the regex
@@ -479,12 +505,12 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     // regex only decides when the model wasn't asked at all (no key, parse
     // failure), plus one narrow backstop: a phone in the contact block the
     // model missed. Fills gaps only — never overwrites a typed value.
-    if (resumeText) {
+    if (resumeText && !(normalizedIntake && applicationProcessing())) {
+      await renewApplicationWork();
       const found = applicationResumeContacts(parsed, resumeText, email);
       if (found.phone || found.email || (found.emails && found.emails.length)) {
-        await fillExtractedContact(`app_${submissionId}`, found).catch((err) =>
-          console.error("contact fill failed", err)
-        );
+        if (applicationProcessing()) await fillExtractedContact(`app_${submissionId}`, found, effectiveOrgId, { strict: true });
+        else await fillExtractedContact(`app_${submissionId}`, found).catch(() => console.error("contact fill failed", "application_contact_retry"));
       }
     }
 
@@ -492,7 +518,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     // Future interest travels with the person, not just the application —
     // the pool record carries the date and what to come back with. (Only
     // TT's own applicants have a pool record.)
-    if (p.followUpAt && candidateId && !tenantOrgId) {
+    if (p.followUpAt && candidateId && !tenantOrgId && !applicationProcessing()) {
       await sbRest(`candidates?id=eq.${candidateId}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -509,6 +535,9 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       }).catch(() => {});
     }
 
+    await renewApplicationWork();
+    if (applicationProcessing()) await finalizeApplication();
+
     // TT's own Airtable: TT's own applicants only.
     if (!tenantOrgId) {
       await mirrorToAirtable({
@@ -521,6 +550,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       });
     }
   } catch (err) {
+    if (applicationProcessing()) throw Error('application_processing_failed');
     pipelineFailed = true;
     console.error("applicant pipeline failed", normalizedIntake ? "person_intake_retry_required" : err);
     await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
@@ -538,6 +568,7 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     }
   }
 
+  await renewApplicationWork();
   // Review row for EVERY entry of TT's own — even when enrichment failed
   // above. A client company's applicants never reach TT's Airtable.
   if (!tenantOrgId) await mirrorApplicationToAirtable({

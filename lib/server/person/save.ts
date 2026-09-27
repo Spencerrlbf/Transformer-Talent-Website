@@ -147,11 +147,12 @@ export async function readPersonProjection(
     jobs_source,
   };
 }
-export async function beginPersonTransaction(client: PersonConnection) {
+export async function beginPersonTransaction(client: PersonConnection, beforeLocks?: () => Promise<void>) {
   await client.query("begin");
   await client.query(
     "set local lock_timeout='3s'; set local statement_timeout='20s'; set local idle_in_transaction_session_timeout='30s'",
   );
+  await beforeLocks?.();
   // Same normalized-writer lock first as save_person, then take the strongest
   // candidate lock before any projection/capture write can upgrade a row lock.
   await client.query("select pg_advisory_xact_lock_shared(72005,0)");
