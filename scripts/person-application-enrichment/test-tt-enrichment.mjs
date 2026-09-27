@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import pg from 'pg';import {randomUUID,createHash} from 'node:crypto';
-const url=process.env.LOCAL_DATABASE_URL;if(!/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_(?:application_enrichment|legacy_sources|conflict_evidence|lookup_mutations|directory_input|directory_execution|directory_publication|directory_creation|directory_outcomes|directory_suppression)_test$/.test(url||''))throw Error('local fixture required');
+const url=process.env.LOCAL_DATABASE_URL;if(!/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_(?:application_enrichment|legacy_sources|conflict_evidence|lookup_mutations|directory_input|directory_execution|directory_publication|directory_creation|directory_outcomes|directory_suppression|directory_readmission)_test$/.test(url||''))throw Error('local fixture required');
 Object.assign(process.env,{PERSON_TRANSITION_SUPPORT:'on',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:url});
 for(const key of ['OPENAI_API_KEY','HARVEST_API_KEY','AIRTABLE_API_TOKEN','RESEND_API_KEY','LLAMA_CLOUD_API_KEY'])delete process.env[key];
 const pool=new pg.Pool({connectionString:url,max:8}),TT='801865a7-6533-41d2-9c45-e4a90e6ad51a';

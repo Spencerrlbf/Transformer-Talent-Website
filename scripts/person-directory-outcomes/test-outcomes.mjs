@@ -361,15 +361,31 @@ for (const field of ["mode", "receiptId", "workspaceId", "organizationId"])
       /directory_execution_binding|directory_execution_input|directory_input_scope/,
     );
   });
-test("completed review under a new UUID remains unavailable before explicit readmission", async () => {
+test("completed review cannot bypass certified readmission through normalized binding", async () => {
   const f = await fresh("live", (s) => {
       s.board.linkedin_url = null;
     }),
     out = await run(f);
-  await assert.rejects(
-    run({ ...f, args: { ...f.args, executionId: randomUUID() } }),
-    /directory_receipt_ineligible/,
-  );
+  await use(async (c) => {
+    await c.query("begin");
+    const executionId = randomUUID();
+    await rpc(c, "person_private.directory_begin", [
+      org,
+      f.args.workspaceId,
+      f.args.receiptId,
+      executionId,
+      f.args.mode,
+      randomUUID(),
+    ]);
+    await assert.rejects(
+      rpc(c, "person_private.directory_bind", [
+        executionId,
+        randomUUID(),
+        JSON.stringify(lib.directoryIdentities(f.snapshot)),
+      ]),
+      /directory_receipt_ineligible/,
+    );
+  });
   assert.deepEqual(await run(f), out);
 });
 for (const mutation of [
@@ -398,7 +414,10 @@ for (const mutation of [
       );
       await phase();
     }
-    await assert.rejects(run(f), /directory_outcome_unproven/);
+    await assert.rejects(
+      run(f),
+      /directory_outcome_unproven|directory_admission_witness/,
+    );
   });
 test("existing suppressed person cannot enter normalized binding as an unmigrated review", async () => {
   const f = await fixture((s) => {

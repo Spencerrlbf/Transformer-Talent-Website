@@ -638,7 +638,7 @@ for (const mutation of [
         ...f,
         args: { ...f.args, mode: "live", executionId: randomUUID() },
       }),
-      /directory_shadow_proof/,
+      /directory_shadow_proof|directory_head_receipt/,
     );
     assert.deepEqual(await run(f), shadow);
   });

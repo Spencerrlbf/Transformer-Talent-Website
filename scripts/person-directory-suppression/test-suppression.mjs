@@ -541,3 +541,5 @@ for (const action of ["return null;", "new.candidate_id:=null;return new;"])
       );
     }
   });
+
+export { setup, row, receipt, state, evidence };
