@@ -20,6 +20,11 @@ export function acceptedApplicationInput(applicationId: string, organizationId: 
   if (s.id !== applicationId || s.organization_id !== organizationId) throw Error('application_scope');
   return s;
 }
+/** Source helpers may derive authority from context only for this accepted identity. */
+export function assertApplicationIdentity(organizationId: string, username: string): void {
+  const s = processing.getStore()?.snapshot;
+  if (!s || s.organization_id !== organizationId || s.linkedin_username !== username) throw Error('application_scope');
+}
 async function lifecycle(fn: string, runtime: Runtime, args: Record<string, unknown> = {}) {
   let result: Record<string, unknown>;
   try { result = await sbRpc(fn, { p_id: runtime.admission.workId, p_token: runtime.admission.token, ...args }); }

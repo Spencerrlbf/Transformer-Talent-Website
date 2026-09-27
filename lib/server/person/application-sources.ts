@@ -1,6 +1,8 @@
+import { applicationProcessing, assertApplicationIdentity, acceptedApplicationInput } from '../person-transition/application';
+import { transitionSupport } from '../person-transition/context';
 // Strict, tenant-scoped cached Harvest access. Cached reads retain the original
 // ledger id/date, and a fresh paid result is durable before resume processing.
-import { sbRest } from "../supabase";
+import { sbRest, sbRpc } from "../supabase";
 import {
   extractEmails,
   extractPhone,
@@ -15,6 +17,12 @@ export async function cachedApplicationHarvest(
   ledgerId?: string,
 ): Promise<{ id: string; raw_payload: unknown } | null> {
   if (org !== TT_ORG_ID) throw Error("person_intake_tenant");
+  if (transitionSupport() && !applicationProcessing()) throw Error('transition_admission');
+  if (applicationProcessing()) {
+    assertApplicationIdentity(org, username);
+    try { return await sbRpc('person_application_harvest_cache', { p_since: since, p_ledger: ledgerId ?? null }); }
+    catch { throw Error('person_intake_cache_read'); }
+  }
   const result = await sbRest(
     `candidate_enrichments?organization_id=eq.${org}&linkedin_username=eq.${encodeURIComponent(username)}&provider=eq.harvest&status=eq.ok&cache_status=eq.miss&raw_payload=not.is.null${ledgerId ? `&id=eq.${encodeURIComponent(ledgerId)}` : `&created_at=gte.${encodeURIComponent(since)}`}&select=id,raw_payload&order=created_at.desc,id.desc&limit=1`,
   );
@@ -27,6 +35,15 @@ export async function storeApplicationHarvest(
   payload: unknown,
 ): Promise<string> {
   if (org !== TT_ORG_ID) throw Error("person_intake_tenant");
+  if (transitionSupport() && !applicationProcessing()) throw Error('transition_admission');
+  if (applicationProcessing()) {
+    assertApplicationIdentity(org, username);
+    try {
+      const result = await sbRpc<{id: string}>('person_application_harvest_store', {p_payload: payload});
+      if (!result?.id) throw Error('person_intake_cache_write');
+      return result.id;
+    } catch { throw Error('person_intake_cache_write'); }
+  }
   const result = await sbRest("candidate_enrichments?select=id", {
     method: "POST",
     prefer: "return=representation",
@@ -56,6 +73,8 @@ export async function applicationIntakeReceipt(
   harvest_ledger_id: string | null;
 } | null> {
   if (org !== TT_ORG_ID) throw Error("person_intake_tenant");
+  if (transitionSupport() && !applicationProcessing()) throw Error('transition_admission');
+  if (applicationProcessing()) acceptedApplicationInput(applicationId, org);
   const result = await sbRest(
     `person_application_receipts?application_id=eq.${encodeURIComponent(applicationId)}&select=application_snapshot,harvest_ledger_id&limit=1`,
   );

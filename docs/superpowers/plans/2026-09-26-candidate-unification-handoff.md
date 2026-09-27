@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-27 (queued application integration prepared). Plan:
+Updated 2026-09-27 (application ownership bridges prepared). Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,12 +15,11 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR38
-at `88354169e21638fa73867558c187602da48ee601`. The current sequential child
-`feat/person-37-queued-application-intake` integrates queued public acceptance,
-shared callback/worker admission, safe pre-effects recovery and transactional
-application finalization. Read GitHub for the latest full SHA before
-release; no production transition or queue integration is enabled.
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR39
+at `b12ea8aca0242af0929266b9beb607cbc8da7d50`. The current sequential child
+`feat/person-38-application-ownership` freezes claimed candidate/source ownership
+for the later writer fences. Read GitHub for the latest full SHA before release;
+no production transition or queue integration is enabled.
 
 ## Exact database accounting
 
@@ -136,7 +135,7 @@ passed 913 preview tenancy calls in 252 seconds; completed and earlier stopped
 fixture runs both cleared 18 strict cleanup checks. The cleanup harness now
 uses exact owned job IDs, retains ownership on failures and has two regressions.
 
-The current child adds queued public acceptance, resume hashes, semantic future
+PR39 adds queued public acceptance, resume hashes, semantic future
 intent dedupe, shared atomic allowance/claim, stage renewal, input-review holds
 and safe pre-effects owner recovery. TT contact/name/preferences commit with
 normalized facts and immutable receipts; the audit proves historical preference
@@ -146,7 +145,19 @@ remains in explicit review. Support remains off; no new migration is live.
 Local coverage includes lifecycle/queue concurrency, actual bundled public routes
 and processing with mocked network, real claimed intake/rollback/ordering, the
 85-check auditor, 27 existing intake checks, 15 local canary checks and build.
-See `scripts/person-application-queue/README.md` for the boundary and commands.
+Exact PR39 head `def05d243f329c4e47d03d0984ed0aee1d85bd20` passed all 913
+preview tenancy calls in 251 seconds; run `5w9zg881e` passed 18 strict cleanup
+checks with zero leftovers after bounded exact-run fallback.
+
+The current ownership child adds a frozen work-to-candidate binding, minimal
+atomic seed and exact receipt/source completion proof. Claimed Harvest storage,
+cache selection and attachment retain first-owner evidence and reject stale or
+transferred scope. Bound receipt rename/replacement/deletion and owned raw-ledger
+mutation fail even without caller context. All guards here remain prepared;
+this is not coverage of every source, normalized, shared-lookup or derivative
+write. Existing unbound legacy receipt/ledger behavior remains compatible while
+the controller is disabled. Full writer coverage is still required before any
+activation. See `scripts/person-application-queue/README.md` for commands.
 
 Retain the private recovery exports (12 JSON files, approximately 441 MB),
 row-restoration proof `RECOVERY_CHECK_PASSED`, and the known physical backup from

@@ -9,20 +9,27 @@ globalThis.fetch=async(input,init={})=>{
  else if(fn==='person_application_work_start')args=[b.p_id,b.p_token];
  else if(fn==='person_transition_renew')args=[b.p_id,b.p_token,b.p_lease];
  else if(fn==='person_application_work_finish')args=[b.p_id,b.p_token,b.p_outcome];
- else if(fn==='person_application_work_defer')args=[b.p_id,b.p_token,b.p_delay];else throw Error('unexpected_rpc');
- try{return Response.json((await pool.query(`select public.${fn}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).rows[0].r);}catch{return Response.json({message:'synthetic_rpc_failed'},{status:409});}
+ else if(fn==='person_application_work_defer')args=[b.p_id,b.p_token,b.p_delay];
+ else if(fn==='person_application_harvest_store')args=[b.p_payload];
+ else if(fn==='person_application_harvest_cache')args=[b.p_since,b.p_ledger];else throw Error('unexpected_rpc');
+ const c=await pool.connect();try{await c.query('begin');const headers=new Headers(init.headers);await c.query("select set_config('request.headers',$1,true)",[JSON.stringify(Object.fromEntries([...headers].filter(([key])=>key.startsWith('x-person-'))))]);const result=(await c.query(`select public.${fn}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).rows[0].r;await c.query('commit');return Response.json(result);}catch{return Response.json({message:'synthetic_rpc_failed'},{status:409});}finally{await c.query('rollback');c.release();}
 };
 const lib=await import('./dist/processing.mjs');test.after(()=>pool.end());
 let serial=0;
 async function app(patch={},username=`synthetic-work-intake-${++serial}`,db=pool){
  const id=randomUUID();await db.query("insert into website_applications(id,organization_id,name,email,linkedin_username,linkedin_url,status,source,person_processing_version,person_intent_hash,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,contact) values($1,$2,$3,'synthetic@example.test',$4,$5,'queued','future',1,$6,$7,$8,'{}','{}',$9)",[id,TT,patch.name??'Synthetic',username,`https://www.linkedin.com/in/${username}`,randomUUID().replaceAll('-','').repeat(2),patch.follow_up_at??'2027-01-01',patch.preferred_roles??['Engineering'],patch.contact??{}]);return id;
 }
-async function processApp(id,{mutate,queryHook,contacts={phone:'+12025550123'},afterIntake}={}){
+async function processApp(id,{mutate,queryHook,harvest,sourceCheck,contacts={phone:'+12025550123'},afterIntake}={}){
  let result,error;const source=(await pool.query('select * from website_applications where id=$1',[id])).rows[0];
  const status=await lib.runApplicationWork({submissionId:id,orgId:TT,boardOrg:null,fromQueue:true},async p=>{
-  await lib.startApplicationEffects();if(mutate)await mutate();const c=await pool.connect();
+  await lib.startApplicationEffects();let harvestLedgerId;
+  if(sourceCheck)await sourceCheck(source);
+  if(harvest==='fresh')harvestLedgerId=await lib.storeApplicationHarvest(TT,source.linkedin_username,{id:123,firstName:'Synthetic',lastName:'Profile',skills:[]});
+  if(harvest==='cached')harvestLedgerId=(await lib.cachedApplicationHarvest(TT,source.linkedin_username,new Date(0).toISOString()))?.id;
+  if(harvest)assert.ok(harvestLedgerId);
+  if(mutate)await mutate();const c=await pool.connect();
   const wrapped={query:async(sql,values)=>{if(queryHook)await queryHook(sql,values,c);return c.query(sql,values);}};
-  try{result=await lib.saveApplicationPersonOnConnection(wrapped,{organizationId:TT,applicationId:id,linkedinUsername:source.linkedin_username,name:'Resolved Synthetic',parsed:{current_title:'Engineer'},resumeText:'Synthetic resume',resumeContacts:contacts,mode:'live'});}
+  try{result=await lib.saveApplicationPersonOnConnection(wrapped,{organizationId:TT,applicationId:id,linkedinUsername:source.linkedin_username,name:'Resolved Synthetic',parsed:{current_title:'Engineer'},resumeText:'Synthetic resume',resumeContacts:contacts,harvestLedgerId,mode:'live'});}
   catch(e){error=e;throw e;}finally{c.release();}
   if(afterIntake)await afterIntake(result);await pool.query("update website_applications set status='processed' where id=$1",[id]);return 'processed';
  });return{status,result,error};
@@ -111,4 +118,15 @@ test('tenant intent evidence cannot authorize metadata on a TT candidate',async(
  await c.query("update candidates set follow_up_at='2028-01-01',role_preferences=$2 where id=$1",[out.result.candidateId,{roles:['Wrong'],locations:[],workplace:[],salary:null}]);const event=(await c.query("select id from person_change_events where candidate_id=$1 and transaction_id=pg_current_xact_id() and source_table='candidates' order by id desc limit 1",[out.result.candidateId])).rows[0].id;
  await assert.rejects(c.query("select person_private.attribute_change($1,$2,'application_preferences')",[event,op]),/audit_application_intent/);
  }finally{await c.query('rollback');c.release();}
+});
+
+test('real claimed Harvest persistence survives intake and later applications reuse finalized evidence',async()=>{
+ const username=`synthetic-work-intake-${++serial}`,a=await app({},username),first=await processApp(a,{harvest:'fresh'});assert.equal(first.status,'processed',first.error?.message);
+ const source=(await pool.query('select e.* from candidate_enrichments e join person_application_receipts r on r.harvest_ledger_id=e.id where r.application_id=$1',[a])).rows[0];assert.equal(source.candidate_id,first.result.candidateId);
+ const b=await app({},username),second=await processApp(b,{harvest:'cached'});assert.equal(second.status,'processed',second.error?.message);assert.equal(second.result.candidateId,first.result.candidateId);
+ const reused=(await pool.query('select e.* from candidate_enrichments e join person_application_receipts r on r.harvest_ledger_id=e.id where r.application_id=$1',[b])).rows[0];assert.deepEqual(reused,source,'original ledger, date and raw evidence are preserved');
+ assert.equal(plan(await snapshot(first.result.candidateId)).status,'verified');
+});
+test('claimed source helpers reject a mismatched caller username before using retained authority',async()=>{
+ const a=await app();const out=await processApp(a,{sourceCheck:async()=>{await assert.rejects(lib.storeApplicationHarvest(TT,'another-person',{id:123}),/application_scope/);await assert.rejects(lib.cachedApplicationHarvest(TT,'another-person',new Date(0).toISOString()),/application_scope/);}});assert.equal(out.status,'processed',out.error?.message);
 });
