@@ -134,3 +134,4 @@ export { beginGuardedAuditOperationLocked, attributeAuditMutation, createReceipt
 export { captureDirectoryAdmissionEvidence,evaluateDirectoryAdmission,directoryAdmissionMatches } from './person/directory-admission';
 export { saveCertifiedDirectoryOnConnection, saveCertifiedDirectory } from './person/directory-execution';
 export { readCertifiedDirectoryCurrentOnConnection, readCertifiedDirectoryCurrent } from './person/directory-current';
+export { claimCertifiedRefreshOnConnection, startCertifiedRefreshProviderOnConnection, storeCertifiedRefreshPayloadOnConnection, failCertifiedRefreshOnConnection, claimCertifiedRefresh, startCertifiedRefreshProvider, storeCertifiedRefreshPayload, failCertifiedRefresh } from './person/refresh-lifecycle';

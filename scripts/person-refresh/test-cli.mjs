@@ -40,7 +40,9 @@ after(async () => {
   await db.end();
   await new Promise((r) => server.close(r));
 });
-await db.query("truncate refresh_queue,person_refresh_attempts");
+// This loopback fixture precedes certified refresh tests. Unowned legacy rows
+// can be removed with ordinary deletes; the prepared schema forbids TRUNCATE.
+await db.query("delete from person_refresh_attempts;delete from refresh_queue");
 const exec = promisify(execFile);
 async function fixture(n) {
   await db.query(
