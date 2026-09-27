@@ -1,9 +1,11 @@
 // Server/worker only. Replaceable vectors never serve as source evidence.
+import { transitionSupport } from "../person-transition/context";
 import { createHash, randomUUID } from "node:crypto";
 import { TT_ORG_ID } from "./normalize";
 import { publishedPersonRowsOnConnection } from "./published";
 import { poolProfileText } from "../pool/profile";
 import {
+  projectionProfileHash,
   beginPersonTransaction,
   lockPerson,
   withPersonConnection,
@@ -58,7 +60,7 @@ export function personDerivativeChunks(sources: Sources): Chunk[] {
   }
   return result;
 }
-async function canonical(c: PersonConnection, id: string) {
+export async function personDerivativeInput(c: PersonConnection, id: string) {
   const row = (await publishedPersonRowsOnConnection(c, [id])).get(id);
   if (!row) throw Error("person_profile_unavailable");
   const resume = (
@@ -73,6 +75,8 @@ async function canonical(c: PersonConnection, id: string) {
     revision: String(row.published_revision),
     sources,
     hash: hash(JSON.stringify([MODEL, DIMS, sources])),
+    bytes: JSON.stringify([MODEL, DIMS, sources]),
+    profileHash: projectionProfileHash(row),
   };
 }
 /** Caller already owns gate72005 and the person advisory/row locks. Enqueue
@@ -82,7 +86,12 @@ export async function enqueuePersonDerivativesLocked(
   a: Scope & { receiptRef: string },
 ) {
   scoped(a);
-  const current = await canonical(c, a.candidateId);
+  const current = await personDerivativeInput(c, a.candidateId);
+  if (transitionSupport()) {
+    const before = (await c.query("select person_private.publication_candidate($1) value", [a.candidateId])).rows[0].value;
+    await c.query("select person_private.derivative_enqueue(null,$1,$2,$3,$4)", [a.candidateId,a.receiptRef,before,current]);
+    return current;
+  }
   await c.query(
     `insert into public.person_derivative_jobs as old(candidate_id,desired_revision,desired_hash,sources,model,dimensions,receipt_ref)
  values($1,$2,$3,$4,$5,$6,$7) on conflict(candidate_id) do update set
@@ -222,7 +231,7 @@ export async function completePersonDerivativesOnConnection(
       !job.lease_valid
     )
       return { status: "stale" as const };
-    const current = await canonical(c, a.candidateId);
+    const current = await personDerivativeInput(c, a.candidateId);
     if (current.hash !== job.desired_hash) {
       await enqueuePersonDerivativesLocked(c, {
         ...a,
