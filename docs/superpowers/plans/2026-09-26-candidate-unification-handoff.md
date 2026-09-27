@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-27 (application boundaries and directory input certification prepared). Plan:
+Updated 2026-09-27 (application boundaries and directory shadow execution prepared). Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,15 +15,20 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR53
-at `8509df2d9a8f95f77bd722fcd6f7c57c7bd718c0`. The directory input child based on
-that parent adds checked scan/staging APIs and private immutable input certificates.
-The decision evaluator also reconstructs admitted components and complete source
-reviews from explicit retained inputs. This comparison does not certify which
-source rows or prior receipt were selected; private execution remains required.
-Its support-on directory command, save and embedding paths explicitly refuse
-execution until the full directory family is admitted. Read GitHub for the latest
-full SHA before release; no production transition or queue integration is enabled.
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR54
+at `532d08ac828ba5733ccc7b85b732490d712a0606`. The current child adds privately
+admitted directory shadow execution for an existing migrated candidate. Certified
+input selection, deterministic documents/reviews, audit proof, normalized writes,
+primary ranking, receipt/state and work completion share one transaction. Same
+execution UUID replays the immutable result. Every legacy candidate field remains
+unchanged. Its private direct-writer capability is unavailable to generic service
+RPC callers; deployment must verify the dedicated database role before release.
+
+The support-on directory command, legacy save and embedding paths still refuse
+execution until the full directory family is integrated. Creation, suppression,
+live publication and source-review re-evaluation remain follow-up work. Read
+GitHub for the latest full SHA before release; no production transition or queue
+integration is enabled and the new migration remains uninstalled.
 
 ## Exact database accounting
 
