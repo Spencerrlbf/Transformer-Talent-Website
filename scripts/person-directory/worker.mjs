@@ -1,10 +1,16 @@
-// Execution is a later admitted operation; input certification alone never
-// authorizes legacy profile writes or paid embeddings.
-export function requireDirectoryExecution() {
+import { randomUUID } from "node:crypto";
+// Only the normalized worker can use certified execution. A missing mode keeps
+// legacy writers and the separately gated paid consumer unavailable.
+export function requireDirectoryExecution(mode) {
   const support = process.env.PERSON_TRANSITION_SUPPORT;
-  if (support === "on") throw Error("person_directory_execution_unavailable");
+  if (support === "on") {
+    if (!["shadow", "live"].includes(mode))
+      throw Error("person_directory_execution_unavailable");
+    return true;
+  }
   if (support !== undefined && support !== "off")
     throw Error("transition_configuration");
+  return false;
 }
 // Sequential source observations under a fenced website lease. No outbound
 // messages or Harvest requests. Optional embeddings have a separate hard cap.
@@ -17,7 +23,7 @@ export async function runDirectory({
   limit = 100000,
   pageSize = 100,
 }) {
-  requireDirectoryExecution();
+  const certified = requireDirectoryExecution(mode);
   if (!["shadow", "live"].includes(mode)) throw Error("person_directory_mode");
   if (!Number.isInteger(limit) || limit < 1 || limit > 100000)
     throw Error("person_directory_limit");
@@ -37,6 +43,54 @@ export async function runDirectory({
     saved: 0,
     review: 0,
     suppressed: 0,
+  };
+  // One UUID per receipt within this invocation. After process death a later
+  // invocation verifies completed saves; reviewed inputs may be reconsidered.
+  const executions = new Map();
+  const save = async (receiptId) => {
+    const id = String(receiptId);
+    if (!certified)
+      return lib.saveDirectory({
+        organizationId: key.organizationId,
+        receiptId,
+        mode,
+      });
+    const prior = executions.get(id);
+    if (prior?.result) return { status: "unchanged", reviewCount: 0 };
+    const entry = prior ?? { executionId: randomUUID(), result: null };
+    executions.set(id, entry);
+    const current = await lib.readCertifiedDirectoryCurrent({
+      ...key,
+      receiptId,
+    });
+    if (
+      current.status === "completed" &&
+      current.disposition === "normalized" &&
+      (mode === "shadow" || current.mode === "live")
+    ) {
+      entry.result = current.result;
+      return {
+        status: "unchanged",
+        reviewCount: current.result.reviewCount ?? 0,
+      };
+    }
+    entry.result = await lib.saveCertifiedDirectory({
+      ...key,
+      receiptId,
+      mode,
+      executionId: entry.executionId,
+    });
+    return entry.result;
+  };
+  const count = (result) => {
+    if (result.status === "unchanged") {
+      stats.unchanged++;
+      stats.review += result.reviewCount ?? 0;
+    } else if (result.status === "done") {
+      stats.saved++;
+      stats.review += result.reviewCount ?? 0;
+    } else if (result.status === "suppressed") stats.suppressed++;
+    else stats.review++;
   };
   const checkpoint = async (release = false) => {
     if (!dry)
@@ -58,17 +112,9 @@ export async function runDirectory({
         });
         if (!pending.length) break;
         for (const receiptId of pending) {
-          const result = await lib.saveDirectory({
-            organizationId: key.organizationId,
-            receiptId,
-            mode,
-          });
+          const result = await save(receiptId);
           stats.recovered++;
-          if (result.status === "done") {
-            stats.saved++;
-            stats.review += result.reviewCount ?? 0;
-          } else if (result.status === "suppressed") stats.suppressed++;
-          else stats.review++;
+          count(result);
         }
         await checkpoint();
       }
@@ -115,22 +161,14 @@ export async function runDirectory({
                     snapshot,
                   });
             if (
+              !certified &&
               receipt.phase === "done" &&
               (mode === "shadow" || receipt.projected)
             ) {
               stats.unchanged++;
               stats.review += receipt.reviewCount ?? 0;
             } else {
-              const result = await lib.saveDirectory({
-                organizationId: key.organizationId,
-                receiptId: receipt.receiptId,
-                mode,
-              });
-              if (result.status === "done") {
-                stats.saved++;
-                stats.review += result.reviewCount ?? 0;
-              } else if (result.status === "suppressed") stats.suppressed++;
-              else stats.review++;
+              count(await save(receipt.receiptId));
             }
             consumed = !receipt.pendingPrevious;
           }
@@ -144,14 +182,17 @@ export async function runDirectory({
     await checkpoint(true);
     return stats;
   } catch (error) {
-    // The cursor always stops before an unsuccessful save. Its immutable
-    // receipt remains ready; the next claim re-reads and retries that contact.
+    // The cursor stops before an unsuccessful save. Fresh input stays ready;
+    // failed reconsideration retains its prior completed receipt. A later
+    // claim re-reads and verifies the contact before continuing.
     await checkpoint(true).catch(() => {});
     throw error;
   }
 }
 export async function main() {
-  requireDirectoryExecution();
+  const certified = requireDirectoryExecution(
+    process.env.PERSON_WRITE_MODE || "legacy",
+  );
   const lib = await import("../dist/worker-lib.mjs");
   const { openComms, commsColumns, readDirectory, missingComms } = await import(
     "../person-trial.mjs"
@@ -198,8 +239,9 @@ export async function main() {
       dry: !!process.env.DRY_RUN,
       limit,
     });
-    const derivatives =
-      !process.env.DRY_RUN && mode === "live" && process.env.OPENAI_API_KEY
+    const derivatives = certified
+      ? { embedded: 0, stale: 0, failed: 0, derivativesDeferred: true }
+      : !process.env.DRY_RUN && mode === "live" && process.env.OPENAI_API_KEY
         ? await drainDirectoryEmbeddings({
             lib,
             workspaceId: workspace.id,
