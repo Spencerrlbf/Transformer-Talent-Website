@@ -627,6 +627,16 @@ commit: schedule an approved quiet window or prepare a separately validated
 concurrent build before applying this migration. Bound timeouts are not an online
 build guarantee. No full-pool throughput measurement is claimed.
 
-Existing-person suppression, same-source review/suppression re-admission under a
-new UUID, worker integration and consumers remain release prerequisites. See
+Existing-person suppression is separately prepared in 180000. Same-source
+review/suppression re-admission under a new UUID, worker integration and consumers
+remain release prerequisites. See
 `scripts/person-directory-outcomes/README.md` for exact scope and checks.
+
+## Prepared directory safety status
+
+`20260927180000_person_directory_suppression.sql` extends private outcomes with an
+exact status-only mutation/event witness. It is uninstalled. Held, unmigrated and
+anchorless people can receive DNC without admitted profile facts; global work
+holds and source identity checks remain enforced. Same-source outcome re-admission,
+worker/consumer integration and remaining writer families stay gated. See
+`scripts/person-directory-suppression/README.md` for checks and audit limitations.

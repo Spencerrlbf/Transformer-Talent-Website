@@ -9,7 +9,7 @@ import {
 } from "../person-directory/worker.mjs";
 const url = process.env.LOCAL_DATABASE_URL;
 if (
-  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:input|execution|publication|creation|outcomes)_test$/.test(
+  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_directory_(?:input|execution|publication|creation|outcomes|suppression)_test$/.test(
     url || "",
   )
 )
