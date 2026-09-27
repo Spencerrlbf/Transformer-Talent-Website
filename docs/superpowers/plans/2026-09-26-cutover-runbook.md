@@ -190,6 +190,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927025000_person_application_proof.sql
 20260927035000_person_application_projection.sql
 20260927052000_person_intake_mutations.sql
+20260927060000_person_intake_ready.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -328,7 +329,9 @@ Prepared projection migration `20260927035000` binds claimed compatibility updat
 audit attribution and projection history/state to one synchronous operation.
 Prepared intake migration `20260927052000` adds exact seed/metadata/preferences
 frames and receipt-derived application finalization, including actual-row validation
-and private metadata replay witnesses. All remain uninstalled. Later pipeline
+and private metadata replay witnesses. Prepared readiness migration `20260927060000`
+requires private metadata/projection/finalization/preference proof before a first
+binding commits and retains original preference ordering on replay. All remain uninstalled. Later pipeline
 completion and public/tenant source admission, remaining proof rows, conflicts,
 recruiter/directory/refresh/derivative writers and historical
 maintenance still require complete admission coverage. Do not use existing

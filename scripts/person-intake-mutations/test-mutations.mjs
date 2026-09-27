@@ -81,10 +81,10 @@ for(const returned of ['old','null'])test(`a suppressed details update returning
  await pool.query(`create function person_private.synthetic_suppress_details() returns trigger language plpgsql as $$begin if exists(select 1 from person_private.intake_mutation_frames where backend_pid=pg_backend_pid() and kind='details') then return ${returned};end if;return new;end$$;create trigger z_synthetic_suppress_details before update on candidates for each row execute function person_private.synthetic_suppress_details()`);
  try{const r=await processApp(id);assert.equal(r.status,'failed');assert.match(r.error?.message||'',/candidate_mutation_frame|intake_metadata_write/);assert.equal((await pool.query('select count(*)::int n from person_private.application_candidates where application_id=$1',[id])).rows[0].n,0);assert.equal((await pool.query('select count(*)::int n from person_private.intake_mutation_frames')).rows[0].n,0);}finally{await pool.query('drop trigger z_synthetic_suppress_details on candidates;drop function person_private.synthetic_suppress_details()');}
 });
-test('an unchanged finalization replay still rejects a late unrelated field change',async()=>{
+test('checked finalization rejects a late unrelated field change',async()=>{
  let replayed=false;const r=await processApp(await app(),{queryHook:async(sql,values,c)=>{
   if(!sql.includes('person_application_finalize('))return;
-  await c.query(sql,values);replayed=true;
+  replayed=true;
   await c.query("create function person_private.synthetic_late_finalize() returns trigger language plpgsql as $$begin if exists(select 1 from person_private.intake_mutation_frames where backend_pid=pg_backend_pid() and kind='finalize') then new.status:='forged';end if;return new;end$$;create trigger z_synthetic_late_finalize before update on website_applications for each row execute function person_private.synthetic_late_finalize()");
  }});assert.ok(replayed);assert.equal(r.status,'failed');assert.match(r.error?.message||'',/application_finalize_frame/);
 });

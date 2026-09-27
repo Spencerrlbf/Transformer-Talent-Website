@@ -510,3 +510,12 @@ application result write still requires its own private completion proof; public
 acceptance, tenant finalization, other writer families, maintenance and complete
 canary/drain coverage remain release prerequisites. No new migration or guard is
 installed by preparing this child.
+
+
+The subsequent prepared `20260927060000_person_intake_ready.sql` records first-intake
+readiness from private stage and actual-row evidence. It requires the appropriate
+projection disposition and preserves the original applied/superseded preference
+proof on replay. Missing historical readiness fails closed. The deferred binding
+check prevents the first intake from committing with a skipped required stage.
+The later workflow result/completion operation still needs to consume this proof;
+tenant binding/results and the broader release prerequisites remain unfinished.
