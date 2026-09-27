@@ -1,3 +1,4 @@
+import { transitionSupport } from "./person-transition/context";
 import { applicationEditsPaused } from './person-transition/acceptance';
 // Candidates v2: applicants + sourced people unified into one org-scoped,
 // sortable, paginated list, plus a per-person drawer detail and editable
@@ -1804,6 +1805,7 @@ export async function saveUnifiedContact(
   // Enforce pool ownership in the service as well as the HTTP route.
   if (key.startsWith("net_")) {
     if (orgId !== TT_ORG_ID) return { error: "not_found" };
+    if (transitionSupport() && personWriteMode() === "legacy") return { error: "temporarily_unavailable" };
     if (personWriteMode() !== "legacy") {
       if (!edit) return { error: "member_required" };
       try {
@@ -1814,6 +1816,7 @@ export async function saveUnifiedContact(
       } catch (error) {
         const reason = (error as Error).message;
         if (["invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable"].includes(reason)) return { error: reason };
+        if (reason === "person_recruiter_unavailable") return { error: "temporarily_unavailable" };
         if (reason === "person_not_found") return { error: "not_found" };
         if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
         return { error: "save_failed" };

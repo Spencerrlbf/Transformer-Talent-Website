@@ -1,10 +1,10 @@
 #!/bin/bash
-# Resets only the caller-owned loopback person_directory_worker_test fixture database.
+# Resets only the caller-owned loopback person_recruiter_admission_test fixture database.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
-DB=person_directory_worker_test
+DB=person_recruiter_admission_test
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 q -d postgres -c "drop database if exists $DB" -c "create database $DB"
 q -d $DB -f scripts/person-trial/local-schema.sql
@@ -86,20 +86,13 @@ q -d $DB -1 -f supabase/migrations/20260927210000_person_refresh_lifecycle.sql
 if test -f supabase/migrations/20260927220000_person_refresh_save.sql; then
  q -d $DB -1 -f supabase/migrations/20260927220000_person_refresh_save.sql
 fi
-q -d $DB -1 -f supabase/migrations/20260927230000_person_refresh_worker.sql
-q -d $DB -1 -f supabase/migrations/20260928000000_person_recruiter_admission.sql
+if test -f supabase/migrations/20260927230000_person_refresh_worker.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927230000_person_refresh_worker.sql
+fi
+if test -f supabase/migrations/20260928000000_person_recruiter_admission.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928000000_person_recruiter_admission.sql
+fi
 node scripts/build-worker-lib.mjs
-npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-input/test-input.mjs
-node --test scripts/person-directory-input/test-cli.mjs scripts/person-directory-admission/test-decision.mjs scripts/person-directory-worker/test-policy.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-conflict-evidence/test-fence.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-recruiter-admission/test-cross-family.mjs
-q -d $DB -c "update person_private.transition_control set enabled=false,phase='open' where singleton"
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory/test-directory.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory/test-cli.mjs
-node --test scripts/person-directory/test-sources.mjs scripts/person-directory/test-worker.mjs
-q -d $DB -c "update person_private.transition_control set enabled=true,phase='open' where singleton"
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-worker/test-cli.mjs
-q -d $DB -c "update person_private.transition_control set enabled=false,phase='open' where singleton"
-q -d $DB -f scripts/person-trial/test-save-person.sql
-q -d $DB -f scripts/person-trial/test-writer-rules.sql
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-recruiter-admission/test-admission.mjs
+
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-recruiter-admission/test-endpoint.mjs

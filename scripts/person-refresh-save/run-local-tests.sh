@@ -89,5 +89,6 @@ fi
 if test -f supabase/migrations/20260927230000_person_refresh_worker.sql; then
  q -d $DB -1 -f supabase/migrations/20260927230000_person_refresh_worker.sql
 fi
+q -d $DB -1 -f supabase/migrations/20260928000000_person_recruiter_admission.sql
 node scripts/build-worker-lib.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-refresh-save/test-save.mjs
