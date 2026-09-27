@@ -2,4 +2,4 @@ export {runApplicationWork,startApplicationEffects,stageApplicationResult} from 
 export {saveApplicationPersonOnConnection} from '../../lib/server/person/intake';
 export {transitionRequestHeaders} from '../../lib/server/person-transition/context';
 export {beginPersonTransaction} from '../../lib/server/person/save';
-export {storeApplicationHarvest,cachedApplicationHarvest} from '../../lib/server/person/application-sources';
+export {storeApplicationHarvest,cachedApplicationHarvest,recordApplicationParser} from '../../lib/server/person/application-sources';

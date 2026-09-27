@@ -194,6 +194,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927065000_person_tenant_binding.sql
 20260927070000_person_application_completion.sql
 20260927080000_person_application_acceptance.sql
+20260927090000_person_application_enrichment.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -377,3 +378,14 @@ client-target Send are explicitly outside this TT-only fence; their broader
 admission, other source families, derivatives and maintenance remain prerequisites.
 Do not install or activate this partial chain. Verification and Unicode parser
 version are documented in `scripts/person-application-acceptance/README.md`.
+
+Prepared enrichment/source migration `20260927090000` follows acceptance. Checked
+Harvest writes retain exact private ownership and the first cache selection;
+historical cache reuse preserves original evidence, date and spend. Resume parser
+telemetry derives its identity from admitted TT readiness. OLD/NEW enrichment
+sources and legacy email writes are fenced while required; tenant spend without
+candidate links and exact anonymous JD INSERT telemetry remain compatible.
+Truncation is refused after installation even while disabled. See
+`scripts/person-application-enrichment/README.md`. This does not complete the
+other-writer, derivative, maintenance or production canary gates. Do not install
+or activate the partial chain before approval.

@@ -570,3 +570,20 @@ tenant acceptance/completion and existing tenant writers remain available.
 The migration is prepared only. Other sources, client-target Send admission,
 derivatives, maintenance and full canaries still block release. See
 `scripts/person-application-acceptance/README.md` for tests and exact boundaries.
+
+## Prepared enrichment evidence and legacy email boundary
+
+`20260927090000_person_application_enrichment.sql` preserves the first selected
+Harvest evidence across retries and advancing freshness cutoffs. Checked writes
+validate actual public rows and exact private ownership before acknowledging
+success. Historical reuse retains original payloads, dates and spend; candidate
+attachments require frozen identity and receipt-backed proof.
+
+Admitted TT parser telemetry uses a narrow checked RPC after intake readiness.
+It records no profile payload or credits and never falls back to raw writes.
+Tenant/support-off processing and exact anonymous JD INSERT telemetry remain
+compatible. Required normalization fences OLD/NEW TT enrichment sources, all
+nonnull candidate links and legacy email mutations. Normalized contacts continue
+through the admitted writer. These guards remain uninstalled. Other writers,
+derivatives, maintenance and full production canaries remain prerequisites; see
+`scripts/person-application-enrichment/README.md` for tests and boundaries.
