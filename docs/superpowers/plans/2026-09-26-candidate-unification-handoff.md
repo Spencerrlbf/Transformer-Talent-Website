@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-27 (typed application projection prepared). Plan:
+Updated 2026-09-27 (application boundaries and directory input certification prepared). Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,11 +15,12 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR42
-at `8fac2256660d4afc0629b83c9ba89e27ab8b67cb`. The current sequential child
-`feat/person-41-application-projection` makes claimed compatibility updates,
-attribution and recovery history one checked database operation. Read GitHub for the latest full SHA before release;
-no production transition or queue integration is enabled.
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR52
+at `4acb8568edf58df4dcbab9fb7888d6ed0a7d087a`. The directory input child based on
+that parent adds checked scan/staging APIs and private immutable input certificates.
+Its support-on directory command, save and embedding paths explicitly refuse
+execution until the full directory family is admitted. Read GitHub for the latest
+full SHA before release; no production transition or queue integration is enabled.
 
 ## Exact database accounting
 
@@ -96,23 +97,25 @@ and application work primitives, plus the separate concurrent directory lookup
 index, is listed in the cutover runbook. All-writer fences, website/worker canaries and runtime
 maintenance remain unfinished. Do not install or enable an incomplete chain.
 
-The application normalization boundary is described in
-`scripts/person-normalization-fence/README.md`. It protects normalized facts and
-shared lookup mutations, preserves disabled legacy behavior, and does not yet
-fence candidates, source/projection/audit proof rows, conflicts or derivatives.
-All other writer families still need admission before controller activation.
+The prepared application path now includes bound ownership, normalized facts,
+private audit/anchor proof, typed projection, exact seed/contact/preference
+mutations, readiness and atomic completion, tenant binding, public acceptance,
+retained Harvest/parser inputs and their original cache selection. The legacy
+email, website communications and non-person experience paths are fenced when
+required. Conflict evidence and shared company/school/skill writes use checked
+mutations. These boundaries preserve support-off compatibility; they are not live.
 
-The application proof boundary in `scripts/person-application-proof/README.md`
-adds privately certified anchors/checkpoints, scoped attribution, genuine-trigger
-proof markers and owner/service DML protections. Previously unregistered anchors
-are not silently certified. Source statement hooks establish lock ordering only;
-typed candidate/projection/source authorization remains unfinished.
+The directory foundation binds each accepted receipt to its actual retained
+snapshot and original capture time. A legacy hash is only a deduplication hint:
+ordinary fields and duplicate-preserving list contents are independently checked.
+Historical uncertified inputs require review, with no implicit adoption. The
+support-on command stops before external reads, candidate writes or embeddings.
+See `scripts/person-directory-input/README.md` for its scope and tests.
 
-The typed projection operation in `scripts/person-application-projection/README.md`
-validates exact ownership, receipt sources, revision and typed profile envelopes,
-then commits candidate fields, attribution, history and state together. Email races
-select the matching fallback profile/hash. Source/non-profile/seed/conflict and
-other writer admission still remain; this is not a completed transition.
+Directory normalization execution, refresh, recruiter edits, derivatives and
+maintenance still need their own admitted operations and integrated canaries.
+Input certification does not authorize these operations or make the full writer
+transition ready for activation.
 
 ## Verification and recovery evidence
 
@@ -167,15 +170,15 @@ Exact PR39 head `def05d243f329c4e47d03d0984ed0aee1d85bd20` passed all 913
 preview tenancy calls in 251 seconds; run `5w9zg881e` passed 18 strict cleanup
 checks with zero leftovers after bounded exact-run fallback.
 
-The current ownership child adds a frozen work-to-candidate binding, minimal
-atomic seed and exact receipt/source completion proof. Claimed Harvest storage,
-cache selection and attachment retain first-owner evidence and reject stale or
-transferred scope. Bound receipt rename/replacement/deletion and owned raw-ledger
-mutation fail even without caller context. All guards here remain prepared;
-this is not coverage of every source, normalized, shared-lookup or derivative
-write. Existing unbound legacy receipt/ledger behavior remains compatible while
-the controller is disabled. Full writer coverage is still required before any
-activation. See `scripts/person-application-queue/README.md` for commands.
+PR40–52 add the prepared application ownership, proof, projection, exact mutation,
+readiness, tenant binding, atomic completion, public acceptance, enrichment,
+legacy source, conflict and lookup boundaries. Every merged child passed its
+exact preview's 913-call tenancy gate and strict 18-check synthetic cleanup.
+The latest PR52 preview at `c5d43de47caae8acb53588046722d11a4c3009e8` passed in
+211 seconds; run `k9w8pad02` had zero leftovers. Its local full-chain validation
+passed 141 assertions, including real lookup contention and FK lock checks.
+No hosted fixture overlapped a source scan. This is compatibility evidence for
+prepared code; production still has only the seven additive migrations above.
 
 Retain the private recovery exports (12 JSON files, approximately 441 MB),
 row-restoration proof `RECOVERY_CHECK_PASSED`, and the known physical backup from
@@ -200,21 +203,20 @@ reproduce the token in reports.
 
 ## Remaining work before release approval
 
-1. **Finish website canary and queue/drain integration.** Local canary,
-   disabled controller and application reservation primitives are prepared.
-   Public queued acceptance, file verification, shared processing claims,
-   pre-effects recovery and receipt-bound finalization are prepared in the current
-   child. Late-writer fences, whole-worker canaries and maintenance remain. All
-   three Actions workers currently share one write-mode variable. A shared flag
-   is not a single-worker canary, and draining Actions does not drain Vercel or
-   recruiter writes. The private `transition-preparation-findings.md` inventory
-   identifies public submission crash/retry, resume persistence, duplicate
-   future-interest, contact extraction, worker staging and paid-reservation gaps.
-   Root owns sequential implementation; no such transition is active. Current
-   processing uses its retained first input instead of mutable callback fields.
-   Legacy queued rows require prior-effect review (files also need hashes), and old unlocked budget
-   writers must be replaced/drained before claiming a strict system-wide cap.
-   Preserve best-effort acceptance notifications without retry-driven resends.
+1. **Finish remaining writer admission and integrated canaries.** Application
+   input, processing, completion and write boundaries are prepared. Directory
+   scan/staging certification is prepared; directory execution remains explicitly
+   unavailable under transition support. Admit directory saves with genuine
+   family-specific work, then refresh, recruiter, derivative and maintenance
+   operations. Test each family's drain/reopen, lock waits, lost responses,
+   replay and rollback, then exercise the whole website/worker release.
+   All three Actions workers currently share one write-mode variable. A shared
+   flag is not a single-worker canary; draining Actions does not drain Vercel or
+   recruiter writes. Legacy queued rows require prior-effect review (files also
+   need hashes). Old unlocked budget writers must be replaced/drained before
+   claiming a strict system-wide cap. Preserve best-effort acceptance notifications
+   without retry-driven resends. Root continues sequential reviewed children;
+   no such transition is active.
 2. **Retain explicit source-proof policy.** Publish identity-review people only
    when their immutable anchor and evidence chain are valid. The 123 same-snapshot
    source mutations and two date holds are unresolved; `--review=publish` does

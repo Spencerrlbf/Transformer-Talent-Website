@@ -1,3 +1,4 @@
+import { transitionSupport } from "../person-transition/context";
 import {
   beginGuardedAuditOperationLocked,
   createReceiptAuditAnchorLocked,
@@ -52,6 +53,18 @@ async function tx<T>(
     throw e;
   }
 }
+async function checkedInput<T>(
+  c: PersonConnection,
+  a: Scope,
+  sql: string,
+  values: any[],
+): Promise<T> {
+  return tx(c, a, async () => (await c.query(sql, values)).rows[0].result as T);
+}
+function requireDirectoryExecution() {
+  if (transitionSupport())
+    throw Error("person_directory_execution_unavailable");
+}
 async function scanRow(c: PersonConnection, a: Lease) {
   const r = (
     await c.query(
@@ -67,6 +80,15 @@ export async function claimDirectoryScanOnConnection(
   c: PersonConnection,
   a: Scan,
 ) {
+  if (transitionSupport())
+    return checkedInput<
+      | { status: "held" | "busy" }
+      | { status: "claimed"; token: string; cursor: string; cycle: number }
+    >(c, a, "select public.person_directory_claim($1,$2,$3) result", [
+      a.organizationId,
+      a.workspaceId,
+      randomUUID(),
+    ]);
   return tx(c, a, async () => {
     await c.query(
       "insert into public.person_directory_scans(workspace_id) values($1) on conflict do nothing",
@@ -96,6 +118,20 @@ export async function checkpointDirectoryScanOnConnection(
   c: PersonConnection,
   a: Lease & { cursor: string; release?: boolean; complete?: boolean },
 ) {
+  if (transitionSupport())
+    return checkedInput<{ status: "checkpointed" }>(
+      c,
+      a,
+      "select public.person_directory_checkpoint($1,$2,$3,$4,$5,$6) result",
+      [
+        a.organizationId,
+        a.workspaceId,
+        a.token,
+        a.cursor,
+        !!a.release,
+        !!a.complete,
+      ],
+    );
   return tx(c, a, async () => {
     const r = await scanRow(c, a);
     if (!a.complete && a.cursor < r.cursor)
@@ -118,6 +154,25 @@ export async function stageDirectoryOnConnection(
 ) {
   const hash = directorySnapshotHash(a.snapshot),
     contactId = a.snapshot.board.contact_id;
+  if (transitionSupport())
+    return checkedInput<{
+      receiptId: string;
+      phase: string;
+      projected: boolean;
+      reviewCount?: number;
+      pendingPrevious?: boolean;
+    }>(
+      c,
+      a,
+      "select public.person_directory_stage($1,$2,$3,$4,$5::jsonb) result",
+      [
+        a.organizationId,
+        a.workspaceId,
+        a.token,
+        hash,
+        JSON.stringify(a.snapshot),
+      ],
+    );
   return tx(c, a, async () => {
     const scan = await scanRow(c, a);
     await c.query("select pg_advisory_xact_lock(72011,hashtext($1))", [
@@ -294,6 +349,7 @@ export async function saveDirectoryOnConnection(
   c: PersonConnection,
   a: Scope & { receiptId: string | number; mode: "shadow" | "live" },
 ) {
+  requireDirectoryExecution();
   if (!["shadow", "live"].includes(a.mode))
     throw Error("person_directory_mode");
   return tx(c, a, async () => {
@@ -671,6 +727,7 @@ export async function claimDirectoryEmbeddingOnConnection(
   c: PersonConnection,
   a: Scope & { receiptId: string | number },
 ) {
+  requireDirectoryExecution();
   return tx(c, a, async () => {
     const r = (
       await c.query(
@@ -711,6 +768,7 @@ export async function saveDirectoryEmbeddingOnConnection(
   c: PersonConnection,
   a: Scope & { receiptId: string | number; token: string; vector: number[] },
 ) {
+  requireDirectoryExecution();
   scope(a);
   if (
     !Array.isArray(a.vector) ||
@@ -763,8 +821,9 @@ export const claimDirectoryEmbedding = (
 export const saveDirectoryEmbedding = (
   a: Scope & { receiptId: string | number; token: string; vector: number[] },
 ) => withPersonConnection((c) => saveDirectoryEmbeddingOnConnection(c, a));
-export const pendingDirectoryEmbeddings = (a: Scan & { limit: number }) =>
-  withPersonConnection((c) => {
+export const pendingDirectoryEmbeddings = (a: Scan & { limit: number }) => {
+  requireDirectoryExecution();
+  return withPersonConnection((c) => {
     scope(a);
     if (!Number.isInteger(a.limit) || a.limit < 1 || a.limit > 50)
       throw Error("person_directory_derivative_limit");
@@ -775,6 +834,7 @@ export const pendingDirectoryEmbeddings = (a: Scan & { limit: number }) =>
       )
       .then((r) => r.rows.map((x) => String(x.id)));
   });
+};
 
 /** One bounded round trip for unchanged snapshots, not one transaction per
  * person on every full scan. Changed/ready/review inputs still use staging. */
@@ -783,6 +843,31 @@ export async function inspectDirectoryPageOnConnection(
   a: Lease & { snapshots: DirectorySnapshot[] },
 ) {
   if (a.snapshots.length > 100) throw Error("person_directory_page_limit");
+  if (transitionSupport())
+    return checkedInput<
+      Array<{
+        contactId: string;
+        receiptId: string;
+        phase: string;
+        projected: boolean;
+        reviewCount: number;
+      }>
+    >(
+      c,
+      a,
+      "select public.person_directory_inspect($1,$2,$3,$4::jsonb) result",
+      [
+        a.organizationId,
+        a.workspaceId,
+        a.token,
+        JSON.stringify(
+          a.snapshots.map((snapshot) => ({
+            snapshot_hash: directorySnapshotHash(snapshot),
+            snapshot,
+          })),
+        ),
+      ],
+    );
   const items = a.snapshots.map((snapshot) => ({
     contact_id: snapshot.board.contact_id,
     snapshot_hash: directorySnapshotHash(snapshot),
@@ -822,6 +907,19 @@ export async function pendingDirectoryReceiptsOnConnection(
 ) {
   if (!Number.isInteger(a.limit) || a.limit < 1 || a.limit > 100)
     throw Error("person_directory_recovery_limit");
+  if (transitionSupport()) {
+    const out = await checkedInput<{
+      status: "ready" | "input_review";
+      receiptIds: string[];
+    }>(c, a, "select public.person_directory_pending($1,$2,$3,$4) result", [
+      a.organizationId,
+      a.workspaceId,
+      a.token,
+      a.limit,
+    ]);
+    if (out.status !== "ready") throw Error("person_directory_input_review");
+    return out.receiptIds;
+  }
   return tx(c, a, async () => {
     await scanRow(c, a);
     return (
