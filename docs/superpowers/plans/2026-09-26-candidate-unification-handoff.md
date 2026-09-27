@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-27 (application audit authority prepared). Plan:
+Updated 2026-09-27 (typed application projection prepared). Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,10 +15,10 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR41
-at `694f5dda023bf18ab1acc60205dca1888548a324`. The current sequential child
-`feat/person-40-audit-proof-boundary` makes application audit authority database-derived
-and protects captured proof. Read GitHub for the latest full SHA before release;
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR42
+at `8fac2256660d4afc0629b83c9ba89e27ab8b67cb`. The current sequential child
+`feat/person-41-application-projection` makes claimed compatibility updates,
+attribution and recovery history one checked database operation. Read GitHub for the latest full SHA before release;
 no production transition or queue integration is enabled.
 
 ## Exact database accounting
@@ -107,6 +107,12 @@ adds privately certified anchors/checkpoints, scoped attribution, genuine-trigge
 proof markers and owner/service DML protections. Previously unregistered anchors
 are not silently certified. Source statement hooks establish lock ordering only;
 typed candidate/projection/source authorization remains unfinished.
+
+The typed projection operation in `scripts/person-application-projection/README.md`
+validates exact ownership, receipt sources, revision and typed profile envelopes,
+then commits candidate fields, attribution, history and state together. Email races
+select the matching fallback profile/hash. Source/non-profile/seed/conflict and
+other writer admission still remain; this is not a completed transition.
 
 ## Verification and recovery evidence
 

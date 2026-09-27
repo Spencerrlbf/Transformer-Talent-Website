@@ -188,6 +188,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927020700_person_application_ownership.sql
 20260927023000_person_normalization_fence.sql
 20260927025000_person_application_proof.sql
+20260927035000_person_application_projection.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -322,8 +323,9 @@ arm a drain by itself. Prepared normalization migration `20260927023000` adds
 exact-receipt save admission and private execution frames for normalized facts
 and shared lookups. Prepared proof migration `20260927025000` makes claimed audit
 authority database-derived and protects capture/anchor/operation/attribution evidence.
-All remain uninstalled. General candidate/source mutations,
-projection/audit proof rows, conflicts, recruiter/directory/refresh/derivative writers and historical
+Prepared projection migration `20260927035000` binds claimed compatibility updates,
+audit attribution and projection history/state to one synchronous operation.
+All remain uninstalled. General candidate/source mutations, remaining proof rows, conflicts, recruiter/directory/refresh/derivative writers and historical
 maintenance still require complete admission coverage. Do not use existing
 mutable identities or old unbound receipts as standalone write authorization.
 

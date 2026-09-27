@@ -1,6 +1,7 @@
 // Server/worker only. One checked-out PostgreSQL connection owns the complete
 // transaction, including the existing TypeScript projection and before-image.
 import { createHash, randomUUID } from "node:crypto";
+import { applicationProcessing } from "../person-transition/application";
 import { project, type ProjectionInput } from "./project";
 import type { PersonDoc } from "./types";
 import { normalizeEmail, normalizePhone, checkClass } from "./normalize";
@@ -67,7 +68,7 @@ export const projectionProfileHash = (row: Record<string, unknown>): string =>
   hash(profileOf(row));
 /** Used for observation only. This writer never calls paid enrichment or marks
  * matching/embedding work stale just because storage representation changed. */
-export function semanticProfileHash(row: Record<string, any>): string {
+function semanticProfileValue(row: Record<string, any>): unknown {
   const clean = (v: any): any =>
     typeof v === "string"
       ? v.replace(/\s+/g, " ").trim()
@@ -82,7 +83,10 @@ export function semanticProfileHash(row: Record<string, any>): string {
                 .map(([k, x]) => [k, clean(x)]),
             )
           : v;
-  return hash(clean(profileOf(row)));
+  return clean(profileOf(row));
+}
+export function semanticProfileHash(row: Record<string, any>): string {
+  return hash(semanticProfileValue(row));
 }
 export async function readPersonProjection(
   client: PersonConnection,
@@ -241,7 +245,7 @@ async function computeProjection(
     state,
     before,
     async (email) =>
-      (
+      !applicationProcessing() && (
         await client.query(
           "select id from public.candidates where email=$1 and id<>$2 limit 1",
           [email, id],
@@ -381,6 +385,25 @@ async function writeProjection(
   runId: string | null = null,
 ): Promise<{ projected: boolean; semanticChanged: boolean; historyId: string | null }> {
   const { original, after, invalidatedKinds } = computed;
+  if (applicationProcessing()) {
+    if (audit.writer !== 'application' || runId !== null) throw Error('projection_application_scope');
+    const fallback = { ...after, email: invalidatedKinds.has('email') ? null : (before.email ?? null) };
+    const serialize = (value: unknown) => JSON.stringify(stable(value));
+    const envelope = {
+      before: serialize(original), after: serialize(after), fallback: serialize(fallback),
+      semanticBefore: serialize(semanticProfileValue(original)),
+      semanticAfter: serialize(semanticProfileValue(after)),
+      semanticFallback: serialize(semanticProfileValue(fallback)),
+      collision: serialize([id, after.email ?? null]),
+    };
+    const result = (await client.query('select public.person_application_project($1,$2,$3) result',
+      [audit.id, revision, envelope])).rows[0].result;
+    if (result.revision !== revision) throw Error('projection_revision');
+    if (result.usedFallback) after.email = fallback.email;
+    computed.changedFields = result.changedFields;
+    computed.emailCollision = result.emailCollision;
+    return { projected: result.projected, semanticChanged: result.semanticChanged, historyId: result.historyId };
+  }
   const recordEmailCollision = async () =>
     client.query(
       `insert into public.identity_conflicts(kind,candidate_ids,incoming,evidence_hash)
