@@ -9,6 +9,7 @@ import {
   phase,
   run,
   fixture,
+  use,
 } from "../person-directory-execution/test-execution.mjs";
 import * as lib from "../dist/worker-lib.mjs";
 const row = async (id) =>
@@ -399,7 +400,7 @@ for (const mutation of [
     }
     await assert.rejects(run(f), /directory_outcome_unproven/);
   });
-test("existing suppressed person cannot be completed as an unmigrated review", async () => {
+test("existing suppressed person cannot enter normalized binding as an unmigrated review", async () => {
   const f = await fixture((s) => {
     s.board.do_not_contact = true;
   });
@@ -410,7 +411,25 @@ test("existing suppressed person cannot be completed as an unmigrated review", a
   );
   await phase();
   const before = await row(f.id);
-  await assert.rejects(run(f), /directory_suppression_unavailable/);
+  await use(async (c) => {
+    await c.query("begin");
+    await rpc(c, "person_private.directory_begin", [
+      org,
+      f.args.workspaceId,
+      f.args.receiptId,
+      f.args.executionId,
+      f.args.mode,
+      randomUUID(),
+    ]);
+    await assert.rejects(
+      rpc(c, "person_private.directory_bind", [
+        f.args.executionId,
+        f.id,
+        JSON.stringify(lib.directoryIdentities(f.snapshot)),
+      ]),
+      /directory_suppression_unavailable/,
+    );
+  });
   assert.deepEqual(await row(f.id), before);
   assert.equal((await receipt(f)).phase, "ready");
 });

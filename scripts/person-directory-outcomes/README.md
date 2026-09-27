@@ -9,7 +9,8 @@ that result, including while the controller is held.
 
 Preserved ordering: superseded, identity conflict, unknown suppression, unknown
 missing LinkedIn, linkage conflict, then missing normalized state or source hold.
-Existing-person suppression remains unavailable. Completed review/suppression
+Migration 180000 separately adds existing-person suppression with an exact status
+and event witness; this 170000 slice alone keeps it unavailable. Completed review/suppression
 re-admission with a new UUID must be implemented before worker activation; this
 child deliberately refuses it. A genuinely newer certified receipt can proceed
 without treating a prior outcome as document evidence. Invariant failures remain
