@@ -60,6 +60,7 @@ export async function parseProfile(
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(90_000),
     body: JSON.stringify({
       model: "gpt-4o-mini",
       temperature: 0,
@@ -123,7 +124,11 @@ export async function parseProfile(
 
 export function linkedinUsername(url: string): string | null {
   const m = url.toLowerCase().match(/\/in\/([^/?#]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  try {
+    const username = m ? decodeURIComponent(m[1]).trim().toLowerCase() : '';
+    return /^[\p{L}\p{N}\p{M}._-]{1,200}$/u.test(username) ? username : null;
+  }
+  catch { return null; }
 }
 
 async function patchCandidate(id: string, payload: Record<string, unknown>) {

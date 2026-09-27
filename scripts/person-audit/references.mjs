@@ -1,4 +1,5 @@
-import {arr,sameSource} from './evidence.mjs';
+import {applicationPreferenceEvidence} from './application.mjs';
+import {arr,sameSource,same} from './evidence.mjs';
 
 // Check the independent candidate-indexed collection, not only attributions
 // found by joining the candidate's events. Never load a foreign event payload.
@@ -17,7 +18,10 @@ export function attributionReferences(s,lib,out){
    const rule=lib.AUDIT_SCOPES[a.scope];
    if(!rule||(rule.writer&&rule.writer!==op.writer)||arr(e.actual_changed_fields).some(k=>!rule.fields.includes(k))||op.evidence?.guard?.version!==lib.AUDIT_GUARD_VERSION||op.evidence?.guard?.anchor_hash!==s.anchor.anchor_hash)return out.review('attribution_invalid');
    if(e.operation!=='UPDATE')return out.review('attribution_invalid');
+   if(a.scope==='application_preferences'&&!applicationPreferenceEvidence(s,e,op,lib))return out.review('application_preferences_unwitnessed');
    if(a.scope==='application_finalize'){
+    const r=arr(s.application_receipts).find(r=>r.application_id===e.source_row_id&&r.candidate_id===s.candidate_id);
+    if(!r||['name','contact'].some(k=>arr(e.actual_changed_fields).includes(k)&&!same(e.payload?.[k],r.application_snapshot?.[k],lib)))return out.review('application_edit_unattributed');
     if(e.source_table!=='website_applications'||op.receipt_ref!==`application:${e.source_row_id}`||e.payload?.id!==e.source_row_id||e.payload?.organization_id!==lib.TT_ORG_ID||e.payload?.candidate_id!==s.candidate_id||(e.previous_payload?.candidate_id!=null&&e.previous_payload.candidate_id!==s.candidate_id))return out.review('attribution_invalid');
    }else if(e.source_table!=='candidates'||e.source_row_id!==s.candidate_id)return out.review('attribution_invalid');
   }

@@ -67,12 +67,15 @@ export const AUDIT_SCOPES: Readonly<Record<string, { writer?: AuditWriter; field
     ],
   },
   recruiter_contact: { writer: "recruiter", fields: ["contact", "updated_at"] },
+  application_preferences: { writer: 'application', fields: ['follow_up_at', 'role_preferences', 'visa_status', 'updated_at'] },
   application_finalize: {
     writer: "application",
     fields: [
       "candidate_id",
       "pool_created_person",
       "parsed_profile",
+      "name",
+      "contact",
       "updated_at",
     ],
   },
