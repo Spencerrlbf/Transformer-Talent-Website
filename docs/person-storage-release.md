@@ -587,3 +587,13 @@ nonnull candidate links and legacy email mutations. Normalized contacts continue
 through the admitted writer. These guards remain uninstalled. Other writers,
 derivatives, maintenance and full production canaries remain prerequisites; see
 `scripts/person-application-enrichment/README.md` for tests and boundaries.
+
+## Prepared legacy source boundary
+
+`20260927100000_person_legacy_source_fence.sql` closes raw write paths for the
+website's communication outcomes and legacy Harvest experience rows while
+normalization is required. Normalized jobs retain TT and candidate ownership
+through BEFORE/AFTER checks; replacement and soft-removal preserve provenance.
+The external communications project and _v2 tables are untouched. Disabled legacy
+upserts, tenant application completion and role/lookup reads remain compatible.
+This migration is uninstalled. See `scripts/person-legacy-sources/README.md`.

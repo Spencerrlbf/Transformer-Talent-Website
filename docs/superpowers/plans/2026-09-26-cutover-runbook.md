@@ -195,6 +195,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927070000_person_application_completion.sql
 20260927080000_person_application_acceptance.sql
 20260927090000_person_application_enrichment.sql
+20260927100000_person_legacy_source_fence.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -389,3 +390,12 @@ Truncation is refused after installation even while disabled. See
 `scripts/person-application-enrichment/README.md`. This does not complete the
 other-writer, derivative, maintenance or production canary gates. Do not install
 or activate the partial chain before approval.
+
+Prepared legacy-source migration `20260927100000` follows enrichment. It fences
+website communication-outcome rows and non-person experience writes while
+normalization is required. Normalized experience rows retain TT/candidate scope
+through AFTER checks, while source replacement and historical soft-removal remain
+valid. No external communications project or _v2 schema changes occur. Disabled
+legacy upserts and tenant completion remain compatible. See
+`scripts/person-legacy-sources/README.md`; other admissions and complete canaries
+remain prerequisites. Do not install this partial chain before release approval.
