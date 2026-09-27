@@ -1,3 +1,4 @@
+import { applicationEditsPaused } from './person-transition/acceptance';
 // Candidates v2: applicants + sourced people unified into one org-scoped,
 // sortable, paginated list, plus a per-person drawer detail and editable
 // contact info. Read-time union over website_applications and the sourcing
@@ -1101,6 +1102,7 @@ export async function updateFollowUp(
   patch: { at?: unknown; roles?: unknown; workplace?: unknown; locations?: unknown; salary?: unknown; visa?: unknown }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
+  if (await applicationEditsPaused(orgId)) return { ok: false, error: "temporarily_unavailable" };
   const id = key.slice(4);
 
   const at = typeof patch.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(patch.at) ? patch.at : null;
@@ -1171,6 +1173,7 @@ export async function updateFollowUpDate(
   at: unknown
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
+  if (await applicationEditsPaused(orgId)) return { ok: false, error: "temporarily_unavailable" };
   const id = key.slice(4);
   const date = typeof at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null;
   if (!date) return { ok: false, error: "bad_date" };
@@ -1210,6 +1213,7 @@ export async function clearFollowUp(
   key: string
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
+  if (await applicationEditsPaused(orgId)) return { ok: false, error: "temporarily_unavailable" };
   const id = key.slice(4);
   const res = await sbRest(
     `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=id,candidate_id&limit=1`
@@ -1793,6 +1797,7 @@ export async function saveUnifiedContact(
   contact: UnifiedContact,
   edit?: { actorId: string; requestId: string }
 ): Promise<{ contact?: UnifiedContact; error?: string }> {
+  if (key.startsWith("app_") && await applicationEditsPaused(orgId)) return { error: "temporarily_unavailable" };
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
 
@@ -1846,6 +1851,7 @@ export async function saveUnifiedResumePath(
   key: string,
   path: string
 ): Promise<boolean> {
+  if (key.startsWith("app_") && await applicationEditsPaused(orgId)) return false;
   const target = key.startsWith("src_")
     ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
     : key.startsWith("app_")

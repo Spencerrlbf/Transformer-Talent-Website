@@ -1,3 +1,4 @@
+import { applicationEditsPaused } from '@/lib/server/person-transition/acceptance';
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
@@ -21,6 +22,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   // This company's person, checked before anything is stored.
   if (!(await candidateInOrg(member.org.id, key)))
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  if (key.startsWith("app_") && await applicationEditsPaused(member.org.id))
+    return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
 
   let form: FormData;
   try {

@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
   const result = await sendNetworkCandidate(member.org.id, body.candidateId, body.jobId);
   if (!result.ok) {
     const code =
+      result.error === "temporarily_unavailable" ? 503 :
       result.error === "insert_failed" ? 502 :
       result.error === "already_sent" ? 409 : 404;
     return NextResponse.json({ error: result.error }, { status: code });

@@ -554,3 +554,19 @@ values and current caps. Screening serialization excludes cache-only metadata.
 See `scripts/person-application-completion/README.md` for verification and scope.
 The migration is prepared only; broader source/writer/derivative admission,
 maintenance and full worker canary/drain coverage still block activation.
+
+## Prepared typed public acceptance
+
+`20260927080000_person_application_acceptance.sql` lets public forms durably
+accept queued input while TT processing is held. SQL creates processing authority
+and validates exact inserted rows; future retries use immutable intent evidence
+plus locked current ownership. Deleted or repurposed history cannot acknowledge
+an application that no longer exists. Legacy semantic hashes remain recognizable.
+
+TT application source rows now require checked acceptance, intake finalization or
+atomic completion while enforced. Candidate-null rows have no edit exception.
+Unsupported TT drawer/add-role/TT-target Send edits pause before side effects;
+tenant acceptance/completion and existing tenant writers remain available.
+The migration is prepared only. Other sources, client-target Send admission,
+derivatives, maintenance and full canaries still block release. See
+`scripts/person-application-acceptance/README.md` for tests and exact boundaries.

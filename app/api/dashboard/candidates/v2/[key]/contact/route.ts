@@ -36,6 +36,6 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ key: string
       : [],
   }, { actorId: member.userId, requestId });
   if (result.error)
-    return NextResponse.json({ error: result.error }, { status: result.error === "not_found" ? 404 : 400 });
+    return NextResponse.json({ error: result.error }, { status: result.error === "temporarily_unavailable" ? 503 : result.error === "not_found" ? 404 : 400 });
   return NextResponse.json({ contact: result.contact });
 }

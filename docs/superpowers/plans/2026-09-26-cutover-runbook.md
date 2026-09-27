@@ -193,6 +193,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927060000_person_intake_ready.sql
 20260927065000_person_tenant_binding.sql
 20260927070000_person_application_completion.sql
+20260927080000_person_application_acceptance.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -366,3 +367,13 @@ claim/finish/replay paths. Claimed workers stage one result and commit results,
 tenant contact additions and work completion together. General source fences,
 other families, derivatives, maintenance and complete canary/drain coverage remain
 unfinished. Do not install or activate this partial chain before release approval.
+
+Prepared acceptance/source migration `20260927080000` follows completion. Held
+public forms retain queued inputs without a work/budget reservation; duplicate
+future requests retain original immutable evidence. The TT source fence accepts
+only exact insertion/finalization/result frames, including previously unlinked
+rows. Editor pauses occur before storage or mirrors. Tenant raw writers and
+client-target Send are explicitly outside this TT-only fence; their broader
+admission, other source families, derivatives and maintenance remain prerequisites.
+Do not install or activate this partial chain. Verification and Unicode parser
+version are documented in `scripts/person-application-acceptance/README.md`.
