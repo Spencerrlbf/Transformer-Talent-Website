@@ -1,10 +1,10 @@
 #!/bin/bash
-# Resets only the caller-owned loopback person_application_intake_queue_test fixture database.
+# Resets only the caller-owned loopback person_application_projection_test fixture database.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
-DB=person_application_intake_queue_test
+DB=person_application_projection_test
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 q -d postgres -c "drop database if exists $DB" -c "create database $DB"
 q -d $DB -f scripts/person-trial/local-schema.sql
@@ -33,7 +33,5 @@ if test -f supabase/migrations/20260927035000_person_application_projection.sql;
  q -d $DB -1 -f supabase/migrations/20260927035000_person_application_projection.sql
 fi
 node scripts/build-worker-lib.mjs
-npx --yes esbuild@0.28.2 scripts/person-application-queue/processing-entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-queue/dist/processing.mjs --log-level=warning
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-queue/test-intake.mjs
-
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-queue/test-ownership.mjs
+npx --yes esbuild@0.28.2 scripts/person-application-projection/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-projection/dist/processing.mjs --log-level=warning
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-projection/test-projection.mjs
