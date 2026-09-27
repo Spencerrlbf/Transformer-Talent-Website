@@ -432,6 +432,7 @@ export async function saveApplicationPersonOnConnection(
     );
     if (retained) {
       await applyApplicationPreferences(client, audit, applicationSnapshot);
+      await client.query("select public.person_application_intake_ready($1)", [audit.id]);
       await client.query("select public.person_transition_assert('tt_person',$1,'application',$2)", [TT_ORG_ID, args.applicationId]);
     }
     const outcome = { ...result, created, applicationSnapshot };

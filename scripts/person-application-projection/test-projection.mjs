@@ -56,7 +56,7 @@ const stable=v=>Array.isArray(v)?v.map(stable):v&&typeof v==='object'?Object.fro
 const serialize=v=>JSON.stringify(stable(v));
 async function projectionProbe(mutate,expected){let checked=false;const r=await processApp(await app(),{queryHook:async(sql,v,c)=>{if(!sql.startsWith('select public.person_application_project('))return;checked=true;await probe(c,async()=>{const copy=structuredClone(v);await mutate(copy,c);await assert.rejects(c.query(sql,copy),expected);});}});assert.equal(r.status,'processed',r.error?.message);assert.ok(checked);}
 for(const [label,mutate,pattern] of [
- ['foreign operation',v=>{v[0]=randomUUID();},/projection_operation/],
+ ['foreign operation',v=>{v[0]=randomUUID();},/intake_mutation_operation/],
  ['stale revision',v=>{v[1]='999999';},/projection_revision/],
  ['stale before',v=>{const e=v[2];const x=JSON.parse(e.before);x.current_title='stale';e.before=serialize(x);},/projection_before/],
  ['extra profile field',v=>{const e=v[2];const x=JSON.parse(e.after);x.notes='forged';e.after=serialize(x);},/projection_fields/],
@@ -67,7 +67,7 @@ for(const [label,mutate,pattern] of [
  ['cleared context',async(v,c)=>{await c.query("select set_config('person.work_id','',true),set_config('person.work_token','',true),set_config('request.headers','{}',true)");},/transition_admission/],
 ])test(`checked projection rejects ${label}`,()=>projectionProbe(mutate,pattern));
 test('incomplete normalized receipt rejects before projection',async()=>{
- let checked=false;const r=await processApp(await app(),{queryHook:async(sql,v,c)=>{if(!sql.startsWith('select public.save_person'))return;checked=true;const op=(await c.query('select operation_id from person_private.application_audit_operations where transaction_id=pg_current_xact_id()')).rows[0];const rev=(await c.query('select rev from candidate_profile_state where candidate_id=(select candidate_id from person_private.application_candidates where transaction_id=pg_current_xact_id())')).rows[0]?.rev??0;await probe(c,()=>assert.rejects(c.query('select person_application_project($1,$2,$3)',[op.operation_id,rev,{}]),/projection_receipt/));}});assert.equal(r.status,'processed',r.error?.message);assert.ok(checked);
+ let checked=false;const r=await processApp(await app(),{queryHook:async(sql,v,c)=>{if(!sql.startsWith('select public.save_person'))return;checked=true;const op=(await c.query('select operation_id from person_private.application_audit_operations where transaction_id=pg_current_xact_id()')).rows[0];const rev=(await c.query('select rev from candidate_profile_state where candidate_id=(select candidate_id from person_private.application_candidates where transaction_id=pg_current_xact_id())')).rows[0]?.rev??0;await probe(c,()=>assert.rejects(c.query('select person_application_project($1,$2,$3)',[op.operation_id,rev,{}]),/intake_mutation_receipt/));}});assert.equal(r.status,'processed',r.error?.message);assert.ok(checked);
 });
 test('existing candidate projection retains original operation for finalization and preferences',async()=>{const r=await processApp(await app({},`projection-${incumbent}`));assert.equal(r.status,'processed',r.error?.message);assert.equal(r.result.candidateId,incumbent);assert.ok((await pool.query("select 1 from person_change_attributions where candidate_id=$1 and scope='application_preferences'",[incumbent])).rowCount);});
 test('unchanged replay creates no extra history and frame cannot be reused',async()=>{const id=await app();let beforeHistory;const r=await processApp(id,{afterIntake:async first=>{
@@ -123,7 +123,7 @@ test('unrelated unique errors are not treated as email collisions',async()=>{
 });
 test('stale transaction operation cannot authorize a later projection',async()=>{
  let previous;const r=await processApp(await app(),{queryHook:async(sql,v)=>{if(sql.startsWith('select public.person_application_project('))previous=structuredClone(v);},afterIntake:async()=>{
-  const c=await pool.connect();try{await c.query('begin');await c.query("select set_config('request.headers',$1,true)",[JSON.stringify(lib.transitionRequestHeaders())]);await assert.rejects(c.query('select person_application_project($1,$2,$3)',previous),/projection_operation/);}finally{await c.query('rollback');c.release();}
+  const c=await pool.connect();try{await c.query('begin');await c.query("select set_config('request.headers',$1,true)",[JSON.stringify(lib.transitionRequestHeaders())]);await assert.rejects(c.query('select person_application_project($1,$2,$3)',previous),/intake_mutation_operation/);}finally{await c.query('rollback');c.release();}
  }});assert.equal(r.status,'processed',r.error?.message);
 });
 test('lease expiry behind a projection state lock rolls back the complete mutation',async()=>{
