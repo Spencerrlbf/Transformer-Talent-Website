@@ -197,6 +197,7 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927090000_person_application_enrichment.sql
 20260927100000_person_legacy_source_fence.sql
 20260927110000_person_conflict_evidence.sql
+20260927120000_person_lookup_mutations.sql
 ```
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
@@ -339,7 +340,7 @@ and private metadata replay witnesses. Prepared readiness migration `20260927060
 requires private metadata/projection/finalization/preference proof before a first
 binding commits and retains original preference ordering on replay. All remain uninstalled. The subsequent prepared migrations described below cover
 pipeline completion, public/tenant acceptance and conflict evidence. Remaining
-shared lookup provenance, recruiter/directory/refresh/derivative writers and
+recruiter/directory/refresh/derivative writers and
 historical maintenance still require complete admission coverage. Do not use existing
 mutable identities or old unbound receipts as standalone write authorization.
 
@@ -411,3 +412,12 @@ and refused while required until maintenance admission is implemented. No
 existing conflicts are resolved or removed. This remains an uninstalled partial
 chain; shared lookups, other writers, derivatives, maintenance and full canaries
 still block activation. See `scripts/person-conflict-evidence/README.md`.
+
+Prepared lookup migration `20260927120000` follows conflict evidence. The writer
+uses private resolvers only at the existing winning-source loop sites; required
+public resolver calls refuse. Exact one-use OLD/NEW proof and readback protect
+company/school/skill mutations. Existing matching, tier rules and skill dedup
+remain compatible. Typed primary-key predicates and FOR NO KEY UPDATE retain
+index access and FK-lock compatibility. See `scripts/person-lookup-mutations/README.md`.
+Other writer admissions, derivatives, maintenance and full canaries still block
+activation; this is not permission to install or enable the partial chain.

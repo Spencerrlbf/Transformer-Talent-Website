@@ -47,14 +47,18 @@ test('helper refuses unrelated sources and preserves exact global dedup and zero
 for(const family of ['company','school'])test(`${family} resolver retains inserted versus dedup conflict counters across candidates`,()=>normalizedProbe(async(c,f)=>{
  const url='https://www.linkedin.com/'+(family==='company'?'company/':'school/')+randomUUID(),id=randomUUID().replaceAll('-','');
  // A mismatched existing identity makes the resolver record a conflict.
+ if((await c.query("select to_regprocedure('person_private.lookup_company(jsonb,uuid,uuid)') available")).rows[0].available)for(const when of ['before','after'])await c.query(`alter table ${family==='company'?'companies':'schools'} disable trigger person_lookup_mutation_${when}`);
  if(family==='company')await c.query("insert into companies(name,linkedin_id,linkedin_url_normalized) values('Synthetic clash',$1,$2)",['old-'+id,url]);
  else await c.query("insert into schools(name,normalized_name,linkedin_org_id,linkedin_url_normalized,identity_basis) values('Synthetic clash',$1,$2,$3,'linkedin_org_id')",[id,'old-'+id,url]);
- const input={id,url,name:'Synthetic incoming',norm:'synthetic incoming'},sql=`select * from public.person_${family}($1,$2,$3)`;
+ if((await c.query("select to_regprocedure('person_private.lookup_company(jsonb,uuid,uuid)') available")).rows[0].available)for(const when of ['before','after'])await c.query(`alter table ${family==='company'?'companies':'schools'} enable trigger person_lookup_mutation_${when}`);
+ const input={id,url,name:'Synthetic incoming',norm:'synthetic incoming'},privateCall=(await c.query('select to_regprocedure($1) available',[`person_private.lookup_${family}(jsonb,uuid,uuid)`])).rows[0].available,sql=`select * from ${privateCall?'person_private.lookup_':'public.person_'}${family}($1,$2,$3)`;
  const one=(await c.query(sql,[input,f.candidate_id,f.source_id])).rows[0];assert.equal(one.conflicts,1);assert.equal(one.created,true);
  const first=(await c.query('select * from identity_conflicts where kind=$1 and source_id=$2',[family+'_identity',f.source_id])).rows[0];assert.ok(first);
  // Remove only this synthetic resolver row, retaining the conflict. A repeat
  // therefore reaches INSERT again and must return conflicts=0, not FOUND=true.
+ if(privateCall)for(const when of ['before','after'])await c.query(`alter table ${family==='company'?'companies':'schools'} disable trigger person_lookup_mutation_${when}`);
  await c.query(`delete from ${family==='company'?'companies':'schools'} where id=$1`,[one[family+'_id']]);
+ if(privateCall)for(const when of ['before','after'])await c.query(`alter table ${family==='company'?'companies':'schools'} enable trigger person_lookup_mutation_${when}`);
  const other=(await c.query("select b.*,d.doc,s.id source_id from person_private.application_candidates b join public.person_application_receipts r using(application_id) cross join lateral jsonb_array_elements(r.documents) d(doc) join public.candidate_sources s on s.candidate_id=b.candidate_id and s.payload_hash=d.doc->'source'->>'payload_hash' where b.candidate_id<>$1 limit 1",[f.candidate_id])).rows[0];assert.ok(other);
  await c.query('update person_private.normalization_frames set candidate_id=$1,application_id=$2,work_id=$3,document=$4 where backend_pid=pg_backend_pid()',[other.candidate_id,other.application_id,other.work_id,other.doc]);
  const two=(await c.query(sql,[input,other.candidate_id,other.source_id])).rows[0];assert.equal(two.created,true);assert.equal(two.conflicts,0);
@@ -73,3 +77,4 @@ for(const change of ['suppress','alter'])test(`private conflict ${change} cannot
  await pool.query(`create function person_private.synthetic_conflict_frame() returns trigger language plpgsql as $$begin ${change==='suppress'?'return null;':"new.expected_row:=jsonb_set(new.expected_row,'{incoming}','{}');return new;"}end$$;create trigger synthetic_conflict_frame before insert on person_private.conflict_frames for each row execute function person_private.synthetic_conflict_frame()`);
  try{const out=await processApp(await app());assert.equal(out.status,'failed');assert.match(out.error?.message||'',/conflict_evidence_frame/);}finally{await pool.query('drop trigger synthetic_conflict_frame on person_private.conflict_frames;drop function person_private.synthetic_conflict_frame()');}
 });
+export {normalizedProbe,probe};

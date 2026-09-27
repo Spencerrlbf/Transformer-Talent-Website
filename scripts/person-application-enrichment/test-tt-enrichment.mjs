@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import pg from 'pg';import {randomUUID,createHash} from 'node:crypto';
-const url=process.env.LOCAL_DATABASE_URL;if(!/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_(?:application_enrichment|legacy_sources|conflict_evidence)_test$/.test(url||''))throw Error('local fixture required');
+const url=process.env.LOCAL_DATABASE_URL;if(!/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_(?:application_enrichment|legacy_sources|conflict_evidence|lookup_mutations)_test$/.test(url||''))throw Error('local fixture required');
 Object.assign(process.env,{PERSON_TRANSITION_SUPPORT:'on',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:url});
 for(const key of ['OPENAI_API_KEY','HARVEST_API_KEY','AIRTABLE_API_TOKEN','RESEND_API_KEY','LLAMA_CLOUD_API_KEY'])delete process.env[key];
 const pool=new pg.Pool({connectionString:url,max:8}),TT='801865a7-6533-41d2-9c45-e4a90e6ad51a';
@@ -23,7 +23,7 @@ globalThis.fetch=async(input,init={})=>{
 const lib=await import('./dist/processing.mjs');test.after(()=>pool.end());
 let serial=0;test.beforeEach(()=>pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"));
 async function app(patch={},username=`synthetic-work-intake-${++serial}-${randomUUID()}`,db=pool){
- const result=(await db.query("select person_application_accept('future',$1::jsonb) r",[JSON.stringify({organization_id:TT,name:patch.name??'Synthetic',email:'synthetic@example.test',linkedin_username:username,linkedin_url:`https://www.linkedin.com/in/${username}`,...(patch.resume?{resume_path:'synthetic/resume.pdf',person_resume_sha256:createHash('sha256').update(Buffer.from('synthetic PDF')).digest('hex')}:{}),preferred_locations:[],role_ids:[],role_titles:[],source:'future',follow_up_at:patch.follow_up_at??'2027-01-01',preferred_roles:patch.preferred_roles??['Engineering'],preferred_workplace:[],comp_expectation:null})])).rows[0].r;assert.equal(result.inserted,true);return result.id;
+ const result=(await db.query("select person_application_accept('future',$1::jsonb) r",[JSON.stringify({organization_id:TT,name:patch.name??'Synthetic',email:patch.email??'synthetic@example.test',linkedin_username:username,linkedin_url:`https://www.linkedin.com/in/${username}`,...(patch.resume?{resume_path:'synthetic/resume.pdf',person_resume_sha256:createHash('sha256').update(Buffer.from('synthetic PDF')).digest('hex')}:{}),preferred_locations:[],role_ids:[],role_titles:[],source:'future',follow_up_at:patch.follow_up_at??'2027-01-01',preferred_roles:patch.preferred_roles??['Engineering'],preferred_workplace:[],comp_expectation:null})])).rows[0].r;assert.equal(result.inserted,true);return result.id;
 }
 async function processApp(id,{mutate,queryHook,harvest,harvestPayload,sourceCheck,afterCache,contacts={phone:'+12025550123'},afterIntake,completion={version:1,matched_role_ids:[],screening:null}}={}){
  let result,error;const source=(await pool.query('select * from website_applications where id=$1',[id])).rows[0];

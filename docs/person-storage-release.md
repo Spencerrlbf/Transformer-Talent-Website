@@ -607,3 +607,13 @@ real inserted-row verification and original global dedup/counter semantics.
 Suppressed inserts cannot silently lose evidence. Disabled legacy handling stays
 compatible; existing conflicts are retained. This migration is uninstalled.
 See `scripts/person-conflict-evidence/README.md` for verified boundaries and tests.
+
+## Prepared shared lookup mutation boundary
+
+`20260927120000_person_lookup_mutations.sql` binds company, school and skill
+mutations to the exact row operation selected by the normalized writer. Extra
+raw mutations and public resolver calls cannot reuse an open normalization
+frame. Existing resolver choices, tier rules, defaults, conflict counters and
+skill dedup remain intact. Typed primary-key readback and compatible target
+locks avoid table scans and unnecessary blocking. This migration is uninstalled.
+See `scripts/person-lookup-mutations/README.md` for tests and remaining gates.
