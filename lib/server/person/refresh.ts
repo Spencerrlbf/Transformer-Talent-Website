@@ -4,6 +4,7 @@ import {
 } from "./audit";
 // Server/worker only. Paid requests happen outside these bounded transactions.
 import { randomUUID } from "node:crypto";
+import { transitionSupport } from "../person-transition/context";
 import { TT_ORG_ID } from "./normalize";
 import { fromHarvest } from "./fromHarvest";
 import { poolSignals } from "../pool/profile";
@@ -19,6 +20,15 @@ import {
 type Key = { organizationId: string; queueId: string };
 type Token = Key & { token: string };
 const modeOk = (mode: string) => mode === "shadow" || mode === "live";
+// Until the complete refresh lifecycle has a certified admission, the old
+// reservation path must stop before it can authorize a paid provider request.
+function requireLegacyRefresh() {
+  if (transitionSupport()) throw Error("person_refresh_execution_unavailable");
+}
+function withLegacyRefreshConnection<T>(fn: (c: PersonConnection) => Promise<T>) {
+  requireLegacyRefresh();
+  return withPersonConnection(fn);
+}
 function scope(args: Key) {
   if (args.organizationId !== TT_ORG_ID) throw Error("person_refresh_tenant");
 }
@@ -28,6 +38,7 @@ async function transaction<T>(
   fn: (row: any, attempt: any) => Promise<T>,
   budget = false,
 ): Promise<T> {
+  requireLegacyRefresh();
   scope(args);
   try {
     await beginPersonTransaction(c);
@@ -118,6 +129,7 @@ export async function pickRefreshRowsOnConnection(
     limit: number;
   },
 ) {
+  requireLegacyRefresh();
   if (
     args.organizationId !== TT_ORG_ID ||
     !["queued", "patch_failed"].includes(args.status) ||
@@ -427,16 +439,16 @@ export async function failRefreshOnConnection(
 
 export const claimRefresh = (
   args: Parameters<typeof claimRefreshOnConnection>[1],
-) => withPersonConnection((c) => claimRefreshOnConnection(c, args));
+) => withLegacyRefreshConnection((c) => claimRefreshOnConnection(c, args));
 export const pickRefreshRows = (
   args: Parameters<typeof pickRefreshRowsOnConnection>[1],
-) => withPersonConnection((c) => pickRefreshRowsOnConnection(c, args));
+) => withLegacyRefreshConnection((c) => pickRefreshRowsOnConnection(c, args));
 export const storeRefreshPayload = (
   args: Parameters<typeof storeRefreshPayloadOnConnection>[1],
-) => withPersonConnection((c) => storeRefreshPayloadOnConnection(c, args));
+) => withLegacyRefreshConnection((c) => storeRefreshPayloadOnConnection(c, args));
 export const saveRefresh = (
   args: Parameters<typeof saveRefreshOnConnection>[1],
-) => withPersonConnection((c) => saveRefreshOnConnection(c, args));
+) => withLegacyRefreshConnection((c) => saveRefreshOnConnection(c, args));
 export const failRefresh = (
   args: Parameters<typeof failRefreshOnConnection>[1],
-) => withPersonConnection((c) => failRefreshOnConnection(c, args));
+) => withLegacyRefreshConnection((c) => failRefreshOnConnection(c, args));

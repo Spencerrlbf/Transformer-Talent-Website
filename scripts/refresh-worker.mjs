@@ -21,6 +21,7 @@
 // Profile tab read the fresh history; before 2026-09-25 it wrote only the
 // headline, title, company, location and skills.
 import fs from "node:fs";
+import { requireRefreshExecution } from "./person-refresh/worker.mjs";
 
 try {
   const envFile = fs.readFileSync(new URL("../.env.scripts", import.meta.url), "utf8");
@@ -30,6 +31,9 @@ try {
   }
 } catch {}
 
+// No configuration lookup, reservation, top-up or provider work may precede
+// the admission support check, including legacy and precompute invocations.
+requireRefreshExecution();
 const workerLib = await import("./dist/worker-lib.mjs");
 const {
   computeFacts,
