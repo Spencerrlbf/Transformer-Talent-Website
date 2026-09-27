@@ -383,20 +383,41 @@ for (const status of ["processing", "done"])
   test(`unchanged content preserves ${status} job attempts/token/completion while advancing revision`, async () => {
     const f = await fixture();
     f.args.mode = "live";
-    await run(f);
-    await phase(false);
     const token = status === "processing" ? randomUUID() : null;
-    await pool.query(
-      "update person_derivative_jobs set status=$2,attempts=2,claim_token=$3,lease_until=case when $3::uuid is null then null else clock_timestamp()+interval '5 minutes' end,claim_missing='[]',completed_hash=desired_hash,error_code='retained' where candidate_id=$1",
-      [f.id, status, token],
-    );
-    await phase();
-    const before = (
+    let seeded;
+    // Seed the legacy consumer image before the first checked producer owns it.
+    // Disabling enforcement cannot authorize rewriting an already-owned job.
+    await run(f, async (sql, values, c) => {
+      if (!sql.includes("person_private.directory_enqueue(")) return;
+      const data = values[2];
+      const binding = (await c.query("select current_setting('person.work_id',true) id,current_setting('person.work_token',true) token,current_setting('request.headers',true) headers")).rows[0];
+      await c.query("select set_config('person.work_id','',true),set_config('person.work_token','',true),set_config('request.headers','{}',true)");
+      await c.query("update person_private.transition_control set enabled=false where singleton");
+      seeded = (await c.query(
+        `insert into person_derivative_jobs(candidate_id,desired_revision,desired_hash,sources,model,dimensions,receipt_ref,status,attempts,claim_token,lease_until,claim_missing,completed_hash,error_code)
+         values($1,$2,$3,$4,'text-embedding-3-small',1536,'synthetic:legacy',$5,2,$6,
+          case when $6::uuid is null then null else clock_timestamp()+interval '5 minutes' end,'[]',$3,'retained') returning to_jsonb(person_derivative_jobs) r`,
+        [f.id, data.revision, data.hash, data.sources, status, token],
+      )).rows[0].r;
+      await c.query("update person_private.transition_control set enabled=true where singleton");
+      await c.query("select set_config('person.work_id',$1,true),set_config('person.work_token',$2,true),set_config('request.headers',$3,true)",[binding.id||'',binding.token||'',binding.headers||'{}']);
+    });
+    // Compare typed timestamps in the same session representation, preserving
+    // Postgres microseconds even when the producer used its pinned UTC setting.
+    const initial = (
       await pool.query(
-        "select to_jsonb(j) r from person_derivative_jobs j where candidate_id=$1",
-        [f.id],
+        "select to_jsonb(j) r,to_jsonb(jsonb_populate_record(null::public.person_derivative_jobs,$2)) seeded from person_derivative_jobs j where candidate_id=$1",
+        [f.id, seeded],
       )
-    ).rows[0].r;
+    ).rows[0];
+    const before = initial.r;
+    assert.equal(seeded.status,status);
+    assert.equal(seeded.attempts,2);
+    assert.equal(seeded.claim_token,token);
+    for (const key of ["desired_hash","status","attempts","claim_token","lease_until","claim_missing","completed_hash","error_code","updated_at"])
+      assert.deepEqual(before[key],initial.seeded[key],`genesis ${key}`);
+    if ((await pool.query("select to_regclass('person_private.derivative_job_changes') is not null present")).rows[0].present)
+      assert.deepEqual((await pool.query("select before_row from person_private.derivative_job_changes where candidate_id=$1 and sequence=1",[f.id])).rows[0].before_row,seeded);
     const next = await nextReceipt(f);
     await run(next);
     const after = (
