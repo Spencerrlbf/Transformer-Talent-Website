@@ -1,6 +1,6 @@
 # Candidate storage unification: handoff and remaining work
 
-Updated 2026-09-26 22:46 UTC. Plan:
+Updated 2026-09-27 00:24 UTC. Plan:
 `docs/superpowers/plans/2026-09-26-overnight-candidate-unification.md`.
 Use the corrected cutover runbook and review worklist beside this document.
 
@@ -15,9 +15,10 @@ Production still serves the legacy candidate fields. Main remains
 profile publication or restrictive guard was performed. Candidate IDs, links,
 legacy fields and original source evidence remain preserved.
 
-Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR32
-at `58e34f0e708696a44ee03ca6abf45dfc74a3c407`. Read GitHub for the latest full SHA
-before release. The corrected review worklist/handoff is a subsequent docs child.
+Feature parent `feat/person-00-storage-unification` / draft PR #2 includes PR37
+at `1f7c601271ab4ef6ea6efdafd5cae2e7af10bb74`. The next sequential child prepares
+atomic application work/reservations. Read GitHub for the latest full SHA before
+release; no production transition or queue integration is enabled.
 
 ## Exact database accounting
 
@@ -89,9 +90,10 @@ Seven additive migrations are live:
 
 Application, atomic projection, receipts, derivative queue, audit anchors,
 snapshots, publication and restrictive-guard migrations remain **prepared only**.
-The exact 13-file chain through PR32 and separate concurrent directory lookup
-index are listed in the cutover runbook. Add future reviewed transition migrations
-before release; do not install an incomplete chain or enable guards prematurely.
+The reviewed chain, including reference ownership, disabled transition support
+and application work primitives, plus the separate concurrent directory lookup
+index, is listed in the cutover runbook. Route/fence integration and runtime
+maintenance remain unfinished. Do not install or enable an incomplete chain.
 
 ## Verification and recovery evidence
 
@@ -113,6 +115,22 @@ Default cleanup hit the existing organization-delete timeout; a bounded fallback
 removed only that run's synthetic organizations and children. Afterwards the DB
 was 31,940,775,059 bytes, with zero blocked sessions, queue entries or capture events.
 No source scan overlapped the hosted fixtures.
+
+PR35 added a rollback-only local application-admission canary (15 checks); it
+is not a website or whole-worker canary. PR36 added candidate-owned reference
+proof and attribution fencing (85 auditor checks). Each passed build and exact
+913-call tenancy with cleanup verified empty. PR36's current 423,050-person
+accounting-scale probe timed out at eight seconds, then passed unchanged in
+7.23 seconds. No tuning was adopted; actual production capacity remains a gate.
+The earlier PR32 4.1-second fixture is not current capacity proof.
+
+PR37's disabled controller/admission foundation passed 19 PostgreSQL checks,
+12 HTTP/PG bridge checks, 15 canary checks, 27 intake regressions, production build,
+and exact 913-call preview tenancy in 250 seconds. Run `25aasa84a` cleanup was
+verified empty. It installs no production source-table triggers or route opt-in.
+The following application-work primitive passes 26 database checks and extends
+token-bearing redirect protection; callers and safe recovery are still to follow.
+Its allowance/input snapshot is not evidence that paid processing completed.
 
 Retain the private recovery exports (12 JSON files, approximately 441 MB),
 row-restoration proof `RECOVERY_CHECK_PASSED`, and the known physical backup from
@@ -137,13 +155,20 @@ reproduce the token in reports.
 
 ## Remaining work before release approval
 
-1. **Implement and test an isolated canary and queue/drain transition.** All
+1. **Finish website canary and queue/drain integration.** Local canary,
+   disabled controller and application reservation primitives are prepared.
+   Public queued acceptance, file verification, shared processing claims,
+   pre-effects recovery, late-writer fences and maintenance remain to finish. All
    three Actions workers currently share one write-mode variable. A shared flag
    is not a single-worker canary, and draining Actions does not drain Vercel or
    recruiter writes. The private `transition-preparation-findings.md` inventory
    identifies public submission crash/retry, resume persistence, duplicate
    future-interest, contact extraction, worker staging and paid-reservation gaps.
-   Root owns the next sequential implementation; no such transition is active.
+   Root owns sequential implementation; no such transition is active. Current
+   stored application fields must be reconciled with original callback intent.
+   Legacy files without content hashes need verification, and old unlocked budget
+   writers must be replaced/drained before claiming a strict system-wide cap.
+   Preserve best-effort acceptance notifications without retry-driven resends.
 2. **Retain explicit source-proof policy.** Publish identity-review people only
    when their immutable anchor and evidence chain are valid. The 123 same-snapshot
    source mutations and two date holds are unresolved; `--review=publish` does

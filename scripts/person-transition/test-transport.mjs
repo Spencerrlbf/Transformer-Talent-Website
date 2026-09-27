@@ -13,7 +13,7 @@ let requestCount=0,malformed=false,redirectCode=0,foreignRequests=0;
 const foreign=http.createServer(async(req,res)=>{foreignRequests++;for await(const _ of req){}res.end(JSON.stringify({status:'held'}));});
 const server=http.createServer(async(req,res)=>{
  requestCount++;
- if(redirectCode && /^\/rest\/v1\/rpc\/person_transition_(claim|renew|finish)$/.test(req.url)){res.writeHead(redirectCode,{Location:`http://127.0.0.1:${foreign.address().port}/sink`});res.end();return;}
+ if(redirectCode && /^\/rest\/v1\/rpc\/person_(transition_(claim|renew|finish)|application_work_claim)$/.test(req.url)){res.writeHead(redirectCode,{Location:`http://127.0.0.1:${foreign.address().port}/sink`});res.end();return;}
  if(req.url==='/rest/v1/echo'){res.end(JSON.stringify({id:req.headers['x-person-work-id']||null,token:req.headers['x-person-work-token']||null}));return;}
  if(req.url==='/rest/v1/redirect'){res.writeHead(302,{Location:'/rest/v1/echo'});res.end();return;}
  const client=await pool.connect();
@@ -79,4 +79,8 @@ for(const code of [307,308])test(`first claim cannot redirect its token-bearing 
 });
 for(const operation of ['renew','finish'])test(`${operation} RPC refuses redirects without an async context`,async()=>{
  redirectCode=307;await assert.rejects(lib.sbRest(`rpc/person_transition_${operation}`,{method:'POST',body:JSON.stringify({p_token:randomUUID()})}));assert.equal(foreignRequests,0);
+});
+
+test('application work claim cannot redirect its reservation token before context exists',async()=>{
+ redirectCode=307;await assert.rejects(lib.sbRest('rpc/person_application_work_claim',{method:'POST',body:JSON.stringify({p_token:randomUUID()})}));assert.equal(foreignRequests,0);
 });
