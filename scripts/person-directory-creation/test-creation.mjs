@@ -317,7 +317,11 @@ for (const patch of [
   test("unadmitted no-LinkedIn or suppressed snapshot creates no person", async () => {
     const f = await fresh("live", patch);
     await assert.rejects(
-      run(f),
+      use(async c => {
+        await c.query('begin');
+        await rpc(c,'person_private.directory_begin',[org,f.args.workspaceId,f.args.receiptId,f.args.executionId,'live',randomUUID()]);
+        return rpc(c,'person_private.directory_seed',[f.args.executionId,f.username,JSON.stringify(lib.directoryIdentities(f.snapshot))]);
+      }),
       /directory_linkedin_required|directory_suppression_unavailable/,
     );
     await noSeed(f);
@@ -786,3 +790,5 @@ test("service and browser roles cannot invoke private creation authority", async
         false,
       );
 });
+
+export {fresh,assess};
