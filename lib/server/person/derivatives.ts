@@ -27,6 +27,11 @@ const key = (x: Chunk) => `${x.source_type}|${x.chunk_index}|${x.content_hash}`;
 function scoped(a: Scope) {
   if (a.organizationId !== TT_ORG_ID) throw Error("person_derivative_scope");
 }
+// These consumers mutate jobs without transition work ownership. Keep them
+// closed until the independently admitted consumer is available.
+function requireLegacyDerivativeConsumer() {
+  if (transitionSupport()) throw Error("person_derivative_consumer_unavailable");
+}
 export function personDerivativeChunks(sources: Sources): Chunk[] {
   const result: Chunk[] = [];
   for (const source_type of SOURCES) {
@@ -121,6 +126,7 @@ async function transaction<T>(
   fn: () => Promise<T>,
 ) {
   scoped(a);
+  requireLegacyDerivativeConsumer();
   try {
     await beginPersonTransaction(c);
     await lockPerson(c, a.candidateId);
@@ -361,15 +367,23 @@ export async function embedPersonDerivativeChunks(
   }
   return out;
 }
-export const preparePersonDerivatives = (a: Scope) =>
-  withPersonConnection((c) => preparePersonDerivativesOnConnection(c, a));
-export const completePersonDerivatives = (
+export async function preparePersonDerivatives(a: Scope) {
+  requireLegacyDerivativeConsumer();
+  return withPersonConnection((c) => preparePersonDerivativesOnConnection(c, a));
+}
+export async function completePersonDerivatives(
   a: Scope & { token: string; vectors: number[][] },
-) => withPersonConnection((c) => completePersonDerivativesOnConnection(c, a));
-export const failPersonDerivatives = (a: Scope & { token: string }) =>
-  withPersonConnection((c) => failPersonDerivativesOnConnection(c, a));
+) {
+  requireLegacyDerivativeConsumer();
+  return withPersonConnection((c) => completePersonDerivativesOnConnection(c, a));
+}
+export async function failPersonDerivatives(a: Scope & { token: string }) {
+  requireLegacyDerivativeConsumer();
+  return withPersonConnection((c) => failPersonDerivativesOnConnection(c, a));
+}
 export async function processPersonDerivatives(a: Scope) {
   scoped(a);
+  requireLegacyDerivativeConsumer();
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { status: "not_configured" };
   const claim = await preparePersonDerivatives(a);
@@ -392,6 +406,7 @@ export async function drainPersonDerivatives(a: {
   const limit = a.limit ?? 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 50)
     throw Error("person_derivative_limit");
+  requireLegacyDerivativeConsumer();
   if (!process.env.OPENAI_API_KEY) return { processed: 0, retry: 0 };
   const rows = await withPersonConnection(
     async (c) =>

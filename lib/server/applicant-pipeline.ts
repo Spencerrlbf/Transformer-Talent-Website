@@ -324,7 +324,10 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
     await renewApplicationWork();
     if (candidateId && !tenantOrgId) {
       if (normalizedIntake) {
-        if(personWriteMode() === 'live') await processPersonDerivatives({organizationId:orgId!,candidateId}).catch(()=>console.error('person_derivative_retry_required'));
+        // Transition intake enqueues the job under its own authority. The old
+        // consumer cannot share that application work; defer until independent
+        // derivative admission is available.
+        if(personWriteMode() === 'live' && !transitionSupport()) await processPersonDerivatives({organizationId:orgId!,candidateId}).catch(()=>console.error('person_derivative_retry_required'));
       } else {
        await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
        await syncCandidateEmbeddings(candidateId, {
