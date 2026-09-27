@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
-import { sbRest } from '../supabase';
+import { sbInsert, sbRpc } from '../supabase';
+import { transitionSupport, transitionUuid } from './context';
+import { TT_ORG_ID } from '../person/normalize';
 
 /** Semantic intent identity excludes generated IDs, clocks and object paths.
  * New preferences produce new evidence; identical retries share one intent. */
@@ -13,13 +15,27 @@ export function futureIntentHash(row: Record<string, unknown>): string {
   }
   return createHash('sha256').update(JSON.stringify(intent)).digest('hex');
 }
+/** Compatibility wrapper: only the database creates processing authority. */
+export async function acceptPublicApplication(kind: 'apply' | 'referral' | 'future', row: Record<string, unknown>): Promise<{ id: string } | null> {
+  if (!transitionSupport()) return sbInsert<{ id: string }>('website_applications', row, true);
+  const { status, resume_text, person_processing_version, ...input } = row;
+  if (status !== 'queued' || resume_text !== null || person_processing_version !== 1) throw Error('application_accept_input');
+  let response: { inserted?: unknown; id?: unknown };
+  try { response = await sbRpc('person_application_accept', { p_kind: kind, p_input: input }); }
+  catch { throw Error('application_storage_unavailable'); }
+  if (response?.inserted === true && transitionUuid(response.id)) return { id: response.id };
+  if (kind === 'future' && response?.inserted === false && response.id === null) return null;
+  throw Error('application_storage_response');
+}
 export async function insertFutureIntent(row: Record<string, unknown>): Promise<{ id: string } | null> {
-  const response = await sbRest('website_applications?on_conflict=organization_id,linkedin_username,person_intent_hash', {
-    method: 'POST', body: JSON.stringify({ ...row, person_intent_hash: futureIntentHash(row) }),
-    prefer: 'return=representation,resolution=ignore-duplicates',
-  });
-  if (!response.ok) throw Error('application_storage_unavailable');
-  const rows = await response.json();
-  if (!Array.isArray(rows)) throw Error('application_storage_response');
-  return rows[0] ?? null;
+  return acceptPublicApplication('future', row);
+}
+/** Editor preflight only. The database still refuses a racing unchecked write.
+ * Missing schema/status with support on is retryable; no storage/mirror follows. */
+export async function applicationEditsPaused(orgId: string): Promise<boolean> {
+  if (!transitionSupport() || orgId !== TT_ORG_ID) return false;
+  try {
+    const status = await sbRpc<{ enabled?: unknown }>('person_transition_status', {});
+    return status?.enabled !== false;
+  } catch { return true; }
 }

@@ -1,3 +1,4 @@
+import { acceptPublicApplication } from '@/lib/server/person-transition/acceptance';
 import { createHash } from 'node:crypto';
 import { transitionSupport } from '@/lib/server/person-transition/context';
 import { after, NextRequest, NextResponse } from "next/server";
@@ -189,8 +190,8 @@ export async function POST(req: NextRequest) {
     if (rp && rp.organization_id === orgId) recruiterProfileId = rp.id;
   }
 
-  const submission = await sbInsert<{ id: string }>(
-    "website_applications",
+  const submission = await acceptPublicApplication(
+    "apply",
     {
       organization_id: orgId,
       recruiter_profile_id: recruiterProfileId,
@@ -211,8 +212,7 @@ export async function POST(req: NextRequest) {
         .join("; ") || null,
       ip: ip === "unknown" ? null : ip,
       user_agent: clean(req.headers.get("user-agent"), 500),
-    },
-    true
+    }
   ).catch((e) => {
     console.error("application insert failed", "storage_unavailable");
     return null;

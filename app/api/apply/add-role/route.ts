@@ -1,3 +1,4 @@
+import { applicationEditsPaused } from '@/lib/server/person-transition/acceptance';
 import { NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbRest } from "@/lib/server/supabase";
@@ -38,6 +39,8 @@ export async function POST(req: NextRequest) {
 
   const ttOrgId = await getOrgId();
   if (!ttOrgId) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+  if (await applicationEditsPaused(ttOrgId))
+    return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
   const res = await sbRest(
     `website_applications?id=eq.${applicationId}&organization_id=eq.${ttOrgId}&select=id,created_at,role_ids,role_titles,matched_role_ids`
   );

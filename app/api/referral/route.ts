@@ -1,3 +1,4 @@
+import { acceptPublicApplication } from '@/lib/server/person-transition/acceptance';
 import { transitionSupport } from '@/lib/server/person-transition/context';
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
@@ -176,8 +177,8 @@ export async function POST(req: NextRequest) {
 
   // Real referral: application row + the shared pipeline (name resolved from
   // the Harvest profile once enrichment runs).
-  const submission = await sbInsert<{ id: string }>(
-    "website_applications",
+  const submission = await acceptPublicApplication(
+    "referral",
     {
       organization_id: orgId,
       recruiter_profile_id: profile?.id ?? null,
@@ -195,8 +196,7 @@ export async function POST(req: NextRequest) {
       source: `referral: by ${referrerName} <${referrerEmail}>`,
       ip: ip === "unknown" ? null : ip,
       user_agent: clean(req.headers.get("user-agent"), 500),
-    },
-    true
+    }
   ).catch((e) => {
     console.error("referral application insert failed", "storage_unavailable");
     return null;

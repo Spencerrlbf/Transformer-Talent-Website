@@ -1,3 +1,4 @@
+import { applicationEditsPaused } from './person-transition/acceptance';
 // Network matches: the internal-only surface over the nightly pool matcher.
 // match_verdicts (pool candidate × org role, scorecard verdicts as v2) is
 // aggregated person-first: one entry per pool person with all their matched
@@ -388,6 +389,8 @@ export async function sendNetworkCandidate(
     if (!client) return { ok: false, error: "linked_role_missing" };
     target = { orgId: linked.orgId, jobId: linked.jobId, title: client.title, roleUuid: client.id };
   }
+
+  if (await applicationEditsPaused(target.orgId)) return { ok: false, error: "temporarily_unavailable" };
 
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
   let [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
