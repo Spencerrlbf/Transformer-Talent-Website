@@ -37,6 +37,7 @@ if test -f supabase/migrations/20260927052000_person_intake_mutations.sql; then
 fi
 q -d $DB -1 -f supabase/migrations/20260927060000_person_intake_ready.sql
 q -d $DB -1 -f supabase/migrations/20260927065000_person_tenant_binding.sql
+q -d $DB -1 -f supabase/migrations/20260927070000_person_application_completion.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-projection/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-projection/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-projection/test-projection.mjs

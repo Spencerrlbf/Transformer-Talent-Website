@@ -535,3 +535,22 @@ verdicts. Transition support requires admission even when no username exists; th
 legacy path remains available with support off. This is prepared only. Atomic
 results/contact completion, broader source/other-writer/derivative admission,
 maintenance and complete canary/drain coverage remain release prerequisites.
+
+
+## Prepared atomic application completion
+
+`20260927070000_person_application_completion.sql` consumes TT readiness or an
+existing tenant binding and atomically writes application results, required tenant
+contact additions, private completion proof and completed work. The claimed
+pipeline stages one bounded result instead of issuing source PATCHes. Completion
+and completed retries require private proof and current organization ownership;
+a mutable processed status cannot authorize them. Lost responses retain completed
+work and do not repeat providers. Support-off behavior remains compatible.
+
+Result frames verify actual rows including resume text, and final lease checks
+cover lock waits and witness persistence. TT results derive from the retained
+receipt and preserve newer preferences. Tenant contact merging preserves curated
+values and current caps. Screening serialization excludes cache-only metadata.
+See `scripts/person-application-completion/README.md` for verification and scope.
+The migration is prepared only; broader source/writer/derivative admission,
+maintenance and full worker canary/drain coverage still block activation.

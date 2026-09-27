@@ -1,10 +1,10 @@
 #!/bin/bash
-# Resets only the caller-owned loopback person_intake_ready_test fixture database.
+# Resets only the caller-owned loopback person_application_completion_test fixture database.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
-DB=person_intake_ready_test
+DB=person_application_completion_test
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 q -d postgres -c "drop database if exists $DB" -c "create database $DB"
 q -d $DB -f scripts/person-trial/local-schema.sql
@@ -39,8 +39,15 @@ fi
 if test -f supabase/migrations/20260927060000_person_intake_ready.sql; then
  q -d $DB -1 -f supabase/migrations/20260927060000_person_intake_ready.sql
 fi
-q -d $DB -1 -f supabase/migrations/20260927065000_person_tenant_binding.sql
-q -d $DB -1 -f supabase/migrations/20260927070000_person_application_completion.sql
+if test -f supabase/migrations/20260927065000_person_tenant_binding.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927065000_person_tenant_binding.sql
+fi
+q -d $DB -c "create table org_roles(id uuid primary key default gen_random_uuid(),organization_id uuid not null,external_id text not null,unique(organization_id,external_id));create table site_role_embeddings(job_id text primary key)"
+if test -f supabase/migrations/20260927070000_person_application_completion.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927070000_person_application_completion.sql
+fi
 node scripts/build-worker-lib.mjs
-npx --yes esbuild@0.28.2 scripts/person-intake-ready/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-intake-ready/dist/processing.mjs --log-level=warning
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-intake-ready/test-ready.mjs
+npx --yes esbuild@0.28.2 scripts/person-application-completion/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-completion/dist/processing.mjs --log-level=warning
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-completion/test-completion.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-completion/test-tt-completion.mjs
+node --test scripts/person-application-completion/test-processing.mjs

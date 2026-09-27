@@ -8,6 +8,7 @@ globalThis.fetch=async(input,init={})=>{
  if(fn==='person_application_work_claim')args=[b.p_application,b.p_org,b.p_token,b.p_lease];
  else if(fn==='person_application_work_start')args=[b.p_id,b.p_token];
  else if(fn==='person_transition_renew')args=[b.p_id,b.p_token,b.p_lease];
+ else if(fn==='person_application_work_complete')args=[b.p_result];
  else if(fn==='person_application_work_finish')args=[b.p_id,b.p_token,b.p_outcome];
  else if(fn==='person_application_work_defer')args=[b.p_id,b.p_token,b.p_delay];
  else if(fn==='person_application_harvest_store')args=[b.p_payload];
@@ -31,7 +32,7 @@ async function processApp(id,{mutate,queryHook,harvest,sourceCheck,contacts={pho
   const wrapped={query:async(sql,values)=>{if(queryHook)await queryHook(sql,values,c);return c.query(sql,values);}};
   try{result=await lib.saveApplicationPersonOnConnection(wrapped,{organizationId:TT,applicationId:id,linkedinUsername:source.linkedin_username,name:'Resolved Synthetic',parsed:{current_title:'Engineer'},resumeText:'Synthetic resume',resumeContacts:contacts,harvestLedgerId,mode:'live'});}
   catch(e){error=e;throw e;}finally{c.release();}
-  if(afterIntake)await afterIntake(result);await pool.query("update website_applications set status='processed' where id=$1",[id]);return 'processed';
+  if(afterIntake)await afterIntake(result);lib.stageApplicationResult({version:1,matched_role_ids:[],screening:null});return 'processed';
  });return{status,result,error};
 }
 test('real claimed intake binds trusted work before any family lock and persists receipt contacts',async()=>{

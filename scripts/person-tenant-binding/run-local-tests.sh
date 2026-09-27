@@ -42,6 +42,7 @@ fi
 if test -f supabase/migrations/20260927065000_person_tenant_binding.sql; then
  q -d $DB -1 -f supabase/migrations/20260927065000_person_tenant_binding.sql
 fi
+q -d $DB -1 -f supabase/migrations/20260927070000_person_application_completion.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-tenant-binding/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-tenant-binding/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-tenant-binding/test-binding.mjs
