@@ -6,6 +6,7 @@ import { beginPersonTransaction, withPersonConnection, type PersonConnection } f
 export type CertifiedRefreshRequest = {
   organizationId: string; requestId: string; queueId: string; token: string;
 };
+export type CertifiedRefreshSaveResult = { status: "done"; candidateId: string; projected: boolean; semanticChanged: boolean; changed: boolean; revision: string };
 export type CertifiedRefreshClaim = CertifiedRefreshRequest & { dailyCap: number; allowPaid: boolean };
 export type CertifiedRefreshClaimResult =
   | { status: "missing" | "busy" | "budget" }
@@ -50,7 +51,7 @@ export async function storeCertifiedRefreshPayloadOnConnection(c: PersonConnecti
   if (!a.raw || typeof a.raw !== "object" || Array.isArray(a.raw) || (!(a.raw as Record<string, unknown>).headline && !(a.raw as Record<string, unknown>).experience)) throw Error("refresh_empty_payload");
   return transaction(c, a, async () => (await c.query("select person_private.refresh_store_payload($1,$2,$3,$4,$5::jsonb) result", [...keys(a), JSON.stringify(a.raw)])).rows[0].result);
 }
-export async function failCertifiedRefreshOnConnection(c: PersonConnection, a: CertifiedRefreshRequest): Promise<{ status: "uncertain" | "retry" } | { status: "review"; reason: string; workId: string }> {
+export async function failCertifiedRefreshOnConnection(c: PersonConnection, a: CertifiedRefreshRequest): Promise<{ status: "uncertain" | "retry" } | { status: "review"; reason: string; workId: string } | CertifiedRefreshSaveResult> {
   return transaction(c, a, async () => (await c.query("select person_private.refresh_fail($1,$2,$3,$4) result", keys(a))).rows[0].result);
 }
 // Configuration and identity validation precede acquiring a pooled connection.

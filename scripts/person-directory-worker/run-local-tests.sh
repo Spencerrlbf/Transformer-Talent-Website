@@ -82,12 +82,16 @@ fi
 if test -f supabase/migrations/20260927200000_person_directory_current.sql; then
  q -d $DB -1 -f supabase/migrations/20260927200000_person_directory_current.sql
 fi
+q -d $DB -1 -f supabase/migrations/20260927210000_person_refresh_lifecycle.sql
+if test -f supabase/migrations/20260927220000_person_refresh_save.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927220000_person_refresh_save.sql
+fi
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-input/test-input.mjs
 node --test scripts/person-directory-input/test-cli.mjs scripts/person-directory-admission/test-decision.mjs scripts/person-directory-worker/test-policy.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-conflict-evidence/test-fence.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-directory-worker/test-worker.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-refresh-save/test-cross-family.mjs
 q -d $DB -c "update person_private.transition_control set enabled=false,phase='open' where singleton"
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory/test-directory.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory/test-cli.mjs

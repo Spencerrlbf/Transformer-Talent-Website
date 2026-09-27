@@ -135,3 +135,4 @@ export { captureDirectoryAdmissionEvidence,evaluateDirectoryAdmission,directoryA
 export { saveCertifiedDirectoryOnConnection, saveCertifiedDirectory } from './person/directory-execution';
 export { readCertifiedDirectoryCurrentOnConnection, readCertifiedDirectoryCurrent } from './person/directory-current';
 export { claimCertifiedRefreshOnConnection, startCertifiedRefreshProviderOnConnection, storeCertifiedRefreshPayloadOnConnection, failCertifiedRefreshOnConnection, claimCertifiedRefresh, startCertifiedRefreshProvider, storeCertifiedRefreshPayload, failCertifiedRefresh } from './person/refresh-lifecycle';
+export { saveCertifiedRefreshOnConnection, saveCertifiedRefresh } from './person/refresh-save';
