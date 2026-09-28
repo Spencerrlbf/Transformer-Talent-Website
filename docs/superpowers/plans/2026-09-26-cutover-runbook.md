@@ -264,6 +264,9 @@ pending, review, queue and external-boundary outcomes. An unstable external
 observation is reported explicitly; Spencer's tolerance for drift does not turn it
 into a verified stable fingerprint or authorize bypassing the writer's guard.
 
+Use `scripts/person-transition.mjs` for every controller and window change (see
+`scripts/person-transition-cli/README.md`); the whole sequence below is rehearsed
+locally end to end by `scripts/person-transition-cli/run-local-tests.sh`.
 While the controller is armed, the catch-up and anchor steps need operator
 maintenance windows (`scripts/person-maintenance/README.md`). Arm, drain and seal
 to `held`. Open a `catchup` window for the exact catch-up run ID, run the pinned
