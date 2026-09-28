@@ -305,6 +305,17 @@ catch-up, and close the window. Then open an `anchors` window, run the anchor CL
 below, and close it. Only then reopen. The controller refuses `reopen` while a window is
 open or expired. Publication and undo are not admitted by these windows.
 
+Catch-up order, as rehearsed on 2026-09-28: the `catchup` window opens only for a
+run that is already running and pinned, but the pinned CLI starts and pages in one
+go. So start the run with `scripts/person-maintenance/start-catchup.mjs` (same
+fingerprint, commit, limit, batch and scope as the pinned CLI), open the window for
+that run, then run the pinned CLI with the same `BACKFILL_CONFIG` plus
+`"resume":true`. Then finalize with `scripts/person-reconcile-finalize.mjs` inside the
+same window, and close it. Warm-up first: the directory fingerprint takes about 7 s
+(15 s at worst in production) against the REST API's 8 s limit, so a cold first call
+fails with 57014 and the run marks itself failed; resume it. Run the dry reconcile
+(`"dry-run":true`) once just before sealing so the first real call is warm.
+
 Then prepare anchors using the unchanged translator and installed audit chain:
 
 ```sh
@@ -313,7 +324,14 @@ node scripts/person-audit-anchors.mjs --limit=1000 --batch=20
 node scripts/person-audit-anchors.mjs --save --limit=1000 --batch=20
 ```
 
-Advance only from the last completed cursor, within time/load gates. Verify every
+Anchors cover every person (about 423,000; about 13 KB each, 5.65 GB in total on the
+copy). One process runs at about 25 people per second from a laptop; four processes
+over the four quarters of the ID range (`--after=` `3fffffff-…`, `7fffffff-…`,
+`bfffffff-…`, each `--limit` just above its quarter's count) finished in about 60
+minutes. Overlap is harmless: an existing anchor is `unchanged`. Both the anchor and
+publish CLIs stop at `--max-bytes` / `--max-db-bytes` (default 34 GB); the database
+grows from about 32 GB to about 38 GB, so confirm disk headroom and set the limit
+explicitly (the copy used 45 GB). Advance only from the last completed cursor, within time/load gates. Verify every
 reported review/pending outcome. Anchors are immutable; do not recreate them to
 legitimize an unexplained edit. Keep the drain effective through activation.
 
@@ -371,6 +389,13 @@ node scripts/person-publish.mjs --run-id=publish-DATE-full --mode=publish --limi
 node scripts/person-publish.mjs --run-id=publish-DATE-full --mode=publish --limit=1000000 --batch-size=500 --review=publish --resume --max-seconds=3600
 ```
 
+Throughput, rehearsed on the copy from a laptop: about 0.84 people per second (each
+person is about 20 round trips at about 55 ms), so the full scan takes days from a
+laptop. It runs while the controller is open, so this is background work, not
+downtime: resume the same run across windows (720 minutes at most each). Run it from a
+host close to the database to cut the round trips. A single run cannot be split
+across processes (one run lock and one maintenance window at a time).
+
 Retain the same runtime and target/review configuration on resume. Report durable
 distinct outcomes, including held, drift and audit-blocked people; completion of
 traversal does not mean all profiles were published. Canary people encountered by
@@ -392,7 +417,9 @@ select public.refresh_network_matches('801865a7-6533-41d2-9c45-e4a90e6ad51a');
 commit;
 ```
 
-Report the before and after counts; a large drop means verdicts are missing and
+On the copy the rebuild took 20 seconds. Its first run once reported an in-transaction
+`after` count above the rebuilt count that a recount and a second run did not
+reproduce; recount a minute after commit. Report the before and after counts; a large drop means verdicts are missing and
 needs investigation before resuming. Spot-check published people on the Network
 tab. Then re-enable the three jobs; the next nightly run rescores as normal:
 
@@ -408,6 +435,19 @@ Undo uses `person-publish-undo.mjs --run-id=EXACT_RUN` for a dry count, then `--
 only within approved rollback scope. Newer edits/publications remain conflicts.
 After any applied undo, run the same Network rebuild so it shows the restored records.
 Do not mass-trigger paid enrichment, embeddings or judging for storage-only changes.
+
+Audit outcomes rehearsed on the copy (dry, 300-person sample after anchors): 246
+verified, 53 `pending` (`directory_snapshot_not_admitted`: directory contacts, about
+15% of the pool, until a certified directory sync records their current contact),
+1 `review` (`anchor_required`, one of the catch-up reviews). An applicant who is also a
+directory contact without a certified directory receipt reviews as
+`historical_owner_unavailable`. The nightly directory sync covers only recent changes,
+so covering every directory contact needs a separate decision.
+
+The cross-organization leak test (`scripts/test-tenancy.mjs`) cannot run while armed:
+its fixture writes candidates directly and the fence refuses it
+(`candidate_mutation_frame`). Run it before arming or while disarmed, with the new
+write paths on.
 
 ### 6. Audit and restrictive guard
 

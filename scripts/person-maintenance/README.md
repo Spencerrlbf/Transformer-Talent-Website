@@ -43,6 +43,15 @@ Publication, undo and source-hold resolution are **not** admitted here.
 - Every open and close is recorded in the append-only `maintenance_events`.
 - With the controller disabled, all four RPCs behave exactly as before.
 
+## Starting the catch-up run
+
+The window only opens for a run that is already `running` and pinned, and the pinned
+CLI starts and pages in one go. `start-catchup.mjs` starts the run exactly as the
+pinned CLI would (its own fingerprint, commit, limit, batch and scope; refuses dry,
+resume, other scopes, a non-pinned checkout and a missing communications URL). Open
+the window, then run the pinned CLI with the same config plus `"resume":true`.
+Rehearsed on a restored copy on 2026-09-28.
+
 ## Operator sequence (from a direct session, `PERSON_PUBLISH_DATABASE_URL`)
 
 ```sql
