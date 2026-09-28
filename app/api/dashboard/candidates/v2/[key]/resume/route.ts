@@ -3,8 +3,10 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
-import { saveUnifiedResumePath, resumeNameFromPath } from "@/lib/server/candidates-unified";
-import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "@/lib/server/contact-extract";
+import { saveUnifiedResumePath, resumeNameFromPath, ttApplicationCandidate, poolContactOf, saveRecruiterContactMapped } from "@/lib/server/candidates-unified";
+import { extractEmails, extractPhone, fillExtractedContact, mergeExtractedContact, pdfText } from "@/lib/server/contact-extract";
+import { checkedApplicationEdit } from "@/lib/server/person-transition/acceptance";
+import { sbRest } from "@/lib/server/supabase";
 import { candidateInOrg } from "@/lib/server/tasks";
 
 export const maxDuration = 60;
@@ -85,8 +87,27 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     ]);
     const phone = extractPhone(text);
     const emails = extractEmails(text);
-    // Contact on a checked TT application row is not written here yet (pending the contact decision).
-    if (!checked && (phone || emails.length)) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
+    if (checked && (phone || emails.length)) {
+      // Same rule as the contact edit: a linked applicant fills the pool person's
+      // contact (checked recruiter path); an unlinked one fills its own copy (checked edit).
+      const linked = await ttApplicationCandidate(key.slice(4));
+      if (linked.candidateId) {
+        const merged = mergeExtractedContact(await poolContactOf(linked.candidateId), { phone, emails });
+        if (merged) {
+          const saved = await saveRecruiterContactMapped(member.org.id, linked.candidateId,
+            { email: merged.contact.email ?? null, phone: merged.contact.phone ?? null, github: merged.contact.github ?? null, otherEmails: merged.contact.otherEmails ?? [] },
+            { actorId: member.userId, requestId: crypto.randomUUID() });
+          if (saved.contact) filled = merged.change;
+        }
+      } else if (linked.found) {
+        const res = await sbRest(`website_applications?id=eq.${key.slice(4)}&organization_id=eq.${member.org.id}&select=contact,email&limit=1`);
+        const [row] = (res.ok ? await res.json() : []) as { contact: Record<string, unknown> | null; email: string | null }[];
+        const current = { email: (row?.contact?.email as string | null) ?? row?.email ?? null, phone: (row?.contact?.phone as string | null) ?? null,
+          github: (row?.contact?.github as string | null) ?? null, otherEmails: Array.isArray(row?.contact?.otherEmails) ? row!.contact!.otherEmails as string[] : [] };
+        const merged = mergeExtractedContact(current, { phone, emails });
+        if (merged && (await checkedApplicationEdit(key.slice(4), "contact", { contact: merged.contact })).ok) filled = merged.change;
+      }
+    } else if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
   } catch (err) {
     console.error("resume contact extraction failed", err);
   }

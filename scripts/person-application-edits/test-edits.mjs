@@ -63,7 +63,7 @@ test('edit: columns outside the kind, contact and name are refused', async () =>
     ['followup_date', { follow_up_at: '2027-05-01', role_ids: ['1'] }, null],
     ['followup_date', { follow_up_at: '2027-05-01' }, { headline: 'Changed' }],
     ['resume', { resume_path: 'x.pdf' }, { follow_up_at: null }],
-    ['contact', { contact: {} }, null],
+    ['contact', { name: 'x' }, null], // contact kind admits only the contact column
     ['followup_date', {}, null],
     // Value shapes
     ['followup', { preferred_roles: [1] }, null],
@@ -166,4 +166,21 @@ test('edit: only the latest future application updates the pool person', async (
   const n = await edit(newer, 'followup_date', { follow_up_at: '2027-12-01' }, { follow_up_at: '2027-12-01' });
   assert.equal(n.mirrored, true);
   assert.equal((await row('candidates', cid)).follow_up_at.toISOString().slice(0, 10), '2027-12-01');
+});
+
+test('edit: contact belongs to the pool person when linked; an unlinked application edits its own copy', async () => {
+  const contact = { email: 'edited@example.test', phone: '+12025550199', github: null, otherEmails: ['other@example.test'] };
+  const { id } = await processed();
+  const before = (await row('website_applications', id)).contact;
+  assert.deepEqual(await edit(id, 'contact', { contact }), { status: 'linked' });
+  assert.deepEqual((await row('website_applications', id)).contact, before);
+  await pool.query("update person_private.transition_control set enabled=false where singleton");
+  const unlinked = (await pool.query("insert into website_applications(organization_id,name,email,source,status,contact) values($1,'Synthetic Unlinked','unlinked@example.test','apply','processed','{}') returning id", [TT])).rows[0].id;
+  await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton");
+  await assert.rejects(pool.query("update website_applications set contact=$2 where id=$1", [unlinked, JSON.stringify(contact)]), /application_source_fence|application_result_frame|application_intake|candidate_mutation/);
+  assert.equal((await edit(unlinked, 'contact', { contact })).status, 'saved');
+  assert.deepEqual((await row('website_applications', unlinked)).contact, contact);
+  for (const bad of [{ name: 'x' }, { email: 5 }, { otherEmails: Array.from({ length: 9 }, (_, i) => `o${i}@example.test`) }, 'text'])
+    await assert.rejects(edit(unlinked, 'contact', { contact: bad }), /application_edit_input/, JSON.stringify(bad));
+  assert.equal(await frames(), 0);
 });

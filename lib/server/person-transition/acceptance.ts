@@ -40,7 +40,7 @@ export async function applicationEditsPaused(orgId: string): Promise<boolean> {
   } catch { return true; }
 }
 
-export type ApplicationEditKind = 'followup' | 'followup_date' | 'followup_clear' | 'resume' | 'roles';
+export type ApplicationEditKind = 'followup' | 'followup_date' | 'followup_clear' | 'resume' | 'roles' | 'contact';
 export type CheckedEditResult = { ok: true; mirrored: boolean } | { ok: false; error: 'temporarily_unavailable' | 'not_found' };
 /** TT application rows are edited through the checked function whenever support is on. */
 export function applicationEditsChecked(orgId: string): boolean {

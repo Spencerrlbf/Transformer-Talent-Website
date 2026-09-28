@@ -1,5 +1,5 @@
 import { transitionSupport } from "./person-transition/context";
-import { applicationEditsPaused, applicationEditsChecked, checkedApplicationEdit } from './person-transition/acceptance';
+import { applicationEditsChecked, checkedApplicationEdit } from './person-transition/acceptance';
 // Candidates v2: applicants + sourced people unified into one org-scoped,
 // sortable, paginated list, plus a per-person drawer detail and editable
 // contact info. Read-time union over website_applications and the sourcing
@@ -1730,7 +1730,10 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
           return `Asked to hear from you later, via your page · ${fmtDate(a.created_at)}`;
         return `Applied via your board · ${fmtDate(a.created_at)}`;
       })(),
-      contact: sentSnapshot
+      // A linked TT applicant's contact is the pool person's (edited there, support on).
+      contact: applicationEditsChecked(orgId) && a.candidate_id
+        ? await poolContactOf(a.candidate_id)
+        : sentSnapshot
         ? { ...(a.contact || {}), email: a.contact?.email ?? null, phone: a.contact?.phone ?? null }
         : { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
@@ -1809,36 +1812,73 @@ const cleanContact = (c: UnifiedContact): UnifiedContact | { error: string } => 
   return out;
 };
 
+/** The linked pool person of a TT application (support-on reads only). */
+export async function ttApplicationCandidate(applicationId: string): Promise<{ found: boolean; candidateId: string | null }> {
+  const res = await sbRest(`website_applications?id=eq.${applicationId}&organization_id=eq.${TT_ORG_ID}&select=id,candidate_id&limit=1`);
+  const [row] = (res.ok ? await res.json() : []) as { id: string; candidate_id: string | null }[];
+  return { found: !!row, candidateId: row?.candidate_id ?? null };
+}
+
+/** The pool person's current contact block: the published view when there is one. */
+export async function poolContactOf(candidateId: string): Promise<UnifiedContact> {
+  const published = await publishedPoolProfiles([candidateId]);
+  if (published.has(candidateId)) return published.get(candidateId)!.contact as UnifiedContact;
+  const res = await sbRest(`candidates?id=eq.${candidateId}&select=email,phone,contact&limit=1`);
+  const [p] = (res.ok ? await res.json() : []) as { email: string | null; phone: string | null; contact: Partial<UnifiedContact> | null }[];
+  return {
+    email: str(p?.contact?.email) ?? str(p?.email),
+    phone: str(p?.contact?.phone) ?? str(p?.phone),
+    github: str(p?.contact?.github),
+    otherEmails: Array.isArray(p?.contact?.otherEmails) ? p!.contact!.otherEmails! : [],
+  };
+}
+
+/** The checked recruiter contact save for a pool person, with the drawer's error codes. */
+export async function saveRecruiterContactMapped(
+  orgId: string, candidateId: string, contact: UnifiedContact, edit?: { actorId: string; requestId: string }
+): Promise<{ contact?: UnifiedContact; error?: string }> {
+  if (orgId !== TT_ORG_ID) return { error: "not_found" };
+  if (personWriteMode() === "legacy") return { error: "temporarily_unavailable" };
+  if (!edit) return { error: "member_required" };
+  try {
+    const saved = await saveRecruiterContact({ organizationId: orgId, candidateId, actorId: edit.actorId,
+      requestId: edit.requestId, contact, mode: personWriteMode() as "shadow" | "live" });
+    return { contact: saved.contact };
+  } catch (error) {
+    const reason = (error as Error).message;
+    if (["invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable"].includes(reason)) return { error: reason };
+    if (reason === "person_recruiter_unavailable") return { error: "temporarily_unavailable" };
+    if (reason === "person_not_found") return { error: "not_found" };
+    if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
+    return { error: "save_failed" };
+  }
+}
+
 export async function saveUnifiedContact(
   orgId: string,
   key: string,
   contact: UnifiedContact,
   edit?: { actorId: string; requestId: string }
 ): Promise<{ contact?: UnifiedContact; error?: string }> {
-  if (key.startsWith("app_") && await applicationEditsPaused(orgId)) return { error: "temporarily_unavailable" };
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
+
+  // TT application rows (support on): a linked applicant's contact is the pool
+  // person's, saved through the checked recruiter path; the application keeps its
+  // submitted copy. Only an unlinked application edits its own copy (checked).
+  if (key.startsWith("app_") && applicationEditsChecked(orgId)) {
+    const linked = await ttApplicationCandidate(key.slice(4));
+    if (!linked.found) return { error: "not_found" };
+    if (linked.candidateId) return saveRecruiterContactMapped(orgId, linked.candidateId, cleaned, edit);
+    const r = await checkedApplicationEdit(key.slice(4), "contact", { contact: cleaned });
+    return r.ok ? { contact: cleaned } : { error: r.error };
+  }
 
   // Enforce pool ownership in the service as well as the HTTP route.
   if (key.startsWith("net_")) {
     if (orgId !== TT_ORG_ID) return { error: "not_found" };
     if (transitionSupport() && personWriteMode() === "legacy") return { error: "temporarily_unavailable" };
-    if (personWriteMode() !== "legacy") {
-      if (!edit) return { error: "member_required" };
-      try {
-        const saved = await saveRecruiterContact({ organizationId: orgId,
-          candidateId: key.slice(4), actorId: edit.actorId, requestId: edit.requestId,
-          contact: cleaned, mode: personWriteMode() as "shadow" | "live" });
-        return { contact: saved.contact };
-      } catch (error) {
-        const reason = (error as Error).message;
-        if (["invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable"].includes(reason)) return { error: reason };
-        if (reason === "person_recruiter_unavailable") return { error: "temporarily_unavailable" };
-        if (reason === "person_not_found") return { error: "not_found" };
-        if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
-        return { error: "save_failed" };
-      }
-    }
+    if (personWriteMode() !== "legacy") return saveRecruiterContactMapped(orgId, key.slice(4), cleaned, edit);
   }
 
   // net_ = pool candidate (TT-internal; the API route gates org access).

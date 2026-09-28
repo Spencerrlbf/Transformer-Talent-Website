@@ -98,5 +98,8 @@ fi
 q -d $DB -1 -f supabase/migrations/20260928030000_person_maintenance_window.sql
 q -d $DB -1 -f supabase/migrations/20260928040000_person_application_edits.sql
 q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
+if test -f supabase/migrations/20260928060000_person_application_contact.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
+fi
 node scripts/build-worker-lib.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish-admission/test-publish-admission.mjs
