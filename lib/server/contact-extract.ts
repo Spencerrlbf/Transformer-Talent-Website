@@ -174,27 +174,6 @@ async function linkedRow(key: string, row: Row, strict = false): Promise<Row | n
  *  phone write is conditional at the database, so a recruiter saving the
  *  contact block at the same moment can't be clobbered. Returns what
  *  changed ({ phone?, otherEmails? }) or null when nothing did. */
-/** The resume-fill rule on an already-read contact block: fill an empty phone, add
- * one unknown email to the other emails (up to 8). Returns null when nothing changes. */
-export function mergeExtractedContact(
-  current: Contact,
-  found: { phone?: string | null; emails?: string[] },
-): { contact: Contact; change: { phone?: string | null; otherEmails?: string[] } } | null {
-  const phone = normalizePhone(found.phone);
-  const emails = (found.emails || []).map((e) => e.trim())
-    .filter((e) => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 160);
-  const known = new Set<string>([current.email, ...(current.otherEmails || [])].filter(Boolean).map((e) => String(e).toLowerCase()));
-  const next: Contact = { ...current };
-  const change: { phone?: string | null; otherEmails?: string[] } = {};
-  if (phone && !(current.phone || "").trim()) { next.phone = phone; change.phone = phone; }
-  const extra = emails.find((e) => !known.has(e.toLowerCase()));
-  if (extra) {
-    const others = [...(current.otherEmails || []), extra].slice(0, 8);
-    if (others.length !== (current.otherEmails || []).length) { next.otherEmails = others; change.otherEmails = others; }
-  }
-  return change.phone || change.otherEmails ? { contact: next, change } : null;
-}
-
 export async function fillExtractedContact(
   key: string,
   found: { phone?: string | null; email?: string | null; emails?: string[] },

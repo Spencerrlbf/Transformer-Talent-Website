@@ -184,3 +184,49 @@ test('edit: contact belongs to the pool person when linked; an unlinked applicat
     await assert.rejects(edit(unlinked, 'contact', { contact: bad }), /application_edit_input/, JSON.stringify(bad));
   assert.equal(await frames(), 0);
 });
+
+const fill = async (id, phone, emails) => (await pool.query('select person_application_contact_fill($1,$2,$3::jsonb) r', [id, phone, JSON.stringify(emails)])).rows[0].r;
+async function unlinkedRow(username = null) {
+  await pool.query("update person_private.transition_control set enabled=false where singleton");
+  try {
+    return (await pool.query("insert into website_applications(organization_id,name,email,source,status,contact,linkedin_username) values($1,'Synthetic Unlinked','unlinked-fill@example.test','apply','processed',$2,$3) returning id",
+      [TT, JSON.stringify({ email: 'typed@example.test', phone: null, github: null, otherEmails: [] }), username])).rows[0].id;
+  } finally { await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"); }
+}
+
+test('fill: an unlinked application fills only an empty phone and one unknown email, atomically', async () => {
+  const id = await unlinkedRow();
+  const r = await fill(id, '+1 202 555 0147', ['typed@example.test', 'UNLINKED-FILL@example.test', 'new@example.test']);
+  assert.equal(r.status, 'saved', JSON.stringify(r));
+  assert.deepEqual(r.filled, { phone: '+1 202 555 0147', otherEmails: ['new@example.test'] });
+  const c = (await row('website_applications', id)).contact;
+  assert.equal(c.phone, '+1 202 555 0147'); assert.deepEqual(c.otherEmails, ['new@example.test']); assert.equal(c.email, 'typed@example.test');
+  assert.deepEqual(await fill(id, '+1 202 555 0199', ['new@example.test']), { status: 'unchanged' });
+  assert.equal((await row('website_applications', id)).contact.phone, '+1 202 555 0147');
+  for (const [phone, emails] of [['not a phone', []], [null, ['not-an-email']], [null, 'x']])
+    await assert.rejects(fill(id, phone, emails), /application_edit_input/);
+});
+
+test('fill: a phone on the sourced record wins, and linked applications are never filled', async () => {
+  const username = `synthetic-fill-${randomUUID()}`;
+  await pool.query("insert into sourced_candidates(organization_id,linkedin_username,contact) values($1,$2,$3)", [TT, username, JSON.stringify({ phone: '+1 202 555 0100', email: 'sourced@example.test' })]);
+  const id = await unlinkedRow(username);
+  const r = await fill(id, '+1 202 555 0147', ['sourced@example.test']);
+  assert.deepEqual(r, { status: 'unchanged' });
+  const { id: linked } = await processed();
+  assert.deepEqual(await fill(linked, '+1 202 555 0147', ['x@example.test']), { status: 'linked' });
+});
+
+test('contact edit on an unlinked application with completed processing passes the result guard', async () => {
+  const id = await unlinkedRow();
+  // A completed processing record behind the row, so the result guard evaluates the edit frame.
+  await pool.query("update person_private.transition_control set enabled=false where singleton");
+  try {
+    const w = (await pool.query("insert into person_private.transition_work(organization_id,scope,family,resource_key,input_hash,token_hash,generation,lease_until,status,finished_at) values($1,'tt_person','application','application:'||$2::text,repeat('e',64),md5('x'),(select generation from person_private.transition_control),now()+interval '1 hour','completed',now()) returning id", [TT, id])).rows[0].id;
+    await pool.query("insert into person_private.application_work(work_id,application_id,organization_id,input_hash,input_snapshot,review_event_id) values($1,$2::uuid,$3::uuid,repeat('e',64),jsonb_build_object('id',$2::text,'organization_id',$3::text),(900000000000+floor(random()*1e9))::bigint)", [w, id, TT]);
+  } finally { await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"); }
+  await assert.rejects(pool.query("update website_applications set contact=$2 where id=$1", [id, JSON.stringify({ email: 'raw@example.test' })]), /application_result_frame|application_source_fence|candidate_mutation/);
+  const contact = { email: 'unlinked-edited@example.test', phone: null, github: null, otherEmails: [] };
+  assert.equal((await edit(id, 'contact', { contact })).status, 'saved');
+  assert.deepEqual((await row('website_applications', id)).contact, contact);
+});

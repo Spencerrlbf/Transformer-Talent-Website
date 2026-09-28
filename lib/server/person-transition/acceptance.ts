@@ -41,7 +41,7 @@ export async function applicationEditsPaused(orgId: string): Promise<boolean> {
 }
 
 export type ApplicationEditKind = 'followup' | 'followup_date' | 'followup_clear' | 'resume' | 'roles' | 'contact';
-export type CheckedEditResult = { ok: true; mirrored: boolean } | { ok: false; error: 'temporarily_unavailable' | 'not_found' };
+export type CheckedEditResult = { ok: true; mirrored: boolean } | { ok: false; error: 'temporarily_unavailable' | 'not_found' | 'linked' };
 /** TT application rows are edited through the checked function whenever support is on. */
 export function applicationEditsChecked(orgId: string): boolean {
   return transitionSupport() && orgId === TT_ORG_ID;
@@ -58,6 +58,7 @@ export async function checkedApplicationEdit(applicationId: string, kind: Applic
   catch (error) { console.error('checked application edit failed', (error as Error).message?.slice(0, 120)); return { ok: false, error: 'temporarily_unavailable' }; }
   if (r?.status === 'saved') return { ok: true, mirrored: r.mirrored === true };
   if (r?.status === 'not_found') return { ok: false, error: 'not_found' };
+  if (r?.status === 'linked') return { ok: false, error: 'linked' };
   return { ok: false, error: 'temporarily_unavailable' };
 }
 /** Preflight before side effects such as a storage upload. */

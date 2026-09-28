@@ -23,6 +23,7 @@ import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
 import { publishedPoolProfiles } from "./person/profile-view";
+import { poolContacts } from "./person/pool-contact";
 import { saveRecruiterContact } from "./person/recruiter";
 import { personWriteMode } from "./person/intake";
 import { TT_ORG_ID } from "./person/normalize";
@@ -777,6 +778,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   for (const [id, p] of people) usernameToSourced.set(p.linkedin_username.toLowerCase(), id);
 
   const rows: UnifiedRow[] = [];
+  const appPerson = new Map<string, string>(); // app_ key -> linked pool person
 
   for (const a of apps) {
     const roles = appRoles(a, pairings);
@@ -793,6 +795,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       }
     }
     const best = bestOf(roles);
+    if (a.candidate_id) appPerson.set(`app_${a.id}`, a.candidate_id);
     rows.push({
       key: `app_${a.id}`,
       name: a.name,
@@ -1059,6 +1062,16 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   }
 
   const items = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  // Linked TT applicants show the pool person's contact (edited there, support on).
+  if (applicationEditsChecked(orgId)) {
+    const linked = items.filter((r) => appPerson.has(r.key));
+    const contacts = linked.length ? await poolContacts(linked.map((r) => appPerson.get(r.key)!)).catch(() => new Map()) : new Map();
+    for (const r of linked) {
+      const c = contacts.get(appPerson.get(r.key)!);
+      if (c) r.contact = { email: c.email, phone: c.phone };
+    }
+  }
 
   // ---- photo enrichment for this page only (profile JSON is heavy) ----
   const srcIds = items.filter((r) => r.key.startsWith("src_")).map((r) => r.key.slice(4));
@@ -1732,7 +1745,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       })(),
       // A linked TT applicant's contact is the pool person's (edited there, support on).
       contact: applicationEditsChecked(orgId) && a.candidate_id
-        ? await poolContactOf(a.candidate_id)
+        ? await poolContactOf(a.candidate_id).catch(() => ({ ...(a.contact || {}), email: a.contact?.email ?? a.email ?? null }))
         : sentSnapshot
         ? { ...(a.contact || {}), email: a.contact?.email ?? null, phone: a.contact?.phone ?? null }
         : { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
@@ -1821,16 +1834,8 @@ export async function ttApplicationCandidate(applicationId: string): Promise<{ f
 
 /** The pool person's current contact block: the published view when there is one. */
 export async function poolContactOf(candidateId: string): Promise<UnifiedContact> {
-  const published = await publishedPoolProfiles([candidateId]);
-  if (published.has(candidateId)) return published.get(candidateId)!.contact as UnifiedContact;
-  const res = await sbRest(`candidates?id=eq.${candidateId}&select=email,phone,contact&limit=1`);
-  const [p] = (res.ok ? await res.json() : []) as { email: string | null; phone: string | null; contact: Partial<UnifiedContact> | null }[];
-  return {
-    email: str(p?.contact?.email) ?? str(p?.email),
-    phone: str(p?.contact?.phone) ?? str(p?.phone),
-    github: str(p?.contact?.github),
-    otherEmails: Array.isArray(p?.contact?.otherEmails) ? p!.contact!.otherEmails! : [],
-  };
+  const c = (await poolContacts([candidateId])).get(candidateId);
+  return c ?? { email: null, phone: null, github: null, otherEmails: [] };
 }
 
 /** The checked recruiter contact save for a pool person, with the drawer's error codes. */
@@ -1871,7 +1876,7 @@ export async function saveUnifiedContact(
     if (!linked.found) return { error: "not_found" };
     if (linked.candidateId) return saveRecruiterContactMapped(orgId, linked.candidateId, cleaned, edit);
     const r = await checkedApplicationEdit(key.slice(4), "contact", { contact: cleaned });
-    return r.ok ? { contact: cleaned } : { error: r.error };
+    return r.ok ? { contact: cleaned } : { error: r.error === "linked" ? "contact_moved" : r.error };
   }
 
   // Enforce pool ownership in the service as well as the HTTP route.

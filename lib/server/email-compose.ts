@@ -4,6 +4,8 @@
 // candidate log, and reply matching for the webhook.
 import { randomUUID } from "crypto";
 import { sbRest, sbInsert } from "./supabase";
+import { applicationEditsChecked } from "./person-transition/acceptance";
+import { poolContacts } from "./person/pool-contact";
 import { ensureLinks } from "./tracked-links";
 
 const KEY_RE = /^(app|src)_[0-9a-f-]{36}$/i;
@@ -185,16 +187,23 @@ export async function candidateContact(
     // column keeps what the candidate originally applied with. The edited
     // address wins — it's what the drawer shows.
     const res = await sbRest(
-      `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=name,email,contact&limit=1`
+      `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=name,email,contact,candidate_id&limit=1`
     );
     const [row] = res.ok
       ? ((await res.json()) as {
           name: string;
           email: string | null;
           contact: { email?: string | null } | null;
+          candidate_id: string | null;
         }[])
       : [];
-    return row ? { name: row.name || "", email: row.contact?.email || row.email || null } : null;
+    if (!row) return null;
+    // A linked TT applicant's contact is edited on the pool person (support on): mail what the drawer shows.
+    if (row.candidate_id && applicationEditsChecked(orgId)) {
+      const pool = (await poolContacts([row.candidate_id]).catch(() => new Map())).get(row.candidate_id);
+      if (pool?.email) return { name: row.name || "", email: pool.email };
+    }
+    return { name: row.name || "", email: row.contact?.email || row.email || null };
   }
   const res = await sbRest(
     `sourced_candidates?id=eq.${id}&organization_id=eq.${orgId}&select=full_name,contact&limit=1`
