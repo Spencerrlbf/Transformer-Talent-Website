@@ -153,8 +153,8 @@ Combined branch: #81 head (whole stack) merged with #78 (on #70) and #80.
 - All 47 suites as written: every suite for the newer migrations passes; 17 older
   suites fail because their harnesses stop before migrations the current library uses.
 - All suites with every missing migration installed before their tests: 36 pass in
-  full. 7 still fail and 4 cannot be upgraded (stub schemas: queue, work,
-  transition; the trial suite passes 48/48 once upgraded).
+  full, and the trial suite passes 48/48 once its missing base pieces are added. 7
+  still fail; 3 use stub schemas that cannot take the full chain (queue, work, transition).
 - The 7 fail identically when upgraded only to the parent (`20260928010000`), so none
   comes from stage 1. Every failure is a stricter refusal: the retired direct intake
   path (`application_source_fence`, 100000), lookup and experience fences with newer
