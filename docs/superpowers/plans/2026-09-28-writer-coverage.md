@@ -27,7 +27,7 @@ would fail once S2 is armed; **n/a** = workflow/status data outside the profile.
 
 | # | Gap | Evidence | Needed |
 |---|---|---|---|
-| G1 | S2 refuses **every** unframed `candidates` UPDATE, including workflow columns: status, notes, follow_up_at, embeddings, matching_embedding, sync hashes | `20260927052000_person_intake_mutations.sql` guard raises `candidate_mutation_frame` unless a frame matches or old=new; no workflow allowance in later redefinitions | An admitted workflow-column path (or allow-list) so nightly embeddings, directory DNC/status, recruiter status and follow-up writes keep working |
+| G1 | S2 refuses **every** unframed `candidates` UPDATE, including workflow columns (status, follow_up_at, role_preferences, visa_status, resume_text, matching_embedding, sync hashes). Rechecked 2026-09-28: this is intended; every post-cutover writer already uses a frame (application details via `person_application_candidate_details`, directory/refresh/recruiter certified saves). The legacy direct writes (`refresh.ts:397`, `directory.ts:407-563`, `intake.ts:342-411`, `applicants.ts:266`, `future-interest:178`, `applicant-pipeline:536`) run only with support off. | `20260927052000_person_intake_mutations.sql`; `intake.ts:156`, `:374` | Frames for the writers that remain: the paused TT editors' follow-up/preference mirror (`candidates-unified.ts:1155,1200,1231`) and `matching_embedding` publication for directory and refresh saves (certified paths defer derivatives; `directory.ts:742` is legacy-only) |
 | G2 | No Actions workflow sets `PERSON_TRANSITION_SUPPORT`; certified refresh/directory/application workers are unreachable from Actions | `grep PERSON_TRANSITION_SUPPORT .github/workflows` → none | Wire the flag (per workflow, not shared) |
 | G3 | No per-dispatch override; three workflows share `vars.PERSON_WRITE_MODE` (refresh-queue:32, review-queue:32, sync-candidates:38); the other six pass nothing | workflow inputs list only cap/dry_run/max/full/limit | Per-dispatch mode + support inputs for an isolated canary |
 | G4 | Historical catch-up fails under S2: `person_backfill_flag_missing_employers` inserts `identity_conflicts` raw; `person_reconcile_record_many` and `person_audit_anchor_commit` are refused (`audit_proof_maintenance`) | `20260927110000:66-67`, `20260927025000:70-71,141-159` | Runbook order: finish catch-up + anchors **before** arming, or admit them; today section 3 runs them during the drain |
@@ -115,7 +115,7 @@ Recorded here as they are made; until then the suggested default applies.
 
 ## 6. Exit checklist
 
-- [ ] G1 workflow-column path for candidates under S2
+- [ ] G1 frames for the remaining candidates writers (editor mirrors, directory/refresh matching_embedding)
 - [ ] G2 support flag wired per workflow
 - [ ] G3 per-dispatch override for an isolated canary
 - [ ] G4 catch-up/anchor order or admission
