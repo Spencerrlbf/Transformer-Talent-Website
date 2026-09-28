@@ -12,8 +12,14 @@ export function anchorDatabaseConfig(env=process.env){
  if(parsed.hash||[...parsed.searchParams.keys()].some(k=>k!=='sslmode')||parsed.searchParams.getAll('sslmode').length>1)throw Error('audit_database_url');
  return {connectionString:url,max:2,statement_timeout:15000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:'tt-person-audit-anchors'};
 }
-export async function openAnchorDatabase(env=process.env){
- const pool=new pg.Pool(anchorDatabaseConfig(env));
+// Supabase's poolers (6543 and the 5432 session pooler) drop the client's startup
+// statement_timeout, so the server would see its role default (2 minutes on the
+// rehearsal copy, 2026-09-28) and every anchor function refuses. Each call therefore
+// runs in its own transaction with SET LOCAL, which every transport honors.
+const CALL_TIMEOUT="set local statement_timeout='15s'";
+/** `overrides` exists for tests that simulate a pooler dropping startup options. */
+export async function openAnchorDatabase(env=process.env,overrides={}){
+ const pool=new pg.Pool({...anchorDatabaseConfig(env),...overrides});
  pool.on('error',()=>{}); // Caller logs only sanitized operation failures.
  try{await pool.query('select 1');}catch(e){await pool.end();throw e;}
  return {
@@ -21,7 +27,13 @@ export async function openAnchorDatabase(env=process.env){
    const keys=Object.hasOwn(methods,fn)?methods[fn]:null;if(!keys||Object.keys(args).length!==keys.length||keys.some(k=>!Object.hasOwn(args,k)))throw Error('audit_database_method');
    const sql=`select public.${fn}(${keys.map((k,i)=>`${k}=>$${i+1}`).join(',')}) result`;
    const values=keys.map(k=>args[k]!==null&&typeof args[k]==='object'?JSON.stringify(args[k]):args[k]);
-   return (await pool.query(sql,values)).rows[0].result;
+   const client=await pool.connect();
+   try{
+    await client.query('begin isolation level read committed');await client.query(CALL_TIMEOUT);
+    const result=(await client.query(sql,values)).rows[0].result;
+    await client.query('commit');return result;
+   }catch(error){await client.query('rollback').catch(()=>{});throw error;}
+   finally{client.release();}
   },
   end:()=>pool.end(),
  };

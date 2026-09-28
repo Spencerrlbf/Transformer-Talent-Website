@@ -25,9 +25,13 @@ export function databaseConfig(env=process.env,applicationName='tt-person-publis
  // the reads and checkpoints made outside them.
  return {connectionString:url,max:2,statement_timeout:20000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:applicationName};
 }
-export async function openDatabase(env=process.env,applicationName){
- const pool=new pg.Pool(databaseConfig(env,applicationName));
+/** `overrides` exists for tests that simulate a pooler dropping startup options. */
+export async function openDatabase(env=process.env,applicationName,overrides={}){
+ const pool=new pg.Pool({...databaseConfig(env,applicationName),...overrides});
  pool.on('error',()=>{});
+ // The session pooler drops the startup statement_timeout; set it on each new
+ // session (these CLIs refuse transaction poolers, so a session SET persists).
+ pool.on('connect',(client)=>{client.query("set statement_timeout='20s'").catch(()=>{});});
  try{await pool.query('select 1');}catch(e){await pool.end();throw e;}
  return pool;
 }

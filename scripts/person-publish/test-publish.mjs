@@ -211,3 +211,11 @@ test("a scan pages migrated people by id, pauses at its limit and resumes from t
   assert.equal(run.processed, 2);
   assert.equal(await count("select count(*)::int n from person_publish_results where run_id='scan-1'"), 2);
 });
+
+test('publish sessions bound themselves when a pooler drops the startup timeout', async () => {
+  const { openDatabase } = await import('./lib.mjs');
+  const pool = await openDatabase({ LOCAL_DATABASE_URL: process.env.LOCAL_DATABASE_URL }, 'tt-person-publish-test', { statement_timeout: undefined });
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await pool.query('show statement_timeout')).rows[0].statement_timeout, '20s');
+  } finally { await pool.end(); }
+});
