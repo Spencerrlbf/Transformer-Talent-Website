@@ -8,6 +8,12 @@ hour. It embeds people whose sources changed through the admitted consumer lifec
 skipped without a runner until the repository variables are `on` and `live`. A
 manual dispatch may override both for one canary run. The nightly refresh no longer
 calls it.
+
+Pending jobs are taken new applicants first, then recruiter edits, then directory
+and refresh, each oldest first, so a backlog cannot hold an applicant past the next
+run. The hourly check fails (so it shows red) when a paid result is unknown, a step
+errored, OpenAI refused everyone (401, 403 or 429) or any job reached the attempt
+limit; a single definite failure retries next run and stays green.
 `DERIVATIVE_DAILY_CAP` sets the most people paid for per UTC day, counted from the
 database across runs (default 200; a bad value fails the run before any work).
 

@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { derivativeDailyCap, main } from '../derivative-worker.mjs';
+import fs from 'node:fs';
+import { derivativeDailyCap, main, runNeedsAttention } from '../derivative-worker.mjs';
 
 const quiet = () => {};
 const never = async () => { throw Error('lib_must_not_load'); };
@@ -39,4 +40,20 @@ test('the real CLI rejects a malformed cap with no network effect', () => {
 test('the real CLI skips cleanly while the repository is on the old path', () => {
   const out = cli({ PERSON_TRANSITION_SUPPORT: 'off', PERSON_WRITE_MODE: 'legacy' });
   assert.equal(out.status, 0, out.stderr); assert.match(out.stdout, /derivative_worker_skipped/); assert.doesNotMatch(out.stderr + out.stdout, /unexpected_network_effect/);
+});
+
+test('the check fails whenever a person needs to look, and stays green otherwise', () => {
+  const base = { resumed: 0, published: 3, paid_people: 3, failed: 0, unknown: 0, errors: 0, attempt_limited: 0, stopped: null };
+  for (const ok of [base, { ...base, stopped: 'daily_cap' }, { ...base, stopped: 'controller_not_open' }, { ...base, failed: 1 }]) assert.equal(runNeedsAttention(ok), false, JSON.stringify(ok));
+  for (const bad of [{ ...base, errors: 1 }, { ...base, unknown: 1, stopped: 'provider_unknown_503' }, { ...base, failed: 1, stopped: 'provider_401' }, { ...base, failed: 1, stopped: 'provider_429' }, { ...base, stopped: 'provider_unknown_response' }, { ...base, attempt_limited: 2 }])
+    assert.equal(runNeedsAttention(bad), true, JSON.stringify(bad));
+});
+
+test('the nightly refresh never calls the embedding worker (the hourly job is its only caller)', () => {
+  const src = fs.readFileSync(new URL('../refresh-worker.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /runCertifiedDerivatives|person-derivative-worker\/worker/);
+  for (const f of fs.readdirSync(new URL('../../.github/workflows/', import.meta.url))) {
+    const y = fs.readFileSync(new URL(`../../.github/workflows/${f}`, import.meta.url), 'utf8');
+    if (f !== 'derivative-worker.yml') assert.doesNotMatch(y, /derivative-worker\.mjs|DERIVATIVE_DAILY_CAP/, f);
+  }
 });

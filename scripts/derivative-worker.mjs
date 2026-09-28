@@ -19,7 +19,15 @@ export function derivativeDailyCap(raw) {
   return cap;
 }
 
-export async function main(env = process.env, { importLib = () => import("./dist/worker-lib.mjs"), log = console.log } = {}) {
+/** A run needs a person when a paid result is unknown, a step errored, OpenAI refused
+ * everyone (bad key, forbidden or rate limited), or people reached the attempt limit.
+ * Green runs mean embeddings are flowing; each of these would otherwise repeat hourly. */
+export function runNeedsAttention(stats) {
+  return Boolean(stats && (stats.errors || stats.unknown || stats.attempt_limited || String(stats.stopped ?? "").startsWith("provider_")));
+}
+
+// The worker and library read process.env; the CLI passes process.env, and tests set it.
+export async function main(env = process.env, { importLib = () => import("./dist/worker-lib.mjs"), log = console.log, warn = console.error } = {}) {
   const dailyCap = derivativeDailyCap(env.DERIVATIVE_DAILY_CAP);
   if (env.PERSON_TRANSITION_SUPPORT !== "on" || env.PERSON_WRITE_MODE !== "live") {
     log(JSON.stringify({ phase: "derivative_worker_skipped", reason: "transition_support_off_or_not_live" }));
@@ -28,7 +36,7 @@ export async function main(env = process.env, { importLib = () => import("./dist
   if (!env.OPENAI_API_KEY) throw new Error("derivative_worker_configuration:OPENAI_API_KEY");
   const lib = await importLib();
   const { runCertifiedDerivatives } = await import("./person-derivative-worker/worker.mjs");
-  const stats = await runCertifiedDerivatives({ lib, apiKey: env.OPENAI_API_KEY, dailyCap });
+  const stats = await runCertifiedDerivatives({ lib, apiKey: env.OPENAI_API_KEY, dailyCap, log, warn });
   log(JSON.stringify({ phase: "derivative_worker_done", ...stats }));
   return stats;
 }
@@ -42,8 +50,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
   } catch {}
   main().then((stats) => {
-    // Errors and unknown paid results need a person to look; definite failures retry next run.
-    process.exit(stats && (stats.errors || stats.unknown) ? 1 : 0);
+    // Single definite failures retry next run; anything in runNeedsAttention fails the check.
+    process.exit(runNeedsAttention(stats) ? 1 : 0);
   }, (error) => {
     console.error(JSON.stringify({ phase: "derivative_worker_stopped", reason: String(error?.message ?? error).slice(0, 120) }));
     process.exit(1);
