@@ -118,13 +118,13 @@ Recorded here as they are made; until then the suggested default applies.
 `[x]` done, `[~]` partly done (see PR), `[ ]` open. Updated 2026-09-28.
 
 
-- [ ] G1 frames for the remaining candidates writers (editor mirrors, directory/refresh matching_embedding)
+- [x] G1 editor mirrors in #72; `matching_embedding` for directory/refresh saves not needed: search uses the nearest of it and the chunk embeddings (#78 keeps chunks current)
 - [x] G2 support flag wired per workflow (#74)
 - [x] G3 per-dispatch override for an isolated canary (#74)
 - [x] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; undo by drain, seal, disarm (tested, #73)
 - [ ] G5 conflict resolution decision
 - [x] G6 lookup writers: no code in this repository writes companies/schools/skills outside the normalized writer, and there are no edge functions (checked 2026-09-29). Writers in other repositories were not checked
-- [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
+- [~] G7 derivative consumer lifecycle in #70; publication and worker in #78 (in review)
 - [x] G8 runbook migration list complete (#75)
 - [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
 - [x] Paused TT editors: follow-up, resume and add-role in #72; contact in #76; TT-target Send in #77
