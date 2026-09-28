@@ -127,8 +127,8 @@ Recorded here as they are made; until then the suggested default applies.
 - [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
 - [x] G8 runbook migration list complete (#75)
 - [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
-- [~] Paused TT editors: follow-up, resume and add-role in #72; contact routed to the pool person in #76; **TT-target Send still open**
-- [ ] Client-target Send admitted
+- [x] Paused TT editors: follow-up, resume and add-role in #72; contact in #76; TT-target Send in #77
+- [x] Client-target Send: tenant rows, outside the TT fence and audit capture (decision 1); unchanged
 - [x] Email-send follow-up clear no longer silently skipped (#72)
 - [ ] Review worker's remaining direct writes (follow-up/preferences/visa, resume-parse, application name/contact) on the admitted path
 - [ ] Refresh top-up and legacy retry on the admitted path or disabled under S2
@@ -140,3 +140,4 @@ Recorded here as they are made; until then the suggested default applies.
 - The shared projection envelope lost the email-collision conflict for every family that used it (application family included). Fixed in #73; an application-path collision test is still to add.
 - `scripts/person-application-acceptance/run-local-tests.sh` fails 5 tests on the unmodified parent: it does not install migrations the library now uses. Refresh it during stage 2.
 - The publish harness uses whatever worker lib is built; rebuild first.
+- A TT-target Send row without a witness made the sent person `review: raw_fact_not_admitted` in the audit. #77 adds the witness.
