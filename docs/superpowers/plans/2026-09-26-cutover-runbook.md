@@ -255,7 +255,11 @@ legitimize an unexplained edit. Keep the drain effective through activation.
 
 ### 4. Canary, audit, then expand writers
 
-**Obtain approval before the first live canary.** Run the tested isolated canary,
+**Obtain approval before the first live canary.** An isolated worker canary is a manual dispatch of one of
+`review-queue`, `refresh-queue` or `sync-candidates` with `write_mode=live` and
+`transition_support=on` (and its own bounds, for example `max`, `cap` or `limit`).
+Scheduled runs and the other workflows keep the repository variables, which stay
+`legacy`/`off` until the expansion step. Run the tested isolated canary,
 validate its actual receipts and queued derivatives, and run the completed
 receipt-aware auditor. A snapshot-ready result is insufficient. Verify the allowed
 and disallowed write paths, application retry behavior and read contracts.
