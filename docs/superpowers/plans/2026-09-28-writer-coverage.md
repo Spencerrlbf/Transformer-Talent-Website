@@ -127,7 +127,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
 - [x] G8 runbook migration list complete (#75)
 - [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
-- [~] Paused TT editors: follow-up, resume and add-role in #72; **contact (awaiting Spencer's decision) and TT-target Send still open**
+- [~] Paused TT editors: follow-up, resume and add-role in #72; contact routed to the pool person in #76; **TT-target Send still open**
 - [ ] Client-target Send admitted
 - [x] Email-send follow-up clear no longer silently skipped (#72)
 - [ ] Review worker's remaining direct writes (follow-up/preferences/visa, resume-parse, application name/contact) on the admitted path
