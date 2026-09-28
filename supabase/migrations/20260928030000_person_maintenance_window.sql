@@ -87,6 +87,9 @@ begin
  if p_revision is distinct from c.revision or p_generation is distinct from c.generation then raise exception 'transition_stale';end if;
  if not c.enabled or c.phase<>'held' then raise exception 'maintenance_requires_held';end if;
  if exists(select 1 from person_private.transition_work where scope='tt_person' and status<>'completed') then raise exception 'transition_unresolved';end if;
+ -- The run is a public label, so it must already be the pinned reconcile run.
+ if p_step='catchup' and not exists(select 1 from public.backfill_runs where run_id=p_run and status='running' and notes->>'kind'='reconcile'
+  and notes->>'commit'='c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc') then raise exception 'maintenance_run';end if;
  select count(*) into n from person_private.transition_work where scope='tt_person' and family='maintenance' and left(resource_key,length(prefix))=prefix;
  insert into person_private.maintenance_control_frames values(pg_backend_pid(),pg_current_xact_id());
  insert into person_private.transition_work(organization_id,scope,family,resource_key,input_hash,token_hash,generation,lease_until)
@@ -265,15 +268,16 @@ end$$;
 create or replace function person_private.audit_proof_maintenance() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
- if person_private.normalization_gate() and not (tg_table_name in ('person_change_events','person_change_queue') and person_private.maintenance_frame_present('catchup')) then
-  raise exception 'audit_proof_maintenance';
+ if person_private.normalization_gate() then
+  if not (tg_table_name in ('person_change_events','person_change_queue') and person_private.maintenance_frame_present('catchup')) then raise exception 'audit_proof_maintenance';end if;
+  perform person_private.maintenance_frame('catchup'); -- still active, same work
  end if;
  return null;
 end$$;
 
 -- Missing-employer flags: unchanged while disabled; checked evidence inside a frame.
 create or replace function public.person_backfill_flag_missing_employers(p_candidate uuid)
-returns integer language plpgsql set search_path='' as $$
+returns integer language plpgsql security definer set search_path='' as $$
 declare n integer:=0;r record;
 begin
  if not person_private.maintenance_frame_present('catchup') then
@@ -304,11 +308,9 @@ alter function public.backfill_audit_many_core(text,jsonb) set schema person_pri
 alter function public.person_reconcile_record_many(text,jsonb) rename to reconcile_record_many_core;
 alter function public.reconcile_record_many_core(text,jsonb) set schema person_private;
 revoke all on function person_private.backfill_save_core(text,uuid,jsonb,bigint),person_private.backfill_audit_many_core(text,jsonb),
- person_private.reconcile_record_many_core(text,jsonb) from public,anon,authenticated;
-grant execute on function person_private.backfill_save_core(text,uuid,jsonb,bigint),person_private.backfill_audit_many_core(text,jsonb),
- person_private.reconcile_record_many_core(text,jsonb) to service_role;
+ person_private.reconcile_record_many_core(text,jsonb) from public,anon,authenticated,service_role;
 create function public.person_backfill_save(p_run text,p_candidate uuid,p_docs jsonb,p_version bigint)
-returns jsonb language plpgsql set search_path='' set statement_timeout='20s' set lock_timeout='2s' as $$
+returns jsonb language plpgsql security definer set search_path='' set statement_timeout='20s' set lock_timeout='2s' as $$
 declare opened boolean;result jsonb;
 begin
  opened:=person_private.maintenance_enter('catchup',p_run);
@@ -317,7 +319,7 @@ begin
  return result;
 end$$;
 create function public.person_backfill_audit_many(p_run text,p_items jsonb) returns jsonb
-language plpgsql set search_path='' set lock_timeout='2s' set statement_timeout='20s' as $$
+language plpgsql security definer set search_path='' set lock_timeout='2s' set statement_timeout='20s' as $$
 declare opened boolean;result jsonb;
 begin
  opened:=person_private.maintenance_enter('catchup',p_run);
@@ -326,7 +328,7 @@ begin
  return result;
 end$$;
 create function public.person_reconcile_record_many(p_run text,p_items jsonb)
-returns jsonb language plpgsql set search_path='' set lock_timeout='2s' set statement_timeout='20s' as $$
+returns jsonb language plpgsql security definer set search_path='' set lock_timeout='2s' set statement_timeout='20s' as $$
 declare opened boolean;result jsonb;
 begin
  opened:=person_private.maintenance_enter('catchup',p_run);
@@ -344,6 +346,5 @@ do $$declare p regprocedure;begin
   execute format('revoke all on function %s from public,anon,authenticated,service_role',p);
  end loop;
 end$$;
--- Called from the invoker entry points above, which run as the service role.
-grant execute on function person_private.maintenance_enter(text,text),person_private.maintenance_leave(boolean),
- person_private.maintenance_frame_present(text),person_private.maintenance_conflict(uuid,jsonb,text,uuid) to service_role;
+-- No maintenance helper is granted to an API role: the owner-rights entry points
+-- above are the only way to open a frame.

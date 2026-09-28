@@ -74,6 +74,7 @@ test('held without a window: the pinned catch-up is refused and writes nothing',
 });
 
 test('a window for another run does not admit this run', async () => {
+  await start('maint-other', 'queue');
   const w = await openWindow('catchup', 'maint-other');
   try { await assert.rejects(reconcile('maint-catchup'), /maintenance_admission/); assert.equal(await queued(), 2); }
   finally { await closeWindow(w.work_id); }
@@ -91,7 +92,20 @@ test('maintenance work cannot be created or changed outside open/close, and API 
     assert.equal(claim.status, 'held');
     await c.query('rollback');
   } finally { c.release(); }
+  // No API role can open a frame, forge conflict evidence or reach the private cores.
+  for (const sql of ["select person_private.maintenance_enter('catchup','maint-catchup')", 'select person_private.maintenance_leave(true)',
+    "select person_private.maintenance_conflict($1,'{}',md5('forged'),null)", "select person_private.maintenance_frame_present('catchup')",
+    "select person_private.reconcile_record_many_core('maint-catchup','[]'::jsonb)", "select person_private.backfill_save_core('maint-catchup',$1,'[]'::jsonb,0)"]) {
+    const d = await pool.connect();
+    try { await d.query('begin'); await d.query('set local role service_role'); await assert.rejects(d.query(sql, sql.includes('$1') ? [A] : []), /permission denied/, sql); }
+    finally { await d.query('rollback').catch(() => {}); d.release(); }
+  }
+  // The runner's public entry points stay executable by the service role; without a window they stop at the gate.
+  const r = await pool.connect();
+  try { await r.query('begin'); await r.query('set local role service_role'); await assert.rejects(r.query("select person_reconcile_record_many('maint-catchup','[]'::jsonb)"), /maintenance_admission/); }
+  finally { await r.query('rollback').catch(() => {}); r.release(); }
   const s = await status();
+  await assert.rejects(pool.query("select person_private.maintenance_open('catchup','maint-unknown-run',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_run/);
   await assert.rejects(pool.query("select person_private.maintenance_open('publish','maint-x',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_input/);
   await assert.rejects(pool.query("select person_private.maintenance_open('catchup','bad.run',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_input/);
   await assert.rejects(pool.query("select person_private.maintenance_open('catchup','maint-x',30,$1,$2,'synthetic_test')", [s.revision - 1, s.generation]), /transition_stale/);
@@ -141,12 +155,11 @@ test('anchors need their own window; a catch-up window does not admit them', asy
 
 test('an expired window admits nothing and still blocks reopening until closed', async () => {
   await pool.query("create function person_private.synthetic_short_maintenance() returns trigger language plpgsql as $$begin if new.family='maintenance' then new.lease_until:=clock_timestamp()+interval '300 milliseconds';end if;return new;end$$;create trigger aa_short_maintenance before insert on person_private.transition_work for each row execute function person_private.synthetic_short_maintenance()");
+  await start('maint-expired', 'all');
   let w;
   try { w = await openWindow('catchup', 'maint-expired'); }
   finally { await pool.query('drop trigger aa_short_maintenance on person_private.transition_work;drop function person_private.synthetic_short_maintenance()'); }
   await new Promise((r) => setTimeout(r, 450));
-  await pool.query("update candidates set headline='Changed while held' where id=$1", [B]).catch(() => {}); // refused anyway
-  await start('maint-expired', 'all');
   await assert.rejects(reconcile('maint-expired'), /maintenance_admission/);
   assert.equal((await status()).expired, 1);
   await assert.rejects(act('reopen'), /transition_unresolved/);
