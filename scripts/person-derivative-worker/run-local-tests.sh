@@ -1,5 +1,5 @@
 #!/bin/bash
-# Resets only the caller-owned loopback person_directory_worker_test fixture database.
+# Local PostgreSQL only: certified embedding publication and worker. Resets only person_directory_worker_test.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
@@ -92,21 +92,7 @@ if test -f supabase/migrations/20260928010000_person_derivative_journal.sql; the
  q -d $DB -1 -f supabase/migrations/20260928010000_person_derivative_journal.sql
 fi
 q -d $DB -1 -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql
-if test -f supabase/migrations/20260928080000_person_derivative_publish.sql; then
- q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
-fi
+q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-input/test-input.mjs
-node --test scripts/person-directory-input/test-cli.mjs scripts/person-directory-admission/test-decision.mjs scripts/person-directory-worker/test-policy.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-conflict-evidence/test-fence.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-derivative-lifecycle/test-lifecycle.mjs
-q -d $DB -c "update person_private.transition_control set enabled=false,phase='open' where singleton"
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory/test-directory.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory/test-cli.mjs
-node --test scripts/person-directory/test-sources.mjs scripts/person-directory/test-worker.mjs
-q -d $DB -c "update person_private.transition_control set enabled=true,phase='open' where singleton"
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-worker/test-cli.mjs
-q -d $DB -c "update person_private.transition_control set enabled=false,phase='open' where singleton"
-q -d $DB -f scripts/person-trial/test-save-person.sql
-q -d $DB -f scripts/person-trial/test-writer-rules.sql
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-derivative-worker/test-worker.mjs

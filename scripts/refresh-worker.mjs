@@ -91,6 +91,15 @@ if (PERSON_MODE !== "legacy") {
     },
   });
   if (stats.failed || stats.review || stats.uncertain) process.exitCode = 1;
+  // Certified embeddings for people whose sources changed (application, directory,
+  // refresh, recruiter). Live mode only; capped paid people per run; no key, no calls.
+  if (process.env.PERSON_TRANSITION_SUPPORT === "on" && PERSON_MODE === "live" && process.env.OPENAI_API_KEY) {
+    const derivativeCap = Number(process.env.DERIVATIVE_DAILY_CAP || 200);
+    const d = await (await import("./person-derivative-worker/worker.mjs")).runCertifiedDerivatives({
+      lib: workerLib, apiKey: process.env.OPENAI_API_KEY, maxPaid: Number.isInteger(derivativeCap) ? derivativeCap : 200,
+    });
+    if (d.errors) process.exitCode = 1;
+  }
 } else {
 // Budget: paid Harvest calls already made today (site + worker share the cap).
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";

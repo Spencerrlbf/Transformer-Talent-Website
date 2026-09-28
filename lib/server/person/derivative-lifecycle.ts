@@ -47,3 +47,39 @@ export const claimCertifiedDerivatives=(a:CertifiedDerivativeClaim)=>{validate(a
 export const startCertifiedDerivativesProvider=(a:CertifiedDerivativeRequest)=>{validate(a);return withPersonConnection(c=>startCertifiedDerivativesProviderOnConnection(c,a));};
 export const storeCertifiedDerivativeVectors=(a:CertifiedDerivativeRequest & {vectors:number[][]})=>{validate(a);return withPersonConnection(c=>storeCertifiedDerivativeVectorsOnConnection(c,a));};
 export const recoverCertifiedDerivatives=(a:CertifiedDerivativeRequest)=>{validate(a);return withPersonConnection(c=>recoverCertifiedDerivativesOnConnection(c,a));};
+/** Publish the certified result: replace the person's chunk embeddings, mark the
+ * job done and close the lifecycle. No provider call. Replays return the result. */
+export async function publishCertifiedDerivativesOnConnection(c: PersonConnection,a: CertifiedDerivativeRequest) {
+ return transaction(c,a,async()=>{
+  await c.query('select person_private.derivative_consumer_enter($1,$2,$3,$4,false,false)',keys(a));
+  const input=await personDerivativeInput(c,a.candidateId);
+  return (await c.query('select person_private.derivative_publish($1,$2::jsonb) result',[a.requestId,JSON.stringify(input)])).rows[0].result;
+ });
+}
+export const publishCertifiedDerivatives=(a:CertifiedDerivativeRequest)=>{validate(a);return withPersonConnection(c=>publishCertifiedDerivativesOnConnection(c,a));};
+/** A definite provider failure (an HTTP error response): the job returns to pending. */
+export async function failCertifiedDerivativesProviderOnConnection(c: PersonConnection,a: CertifiedDerivativeRequest & {httpStatus:number}) {
+ if(!Number.isInteger(a.httpStatus)||a.httpStatus<400||a.httpStatus>599) throw Error('derivative_failure_input');
+ return transaction(c,a,async()=>{
+  await c.query('select person_private.derivative_consumer_enter($1,$2,$3,$4,true,false)',keys(a));
+  return (await c.query('select person_private.derivative_provider_failed($1,$2) result',[a.requestId,a.httpStatus])).rows[0].result;
+ });
+}
+export const failCertifiedDerivativesProvider=(a:CertifiedDerivativeRequest & {httpStatus:number})=>{validate(a);return withPersonConnection(c=>failCertifiedDerivativesProviderOnConnection(c,a));};
+/** Pending TT jobs a worker may claim (read only). */
+export async function pendingCertifiedDerivatives(limit:number):Promise<string[]> {
+ if(!transitionSupport()) throw Error('derivative_lifecycle_disabled');
+ if(!Number.isInteger(limit)||limit<1||limit>5000) throw Error('derivative_input');
+ return withPersonConnection(async c=>(await c.query(
+  "select candidate_id from public.person_derivative_jobs where status='pending' and attempts<3 order by updated_at,candidate_id limit $1",[limit])).rows.map(r=>r.candidate_id));
+}
+/** Retained lifecycles whose work is still open: publish a stored result, or recover (read only). */
+export async function resumableCertifiedDerivatives(limit:number):Promise<{requestId:string;candidateId:string;token:string;phase:string;live:boolean}[]> {
+ if(!transitionSupport()) throw Error('derivative_lifecycle_disabled');
+ if(!Number.isInteger(limit)||limit<1||limit>5000) throw Error('derivative_input');
+ return withPersonConnection(async c=>(await c.query(
+  `select e.request_id,e.candidate_id,e.claim_result->>'token' token,e.phase,(w.status='active' and w.lease_until>clock_timestamp()) live
+   from person_private.derivative_lifecycles e join person_private.transition_work w on w.id=e.work_id
+   where w.status='active' and e.phase in ('claimed','stored') order by e.request_id limit $1`,[limit])).rows
+  .map(r=>({requestId:r.request_id,candidateId:r.candidate_id,token:r.token,phase:r.phase,live:r.live})));
+}
