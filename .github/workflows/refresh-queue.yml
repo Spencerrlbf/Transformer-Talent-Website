@@ -26,6 +26,12 @@ on:
         options: [vars, "off", "on"]
         default: vars
 
+# One refresh run at a time: the Harvest and embedding spend caps are read from the
+# database, and overlapping runs would each see the same remaining budget.
+concurrency:
+  group: refresh-queue
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -48,5 +54,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HARVEST_API_KEY: ${{ secrets.HARVEST_API_KEY }}
           REFRESH_DAILY_CAP: ${{ inputs.cap || vars.REFRESH_DAILY_CAP || 50 }}
+          DERIVATIVE_DAILY_CAP: ${{ vars.DERIVATIVE_DAILY_CAP || 200 }}
           CONCURRENCY: ${{ inputs.concurrency || '1' }}
           NO_TOPUP: ${{ inputs.no_topup && '1' || '' }}
