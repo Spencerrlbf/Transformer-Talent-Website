@@ -215,6 +215,10 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260928030000_person_maintenance_window.sql
 20260928040000_person_application_edits.sql
 20260928050000_person_publish_admission.sql
+20260928060000_person_application_contact.sql
+20260928070000_person_network_send.sql
+20260928080000_person_derivative_publish.sql
+20260928090000_person_maintenance_deferred.sql
 ```
 
 Before applying the chain, build the directory identity index without blocking
@@ -228,7 +232,14 @@ The candidates heap was 660 MB on 2026-09-28, so a blocking build would take sec
 but pre-building removes even that write pause. `20260927190000` refuses to install
 if any directory execution already completed. Install the whole chain before any
 certified directory writer runs. Include only files merged into the released parent:
-`20260928020000` arrives with #70, and `030000` to `050000` arrive with #71 to #73.
+`20260928020000` arrives with #70 and `080000` with #78; `030000` to `050000` arrive
+with #71 to #73, `060000` with #76, `070000` with #77 and `090000` with #79.
+
+This order was checked on 2026-09-28: a local copy built in production's applied
+order (072 to `20260926050355`, then this list) and one built in the test harnesses'
+order produced identical functions, triggers, columns, grants, policies, indexes and
+constraints. The local base schema is a stand-in, so the production-schema check is
+the rehearsal branch.
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
 attribution references, source ownership checks and committed reference epochs.
