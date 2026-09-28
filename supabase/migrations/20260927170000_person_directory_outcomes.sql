@@ -4,7 +4,8 @@ alter table person_private.directory_executions add column disposition text not 
 alter table person_private.directory_executions add column outcome_hash text;
 -- Prepared build only. Nonunique preserves legacy mixed-case identities. The
 -- bounded lock/statement timeouts apply when this chain is eventually approved.
-create index candidates_person_username_idx on public.candidates(lower(linkedin_username));
+-- The runbook pre-builds this index CONCURRENTLY outside a transaction; this is a no-op then.
+create index if not exists candidates_person_username_idx on public.candidates(lower(linkedin_username));
 create function person_private.directory_identity_owners(p_contact uuid,p_identities jsonb) returns table(id uuid)
 language sql stable set search_path='' as $$
  select c.id from public.candidates c where lower(c.linkedin_username)=any(array(select x.value from jsonb_to_recordset(p_identities) x(kind text,value text) where x.kind='linkedin_username'))

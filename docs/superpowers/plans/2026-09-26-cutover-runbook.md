@@ -198,7 +198,37 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927100000_person_legacy_source_fence.sql
 20260927110000_person_conflict_evidence.sql
 20260927120000_person_lookup_mutations.sql
+20260927130000_person_directory_input.sql
+20260927140000_person_directory_execution.sql
+20260927150000_person_directory_publication.sql
+20260927160000_person_directory_creation.sql
+20260927170000_person_directory_outcomes.sql
+20260927180000_person_directory_suppression.sql
+20260927190000_person_directory_readmission.sql
+20260927200000_person_directory_current.sql
+20260927210000_person_refresh_lifecycle.sql
+20260927220000_person_refresh_save.sql
+20260927230000_person_refresh_worker.sql
+20260928000000_person_recruiter_admission.sql
+20260928010000_person_derivative_journal.sql
+20260928020000_person_derivative_lifecycle.sql
+20260928030000_person_maintenance_window.sql
+20260928040000_person_application_edits.sql
+20260928050000_person_publish_admission.sql
 ```
+
+Before applying the chain, build the directory identity index without blocking
+candidate writes, outside a transaction (`20260927170000` then skips it):
+
+```sql
+create index concurrently if not exists candidates_person_username_idx on public.candidates(lower(linkedin_username));
+```
+
+The candidates heap was 660 MB on 2026-09-28, so a blocking build would take seconds,
+but pre-building removes even that write pause. `20260927190000` refuses to install
+if any directory execution already completed. Install the whole chain before any
+certified directory writer runs. Include only files merged into the released parent:
+`20260928020000` arrives with #70, and `030000` to `050000` arrive with #71 to #73.
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
 attribution references, source ownership checks and committed reference epochs.
