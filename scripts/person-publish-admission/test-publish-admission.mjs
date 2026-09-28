@@ -17,6 +17,7 @@ const quiet = () => {};
 const opts = (argv) => parseOptions(argv, SPEC);
 const id = (n) => `ad000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const A = id(1), B = id(2), C = id(3), U = id(4); // U has no anchor.
+const D = id(5), R = id(6); // D's primary email belongs to R.
 const one = async (sql, args = []) => (await pool.query(sql, args)).rows[0];
 const status = async () => (await one('select person_transition_status() r')).r;
 const act = async (a) => { const s = await status(); return (await one("select person_private.transition_set($1,$2,$3,'synthetic_test') r", [a, s.revision, s.generation])).r; };
@@ -46,6 +47,13 @@ test.after(async () => { await pool.end(); });
 
 test('setup: anchored people while disabled, then arm', async () => {
   for (const [cid, k, anchored] of [[A, 1, true], [B, 2, true], [C, 3, true], [U, 4, false]]) await seed(cid, k, anchored);
+  // D's legacy primary email is already another candidate's address.
+  await pool.query("insert into candidates(id,full_name,linkedin_username,email) values($1,'Synthetic Owner','synthetic-pubadm-owner','taken-pubadm@example.com')", [R]);
+  await pool.query(`insert into candidates(id,full_name,linkedin_username,linkedin_url,current_title,current_company,email,source,status,work_experience,created_at)
+   values($1,'Synthetic Publish 5','synthetic-pubadm-5','https://www.linkedin.com/in/synthetic-pubadm-5','Engineer','Synthetic Co',null,'directory','Engaged',$2::jsonb,'2025-01-01')`,
+    [D, JSON.stringify([{ title: 'Engineer', company: 'Synthetic Co', is_current: true, start_date: { year: 2020, month: 'Jan' } }])]);
+  await pool.query("insert into candidate_emails(candidate_id,email_address,is_primary) values($1,'taken-pubadm@example.com',true)", [D]);
+  await prepareAuditFixture(D);
   assert.equal((await act('arm')).enabled, true);
   assert.equal((await status()).phase, 'open');
 });
@@ -137,4 +145,17 @@ test('disabled: publication uses the existing path unchanged', async () => {
   assert.equal(summary.projected, 1, JSON.stringify(summary));
   assert.equal((await one('select run_id from person_projection_history where candidate_id=$1', [C])).run_id, 'pub-disabled');
   assert.equal(await n("select count(*) n from person_private.publish_audit_operations where candidate_id=$1", [C]), 0);
+});
+
+test('an email collision keeps the old address and records the review conflict, like the disabled path', async () => {
+  if (!(await status()).enabled) await act('arm');
+  const w = await openWindow('publish', 'pub-collision');
+  let summary;
+  try { summary = await publish('pub-collision', [D]); } finally { await closeWindow(w.work_id); }
+  assert.equal(summary.projected + summary.unchanged, 1, JSON.stringify(summary));
+  assert.equal(summary.email_collision, 1, JSON.stringify(summary));
+  assert.equal((await one("select email_collision from person_publish_results where run_id='pub-collision' and candidate_id=$1", [D])).email_collision, true);
+  assert.equal(await n("select count(*) n from identity_conflicts where kind='legacy_email_collision' and $1=any(candidate_ids) and status='open'", [D]), 1);
+  assert.equal((await one('select email from candidates where id=$1', [D])).email, null);
+  assert.equal((await one('select email from candidates where id=$1', [R])).email, 'taken-pubadm@example.com');
 });

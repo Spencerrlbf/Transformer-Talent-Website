@@ -86,6 +86,8 @@ create function person_private.publish_audit_immutable() returns trigger languag
 begin raise exception 'publish_audit_immutable';end$$;
 create trigger publish_audit_immutable before update or delete on person_private.publish_audit_operations
  for each row execute function person_private.publish_audit_immutable();
+create trigger publish_audit_no_truncate before truncate on person_private.publish_audit_operations
+ for each statement execute function person_private.publish_audit_immutable();
 create constraint trigger publish_projection_cleanup after insert on person_private.publish_projection_frames
  deferrable initially deferred for each row execute function person_private.maintenance_frame_cleanup();
 create or replace function person_private.maintenance_frame_cleanup() returns trigger language plpgsql security definer set search_path='' as $$
@@ -174,6 +176,9 @@ begin
  if to_jsonb(stored_operation) is distinct from to_jsonb(expected_operation) or (select to_jsonb(o) from public.person_audit_operations o where id=oid) is distinct from to_jsonb(expected_operation) then raise exception 'publish_audit_actual';end if;
  insert into person_private.publish_audit_operations values(oid,f.work_id,p_candidate,pg_current_xact_id(),v,null,f.run_id);
  perform person_private.audit_proof_clear('person_audit_operations');
+ if not exists(select 1 from person_private.publish_audit_operations a where a.operation_id=oid and a.work_id=f.work_id and a.candidate_id=p_candidate and a.transaction_id=pg_current_xact_id() and a.captured_version=v and a.run_id=f.run_id)
+  or not exists(select 1 from person_private.certified_audit_operations p where p.operation_id=oid) then raise exception 'publish_audit_private_actual';end if;
+ perform person_private.maintenance_frame('publish');
  return oid;
 exception when others then perform person_private.audit_proof_clear('person_audit_operations');raise;
 end$$;
@@ -186,7 +191,7 @@ do $$declare d text;n text;sig text;begin
  execute replace(d,n,' elsif person_private.publish_projection_family() then if (person_private.maintenance_frame(''publish'')).work_id is distinct from p_execution then raise exception ''publish_projection_owner'';end if;'||n);
  d:=pg_get_functiondef('person_private.projection_frame_clear(uuid)'::regprocedure);
  if array_length(string_to_array(d,n),1)<>2 then raise exception 'publish_projection_definition';end if;
- execute replace(d,n,' elsif person_private.publish_projection_family() then delete from person_private.publish_projection_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id();'||n);
+ execute replace(d,n,' elsif person_private.publish_projection_family() then delete from person_private.publish_projection_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id();if exists(select 1 from person_private.publish_projection_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id()) then raise exception ''publish_projection_cleanup'';end if;'||n);
  d:=pg_get_functiondef('person_private.projection_frame_set(uuid,uuid,uuid,uuid,jsonb,jsonb,boolean)'::regprocedure);
  if array_length(string_to_array(d,n),1)<>2 then raise exception 'publish_projection_definition';end if;
  execute replace(d,n,' elsif person_private.publish_projection_family() then insert into person_private.publish_projection_frames values(pg_backend_pid(),pg_current_xact_id(),p_work,p_candidate,p_operation,p_before,p_after,p_execution);'||n);
@@ -254,6 +259,9 @@ begin
  opened:=person_private.maintenance_enter('publish',p_run);
  if not opened then raise exception 'publish_requires_window';end if;
  w:=person_private.maintenance_frame('publish');
+ if not exists(select 1 from public.person_publish_runs where run_id=p_run and mode='publish' and status='running') then raise exception 'publish_run_inactive';end if;
+ perform 1 from public.candidates where id=p_candidate for update;
+ if not found then raise exception 'publish_input';end if;
  oid:=person_private.publish_audit_begin(p_candidate);
  r:=person_private.projection_apply(w.work_id,w.work_id,p_candidate,oid,p_revision,p_envelope);
  perform person_private.maintenance_frame('publish');

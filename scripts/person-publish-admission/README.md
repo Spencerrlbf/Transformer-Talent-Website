@@ -27,6 +27,15 @@ Prepared only. `20260928050000_person_publish_admission.sql` implements Spencer'
     carry the run ID, so undo-by-run still selects them;
   - adds profile attribution through `attribute_change`, which now has a publish
     branch.
+- An email collision keeps the old address and records the
+  `legacy_email_collision` review conflict, as the disabled path does. The shared
+  projection envelope now sends the desired email and lets the checked SQL choose
+  the fallback. This also corrects the application family, which used the same
+  envelope and lost the conflict too.
+- Only anchor and history problems (a listed set of `audit_*` codes) block a single
+  person. Any other failure stops the run.
+- The run must exist as a running publish run. The function locks the candidate row
+  before building the guard.
 - With the controller disabled, or the transition schema absent, the existing
   publish path is used unchanged.
 - Draining refuses publication (`maintenance_requires_open`). Seal waits until the
@@ -45,10 +54,12 @@ node scripts/build-worker-lib.mjs
 PSQL=/path/to/psql bash scripts/person-publish-admission/run-local-tests.sh PORT
 ```
 
-On 2026-09-28, publication with the controller open passed 9/9 through the real
+On 2026-09-28, after an independent review, publication with the controller open
+passed 10/10 through the real
 publish runner, covering:
 
 - no window, and a window for another run;
+- an email collision, which fails without the envelope fix;
 - a projected person and an audit-blocked person;
 - history, operation and certified-registry evidence;
 - the person verifying in the post-cutover audit after publication, and again after a
@@ -64,6 +75,14 @@ Other suites on the same change:
 | Application edits | 34/34 |
 | Cross-family suite | 504/504 |
 | `tsc` | passes |
+
+Publish operations are certified as soon as their transaction commits. That is
+weaker than the families that also require a completion witness, but each
+publication is one function in one transaction, and operations cannot change
+afterwards. Untested: expiry partway through a run, another family continuing the
+chain after a publish operation, and concurrent writers on the same person. An
+independent reviewer ran the concurrent case by hand: a queued drain waited, then
+proceeded, with no deadlock.
 
 The publish harness uses whatever worker lib is already built, so run
 `node scripts/build-worker-lib.mjs` first. No production database or hosted preview
