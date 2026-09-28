@@ -121,7 +121,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [ ] G1 frames for the remaining candidates writers (editor mirrors, directory/refresh matching_embedding)
 - [ ] G2 support flag wired per workflow
 - [ ] G3 per-dispatch override for an isolated canary
-- [~] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; **undo still open**
+- [x] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; undo by drain, seal, disarm (tested, #73)
 - [ ] G5 conflict resolution decision
 - [ ] G6 lookup writers confirmed
 - [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
