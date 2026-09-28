@@ -51,6 +51,80 @@ if test -f supabase/migrations/20260927080000_person_application_acceptance.sql;
  q -d $DB -1 -f supabase/migrations/20260927080000_person_application_acceptance.sql
 fi
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-acceptance/test-acceptance.mjs
+# The TT fence and route suites exercise the current library, which uses the later
+# prepared chain (directory publication, refresh, recruiter). Install what exists.
+if test -f supabase/migrations/20260927090000_person_application_enrichment.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927090000_person_application_enrichment.sql
+fi
+if test -f supabase/migrations/20260927100000_person_legacy_source_fence.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927100000_person_legacy_source_fence.sql
+fi
+if test -f supabase/migrations/20260927110000_person_conflict_evidence.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927110000_person_conflict_evidence.sql
+fi
+if test -f supabase/migrations/20260927120000_person_lookup_mutations.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927120000_person_lookup_mutations.sql
+fi
+if test -f supabase/migrations/20260927130000_person_directory_input.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927130000_person_directory_input.sql
+fi
+if test -f supabase/migrations/20260927140000_person_directory_execution.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927140000_person_directory_execution.sql
+fi
+if test -f supabase/migrations/20260927150000_person_directory_publication.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927150000_person_directory_publication.sql
+fi
+if test -f supabase/migrations/20260927160000_person_directory_creation.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927160000_person_directory_creation.sql
+fi
+if test -f supabase/migrations/20260927170000_person_directory_outcomes.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927170000_person_directory_outcomes.sql
+fi
+if test -f supabase/migrations/20260927180000_person_directory_suppression.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927180000_person_directory_suppression.sql
+fi
+if test -f supabase/migrations/20260927190000_person_directory_readmission.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927190000_person_directory_readmission.sql
+fi
+if test -f supabase/migrations/20260927200000_person_directory_current.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927200000_person_directory_current.sql
+fi
+if test -f supabase/migrations/20260927210000_person_refresh_lifecycle.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927210000_person_refresh_lifecycle.sql
+fi
+if test -f supabase/migrations/20260927220000_person_refresh_save.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927220000_person_refresh_save.sql
+fi
+if test -f supabase/migrations/20260927230000_person_refresh_worker.sql; then
+ q -d $DB -1 -f supabase/migrations/20260927230000_person_refresh_worker.sql
+fi
+if test -f supabase/migrations/20260928000000_person_recruiter_admission.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928000000_person_recruiter_admission.sql
+fi
+if test -f supabase/migrations/20260928010000_person_derivative_journal.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928010000_person_derivative_journal.sql
+fi
+if test -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql
+fi
+if test -f supabase/migrations/20260928030000_person_maintenance_window.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928030000_person_maintenance_window.sql
+fi
+if test -f supabase/migrations/20260928040000_person_application_edits.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928040000_person_application_edits.sql
+fi
+if test -f supabase/migrations/20260928050000_person_publish_admission.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
+fi
+if test -f supabase/migrations/20260928060000_person_application_contact.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
+fi
+if test -f supabase/migrations/20260928070000_person_network_send.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
+fi
+if test -f supabase/migrations/20260928080000_person_derivative_publish.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
+fi
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-completion/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-completion/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-acceptance/test-tt-fence.mjs
