@@ -321,6 +321,9 @@ legitimize an unexplained edit. Keep the drain effective through activation.
 **Obtain approval before the first live canary.** An isolated worker canary is a manual dispatch of one of
 `review-queue`, `refresh-queue` or `sync-candidates` with `write_mode=live` and
 `transition_support=on` (and its own bounds, for example `max`, `cap` or `limit`).
+The embeddings those writers queue are written by the hourly `derivative-worker`
+workflow (#82): dispatch it with the same overrides to embed the canary people, and
+validate their published chunks. Its schedule stays skipped until expansion.
 Scheduled runs and the other workflows keep the repository variables, which stay
 `legacy`/`off` until the expansion step. Run the tested isolated canary,
 validate its actual receipts and queued derivatives, and run the completed

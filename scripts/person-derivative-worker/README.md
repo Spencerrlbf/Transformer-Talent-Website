@@ -1,8 +1,13 @@
 # Certified embedding worker
 
 Prepared only. With `PERSON_TRANSITION_SUPPORT=on`, live mode and an OpenAI key,
-the nightly `refresh-queue` run finishes by calling `runCertifiedDerivatives`. It
-embeds people whose sources changed through the admitted consumer lifecycle (#70).
+the hourly `derivative-worker` workflow (`scripts/derivative-worker.mjs`, minute 20)
+calls `runCertifiedDerivatives`, so a new applicant's search chunks land within the
+hour. It embeds people whose sources changed through the admitted consumer lifecycle
+(#70). It is the only scheduled caller; runs never overlap, and the scheduled job is
+skipped without a runner until the repository variables are `on` and `live`. A
+manual dispatch may override both for one canary run. The nightly refresh no longer
+calls it.
 `DERIVATIVE_DAILY_CAP` sets the most people paid for per UTC day, counted from the
 database across runs (default 200; a bad value fails the run before any work).
 

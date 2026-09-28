@@ -96,3 +96,4 @@ q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-derivative-worker/test-worker.mjs
+node --test scripts/person-derivative-worker/test-hourly.mjs

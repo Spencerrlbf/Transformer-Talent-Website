@@ -151,3 +151,13 @@ test('worker: while draining it makes no new claims', async () => {
     assert.equal((await job(d)).status, 'pending');
   } finally { await pool.query('update person_private.transition_control set enabled=$1,phase=$2 where singleton', [s.enabled, s.phase]); }
 });
+
+test('hourly entry point: publishes pending people through the certified worker', async () => {
+  const { main } = await import('../derivative-worker.mjs');
+  const [h] = await pending(1);
+  let calls = 0;
+  const stats = await main({ PERSON_TRANSITION_SUPPORT: 'on', PERSON_WRITE_MODE: 'live', OPENAI_API_KEY: 'synthetic', DERIVATIVE_DAILY_CAP: '10000' },
+    { importLib: async () => ({ ...lib, embedPersonDerivativeChunks: async (parts) => { calls++; return vectors(parts.length); } }), log: quiet });
+  assert.ok(stats.published >= 1, JSON.stringify(stats)); assert.ok(calls >= 1);
+  assert.equal((await job(h)).status, 'done');
+});
