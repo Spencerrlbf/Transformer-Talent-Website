@@ -150,7 +150,7 @@ Combined branch: #81 head (whole stack) merged with #78 (on #70) and #80.
   order followed by the runbook list, and a copy built in harness order, produced
   identical functions, triggers, columns, grants, policies, indexes and constraints.
   The runbook list stopped at `050000`; completed through `090000` on #81.
-- All 47 suites as written: every suite for the newer migrations passes; 17 older
+- All 47 suites as written: every suite for the newer migrations passes; 15 older
   suites fail because their harnesses stop before migrations the current library uses.
 - All suites with every missing migration installed before their tests: 36 pass in
   full, and the trial suite passes 48/48 once its missing base pieces are added. 7
