@@ -275,6 +275,9 @@ receipts. A flag flip alone is not proof that already-running legacy code stoppe
 comparison/publish dry run and retain its exact counts and limitations. Do not
 expect every historical source-review person to pass the anchor guard.
 
+With the controller armed and open, open a `publish` maintenance window for the
+run ID first, and close it after the invocation (`scripts/person-publish-admission/README.md`).
+Other admitted writers keep running. Draining refuses publication.
 Use an explicit ID set for the initial canary, with its own run ID:
 
 ```sh

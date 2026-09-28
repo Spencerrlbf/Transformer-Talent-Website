@@ -772,6 +772,32 @@ export async function publishPersonProjectionOnConnection(
         summary,
       );
     }
+    // Armed controller: publication goes through the operator's publish window and
+    // the shared checked projection path (writer fences stay on for everyone else).
+    const transitionInstalled = (await client.query("select to_regprocedure('public.person_transition_status()') is not null present")).rows[0].present;
+    if (transitionInstalled && (await client.query("select coalesce((public.person_transition_status()->>'enabled')::boolean,false) armed")).rows[0].armed) {
+      await client.query("savepoint person_publish_audit");
+      let r: { projected: boolean; historyId: string | null; changedFields: string[]; emailCollision: boolean };
+      try {
+        r = (await client.query("select public.person_publish_project($1,$2,$3,$4::jsonb) r",
+          [options.runId, id, revision, JSON.stringify(projectionEnvelope(id, before, computed))])).rows[0].r;
+      } catch (error) {
+        const reason = (error as Error).message;
+        if (reason === "legacy_projection_drift") {
+          await client.query("rollback to savepoint person_publish_audit");
+          await client.query("release savepoint person_publish_audit");
+          return await finish(done("drift", { revision }));
+        }
+        if (!/^audit_[a-z_]+$/.test(reason)) throw error;
+        await client.query("rollback to savepoint person_publish_audit");
+        await client.query("release savepoint person_publish_audit");
+        return await finish(done("audit_blocked", { ...summary, reason }));
+      }
+      await client.query("release savepoint person_publish_audit");
+      return await finish(done(r.projected ? "projected" : "unchanged", {
+        ...summary, changedFields: r.changedFields, emailCollision: r.emailCollision, historyId: r.historyId,
+      }));
+    }
     let audit: AuditOperation;
     await client.query("savepoint person_publish_audit");
     try {

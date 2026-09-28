@@ -106,7 +106,7 @@ test('maintenance work cannot be created or changed outside open/close, and API 
   finally { await r.query('rollback').catch(() => {}); r.release(); }
   const s = await status();
   await assert.rejects(pool.query("select person_private.maintenance_open('catchup','maint-unknown-run',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_run/);
-  await assert.rejects(pool.query("select person_private.maintenance_open('publish','maint-x',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_input/);
+  await assert.rejects(pool.query("select person_private.maintenance_open('undo','maint-x',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_input/);
   await assert.rejects(pool.query("select person_private.maintenance_open('catchup','bad.run',30,$1,$2,'synthetic_test')", [s.revision, s.generation]), /maintenance_input/);
   await assert.rejects(pool.query("select person_private.maintenance_open('catchup','maint-x',30,$1,$2,'synthetic_test')", [s.revision - 1, s.generation]), /transition_stale/);
 });
