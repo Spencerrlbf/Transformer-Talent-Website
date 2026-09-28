@@ -264,7 +264,9 @@ pending, review, queue and external-boundary outcomes. An unstable external
 observation is reported explicitly; Spencer's tolerance for drift does not turn it
 into a verified stable fingerprint or authorize bypassing the writer's guard.
 
-Use `scripts/person-transition.mjs` for every controller and window change (see
+Every controller and window change names the phase you expect (`--expect-phase`).
+Before seal, `--wait-drained` must report drained. Retire expired pre-effects application
+work by re-claiming it; parked (deferred) work is fine to hold. Use `scripts/person-transition.mjs` for every controller and window change (see
 `scripts/person-transition-cli/README.md`); the whole sequence below is rehearsed
 locally end to end by `scripts/person-transition-cli/run-local-tests.sh`.
 While the controller is armed, the catch-up and anchor steps need operator

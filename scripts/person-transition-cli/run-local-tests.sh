@@ -104,5 +104,8 @@ fi
 if test -f supabase/migrations/20260928070000_person_network_send.sql; then
  q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 fi
+if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
+fi
 node scripts/build-worker-lib.mjs
 PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-rehearsal.mjs
