@@ -93,7 +93,7 @@ export function collectEvidence(s,lib,external,out){
    }else{out.review('operation_invalid');return null;}
   }
   for(const l of arr(s.ledger))if(!add(ledgerDoc(l),`raw-ledger:${l.id}`,{admitted:false}))return null;
-  for(const a of arr(s.applications))if(!receipts.has(`application:${a.id}`)){
+  for(const a of arr(s.applications))if(!receipts.has(`application:${a.id}`)&&!sentApplication(s,a,lib)){
    if(a.organization_id!==lib.TT_ORG_ID||a.candidate_id!==id){out.review('application_owner_invalid');return null;}
    if(!add(lib.fromApplication(a,createdThePerson(a,s.anchor.before_image),id),`raw-application:${a.id}`,{admitted:false}))return null;
   }
@@ -107,4 +107,10 @@ export function collectEvidence(s,lib,external,out){
   }
   out.checks.documents={witnessed:docs.length,receipts:receipts.size};return {docs,receipts};
  }catch{out.review('source_reconstruction_failed');return null;}
+}
+/** A TT pipeline row created by the checked Network Send: witnessed, not a source.
+ * With an event, the witness must come from that insert's transaction. */
+export function sentApplication(s,row,lib,event=null){
+ const w=arr(s.application_sends).find(x=>x.application_id===row?.id);
+ return !!w&&w.candidate_id===s.candidate_id&&row.candidate_id===s.candidate_id&&row.organization_id===lib.TT_ORG_ID&&row.source==='transformer_talent'&&row.status==='processed'&&(!event||w.transaction_id===event.transaction_id);
 }

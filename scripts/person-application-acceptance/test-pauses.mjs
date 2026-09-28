@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 Object.assign(process.env,{PERSON_TRANSITION_SUPPORT:'on',PERSON_WRITE_MODE:'legacy',SUPABASE_URL:'http://pause.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic'});
 for(const k of ['RESEND_API_KEY','OPENAI_API_KEY','HARVEST_API_KEY','NOTION_TOKEN','NOTION_DATABASE_ID','AIRTABLE_API_TOKEN'])delete process.env[k];
-const ROLE="17",TT='801865a7-6533-41d2-9c45-e4a90e6ad51a',A='ce000000-0000-4000-8000-000000000002',id='ce000000-0000-4000-8000-000000000003';let statusReads=0,candidateReads=0,writes=[],enabled=true,broken=false,linked=false,editStatus='unavailable',readyStatus=null,edits=[],linkedApp=true;
+const ROLE="17",TT='801865a7-6533-41d2-9c45-e4a90e6ad51a',A='ce000000-0000-4000-8000-000000000002',id='ce000000-0000-4000-8000-000000000003';let statusReads=0,candidateReads=0,writes=[],enabled=true,broken=false,linked=false,editStatus='unavailable',readyStatus=null,edits=[],linkedApp=true,candidateFound=false,sends=[],sendStatus='unavailable';
 globalThis.fetch=async(input,init={})=>{const u=new URL(String(input));assert.equal(u.origin,'http://pause.invalid','outbound forbidden');const table=u.pathname.split('/').at(-1),method=init.method||'GET';if(method!=='GET'&&!table.startsWith('person_')&&table!=='rate_limit_events')writes.push({path:u.pathname,method});
  if(u.pathname==='/auth/v1/user')return Response.json({id,email:'synthetic@example.test'});
  if(table==='org_members')return Response.json([{member_role:'owner',organizations:{id:TT,slug:'transformer-talent',name:'Synthetic'}}]);
@@ -12,13 +12,14 @@ globalThis.fetch=async(input,init={})=>{const u=new URL(String(input));assert.eq
  if(table==='org_roles')return Response.json([{id,title:'Synthetic',linked_org_role:linked?{orgId:A,jobId:'1'}:null}]);
  if(table==='rate_limit_events')return Response.json([],{headers:{'content-range':'0-0/0'}});
  if(table==='website_applications')return Response.json([{id,candidate_id:linkedApp?id:null,follow_up_at:'2027-01-01',created_at:new Date().toISOString(),role_ids:[],role_titles:[],matched_role_ids:['1',ROLE]}]);
- if(table==='candidates'){candidateReads++;return Response.json([]);}
+ if(table==='person_network_send'){sends.push(JSON.parse(init.body));return Response.json(sendStatus==='sent'?{status:'sent',applicationId:id}:{status:sendStatus});}
+ if(table==='candidates'){candidateReads++;return Response.json(candidateFound?[{id,full_name:'Synthetic',linkedin_url:null,linkedin_username:'synthetic-send',contact:null,email:null,phone:null,current_title:'Engineer',current_company:null,location:null}]:[]);}
  return Response.json([]);
 };
 const routes=await import('./dist/routes.mjs');
 function req(body={}){const f=new FormData();f.set('file',new File(['synthetic'], 'resume.pdf',{type:'application/pdf'}));return{headers:new Headers({authorization:'Bearer synthetic'}),json:async()=>body,formData:async()=>f};}
-const ctx={params:Promise.resolve({key:'app_'+id})};test.beforeEach(()=>{statusReads=0;candidateReads=0;writes=[];enabled=true;broken=false;linked=false;editStatus='unavailable';readyStatus=null;edits=[];linkedApp=true;process.env.PERSON_TRANSITION_SUPPORT='on';});
-for(const [route,body]of [['contact',{phone:'+12025550123'}],['send',{candidateId:id,jobId:'1'}]])test(`${route} pauses before storage, mirrors or pool mutations`,async()=>{const r=await routes[route](req(body),ctx);assert.equal(r.status,503);assert.equal((await r.json()).error,'temporarily_unavailable');assert.deepEqual(writes,[]);});
+const ctx={params:Promise.resolve({key:'app_'+id})};test.beforeEach(()=>{statusReads=0;candidateReads=0;writes=[];enabled=true;broken=false;linked=false;editStatus='unavailable';readyStatus=null;edits=[];linkedApp=true;candidateFound=false;sends=[];sendStatus='unavailable';process.env.PERSON_TRANSITION_SUPPORT='on';});
+for(const [route,body]of [['contact',{phone:'+12025550123'}]])test(`${route} pauses before storage, mirrors or pool mutations`,async()=>{const r=await routes[route](req(body),ctx);assert.equal(r.status,503);assert.equal((await r.json()).error,'temporarily_unavailable');assert.deepEqual(writes,[]);});
 test('missing enabled schema/status fails closed before resume upload',async()=>{broken=true;assert.equal((await routes.resume(req(),ctx)).status,503);assert.deepEqual(writes,[]);});
 test('tenant editor preflight bypasses the TT controller',async()=>{broken=true;assert.equal(await routes.applicationEditsPaused(A),false);});
 test('disabled and schema-absent legacy preflight remain available',async()=>{enabled=false;assert.equal(await routes.applicationEditsPaused(TT),false);process.env.PERSON_TRANSITION_SUPPORT='off';broken=true;assert.equal(await routes.applicationEditsPaused(TT),false);});
@@ -42,4 +43,12 @@ test('contact of a linked TT applicant goes to the pool person (legacy mode wait
 test('contact of an unlinked TT application saves its own copy through the checked edit only',async()=>{
  linkedApp=false;editStatus='saved';const r=await routes.contact(req({email:'unlinked@example.test'}),ctx);assert.equal(r.status,200);
  assert.equal(edits.length,1);assert.equal(edits[0].p_kind,'contact');assert.equal(edits[0].p_patch.contact.email,'unlinked@example.test');assert.deepEqual(writes,[]);
+});
+test('send into the TT pipeline waits when the checked Send is unavailable and writes nothing',async()=>{
+ candidateFound=true;const r=await routes.send(req({candidateId:id,jobId:'1'}));assert.equal(r.status,503);assert.equal((await r.json()).error,'temporarily_unavailable');
+ assert.equal(sends.length,1);assert.equal(sends[0].p_row.source,'transformer_talent');assert.deepEqual(writes,[]);
+});
+test('send into the TT pipeline saves only through the checked Send',async()=>{
+ candidateFound=true;sendStatus='sent';const r=await routes.send(req({candidateId:id,jobId:'1'}));assert.ok(r.status<300,String(r.status));
+ assert.equal(sends.length,1);assert.deepEqual(writes.filter(w=>/website_applications|match_verdicts/.test(w.path)),[]);
 });
