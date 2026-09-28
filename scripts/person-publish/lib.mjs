@@ -25,15 +25,34 @@ export function databaseConfig(env=process.env,applicationName='tt-person-publis
  // the reads and checkpoints made outside them.
  return {connectionString:url,max:2,statement_timeout:20000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:applicationName};
 }
-/** `overrides` exists for tests that simulate a pooler dropping startup options. */
+/** A pool whose every session carries a 20s statement_timeout. Supabase's session
+ * pooler drops the startup option, so each new session sets it before first use,
+ * awaited; a session that cannot set it is discarded, never used unbounded. These
+ * CLIs refuse transaction poolers, so a session setting persists. `overrides` is
+ * only for tests that simulate a pooler dropping startup options. */
 export async function openDatabase(env=process.env,applicationName,overrides={}){
  const pool=new pg.Pool({...databaseConfig(env,applicationName),...overrides});
  pool.on('error',()=>{});
- // The session pooler drops the startup statement_timeout; set it on each new
- // session (these CLIs refuse transaction poolers, so a session SET persists).
- pool.on('connect',(client)=>{client.query("set statement_timeout='20s'").catch(()=>{});});
- try{await pool.query('select 1');}catch(e){await pool.end();throw e;}
- return pool;
+ const bounded=new WeakSet();
+ const connect=async()=>{
+  const client=await pool.connect();
+  if(bounded.has(client))return client;
+  try{await client.query("set statement_timeout='20s'");bounded.add(client);return client;}
+  catch(error){client.release(error);throw error;}
+ };
+ const db={
+  connect,
+  async query(...args){
+   const client=await connect();let broken;
+   // SQL errors (with a SQLSTATE) keep the session; transport errors discard it.
+   try{return await client.query(...args);}catch(error){if(!error?.code)broken=error;throw error;}
+   finally{client.release(broken);}
+  },
+  end:()=>pool.end(),
+  on:(...args)=>pool.on(...args),
+ };
+ try{await db.query('select 1');}catch(e){await pool.end();throw e;}
+ return db;
 }
 /** Serialize publish and undo for the same run across independent processes.
  * Keep one session for the whole runner; each person's transaction remains

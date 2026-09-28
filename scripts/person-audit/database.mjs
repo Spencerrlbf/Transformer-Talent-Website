@@ -27,13 +27,13 @@ export async function openAnchorDatabase(env=process.env,overrides={}){
    const keys=Object.hasOwn(methods,fn)?methods[fn]:null;if(!keys||Object.keys(args).length!==keys.length||keys.some(k=>!Object.hasOwn(args,k)))throw Error('audit_database_method');
    const sql=`select public.${fn}(${keys.map((k,i)=>`${k}=>$${i+1}`).join(',')}) result`;
    const values=keys.map(k=>args[k]!==null&&typeof args[k]==='object'?JSON.stringify(args[k]):args[k]);
-   const client=await pool.connect();
+   const client=await pool.connect();let broken;
    try{
     await client.query('begin isolation level read committed');await client.query(CALL_TIMEOUT);
     const result=(await client.query(sql,values)).rows[0].result;
     await client.query('commit');return result;
-   }catch(error){await client.query('rollback').catch(()=>{});throw error;}
-   finally{client.release();}
+   }catch(error){await client.query('rollback').catch(e=>{broken=e;});throw error;}
+   finally{client.release(broken);} // a session whose rollback failed is discarded
   },
   end:()=>pool.end(),
  };
