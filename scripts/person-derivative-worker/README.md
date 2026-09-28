@@ -3,13 +3,15 @@
 Prepared only. With `PERSON_TRANSITION_SUPPORT=on`, live mode and an OpenAI key,
 the nightly `refresh-queue` run finishes by calling `runCertifiedDerivatives`. It
 embeds people whose sources changed through the admitted consumer lifecycle (#70).
-`DERIVATIVE_DAILY_CAP` sets the most people it pays for per run (default 200).
+`DERIVATIVE_DAILY_CAP` sets the most people paid for per UTC day, counted from the
+database across runs (default 200; a bad value fails the run before any work).
 
 Each run does two things:
 
 1. **Retained work.** A lifecycle whose vectors are stored and whose lease is live
    is published. One whose lease has passed is recovered.
-2. **New jobs.** For each pending job, within the cap:
+2. **New jobs.** Only while the controller is open or disabled. For each pending
+   job, within today's remaining cap:
    - claim it;
    - if chunks are missing, certify the provider start, call OpenAI for only those
      chunks, and store the vectors;
@@ -22,11 +24,18 @@ Each run does two things:
   the missing ones. It marks the job `done` with its completed hash through the
   journal, and closes the lifecycle as `published` with its work completed. No
   provider call.
-- **A definite provider failure.** An HTTP error response means no result and no
-  charge. The lifecycle closes as `failed`, the job returns to `pending`
-  (`provider_failed`) and the work completes. That failed request does not block
-  the person's next paid start. A lost response (transport error or unreadable
-  body) stays unknown, never pays twice and stays held, as in #70.
+- **A definite provider failure.** A clear rejection means the request was refused,
+  not processed and not billed: 400, 401, 403, 404, 413, 422 or 429, or input the
+  worker refused before sending. The lifecycle closes as `failed`, the job returns
+  to `pending` (`provider_failed`) and the work completes. That failed request does
+  not block the person's next paid start.
+  - A 401, 403 or 429 stops the run, so one outage costs one attempt, not everyone's.
+  - A 5xx, another status, a transport error or an unreadable body may have been
+    processed. It stays unknown, is never paid again, stops the run and fails it.
+- **Retries and replays.** Storing a paid result is retried on a lost connection. A
+  repeated publish returns the retained result.
+- **Attempt limit.** Jobs that reach three attempts are counted in the run summary
+  (`attempt_limited`).
 
 The worker does not maintain `candidates.matching_embedding` for directory and
 refresh saves. Search (`match_candidates_v2`) takes the nearest of that vector and
@@ -41,12 +50,14 @@ PSQL=/path/to/psql bash scripts/person-derivative-worker/run-local-tests.sh PORT
 
 On 2026-09-28 (fake provider, synthetic people):
 
-- **Worker harness:** 365/365, including 5 new tests:
+- **Worker harness:** 370/370, after an independent review, including 10 new tests:
   - publish after a paid store;
   - publish with every chunk retained and no provider call;
   - a definite failure that returns the job to pending and doesn't block the next start;
   - publish refused before vectors are stored;
-  - the worker's cap, publication, and definite versus unknown failures.
+  - a repeated publish;
+  - the worker: the cap across runs, clear rejections, a provider-wide stop, unknown
+    results, a store retry, and no claims while draining.
 - **Lifecycle harness:** 528/528 with this migration installed.
 - **Type check:** `tsc` passes.
 

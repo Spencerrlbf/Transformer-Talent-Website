@@ -71,7 +71,7 @@ test('a definite provider failure returns the job to pending and does not block 
   const b = { ...a, requestId: randomUUID(), token: randomUUID() };
   assert.equal((await claim(b)).status, 'claimed');
   assert.equal((await start(b)).status, 'start');
-  await assert.rejects(failed(b, 200), /derivative_failure_input/);
+  for (const code of [200, 500, 502, 503, 504]) await assert.rejects(failed(b, code), /derivative_failure_input/, String(code)); // may have been processed: not definite
 });
 
 test('publish refuses a claim that has not stored its paid vectors', async () => {
@@ -83,26 +83,71 @@ test('publish refuses a claim that has not stored its paid vectors', async () =>
   assert.equal(await chunks(a.candidateId) >= 0, true);
 });
 
-test('worker: pays within its cap, publishes, and separates definite from unknown failures', async () => {
+test('publish repeated after success returns the same result', async () => {
+  const { a } = await fresh();
+  const c = await claim(a); await start(a); await store(a, vectors(c.missing.length));
+  const first = await publish(a);
+  assert.equal(first.status, 'published');
+  assert.deepEqual(await publish(a), first);
+});
+
+const quiet = () => {};
+const pending = async (k) => { const out = []; for (let i = 0; i < k; i++) out.push((await fresh()).a.candidateId); return out; };
+const worker = (opts) => runCertifiedDerivatives({ lib, apiKey: 'synthetic', dailyCap: 10000, limit: 500, log: quiet, warn: quiet, retryDelay: 1, ...opts });
+
+test('worker: publishes within the cap, and the cap spans runs', async () => {
   process.env.PERSON_TRANSITION_SUPPORT = 'on';
-  const people = [];
-  for (let i = 0; i < 3; i++) people.push((await fresh()).a.candidateId);
+  const people = await pending(3);
   let calls = 0;
-  const quiet = () => {};
-  const zero = await runCertifiedDerivatives({ lib, apiKey: 'synthetic', maxPaid: 0, limit: 500, embed: async () => { calls++; return []; }, log: quiet, warn: quiet });
-  assert.equal(zero.paid_people, 0); assert.equal(calls, 0);
-  const ok = await runCertifiedDerivatives({ lib, apiKey: 'synthetic', maxPaid: 500, limit: 500, log: quiet, warn: quiet,
-    embed: async (parts) => { calls++; return vectors(parts.length); } });
+  const zero = await worker({ dailyCap: 0, embed: async () => { calls++; return []; } });
+  assert.equal(zero.stopped, 'daily_cap'); assert.equal(calls, 0);
+  const ok = await worker({ embed: async (parts) => { calls++; return vectors(parts.length); } });
   assert.ok(ok.published >= people.length, JSON.stringify(ok));
   for (const id of people) assert.equal((await job(id)).status, 'done', id);
-  const { a: d } = await fresh();
-  const bad = await runCertifiedDerivatives({ lib, apiKey: 'synthetic', maxPaid: 500, limit: 500, log: quiet, warn: quiet,
-    embed: async () => { throw Error('person_derivative_http_503'); } });
-  assert.ok(bad.failed >= 1, JSON.stringify(bad));
-  assert.equal((await job(d.candidateId)).status, 'pending');
-  const { a: u } = await fresh();
-  const lost = await runCertifiedDerivatives({ lib, apiKey: 'synthetic', maxPaid: 500, limit: 500, log: quiet, warn: quiet,
-    embed: async () => { throw Error('person_derivative_transport'); } });
-  assert.ok(lost.unknown >= 1, JSON.stringify(lost));
-  assert.equal((await job(u.candidateId)).status, 'processing'); // unknown: held for review, never paid again
+  await pending(1);
+  const paidToday = await lib.paidCertifiedDerivativesToday();
+  const capped = await worker({ dailyCap: paidToday, embed: async (parts) => vectors(parts.length) });
+  assert.equal(capped.stopped, 'daily_cap'); assert.equal(capped.paid_people, 0);
+});
+
+test('worker: a clear rejection retries later; a provider-wide rejection stops the run', async () => {
+  const [one] = await pending(1);
+  const rejected = await worker({ embed: async () => { throw Error('person_derivative_http_422'); } });
+  assert.ok(rejected.failed >= 1, JSON.stringify(rejected));
+  assert.equal((await job(one)).status, 'pending'); assert.equal((await job(one)).error_code, 'provider_failed');
+  await pending(2);
+  const before = await lib.paidCertifiedDerivativesToday();
+  const limited = await worker({ embed: async () => { throw Error('person_derivative_http_429'); } });
+  assert.equal(limited.stopped, 'provider_429'); assert.equal(limited.failed, 1);
+  assert.equal(await lib.paidCertifiedDerivativesToday(), before + 1); // only one attempt spent
+});
+
+test('worker: a server error or lost response is unknown, never paid again, and stops the run', async () => {
+  const [u] = await pending(2);
+  const lost = await worker({ embed: async () => { throw Error('person_derivative_http_503'); } });
+  assert.equal(lost.unknown, 1); assert.equal(lost.stopped, 'provider_unknown_503');
+  const held = (await pool.query("select candidate_id from person_derivative_jobs where status='processing' and candidate_id=any($1::uuid[])", [[u]])).rows.length
+    + (await pool.query("select candidate_id from person_derivative_jobs where status='processing'")).rows.length;
+  assert.ok(held >= 1); // the unknown one stays processing for review
+  const transport = await worker({ embed: async () => { throw Error('person_derivative_transport'); } });
+  assert.equal(transport.stopped, 'provider_unknown_response');
+});
+
+test('worker: a lost connection while storing is retried and the result is published', async () => {
+  const [p] = await pending(1);
+  let failures = 1;
+  const flaky = { ...lib, storeCertifiedDerivativeVectors: async (x) => { if (failures-- > 0) throw Error('Connection terminated unexpectedly'); return lib.storeCertifiedDerivativeVectors(x); } };
+  const r = await worker({ lib: flaky, embed: async (parts) => vectors(parts.length) });
+  assert.equal((await job(p)).status, 'done', JSON.stringify(r));
+});
+
+test('worker: while draining it makes no new claims', async () => {
+  const [d] = await pending(1);
+  const s = (await pool.query('select revision,generation,enabled,phase from person_private.transition_control')).rows[0];
+  await pool.query("update person_private.transition_control set enabled=true,phase='draining' where singleton");
+  try {
+    const r = await worker({ embed: async () => { throw Error('must not be called'); } });
+    assert.equal(r.stopped, 'controller_not_open'); assert.equal(r.paid_people, 0);
+    assert.equal((await job(d)).status, 'pending');
+  } finally { await pool.query('update person_private.transition_control set enabled=$1,phase=$2 where singleton', [s.enabled, s.phase]); }
 });

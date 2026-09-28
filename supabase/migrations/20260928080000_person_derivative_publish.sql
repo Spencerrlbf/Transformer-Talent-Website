@@ -39,7 +39,7 @@ do $$declare d text;n text;o text;begin
  execute replace(d,n,E'  elsif j.after_row->>''status''=''done'' then\n   if e.phase<>''published'' or w.status not in (''active'',''completed'') or j.after_row->>''claim_token'' is not null or j.after_row->>''lease_until'' is not null or j.after_row->>''claim_missing'' is not null or j.after_row->>''error_code'' is not null or\n    j.after_row->''completed_hash'' is distinct from j.after_row->''desired_hash'' or j.after_row->''desired_hash'' is distinct from e.canonical->''hash'' then raise exception ''derivative_journal_recovery'';end if;\n'||n);
 end$$;
 
--- A definite provider failure (an HTTP error response: no result, not billed):
+-- A definite provider failure (a clear rejection response: not processed, not billed):
 -- the lifecycle closes as `failed`, the job returns to pending, the work completes.
 -- A lost response stays unknown (`uncertain`) as before.
 do $$declare d text;n text;o text;begin
@@ -70,7 +70,9 @@ create function person_private.derivative_provider_failed(p_request uuid,p_http 
 language plpgsql set search_path='' set timezone='UTC' set datestyle='ISO,YMD' as $$
 declare e person_private.derivative_lifecycles;j public.person_derivative_jobs;w person_private.transition_work;result jsonb;
 begin
- if p_http is null or p_http not between 400 and 599 then raise exception 'derivative_failure_input';end if;
+ -- Only clear rejections are definite: the request was refused, not processed.
+ -- 5xx and lost responses may have been processed and billed; they stay unknown.
+ if p_http is null or p_http not in (400,401,403,404,413,422,429) then raise exception 'derivative_failure_input';end if;
  e:=person_private.derivative_consumer_context(p_request);
  if e.phase='failed' then return e.payload_result;end if;
  if e.phase<>'claimed' or e.provider_started_at is null or e.vectors is not null then raise exception 'derivative_failure_ineligible';end if;
