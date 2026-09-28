@@ -9,6 +9,7 @@ import { prepareAuditFixture } from '../person-audit/local-fixture.mjs';
 import { planAudit } from '../person-audit/postcutover.mjs';
 import { runPublish, SPEC } from '../person-publish.mjs';
 import { parseOptions, databaseConfig } from '../person-publish/lib.mjs';
+import { runUndo, SPEC as UNDO_SPEC } from '../person-publish-undo.mjs';
 
 const url = process.env.LOCAL_DATABASE_URL;
 if (!url || new URL(url).pathname !== '/person_publish_admission_test' || !['127.0.0.1', 'localhost'].includes(new URL(url).hostname)) throw Error('publish_admission_test_database');
@@ -18,6 +19,7 @@ const opts = (argv) => parseOptions(argv, SPEC);
 const id = (n) => `ad000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const A = id(1), B = id(2), C = id(3), U = id(4); // U has no anchor.
 const D = id(5), R = id(6); // D's primary email belongs to R.
+const E = id(7); // Published armed, then rolled back.
 const one = async (sql, args = []) => (await pool.query(sql, args)).rows[0];
 const status = async () => (await one('select person_transition_status() r')).r;
 const act = async (a) => { const s = await status(); return (await one("select person_private.transition_set($1,$2,$3,'synthetic_test') r", [a, s.revision, s.generation])).r; };
@@ -46,7 +48,7 @@ async function plan(cid) {
 test.after(async () => { await pool.end(); });
 
 test('setup: anchored people while disabled, then arm', async () => {
-  for (const [cid, k, anchored] of [[A, 1, true], [B, 2, true], [C, 3, true], [U, 4, false]]) await seed(cid, k, anchored);
+  for (const [cid, k, anchored] of [[A, 1, true], [B, 2, true], [C, 3, true], [U, 4, false], [E, 7, true]]) await seed(cid, k, anchored);
   // D's legacy primary email is already another candidate's address.
   await pool.query("insert into candidates(id,full_name,linkedin_username,email) values($1,'Synthetic Owner','synthetic-pubadm-owner','taken-pubadm@example.com')", [R]);
   await pool.query(`insert into candidates(id,full_name,linkedin_username,linkedin_url,current_title,current_company,email,source,status,work_experience,created_at)
@@ -158,4 +160,24 @@ test('an email collision keeps the old address and records the review conflict, 
   assert.equal(await n("select count(*) n from identity_conflicts where kind='legacy_email_collision' and $1=any(candidate_ids) and status='open'", [D]), 1);
   assert.equal((await one('select email from candidates where id=$1', [D])).email, null);
   assert.equal((await one('select email from candidates where id=$1', [R])).email, 'taken-pubadm@example.com');
+});
+
+test('rollback: undo is refused while armed and restores after drain, seal and disarm', async () => {
+  if (!(await status()).enabled) await act('arm');
+  const original = (await one('select to_jsonb(c) r from candidates c where id=$1', [E])).r;
+  const w = await openWindow('publish', 'pub-rollback');
+  try { assert.equal((await publish('pub-rollback', [E])).projected, 1); } finally { await closeWindow(w.work_id); }
+  const undo = (argv) => runUndo({ pool, lib, options: parseOptions(argv, UNDO_SPEC), onProgress: quiet });
+  let armed;
+  try { armed = await undo(['--run-id=pub-rollback', '--apply']); } catch (e) { armed = { error: e.message }; }
+  assert.notEqual(armed.restored, 1, JSON.stringify(armed));
+  assert.equal(await n('select count(*) n from person_projection_history where candidate_id=$1 and restored_at is not null', [E]), 0);
+  for (const a of ['drain', 'seal', 'disarm']) await act(a);
+  const applied = await undo(['--run-id=pub-rollback', '--apply']);
+  assert.equal(applied.restored, 1, JSON.stringify(applied));
+  const restored = (await one('select to_jsonb(c) r from candidates c where id=$1', [E])).r;
+  for (const k of lib.PROFILE_FIELDS) assert.deepEqual(restored[k] ?? null, original[k] ?? null, k);
+  const p = await plan(E);
+  assert.equal(p.status, 'verified', JSON.stringify(p));
+  assert.equal((await act('arm')).enabled, true);
 });

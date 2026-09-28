@@ -43,9 +43,20 @@ Prepared only. `20260928050000_person_publish_admission.sql` implements Spencer'
 - `person_publish_project`, `maintenance_open` and every helper are not executable
   by any API role.
 
-**Not included:** undo while armed. `person-publish-undo.mjs` still uses its direct
-path, which the fences refuse while armed. That needs its own admitted path before
-any post-cutover undo.
+## Rollback (undo)
+
+Undo is refused while the controller is armed. The fences block its direct path.
+To roll back a publication run:
+
+1. `drain`, then `seal`: all admitted work finishes.
+2. `disarm`.
+3. `person-publish-undo.mjs --run-id=RUN` (dry count), then `--apply`.
+4. `arm` again, or stay disarmed if the rollback decision says so.
+
+After cutover every writer is on the new path, so nothing unfenced runs in between.
+This is tested: an armed publication is refused undo, then restored exactly after
+disarm, and the person still verifies in the post-cutover audit. No separate armed
+undo path is built.
 
 ## Verification
 
@@ -55,7 +66,7 @@ PSQL=/path/to/psql bash scripts/person-publish-admission/run-local-tests.sh PORT
 ```
 
 On 2026-09-28, after an independent review, publication with the controller open
-passed 10/10 through the real
+passed 11/11 through the real
 publish runner, covering:
 
 - no window, and a window for another run;
@@ -64,7 +75,8 @@ publish runner, covering:
 - history, operation and certified-registry evidence;
 - the person verifying in the post-cutover audit after publication, and again after a
   second, unchanged publication;
-- draining, operator-only access, and the disabled path.
+- draining, operator-only access, and the disabled path;
+- the rollback sequence above.
 
 Other suites on the same change:
 

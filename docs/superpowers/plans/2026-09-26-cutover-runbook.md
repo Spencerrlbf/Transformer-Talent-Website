@@ -302,6 +302,8 @@ traversal does not mean all profiles were published. Canary people encountered b
 the full scan normally become unchanged; do not double-count distinct people.
 Keep both run IDs for separate reporting and exact-history undo.
 
+While armed, undo is refused: first drain, seal and disarm (tested in
+`scripts/person-publish-admission`), then undo, then arm again if the rollback keeps the new path.
 Undo uses `person-publish-undo.mjs --run-id=EXACT_RUN` for a dry count, then `--apply`
 only within approved rollback scope. Newer edits/publications remain conflicts.
 Do not mass-trigger paid enrichment, embeddings or judging for storage-only changes.
