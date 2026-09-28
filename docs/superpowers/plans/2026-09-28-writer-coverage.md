@@ -124,7 +124,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; undo by drain, seal, disarm (tested, #73)
 - [ ] G5 conflict resolution decision
 - [x] G6 lookup writers: no code in this repository writes companies/schools/skills outside the normalized writer, and there are no edge functions (checked 2026-09-29). Writers in other repositories were not checked
-- [~] G7 derivative consumer lifecycle in #70; publication and worker in #78 (in review)
+- [x] G7 derivative consumer lifecycle in #70; publication and worker in #78; one refresh run at a time in #81
 - [x] G8 runbook migration list complete (#75)
 - [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
 - [x] Paused TT editors: follow-up, resume and add-role in #72; contact in #76; TT-target Send in #77
@@ -133,7 +133,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] Review worker: with support on, every direct write in `applicant-pipeline.ts` is skipped under admitted processing (`!applicationProcessing()` guards); the admitted work path writes the rest (checked 2026-09-29)
 - [x] Refresh: with support on, `runCertifiedRefresh` tops up through `topUpCertifiedRefresh`; the legacy retry only runs in legacy mode (checked 2026-09-29)
 - [~] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2-3 still to ask
-- [~] Tested drain with public submissions accepted throughout: CLI and full local rehearsal in #79 (in review)
+- [x] Tested drain with public submissions accepted throughout: CLI and full local rehearsal with real live, parked and expired work in #79
 
 ## 7. Found while building
 
