@@ -123,7 +123,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] G3 per-dispatch override for an isolated canary (#74)
 - [x] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; undo by drain, seal, disarm (tested, #73)
 - [ ] G5 conflict resolution decision
-- [ ] G6 lookup writers confirmed
+- [x] G6 lookup writers: no code in this repository writes companies/schools/skills outside the normalized writer, and there are no edge functions (checked 2026-09-29). Writers in other repositories were not checked
 - [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
 - [x] G8 runbook migration list complete (#75)
 - [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
