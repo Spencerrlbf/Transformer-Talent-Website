@@ -1,4 +1,4 @@
-import { applicationEditsPaused } from '@/lib/server/person-transition/acceptance';
+import { applicationEditReady, applicationEditsChecked } from '@/lib/server/person-transition/acceptance';
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
@@ -23,7 +23,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   if (!(await candidateInOrg(member.org.id, key)))
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  if (key.startsWith("app_") && await applicationEditsPaused(member.org.id))
+  // TT application rows: the checked edit must be admissible before anything is stored.
+  const checked = key.startsWith("app_") && applicationEditsChecked(member.org.id);
+  if (checked && !(await applicationEditReady(key.slice(4))))
     return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
 
   let form: FormData;
@@ -75,7 +77,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     ]);
     const phone = extractPhone(text);
     const emails = extractEmails(text);
-    if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
+    // Contact on a checked TT application row is not written here yet (pending the contact decision).
+    if (!checked && (phone || emails.length)) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
   } catch (err) {
     console.error("resume contact extraction failed", err);
   }
