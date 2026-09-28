@@ -122,7 +122,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] G2 support flag wired per workflow (#74)
 - [x] G3 per-dispatch override for an isolated canary (#74)
 - [x] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; undo by drain, seal, disarm (tested, #73)
-- [ ] G5 conflict resolution decision
+- [x] G5 accepted (Spencer, 2026-09-28): conflicts stay unresolvable while armed. None has ever been resolved (all 5,483 open in production) and there is no resolver in the app; new flags are still recorded. The post-launch duplicate-people project builds a checked resolver
 - [x] G6 lookup writers: no code in this repository writes companies/schools/skills outside the normalized writer, and there are no edge functions (checked 2026-09-29). Writers in other repositories were not checked
 - [x] G7 derivative consumer lifecycle in #70; publication and worker in #78; one refresh run at a time in #81
 - [x] G8 runbook migration list complete (#75)
