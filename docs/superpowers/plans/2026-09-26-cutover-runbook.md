@@ -231,7 +231,8 @@ create index concurrently if not exists candidates_person_username_idx on public
 The candidates heap was 660 MB on 2026-09-28, so a blocking build would take seconds,
 but pre-building removes even that write pause. `20260927190000` refuses to install
 if any directory execution already completed. Install the whole chain before any
-certified directory writer runs. Include only files merged into the released parent:
+certified directory writer runs. Merge #82 with or before #81: #81 stops passing the embedding cap to the nightly
+refresh, which only #82 stops calling the worker. Include only files merged into the released parent:
 `20260928020000` arrives with #70 and `080000` with #78; `030000` to `050000` arrive
 with #71 to #73, `060000` with #76, `070000` with #77 and `090000` with #79.
 
@@ -324,6 +325,10 @@ legitimize an unexplained edit. Keep the drain effective through activation.
 The embeddings those writers queue are written by the hourly `derivative-worker`
 workflow (#82): dispatch it with the same overrides to embed the canary people, and
 validate their published chunks. Its schedule stays skipped until expansion.
+Dispatch every canary from `main` after the release merge, never from a stack
+branch: a branch with #78 but without #82 still runs embeddings inside
+`refresh-queue`, in a different concurrency group, and the two runs would each see
+the same remaining daily cap.
 Scheduled runs and the other workflows keep the repository variables, which stay
 `legacy`/`off` until the expansion step. Run the tested isolated canary,
 validate its actual receipts and queued derivatives, and run the completed
