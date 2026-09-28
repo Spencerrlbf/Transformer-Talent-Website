@@ -115,19 +115,28 @@ Recorded here as they are made; until then the suggested default applies.
 
 ## 6. Exit checklist
 
+`[x]` done, `[~]` partly done (see PR), `[ ]` open. Updated 2026-09-28.
+
+
 - [ ] G1 frames for the remaining candidates writers (editor mirrors, directory/refresh matching_embedding)
 - [ ] G2 support flag wired per workflow
 - [ ] G3 per-dispatch override for an isolated canary
-- [ ] G4 maintenance admission for catch-up, reconcile, anchors, publish and undo
+- [~] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; **undo still open**
 - [ ] G5 conflict resolution decision
 - [ ] G6 lookup writers confirmed
-- [ ] G7 derivative consumer + safe install order
+- [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
 - [ ] G8 runbook migration list complete
 - [ ] G9 index build plan
-- [ ] Paused TT editors converted to checked writes: add-role, contact, resume, follow-up, TT-target Send
+- [~] Paused TT editors: follow-up, resume and add-role in #72; **contact (awaiting Spencer's decision) and TT-target Send still open**
 - [ ] Client-target Send admitted
-- [ ] Email-send follow-up clear surfaces or completes (no silent skip)
+- [x] Email-send follow-up clear no longer silently skipped (#72)
 - [ ] Review worker's remaining direct writes (follow-up/preferences/visa, resume-parse, application name/contact) on the admitted path
 - [ ] Refresh top-up and legacy retry on the admitted path or disabled under S2
-- [ ] Scope decisions 1-3 recorded
+- [~] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2-3 still to ask
 - [ ] Tested queue-only drain with public submissions accepted throughout
+
+## 7. Found while building
+
+- The shared projection envelope lost the email-collision conflict for every family that used it (application family included). Fixed in #73; an application-path collision test is still to add.
+- `scripts/person-application-acceptance/run-local-tests.sh` fails 5 tests on the unmodified parent: it does not install migrations the library now uses. Refresh it during stage 2.
+- The publish harness uses whatever worker lib is built; rebuild first.
