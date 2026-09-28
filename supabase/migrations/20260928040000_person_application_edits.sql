@@ -33,7 +33,7 @@ create function person_private.application_edit_columns(p_kind text) returns tex
   when 'followup' then array['follow_up_at','preferred_roles','preferred_locations','preferred_workplace','comp_expectation','visa_status','location']
   when 'followup_date' then array['follow_up_at']
   when 'followup_clear' then array['follow_up_at']
-  when 'resume' then array['resume_path']
+  when 'resume' then array['resume_path','person_resume_sha256']
   when 'roles' then array['role_ids','role_titles'] end
 $$;
 create function person_private.application_edit_mirror_columns(p_kind text) returns text[] language sql immutable set search_path='' as $$
@@ -66,6 +66,35 @@ begin
  if p_op<>'UPDATE' or f.candidate_id::text is distinct from n->>'id' or f.before_row-'updated_at' is distinct from o-'updated_at' or f.after_row-'updated_at' is distinct from n-'updated_at' then raise exception 'application_edit_mirror_frame';end if;
 end$$;
 
+-- Exact value shapes; the website validates first, this refuses anything else.
+create function person_private.application_edit_valid(p_kind text,p_patch jsonb,p_mirror jsonb) returns boolean language sql immutable set search_path='' as $$
+ with v(k,x) as (select key,value from jsonb_each(p_patch)),
+  strs(x) as (select x from v where k in ('preferred_roles','preferred_locations','preferred_workplace','role_ids','role_titles'))
+ select
+  not exists(select 1 from v where k='follow_up_at' and not (jsonb_typeof(x)='null' or (jsonb_typeof(x)='string' and x#>>'{}' ~ '^\d{4}-\d{2}-\d{2}$')))
+  and not exists(select 1 from strs where jsonb_typeof(x)<>'array' or jsonb_array_length(x)>20 or exists(select 1 from jsonb_array_elements(x) e where jsonb_typeof(e)<>'string' or length(e#>>'{}')>200))
+  and not exists(select 1 from v where k in ('comp_expectation','visa_status','location') and not (jsonb_typeof(x)='null' or (jsonb_typeof(x)='string' and length(x#>>'{}')<=200)))
+  and not exists(select 1 from v where k='resume_path' and not (jsonb_typeof(x)='string' and x#>>'{}' ~ '^\d{4}-\d{2}-\d{2}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9._-]{1,80}$'))
+  and not exists(select 1 from v where k='person_resume_sha256' and not (jsonb_typeof(x)='string' and x#>>'{}' ~ '^[a-f0-9]{64}$'))
+  and (p_kind<>'resume' or (p_patch ? 'resume_path' and p_patch ? 'person_resume_sha256'))
+  and (p_mirror is null or (
+   not exists(select 1 from jsonb_each(p_mirror) m where m.key='follow_up_at' and not (jsonb_typeof(m.value)='null' or (jsonb_typeof(m.value)='string' and m.value#>>'{}' ~ '^\d{4}-\d{2}-\d{2}$')))
+   and not exists(select 1 from jsonb_each(p_mirror) m where m.key='visa_status' and not (jsonb_typeof(m.value)='null' or (jsonb_typeof(m.value)='string' and length(m.value#>>'{}')<=200)))
+   and not exists(select 1 from jsonb_each(p_mirror) m where m.key='role_preferences' and not (jsonb_typeof(m.value)='object'
+    and not exists(select 1 from jsonb_object_keys(m.value) rk where rk not in ('roles','locations','workplace','salary'))
+    and not exists(select 1 from jsonb_each(m.value) r where r.key<>'salary' and (jsonb_typeof(r.value)<>'array' or jsonb_array_length(r.value)>20 or exists(select 1 from jsonb_array_elements(r.value) e where jsonb_typeof(e)<>'string' or length(e#>>'{}')>200)))
+    and (not (m.value ? 'salary') or jsonb_typeof(m.value->'salary') in ('null','string'))))))
+$$;
+-- The pool person carries the latest future intent only (the pipeline's rule):
+-- editing an older application changes that row but not the person.
+create function person_private.application_edit_latest(a public.website_applications) returns boolean language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from person_private.application_intents where application_id=a.id) then return person_private.application_future_latest(a.id);end if;
+ return not exists(select 1 from public.website_applications o where o.organization_id=a.organization_id and o.candidate_id=a.candidate_id and o.source='future' and o.id<>a.id
+  and (o.created_at>a.created_at or (o.created_at=a.created_at and o.id>a.id)))
+  and not exists(select 1 from person_private.application_intents j where j.organization_id=a.organization_id and j.linkedin_username=a.linkedin_username and j.application_id<>a.id);
+end$$;
+
 create function public.person_application_edit_ready(p_application uuid) returns jsonb
 language plpgsql stable security definer set search_path='' as $$
 declare c person_private.transition_control;a public.website_applications;
@@ -85,7 +114,8 @@ begin
  cols:=person_private.application_edit_columns(p_kind);mcols:=person_private.application_edit_mirror_columns(p_kind);
  if p_application is null or cols is null or p_patch is null or jsonb_typeof(p_patch)<>'object' or p_patch='{}'::jsonb or
   exists(select 1 from jsonb_object_keys(p_patch) k where not k=any(cols)) or
-  (p_mirror is not null and (mcols is null or jsonb_typeof(p_mirror)<>'object' or exists(select 1 from jsonb_object_keys(p_mirror) k where not k=any(mcols))))
+  (p_mirror is not null and (mcols is null or jsonb_typeof(p_mirror)<>'object' or exists(select 1 from jsonb_object_keys(p_mirror) k where not k=any(mcols)))) or
+  not person_private.application_edit_valid(p_kind,p_patch,p_mirror)
  then raise exception 'application_edit_input';end if;
  -- Controller, then the applicant's username, then business rows (documented order).
  c:=person_private.transition_lock();
@@ -107,7 +137,7 @@ begin
   if actual is distinct from n then raise exception 'application_edit_actual';end if;
   delete from person_private.application_edit_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id();
  end if;
- if p_mirror is not null and a.candidate_id is not null then
+ if p_mirror is not null and a.candidate_id is not null and person_private.application_edit_latest(a) then
   select * into cand from public.candidates where id=a.candidate_id for update;
   if cand.id is not null then
    co:=to_jsonb(cand);cn:=to_jsonb(jsonb_populate_record(cand,p_mirror));

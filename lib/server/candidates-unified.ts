@@ -1869,10 +1869,13 @@ export async function saveUnifiedContact(
 export async function saveUnifiedResumePath(
   orgId: string,
   key: string,
-  path: string
+  path: string,
+  sha256?: string
 ): Promise<boolean> {
-  if (key.startsWith("app_") && applicationEditsChecked(orgId))
-    return (await checkedApplicationEdit(key.slice(4), "resume", { resume_path: path }).catch(() => ({ ok: false }))).ok;
+  if (key.startsWith("app_") && applicationEditsChecked(orgId)) {
+    if (!sha256) return false;
+    return (await checkedApplicationEdit(key.slice(4), "resume", { resume_path: path, person_resume_sha256: sha256 })).ok;
+  }
   const target = key.startsWith("src_")
     ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
     : key.startsWith("app_")

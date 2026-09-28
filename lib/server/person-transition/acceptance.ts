@@ -52,8 +52,10 @@ export function applicationEditsChecked(orgId: string): boolean {
 export async function checkedApplicationEdit(applicationId: string, kind: ApplicationEditKind,
   patch: Record<string, unknown>, mirror: Record<string, unknown> | null = null): Promise<CheckedEditResult> {
   if (!transitionUuid(applicationId)) return { ok: false, error: 'not_found' };
-  const r = await sbRpc<{ status?: unknown; mirrored?: unknown }>('person_application_edit',
-    { p_application: applicationId, p_kind: kind, p_patch: patch, p_mirror: mirror });
+  let r: { status?: unknown; mirrored?: unknown };
+  // A missing function (support on before the migration) or a transient failure is retryable.
+  try { r = await sbRpc('person_application_edit', { p_application: applicationId, p_kind: kind, p_patch: patch, p_mirror: mirror }); }
+  catch (error) { console.error('checked application edit failed', (error as Error).message?.slice(0, 120)); return { ok: false, error: 'temporarily_unavailable' }; }
   if (r?.status === 'saved') return { ok: true, mirrored: r.mirrored === true };
   if (r?.status === 'not_found') return { ok: false, error: 'not_found' };
   return { ok: false, error: 'temporarily_unavailable' };

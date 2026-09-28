@@ -65,6 +65,16 @@ test('edit: columns outside the kind, contact and name are refused', async () =>
     ['resume', { resume_path: 'x.pdf' }, { follow_up_at: null }],
     ['contact', { contact: {} }, null],
     ['followup_date', {}, null],
+    // Value shapes
+    ['followup', { preferred_roles: [1] }, null],
+    ['followup', { comp_expectation: { x: 1 } }, null],
+    ['followup_date', { follow_up_at: 'soon' }, null],
+    ['roles', { role_ids: '17', role_titles: [] }, null],
+    ['resume', { resume_path: '../../outside.pdf', person_resume_sha256: 'a'.repeat(64) }, null],
+    ['resume', { resume_path: `2026-09-28/${randomUUID()}-x.pdf` }, null],
+    ['followup_date', { follow_up_at: '2027-05-01' }, { follow_up_at: 5 }],
+    ['followup', { follow_up_at: '2027-05-01' }, { role_preferences: { roles: [1] } }],
+    ['followup', { follow_up_at: '2027-05-01' }, { role_preferences: { other: [] } }],
   ]) await assert.rejects(edit(id, kind, patch, mirror), /application_edit_input/, JSON.stringify([kind, patch, mirror]));
 });
 
@@ -91,8 +101,11 @@ test('edit: while draining (or held: the same not-open rule) nothing is written'
 
 test('edit: the resume pointer and suggested roles', async () => {
   const { id } = await processed();
-  assert.equal((await edit(id, 'resume', { resume_path: 'resumes/recruiter-upload.pdf' })).status, 'saved');
-  assert.equal((await row('website_applications', id)).resume_path, 'resumes/recruiter-upload.pdf');
+  const path = `2026-09-28/${randomUUID()}-recruiter-upload.pdf`;
+  assert.equal((await edit(id, 'resume', { resume_path: path, person_resume_sha256: 'a'.repeat(64) })).status, 'saved');
+  const r = await row('website_applications', id);
+  assert.equal(r.resume_path, path);
+  assert.equal(r.person_resume_sha256, 'a'.repeat(64));
   assert.equal((await edit(id, 'roles', { role_ids: ['9001'], role_titles: ['Synthetic Role (#9001)'] })).status, 'saved');
   const a = await row('website_applications', id);
   assert.deepEqual(a.role_ids, ['9001']);
@@ -120,4 +133,37 @@ test('edit: only the service role can execute the edit functions', async () => {
   }
   const helpers = (await pool.query("select count(*)::int n from pg_proc where pronamespace='person_private'::regnamespace and proname like 'application_edit_%' and has_function_privilege('service_role',oid,'execute')")).rows[0].n;
   assert.equal(helpers, 0);
+});
+
+test('edit: every kind keeps the person audit verified', async () => {
+  const { id, cid } = await processed();
+  assert.equal((await plan(cid)).status, 'verified');
+  const prefs = { follow_up_at: '2027-10-01', preferred_roles: ['Design'], preferred_locations: ['NYC'], preferred_workplace: ['Hybrid'], comp_expectation: null, visa_status: null, location: null };
+  assert.equal((await edit(id, 'followup', prefs, { follow_up_at: '2027-10-01', role_preferences: { roles: ['Design'], locations: ['NYC'], workplace: ['Hybrid'], salary: null }, visa_status: null })).mirrored, true);
+  assert.equal((await plan(cid)).status, 'verified');
+  assert.equal((await edit(id, 'resume', { resume_path: `2026-09-28/${randomUUID()}-r.pdf`, person_resume_sha256: 'b'.repeat(64) })).status, 'saved');
+  assert.equal((await edit(id, 'roles', { role_ids: ['9002'], role_titles: ['Synthetic (#9002)'] })).status, 'saved');
+  const after = await plan(cid);
+  assert.equal(after.status, 'verified', JSON.stringify(after));
+});
+
+test('edit: only the latest future application updates the pool person', async () => {
+  const username = `synthetic-edit-latest-${randomUUID()}`;
+  const older = await app({ preferred_roles: ['Older'] }, username);
+  assert.equal((await processApp(older)).status, 'processed');
+  const newer = await app({ preferred_roles: ['Newer'], follow_up_at: '2027-02-01' }, username);
+  assert.equal((await processApp(newer)).status, 'processed');
+  const cid = (await row('website_applications', newer)).candidate_id;
+  assert.equal((await row('website_applications', older)).candidate_id, cid);
+  const before = await row('candidates', cid);
+  const r = await edit(older, 'followup', { follow_up_at: '2027-11-01', preferred_roles: ['Edited older'], preferred_locations: [], preferred_workplace: [], comp_expectation: null, visa_status: null, location: null },
+    { follow_up_at: '2027-11-01', role_preferences: { roles: ['Edited older'], locations: [], workplace: [], salary: null }, visa_status: null });
+  assert.deepEqual(r, { status: 'saved', changed: true, mirrored: false });
+  assert.deepEqual((await row('website_applications', older)).preferred_roles, ['Edited older']);
+  const after = await row('candidates', cid);
+  assert.deepEqual(after.role_preferences, before.role_preferences);
+  assert.deepEqual(after.follow_up_at, before.follow_up_at);
+  const n = await edit(newer, 'followup_date', { follow_up_at: '2027-12-01' }, { follow_up_at: '2027-12-01' });
+  assert.equal(n.mirrored, true);
+  assert.equal((await row('candidates', cid)).follow_up_at.toISOString().slice(0, 10), '2027-12-01');
 });

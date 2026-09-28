@@ -1,4 +1,5 @@
 import { applicationEditReady, applicationEditsChecked } from '@/lib/server/person-transition/acceptance';
+import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
@@ -61,8 +62,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     return NextResponse.json({ error: "upload_failed" }, { status: 502 });
   }
 
-  if (!(await saveUnifiedResumePath(member.org.id, key, path)))
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (!(await saveUnifiedResumePath(member.org.id, key, path, sha256))) {
+    if (checked) {
+      // The checked edit became unavailable after the preflight: remove the unreferenced upload and retry later.
+      await fetch(`${base}/storage/v1/object/resumes/${path}`, { method: "DELETE", headers: { Authorization: `Bearer ${storageKey}`, apikey: storageKey } }).catch(() => null);
+      return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
+    }
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   // Phone (and any extra email) off the resume into the contact block —
   // gaps only, a typed value always wins. Local pdf-parse of the first
