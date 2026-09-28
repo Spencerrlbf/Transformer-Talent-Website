@@ -132,7 +132,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] Email-send follow-up clear no longer silently skipped (#72)
 - [x] Review worker: with support on, every direct write in `applicant-pipeline.ts` is skipped under admitted processing (`!applicationProcessing()` guards); the admitted work path writes the rest (checked 2026-09-29)
 - [x] Refresh: with support on, `runCertifiedRefresh` tops up through `topUpCertifiedRefresh`; the legacy retry only runs in legacy mode (checked 2026-09-29)
-- [~] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2-3 still to ask
+- [~] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2 agreed 2026-09-28 (pause compute-signals, build-shortlists and judge-shortlists for the sitting; rebuild network_matches after publication and after any undo; runbook on #81; rebuild query counted 94,952 rows read-only, matching the current list); 3 still to ask
 - [x] Tested drain with public submissions accepted throughout: CLI and full local rehearsal with real live, parked and expired work in #79
 
 ## 7. Found while building
