@@ -133,7 +133,7 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] Review worker: with support on, every direct write in `applicant-pipeline.ts` is skipped under admitted processing (`!applicationProcessing()` guards); the admitted work path writes the rest (checked 2026-09-29)
 - [x] Refresh: with support on, `runCertifiedRefresh` tops up through `topUpCertifiedRefresh`; the legacy retry only runs in legacy mode (checked 2026-09-29)
 - [~] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2-3 still to ask
-- [ ] Tested queue-only drain with public submissions accepted throughout
+- [~] Tested drain with public submissions accepted throughout: CLI and full local rehearsal in #79 (in review)
 
 ## 7. Found while building
 
