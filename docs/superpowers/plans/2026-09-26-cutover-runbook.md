@@ -269,6 +269,23 @@ procedure from prerequisite 4. Inspect active Actions and database checkpoints
 before any dispatch; do not duplicate an active migration or overlap a source
 scan with tenancy fixtures. Record any temporary schedule pauses.
 
+Before arming, pause the three nightly derived-data jobs for the whole sitting
+(Spencer, 2026-09-28). They only read people and write derived tables, but a run
+during publication would score a mix of old and new records. First confirm none
+is running:
+
+```sh
+gh run list --workflow=compute-signals.yml --status=in_progress
+gh run list --workflow=build-shortlists.yml --status=in_progress
+gh run list --workflow=judge-shortlists.yml --status=in_progress
+gh workflow disable compute-signals.yml
+gh workflow disable build-shortlists.yml
+gh workflow disable judge-shortlists.yml
+```
+
+The person writers (review-queue, refresh-queue, sync-candidates) are not paused
+this way; the controller drains and holds them.
+
 Run bounded final catch-up under the accepted historical policy before publication;
 retain new run IDs and resume the same pin/configuration. Account exact verified,
 pending, review, queue and external-boundary outcomes. An unstable external
@@ -352,10 +369,36 @@ traversal does not mean all profiles were published. Canary people encountered b
 the full scan normally become unchanged; do not double-count distinct people.
 Keep both run IDs for separate reporting and exact-history undo.
 
+After the full publication, rebuild the Network list so its copied name, title
+and company match the published records. It rebuilds from the current verdicts,
+shortlists and signals (unchanged while the jobs are paused), costs nothing, and
+replaces the rows in one transaction, so readers see the old list until commit.
+Transformer Talent is the only organization with rows (94,952 across 450 roles on
+2026-09-28). On the direct session:
+
+```sql
+begin;
+set local statement_timeout = '10min';
+select count(*) from public.network_matches where organization_id = '801865a7-6533-41d2-9c45-e4a90e6ad51a';
+select public.refresh_network_matches('801865a7-6533-41d2-9c45-e4a90e6ad51a');
+commit;
+```
+
+Report the before and after counts; a large drop means verdicts are missing and
+needs investigation before resuming. Spot-check published people on the Network
+tab. Then re-enable the three jobs; the next nightly run rescores as normal:
+
+```sh
+gh workflow enable compute-signals.yml
+gh workflow enable build-shortlists.yml
+gh workflow enable judge-shortlists.yml
+```
+
 While armed, undo is refused: first drain, seal and disarm (tested in
 `scripts/person-publish-admission`), then undo, then arm again if the rollback keeps the new path.
 Undo uses `person-publish-undo.mjs --run-id=EXACT_RUN` for a dry count, then `--apply`
 only within approved rollback scope. Newer edits/publications remain conflicts.
+After any applied undo, run the same Network rebuild so it shows the restored records.
 Do not mass-trigger paid enrichment, embeddings or judging for storage-only changes.
 
 ### 6. Audit and restrictive guard
