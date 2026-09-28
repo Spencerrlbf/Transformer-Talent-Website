@@ -130,8 +130,8 @@ Recorded here as they are made; until then the suggested default applies.
 - [x] Paused TT editors: follow-up, resume and add-role in #72; contact in #76; TT-target Send in #77
 - [x] Client-target Send: tenant rows, outside the TT fence and audit capture (decision 1); unchanged
 - [x] Email-send follow-up clear no longer silently skipped (#72)
-- [ ] Review worker's remaining direct writes (follow-up/preferences/visa, resume-parse, application name/contact) on the admitted path
-- [ ] Refresh top-up and legacy retry on the admitted path or disabled under S2
+- [x] Review worker: with support on, every direct write in `applicant-pipeline.ts` is skipped under admitted processing (`!applicationProcessing()` guards); the admitted work path writes the rest (checked 2026-09-29)
+- [x] Refresh: with support on, `runCertifiedRefresh` tops up through `topUpCertifiedRefresh`; the legacy retry only runs in legacy mode (checked 2026-09-29)
 - [~] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2-3 still to ask
 - [ ] Tested queue-only drain with public submissions accepted throughout
 
