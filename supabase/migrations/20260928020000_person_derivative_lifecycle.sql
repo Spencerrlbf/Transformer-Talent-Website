@@ -122,14 +122,14 @@ do $$declare d text;n text;begin
  n:='select * into f from person_private.derivative_producer_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id();';
  if array_length(string_to_array(d,n),1)<>2 then raise exception 'derivative_record_frame_definition';end if;
  d:=replace(d,n,n||E'\n if exists(select 1 from person_private.transition_work where id=p_work and family=''derivative'') then select (jsonb_populate_record(null::person_private.derivative_producer_frames,to_jsonb(cf))).* into f from person_private.derivative_consumer_frames cf where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id() and relation_name=''person_derivative_jobs'';end if;');
- d:=replace(d,'''application'',''directory'',''refresh''','''application'',''directory'',''refresh'',''derivative''');execute d;
+ n:=d;d:=replace(d,'''application'',''directory'',''refresh''','''application'',''directory'',''refresh'',''derivative''');if d=n then raise exception 'derivative_record_family_definition';end if;execute d;
  d:=pg_get_functiondef('person_private.derivative_job_change_valid(uuid)'::regprocedure);
- d:=replace(d,'w.family in (''application'',''directory'',''refresh'')','(w.family in (''application'',''directory'',''refresh'') or (w.family=''derivative'' and exists(select 1 from person_private.derivative_lifecycles e where e.work_id=w.id and e.candidate_id=j.candidate_id and person_private.derivative_lifecycle_valid(e))))');execute d;
+ n:=d;d:=replace(d,'w.family in (''application'',''directory'',''refresh'')','(w.family in (''application'',''directory'',''refresh'') or (w.family=''derivative'' and exists(select 1 from person_private.derivative_lifecycles e where e.work_id=w.id and e.candidate_id=j.candidate_id and person_private.derivative_lifecycle_valid(e))))');if d=n then raise exception 'derivative_change_valid_definition';end if;execute d;
  d:=pg_get_functiondef('person_private.derivative_journal_deferred()'::regprocedure);
  n:='if not ((w.status=''active'' and w.lease_until>clock_timestamp()) or';
  if array_length(string_to_array(d,n),1)<>2 then raise exception 'derivative_deferred_definition';end if;
  d:=replace(d,n,'if w.family<>''derivative'' and not ((w.status=''active'' and w.lease_until>clock_timestamp()) or');
- d:=replace(d,'select * into w from person_private.transition_work where id=j.work_id;',E'select * into w from person_private.transition_work where id=j.work_id;\n  if w.family=''derivative'' then perform person_private.derivative_consumer_journal_end(j);end if;');execute d;
+ n:=d;d:=replace(d,'select * into w from person_private.transition_work where id=j.work_id;',E'select * into w from person_private.transition_work where id=j.work_id;\n  if w.family=''derivative'' then perform person_private.derivative_consumer_journal_end(j);end if;');if d=n then raise exception 'derivative_deferred_end_definition';end if;execute d;
  d:=pg_get_functiondef('person_private.transition_claim(text,uuid,text,text,text,uuid,integer)'::regprocedure);n:=E'begin\n';
  if array_length(string_to_array(d,n),1)<>2 then raise exception 'derivative_claim_definition';end if;
  execute replace(d,n,n||E' if p_family=''derivative'' and not exists(select 1 from person_private.derivative_admission_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id() and p_resource=''derivative:''||request_id::text) then raise exception ''derivative_admission_required'';end if;\n');
@@ -266,6 +266,8 @@ begin
   perform set_config('person.work_id',w.id::text,true);perform set_config('person.work_token',p_token::text,true);
   perform pg_advisory_xact_lock(72009,hashtext(p_candidate::text));
   perform 1 from public.candidates where id=p_candidate for update;
+  -- Wait for an unknown earlier paid result instead of consuming another attempt.
+  if exists(select 1 from person_private.derivative_lifecycles old where old.candidate_id=p_candidate and old.provider_started_at is not null and old.vectors is null) then raise sqlstate 'DCB01';end if;
   select * into j from public.person_derivative_jobs where candidate_id=p_candidate for update;
   if j.candidate_id is null then raise sqlstate 'DCA01';end if;
   if person_private.derivative_job_current(p_candidate) is distinct from true then raise exception 'derivative_job_changed';end if;
@@ -284,7 +286,7 @@ end$$;
 create function person_private.derivative_claim_seal(p_request uuid,p_input jsonb,p_parts jsonb) returns jsonb
 language plpgsql set search_path='' set timezone='UTC' set datestyle='ISO,YMD' as $$
 declare a person_private.derivative_admission_frames;w person_private.transition_work;e person_private.derivative_lifecycles;prior person_private.derivative_lifecycles;
- j public.person_derivative_jobs;target jsonb;part jsonb;cached jsonb;available jsonb:='[]';missing jsonb:='[]';r public.candidate_embeddings;result jsonb;
+ j public.person_derivative_jobs;target jsonb;part jsonb;cached jsonb;available jsonb:='[]';missing jsonb:='[]';r public.candidate_embeddings;result jsonb;reusable uuid[];
 begin
  select * into a from person_private.derivative_admission_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id() and request_id=p_request;
  select * into w from person_private.transition_work where id=a.work_id;
@@ -292,6 +294,11 @@ begin
  perform person_private.derivative_input_check(a.candidate_id,p_input);
  if p_parts is distinct from person_private.derivative_chunks(p_input->'sources') then raise exception 'derivative_parts';end if;
  select * into j from public.person_derivative_jobs where candidate_id=a.candidate_id;
+ select coalesce(array_agg(old.request_id),'{}') into reusable from person_private.derivative_lifecycles old
+ where old.candidate_id=a.candidate_id and old.organization_id=w.organization_id and old.provider_started_at is not null and old.vectors is not null and
+  old.canonical->'sources' is not null and (old.canonical->>'bytes')::jsonb->0=to_jsonb(j.model) and (old.canonical->>'bytes')::jsonb->1=to_jsonb(j.dimensions) and
+  exists(select 1 from jsonb_array_elements(old.missing) m where m in (select value from jsonb_array_elements(p_parts))) and
+  person_private.derivative_lifecycle_valid(old) and person_private.derivative_vectors_valid(old.vectors,jsonb_array_length(old.missing));
  for part in select value from jsonb_array_elements(p_parts) loop
   select * into r from public.candidate_embeddings where candidate_id=a.candidate_id and source_type=part->>'source_type' and chunk_index=(part->>'chunk_index')::int and content_hash=part->>'content_hash';
   if r.id is not null and r.organization_id<>w.organization_id then raise exception 'derivative_foreign_collision';end if;
@@ -301,10 +308,7 @@ begin
   else
    select jsonb_build_object('part',part,'vector',old.vectors->(p.ordinality::int-1),'requestId',old.request_id) into cached
    from person_private.derivative_lifecycles old cross join lateral jsonb_array_elements(old.missing) with ordinality p(value,ordinality)
-   where old.candidate_id=a.candidate_id and old.organization_id=w.organization_id and old.provider_started_at is not null and old.vectors is not null and
-    old.canonical->'sources' is not null and (old.canonical->>'bytes')::jsonb->0=to_jsonb(j.model) and
-    (old.canonical->>'bytes')::jsonb->1=to_jsonb(j.dimensions) and p.value=part and person_private.derivative_lifecycle_valid(old) and
-    person_private.derivative_vectors_valid(old.vectors,jsonb_array_length(old.missing)) order by old.request_id limit 1;
+   where old.request_id=any(reusable) and p.value=part order by old.request_id limit 1;
   end if;
   if cached is null then missing:=missing||jsonb_build_array(part);else available:=available||jsonb_build_array(cached);end if;
  end loop;
@@ -402,7 +406,9 @@ begin
  else select * into e from person_private.derivative_lifecycles where request_id=new.request_id;end if;
  select * into w from person_private.transition_work where id=e.work_id;
  if person_private.derivative_lifecycle_valid(e) is distinct from true or person_private.derivative_job_current(e.candidate_id) is distinct from true or
- (e.phase in ('claimed','stored') and (w.status<>'active' or w.lease_until<=clock_timestamp())) or
+ (e.phase='claimed' and (w.status<>'active' or w.lease_until<=clock_timestamp())) or
+ -- Stored vectors are a known paid result: a lease that passes before commit must not roll them back.
+ (e.phase='stored' and w.status<>'active') or
  (e.phase='uncertain' and (w.status<>'uncertain' or e.provider_started_at is null or e.vectors is not null)) or
  (e.phase in ('retry','superseded') and (w.status<>'completed' or (e.provider_started_at is not null and e.vectors is null))) or
  exists(select 1 from person_private.derivative_admission_frames where backend_pid=pg_backend_pid() and transaction_id=pg_current_xact_id()) or

@@ -113,10 +113,10 @@ test('changed source supersedes only public ownership and an unknown earlier pai
  const {a,f}=await fresh(),c=await claim(a);await start(a);
  const next=await processApp(await app({},f.before.linkedin_username));assert.equal(next.status,'processed',next.error?.message);
  const changed=await job(a.candidateId);assert.notEqual(changed.desired_hash,c.desiredHash);
- const b={...a,requestId:randomUUID(),token:randomUUID()};await claim(b);await assert.rejects(start(b),/derivative_paid_unresolved/);
+ const b={...a,requestId:randomUUID(),token:randomUUID()};const attempts=(await job(a.candidateId)).attempts;
+ assert.deepEqual(await claim(b),{status:'busy'});assert.equal(await life(b),undefined);assert.equal((await job(a.candidateId)).attempts,attempts);
  const newJob=await job(a.candidateId);assert.equal((await store(a,vectors(c.missing.length))).status,'superseded');assert.deepEqual(await job(a.candidateId),newJob);
- assert.equal((await start(b)).status,'reprepare');
- const d={...a,requestId:randomUUID(),token:randomUUID()};const reclaimed=await claim(d);assert.ok(reclaimed.missing.length< (await life(b)).missing.length);assert.equal((await start(d)).status,'start');
+ const reclaimed=await claim(b);assert.equal(reclaimed.status,'claimed');assert.ok(reclaimed.missing.length< (await life(b)).parts.length);assert.equal((await start(b)).status,'start');
 });
 test('foreign embedding unique-key collision is detected before claim or paid start',async()=>{
  const {a}=await fresh(),j=await job(a.candidateId),part=lib.personDerivativeChunks(j.sources)[0],foreign=randomUUID();
@@ -152,4 +152,13 @@ for(const field of ['provider_started_at','vectors'])test(`retained ${field} can
  await use(async db=>{await db.query("begin;set local timezone='UTC';set local datestyle='ISO,YMD'");await db.query('select person_private.derivative_consumer_enter($1,$2,$3,$4,true,false)',[org,a.requestId,a.candidateId,a.token]);
   await assert.rejects(db.query(`select person_private.derivative_lifecycle_set(to_jsonb(e),to_jsonb(e)||jsonb_build_object('${field}',null)) from person_private.derivative_lifecycles e where request_id=$1`,[a.requestId]),/derivative_immutable/);
  });assert.ok((await life(a))[field]);
+});
+
+test('vectors stored before the lease passes survive a commit that lands after it',async()=>{
+ const {a}=await fresh(),c=await shortClaim(a);await start(a);
+ await pool.query("create function person_private.synthetic_commit_delay() returns trigger language plpgsql as $$begin if new.vectors is not null and new.phase='stored' then perform pg_sleep(0.6);end if;return null;end$$;create constraint trigger aa_commit_delay after update on person_private.derivative_lifecycles deferrable initially deferred for each row execute function person_private.synthetic_commit_delay()");
+ try{const v=vectors(c.missing.length);assert.deepEqual(await store(a,v),{status:'stored'});assert.deepEqual((await life(a)).vectors,v);assert.equal((await life(a)).phase,'stored');assert.deepEqual(await store(a,v),{status:'stored'});}
+ finally{await pool.query('drop trigger aa_commit_delay on person_private.derivative_lifecycles;drop function person_private.synthetic_commit_delay()');}
+ assert.equal((await recover(a)).status,'retry');assert.equal((await job(a.candidateId)).status,'pending');
+ const next={...a,requestId:randomUUID(),token:randomUUID()};const reused=await claim(next);assert.equal(reused.status,'claimed');assert.deepEqual(reused.missing,[]);
 });

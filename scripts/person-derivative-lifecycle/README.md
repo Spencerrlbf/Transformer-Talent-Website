@@ -20,6 +20,33 @@ Generic work admission, finish and renewal cannot bypass the lifecycle. Legacy p
 history retained in producer genesis cannot authorize a new provider start. All new
 tables and functions are private to `person_private` with no service-role grant.
 
+## Independent review (2026-09-28)
+
+No blockers: no double spend, no spend without an admitted claim, no claim committed
+without its seal, lock order consistent with the producer. Fixed after review:
+
+- Vectors stored while the lease is live are no longer rolled back if the commit
+  lands after the lease passes (test: "vectors stored before the lease passes survive
+  a commit that lands after it"; it fails without the fix).
+- A claim returns `busy` while an earlier paid result for the candidate is unknown,
+  instead of consuming one of its three attempts.
+- Reusable retained vectors are validated once per claim instead of once per part.
+- The three text patches of earlier functions now fail if they no longer match.
+
+Known limits, deliberately kept:
+
+- A job whose first journal entry shows legacy paid history (`processing`, or
+  attempts above zero and not done) stays in `review`; it cannot authorize another
+  paid start. `person_derivative_jobs` does not exist in production yet, so no such
+  history exists at installation.
+- Lifecycles are never pruned; each retained lifecycle adds validation work to a
+  claim for that candidate.
+- If `PERSON_TRANSITION_SUPPORT` were switched off after candidates were journaled
+  (a rollback), the legacy drain can starve on journaled jobs (fence from #68). The
+  rollback procedure must account for this.
+- Untested: two concurrent provider starts for one request, consumer/producer
+  deadlock under load, and refusal of start/store while `held`.
+
 Still required before activation: a worker that calls these steps with a spend cap,
 publication of the stored chunks, `matching_embedding` handling, and the canary.
 
@@ -32,5 +59,5 @@ PSQL=/path/to/psql bash scripts/person-derivative-lifecycle/run-local-tests.sh P
 
 Resets only the loopback `person_directory_worker_test` database. On 2026-09-28 at
 commit `feat/person-67-derivative-lifecycle` it passed all suites the harness runs
-(527 tests, including 20 lifecycle tests) and `tsc --noEmit`. No provider call,
+(528 tests, including 21 lifecycle tests, after the review fixes) and `tsc --noEmit`. No provider call,
 production database or hosted preview was used.
