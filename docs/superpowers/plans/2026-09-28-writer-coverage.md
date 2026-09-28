@@ -141,3 +141,35 @@ Recorded here as they are made; until then the suggested default applies.
 - `scripts/person-application-acceptance/run-local-tests.sh` fails 5 tests on the unmodified parent: it does not install migrations the library now uses. Refresh it during stage 2.
 - The publish harness uses whatever worker lib is built; rebuild first.
 - A TT-target Send row without a witness made the sent person `review: raw_fact_not_admitted` in the audit. #77 adds the witness.
+
+## 8. Stage 2 verification (2026-09-28, local only)
+
+Combined branch: #81 head (whole stack) merged with #78 (on #70) and #80.
+
+- Install order: production has 072 to `20260926050355`. A local copy built in that
+  order followed by the runbook list, and a copy built in harness order, produced
+  identical functions, triggers, columns, grants, policies, indexes and constraints.
+  The runbook list stopped at `050000`; completed through `090000` on #81.
+- All 47 suites as written: every suite for the newer migrations passes; 17 older
+  suites fail because their harnesses stop before migrations the current library uses.
+- All suites with every missing migration installed before their tests: 36 pass in
+  full. 7 still fail and 4 cannot be upgraded (stub schemas: queue, work,
+  transition; the trial suite passes 48/48 once upgraded).
+- The 7 fail identically when upgraded only to the parent (`20260928010000`), so none
+  comes from stage 1. Every failure is a stricter refusal: the retired direct intake
+  path (`application_source_fence`, 100000), lookup and experience fences with newer
+  codes, service-role INSERT removed from attributions and epochs (025000), or a
+  knock-on of one of these. No write the old tests expected refused was allowed.
+  The old suites should be retired or moved to the accepted path after launch.
+- Rehearsal with the full chain including `080000`: 6/6 (harness fixed on #81).
+- Type check clean; production build succeeds; offline scripts pass (directory and
+  refresh write safeguards, email escaping, tenancy cleanup scope).
+- Not run: the tenancy sweep and the six scripts that write throwaway rows to the
+  shared database. They need a non-production database and `.env.scripts`.
+- Scope 3 fact: no pending migration references candidate_notes,
+  candidate_email_log, referrals, verdicts, shortlists, signals or network_matches,
+  and no route that writes notes, email log or referrals writes candidates. Checked
+  by reading; not run against a live database.
+- Scope 2 fact: network_matches copies full_name, current_title and current_company;
+  `refresh_network_matches(org)` rebuilds from candidates. The runbook does not yet
+  pause the derived nightly jobs or rebuild after publication.
