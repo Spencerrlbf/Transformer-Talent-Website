@@ -217,5 +217,8 @@ test('publish sessions bound themselves when a pooler drops the startup timeout'
   const pool = await openDatabase({ LOCAL_DATABASE_URL: process.env.LOCAL_DATABASE_URL }, 'tt-person-publish-test', { statement_timeout: undefined });
   try {
     for (let i = 0; i < 3; i++) assert.equal((await pool.query('show statement_timeout')).rows[0].statement_timeout, '20s');
+    const [a, b] = await Promise.all([pool.connect(), pool.connect()]); // two distinct sessions
+    try { for (const c of [a, b]) assert.equal((await c.query('show statement_timeout')).rows[0].statement_timeout, '20s'); }
+    finally { a.release(); b.release(); }
   } finally { await pool.end(); }
 });
