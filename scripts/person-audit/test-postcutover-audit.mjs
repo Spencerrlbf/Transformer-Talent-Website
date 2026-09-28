@@ -225,18 +225,23 @@ test("a done refresh receipt on an anchored person is admitted and the person st
 
 test("a done directory receipt creates a receipt-anchored person that is verified", async () => {
   const workspaceId = id(3007), contactId = id(1007), username = "synthetic-audit-dir-7";
+  const directorySnapshot = {
+    board: { contact_id: contactId, name: "Synthetic Audit Directory", linkedin_url: `https://www.linkedin.com/in/${username}`, updated_at: "2026-09-26" },
+    harvest: null, exps: [], edus: [], emails: [], phones: [], facts: [], identifiers: [] };
   const c = await pool.connect();
   let saved;
   try {
     const claim = await lib.claimDirectoryScanOnConnection(c, { organizationId: org, workspaceId });
-    const staged = await lib.stageDirectoryOnConnection(c, { organizationId: org, workspaceId, token: claim.token, snapshot: {
-      board: { contact_id: contactId, name: "Synthetic Audit Directory", linkedin_url: `https://www.linkedin.com/in/${username}`, updated_at: "2026-09-26" },
-      harvest: null, exps: [], edus: [], emails: [], phones: [], facts: [], identifiers: [] } });
+    const staged = await lib.stageDirectoryOnConnection(c, { organizationId: org, workspaceId, token: claim.token, snapshot: directorySnapshot });
     saved = await lib.saveDirectoryOnConnection(c, { organizationId: org, receiptId: staged.receiptId, mode: "shadow" });
   } finally { c.release(); }
   const created = (await pool.query("select candidate_id from person_directory_receipts where contact_id=$1 and phase='done' order by id desc limit 1", [contactId])).rows[0]?.candidate_id;
   assert.ok(created, `the directory save created a person (${JSON.stringify(saved)})`);
-  const plan = await planOf(created);
+  const snapshot = await snapshotOf(created);
+  // Without the live directory read the linked contact cannot be proven.
+  assert.equal(planAudit(snapshot, lib).reason, "external_unavailable");
+  // With the current directory record equal to the admitted snapshot it verifies.
+  const plan = planAudit(snapshot, lib, { complete: true, rows: new Map([[contactId, directorySnapshot]]) });
   assert.equal(plan.status, "verified", JSON.stringify(plan));
   assert.equal(plan.checks.creation_event, true);
   assert.equal(plan.checks.directory.pending, 0);
