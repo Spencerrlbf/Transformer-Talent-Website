@@ -95,7 +95,10 @@ export async function pendingCertifiedDerivatives(limit:number):Promise<string[]
  if(!transitionSupport()) throw Error('derivative_lifecycle_disabled');
  if(!Number.isInteger(limit)||limit<1||limit>5000) throw Error('derivative_input');
  return withPersonConnection(async c=>(await c.query(
-  "select candidate_id from public.person_derivative_jobs where status='pending' and attempts<3 order by updated_at,candidate_id limit $1",[limit])).rows.map(r=>r.candidate_id));
+  // New applicants first, then recruiter edits, then directory and refresh, each oldest
+  // first: a backlog must not hold a new applicant's search chunks past the next run.
+  `select candidate_id from public.person_derivative_jobs where status='pending' and attempts<3
+   order by (receipt_ref like 'application:%') desc,(receipt_ref like 'recruiter:%') desc,updated_at,candidate_id limit $1`,[limit])).rows.map(r=>r.candidate_id));
 }
 /** Retained lifecycles whose work is still open: publish a stored result, or recover (read only). */
 export async function resumableCertifiedDerivatives(limit:number):Promise<{requestId:string;candidateId:string;token:string;phase:string;live:boolean}[]> {
