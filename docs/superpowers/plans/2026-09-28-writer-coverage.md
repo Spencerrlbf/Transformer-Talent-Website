@@ -125,8 +125,8 @@ Recorded here as they are made; until then the suggested default applies.
 - [ ] G5 conflict resolution decision
 - [ ] G6 lookup writers confirmed
 - [~] G7 derivative consumer lifecycle in #70; worker integration and install order still open
-- [ ] G8 runbook migration list complete
-- [ ] G9 index build plan
+- [x] G8 runbook migration list complete (#75)
+- [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
 - [~] Paused TT editors: follow-up, resume and add-role in #72; **contact (awaiting Spencer's decision) and TT-target Send still open**
 - [ ] Client-target Send admitted
 - [x] Email-send follow-up clear no longer silently skipped (#72)
