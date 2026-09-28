@@ -41,7 +41,7 @@ end$$;
 -- One Send: the exact TT pipeline row, witnessed. Refused while draining or held.
 create function public.person_network_send(p_row jsonb) returns jsonb
 language plpgsql security definer set search_path='' set timezone='UTC' set datestyle='ISO,YMD' as $$
-declare c person_private.transition_control;job text;cid uuid;n jsonb;actual jsonb;aid uuid:=gen_random_uuid();
+declare c person_private.transition_control;job text;cid uuid;n jsonb;actual jsonb;aid uuid:=gen_random_uuid();cand public.candidates;
  allowed text[]:=array['organization_id','name','email','linkedin_url','linkedin_username','role_ids','role_titles','status','source','candidate_id','parsed_profile','harvest_profile','screening','contact'];
 begin
  if current_setting('transaction_isolation')<>'read committed' then raise exception 'network_send_isolation';end if;
@@ -55,8 +55,18 @@ begin
  c:=person_private.transition_lock();
  if c.enabled and c.phase<>'open' then return jsonb_build_object('status','unavailable');end if;
  if p_row->>'linkedin_username' is not null then perform pg_advisory_xact_lock(72007,hashtext(p_row->>'linkedin_username'));end if;
- perform 1 from public.candidates where id=cid for key share;
- if not found then return jsonb_build_object('status','candidate_not_found');end if;
+ -- The person's writer lock serializes Sends even without a LinkedIn username.
+ perform pg_advisory_xact_lock(hashtext(cid::text));
+ select * into cand from public.candidates where id=cid for key share;
+ if cand.id is null then return jsonb_build_object('status','candidate_not_found');end if;
+ -- Identity and profile fields come from the pool person's own record, which
+ -- publication keeps equal to the published profile.
+ if p_row->>'linkedin_username' is distinct from cand.linkedin_username or p_row->>'linkedin_url' is distinct from cand.linkedin_url or
+  p_row->>'name' is distinct from coalesce(nullif(cand.full_name,''),'Candidate') or
+  p_row->'parsed_profile' is distinct from jsonb_build_object('current_title',nullif(trim(cand.current_title),''),'current_company',nullif(trim(cand.current_company),''),'location',nullif(trim(cand.location),'')) or
+  (p_row->>'email'<>'' and not (lower(p_row->>'email') in (lower(coalesce(cand.email,'')),lower(coalesce(cand.contact->>'email','')))
+   or exists(select 1 from public.candidate_contacts k where k.candidate_id=cid and k.kind='email' and lower(k.value_normalized)=lower(p_row->>'email'))))
+ then raise exception 'network_send_profile';end if;
  if exists(select 1 from public.website_applications where organization_id='801865a7-6533-41d2-9c45-e4a90e6ad51a' and candidate_id=cid and role_ids @> array[job]) then
   return jsonb_build_object('status','already_sent');end if;
  n:=to_jsonb(jsonb_populate_record(null::public.website_applications,

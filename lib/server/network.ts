@@ -406,7 +406,7 @@ export async function sendNetworkCandidate(
     ).get(candidateId)?.[0]?.email ?? null;
 
   // One send per (person, target job) — pipelines never grow duplicates.
-  // The checked Send decides this atomically under its own lock.
+  // The checked Send decides this under the person's writer lock.
   if (!checkedSend) {
     const dupRes = await sbRest(
       `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
@@ -467,12 +467,15 @@ export async function sendNetworkCandidate(
   if (checkedSend) {
     type SendResult = { status?: string; applicationId?: string };
     const r: SendResult = await sbRpc<SendResult>("person_network_send", { p_row: row }).catch((e): SendResult => {
-      console.error("checked network send failed", (e as Error).message?.slice(0, 120));
-      return { status: "unavailable" };
+      const message = (e as Error).message ?? "";
+      console.error("checked network send failed", message.slice(0, 120));
+      // A refused row is a real failure, not a reason to retry.
+      return { status: /network_send_(input|profile|actual)/.test(message) ? "refused" : "unavailable" };
     });
     if (r.status === "sent" && r.applicationId) return { ok: true, applicationId: r.applicationId };
     if (r.status === "already_sent") return { ok: false, error: "already_sent" };
     if (r.status === "candidate_not_found") return { ok: false, error: "candidate_not_found" };
+    if (r.status === "refused") return { ok: false, error: "insert_failed" };
     return { ok: false, error: "temporarily_unavailable" };
   }
   const inserted = await sbInsert<{ id: string }>("website_applications", row, true).catch((e) => {

@@ -16,6 +16,16 @@ own roles creates the pipeline row through `person_network_send(row)`, from
   witnessed Send row as a pipeline entry, not a source: it is not pending, not a raw
   document, and not an integrity input. Without that rule, a sent person drops to
   `review: raw_fact_not_admitted` (tested).
+- **Content bound to the pool record.** Name, LinkedIn URL and username, title,
+  company and location must equal the pool person's own row, which the published
+  profile is read from. The email must be one of the person's addresses, or empty.
+  A service-role caller cannot plant a different identity or profile under a
+  witness (`network_send_profile`). Contact phone, screening and the Harvest
+  snapshot are still taken as given, as before the fence.
+- **Locks.** The person's writer lock serializes concurrent Sends; every production
+  candidate also has a username, so the username lock applies too. Refused rows
+  report as failures (`insert_failed`), not as retryable.
+- **Deploy order.** Install the migration before switching support on.
 - **Client roles unchanged.** Sends into a client company's role create tenant rows,
   which the TT fence and the audit capture don't touch. They keep their writer.
 
@@ -23,9 +33,9 @@ own roles creates the pipeline row through `person_network_send(row)`, from
 
 | Suite | Result |
 |---|---|
-| Edit suite, including Send: witness, audit stays `verified`, duplicate, draining, input refusals, grants | 40/40 |
+| Edit suite, including Send: witness, audit stays `verified`, duplicate, concurrent Sends, draining, input and forged-content refusals, grants | 41/41 |
 | Routes (a TT-target Send waits or saves only through the checked function) | 19/19 |
-| Post-cutover audit suite | 87/87 |
+| Post-cutover audit suite, including the witness rule's edge cases | 91/91 |
 | Cross-family | 504/504 |
 | Publish | 39/39 |
 | Publish admission | 11/11 |
