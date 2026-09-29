@@ -4437,6 +4437,8 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .cv2d-fit-title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .cv2d-fit-title em { font-style: normal; font-weight: 500; color: var(--muted); }
 .cv2d-fit-via { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.cv2d-also { display: flex; align-items: center; gap: 10px; margin: 26px 0 14px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.cv2d-also::after { content: ""; flex: 1; border-top: 1px solid var(--row-line); }
 .cv2d-fit-title .cv2d-fit-job { margin-left: auto; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--accent-press); text-decoration: underline; }
 @media (max-width: 640px) { .vc-tech { grid-template-columns: 1fr; } .vc-lbl { padding-top: 0; } }
 .dash-src-again { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 14px; font-size: 13px; color: var(--body-2); }

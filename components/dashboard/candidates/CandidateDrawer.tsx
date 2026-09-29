@@ -76,6 +76,8 @@ type Detail = {
   } | null;
   noReply?: { markedAt: string; checkBackAt: string | null; jobId: string | null } | null;
   pipeline: PipelineEntry[];
+  /** Suggested roles judged contact or worth a message: Fit tab, "Also a match". */
+  alsoMatches?: PipelineEntry[];
   /** Where the Profile tab's history comes from and when it was fetched. */
   profileSource?: string | null;
   experience: {
@@ -1385,6 +1387,25 @@ export default function CandidateDrawer({
                       <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} decision={p.jobId === roleContext ? decision : undefined} companies={companies} />
                     </section>
                   ))}
+                  {(detail.alsoMatches?.length ?? 0) > 0 && (
+                    <>
+                      <div className="cv2d-also">
+                        Also a match · {detail.alsoMatches!.length} {detail.alsoMatches!.length === 1 ? "role" : "roles"}
+                      </div>
+                      {detail.alsoMatches!.map((p) => (
+                        <section className="cv2d-fit-role" key={`also-${p.jobId}`}>
+                          <div className="cv2d-fit-title">
+                            {p.title} <em>#{p.jobId}</em>
+                            <span className="cv2d-fit-via">suggested</span>
+                            <button type="button" className="cv2d-rolebtn cv2d-fit-job" title="View this job" onClick={() => setOpenJob(p.jobId)}>
+                              View job
+                            </button>
+                          </div>
+                          <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} companies={companies} />
+                        </section>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
 
