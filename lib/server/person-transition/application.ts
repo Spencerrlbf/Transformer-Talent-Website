@@ -158,6 +158,13 @@ export async function runApplicationWork(p: ApplicantPipelineInput, process: (in
     }));
   } catch (error) {
     if (error instanceof AlreadyStarted) return 'queued';
+    // Operators need the reason; only identifier-like codes are logged, never values.
+    {
+      const e = error as { message?: unknown; code?: unknown; name?: unknown };
+      const safe = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9_:.\-]{1,100}$/.test(v) ? v : null);
+      console.error(JSON.stringify({ phase: 'application_work_stopped', started: runtime?.started ?? false,
+        reason: safe(e?.message) ?? safe(e?.code) ?? 'unlabelled', code: safe(e?.code), name: safe(e?.name) }));
+    }
     if (runtime) {
       try {
         if (runtime.started) await lifecycle('person_application_work_finish', runtime, { p_outcome: 'uncertain' });
