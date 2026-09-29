@@ -265,7 +265,14 @@ Supply secrets through server-only configuration, never chat or committed files:
   port 5432 for publish/undo/guard CLIs; these refuse transaction poolers on 6543.
 - Existing private website API credentials for the hosted tenancy fixture.
 
-Verify configuration without printing credentials. Use the tested queue-only/drain
+Verify configuration without printing credentials. `PERSON_DATABASE_URL` must be
+the shared pooler (`aws-0-<region>.pooler.supabase.com:6543`, user `postgres.<ref>`),
+not the IPv6-only direct host `db.<ref>.supabase.co`, which Vercel and GitHub runners
+cannot resolve. The 2026-09-28 rehearsal preview had the direct host: every admitted
+application saved its row and paid its Harvest call, then failed at the pool-person
+save (`person_save_failed:operation_failed`, underlying `ENOTFOUND`) and was left
+`uncertain`. Before any canary, prove the connection from the deployed runtime itself
+(a guarded one-off check, or one synthetic admitted write), not only from a laptop. Use the tested queue-only/drain
 procedure from prerequisite 4. Inspect active Actions and database checkpoints
 before any dispatch; do not duplicate an active migration or overlap a source
 scan with tenancy fixtures. Record any temporary schedule pauses.
