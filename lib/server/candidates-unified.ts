@@ -269,6 +269,10 @@ export type UnifiedDetail = {
     /** "no_reply" when Past because we stopped chasing them. */
     stageReason?: string | null;
   }[];
+  /** Roles the system suggested and the judge rated positively (contact or worth a
+   *  message) that are not already in the pipeline. Shown on the Fit tab only, under
+   *  "Also a match"; the table, its filters and the Pipeline tab ignore them. */
+  alsoMatches?: UnifiedDetail["pipeline"];
   experience: ExperienceGroup[];
   /** Where the Profile tab's history comes from and when it was fetched
    *  ("Refreshed from LinkedIn, Sep 24, 2026"); null when there is none. */
@@ -1425,6 +1429,39 @@ function applicantPipeline(
   });
 }
 
+/** Suggested roles judged "contact" or "message" for this person, not already in the
+ *  pipeline: contact first, then message, newest first. */
+function applicantAlsoMatches(
+  a: AppRow,
+  pairings: Map<string, VerdictRow>,
+  exclude: Set<string>,
+  byExternal?: Map<string, RoleInfo>
+): UnifiedDetail["pipeline"] {
+  const rank = (label: string) => (label === "contact" ? 0 : 1);
+  return matchedVerdicts(pairings, a.candidate_id)
+    .map(({ jobId, row }) => ({ jobId, row, v2: readable(row).v2 }))
+    .filter((m) => !exclude.has(m.jobId) && m.v2 && (m.v2.label === "contact" || m.v2.label === "message"))
+    .sort((x, y) => rank(x.v2!.label) - rank(y.v2!.label) || (y.row.created_at || "").localeCompare(x.row.created_at || ""))
+    .map(({ jobId, row, v2 }) => {
+      const info = byExternal?.get(jobId);
+      return {
+        jobId,
+        title: row.org_roles?.title || `Role #${jobId}`,
+        company: info?.company ?? null,
+        salary: info?.salary ?? null,
+        location: info?.location ?? null,
+        via: "matched" as const,
+        tag: v2!.label,
+        tagLabel: labelOf(v2!.label),
+        reason: v2!.paragraph,
+        verdict: v2!,
+        feedbackKey: `app_${a.id}`,
+        addedAt: row.created_at || a.created_at,
+        stage: "new",
+      };
+    });
+}
+
 const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -1671,6 +1708,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
 
     await appendAttached(orgId, key, pipeline, byExternal);
     await attachStages(orgId, key, pipeline);
+    const alsoMatches = (a.role_ids || []).length
+      ? applicantAlsoMatches(a, pairings, new Set(pipeline.map((x) => x.jobId)), byExternal)
+      : [];
     const bits = profileBits(sourced?.profile || (a.harvest_profile as HarvestProfile | null));
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
     const resumePath = a.resume_path || sourced?.resume_path || null;
@@ -1689,6 +1729,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       shortlisted: await isShortlisted(orgId, key),
       viaTT: a.source === "transformer_talent",
       alsoSourced: !!sourced,
+      alsoMatches,
       provenance: (() => {
         // "referral: by NAME <EMAIL>" — credit the referrer in the drawer.
         const m = (a.source || "").match(/^referral: by (.+) <([^>]+)>/);
