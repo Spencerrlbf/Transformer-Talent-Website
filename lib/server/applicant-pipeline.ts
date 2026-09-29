@@ -564,6 +564,13 @@ async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<
       });
     }
   } catch (err) {
+    {
+      // Operators need the failing step; log only identifier-like codes and HTTP status, never messages.
+      const e = err as { message?: unknown; code?: unknown; name?: unknown; status?: unknown };
+      const safe = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9_:.\-]{1,100}$/.test(v) ? v : null);
+      console.error(JSON.stringify({ phase: 'applicant_pipeline_error', reason: safe(e?.message), code: safe(e?.code),
+        name: safe(e?.name), status: typeof e?.status === 'number' ? e.status : null, processing: applicationProcessing() }));
+    }
     if (applicationProcessing()) throw Error('application_processing_failed');
     pipelineFailed = true;
     console.error("applicant pipeline failed", normalizedIntake ? "person_intake_retry_required" : err);
