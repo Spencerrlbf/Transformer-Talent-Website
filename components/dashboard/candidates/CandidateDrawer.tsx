@@ -1410,6 +1410,9 @@ export default function CandidateDrawer({
                       <p className="cv2d-about">{detail.about}</p>
                     </>
                   )}
+                  <div className="cv2d-prof-wrap">
+                  <div className="cv2d-prof">
+                  <div className="cv2d-prof-main">
                   <h4 className="cv2d-sec">Experience</h4>
                   {detail.profileSource && <p className="cv2d-dim">{detail.profileSource}</p>}
                   {detail.experience.length === 0 && (
@@ -1443,10 +1446,13 @@ export default function CandidateDrawer({
                       </div>
                     </div>
                   ))}
+                  </div>
 
+                  {(detail.education.length > 0 || detail.skills.length > 0) && (
+                  <aside className="cv2d-prof-side">
                   {detail.education.length > 0 && (
                     <>
-                      <h4 className="cv2d-sec" style={{ marginTop: 26 }}>
+                      <h4 className="cv2d-sec">
                         Education
                       </h4>
                       {detail.education.map((e, i) => (
@@ -1473,7 +1479,7 @@ export default function CandidateDrawer({
 
                   {detail.skills.length > 0 && (
                     <>
-                      <h4 className="cv2d-sec" style={{ marginTop: 26 }}>
+                      <h4 className={detail.education.length > 0 ? "cv2d-sec cv2d-sec-gap" : "cv2d-sec"}>
                         Skills
                       </h4>
                       <div className="cv2d-skills">
@@ -1484,6 +1490,10 @@ export default function CandidateDrawer({
                       </div>
                     </>
                   )}
+                  </aside>
+                  )}
+                  </div>
+                  </div>
                 </>
               )}
 
