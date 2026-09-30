@@ -1,5 +1,5 @@
 import { transitionSupport } from "./person-transition/context";
-import { applicationEditsPaused } from './person-transition/acceptance';
+import { applicationEditsPaused, applicationEditsChecked, checkedApplicationEdit } from './person-transition/acceptance';
 // Candidates v2: applicants + sourced people unified into one org-scoped,
 // sortable, paginated list, plus a per-person drawer detail and editable
 // contact info. Read-time union over website_applications and the sourcing
@@ -1103,7 +1103,6 @@ export async function updateFollowUp(
   patch: { at?: unknown; roles?: unknown; workplace?: unknown; locations?: unknown; salary?: unknown; visa?: unknown }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
-  if (await applicationEditsPaused(orgId)) return { ok: false, error: "temporarily_unavailable" };
   const id = key.slice(4);
 
   const at = typeof patch.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(patch.at) ? patch.at : null;
@@ -1135,6 +1134,15 @@ export async function updateFollowUp(
   }[];
   if (!row) return { ok: false, error: "not_found" };
   if (!row.follow_up_at) return { ok: false, error: "no_ask" };
+
+  if (applicationEditsChecked(orgId)) {
+    const r = await checkedApplicationEdit(id, "followup",
+      { follow_up_at: at, preferred_roles: roles, preferred_locations: locations, preferred_workplace: workplace,
+        comp_expectation: salary, visa_status: visa, location: null },
+      row.candidate_id ? { follow_up_at: at, role_preferences: { roles, locations, workplace, salary }, visa_status: visa } : null
+    ).catch(() => ({ ok: false as const, error: "save_failed" }));
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
 
   const saved = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
     method: "PATCH",
@@ -1174,7 +1182,6 @@ export async function updateFollowUpDate(
   at: unknown
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
-  if (await applicationEditsPaused(orgId)) return { ok: false, error: "temporarily_unavailable" };
   const id = key.slice(4);
   const date = typeof at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null;
   if (!date) return { ok: false, error: "bad_date" };
@@ -1189,6 +1196,12 @@ export async function updateFollowUpDate(
   }[];
   if (!row) return { ok: false, error: "not_found" };
   if (!row.follow_up_at) return { ok: false, error: "no_ask" };
+
+  if (applicationEditsChecked(orgId)) {
+    const r = await checkedApplicationEdit(id, "followup_date", { follow_up_at: date },
+      row.candidate_id ? { follow_up_at: date } : null).catch(() => ({ ok: false as const, error: "save_failed" }));
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
 
   const saved = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
     method: "PATCH",
@@ -1214,13 +1227,17 @@ export async function clearFollowUp(
   key: string
 ): Promise<{ ok: boolean; error?: string }> {
   if (!key.startsWith("app_")) return { ok: false, error: "bad_key" };
-  if (await applicationEditsPaused(orgId)) return { ok: false, error: "temporarily_unavailable" };
   const id = key.slice(4);
   const res = await sbRest(
     `website_applications?id=eq.${id}&organization_id=eq.${orgId}&select=id,candidate_id&limit=1`
   );
   const [row] = (res.ok ? await res.json() : []) as { id: string; candidate_id: string | null }[];
   if (!row) return { ok: false, error: "not_found" };
+  if (applicationEditsChecked(orgId)) {
+    const r = await checkedApplicationEdit(id, "followup_clear", { follow_up_at: null },
+      row.candidate_id ? { follow_up_at: null } : null).catch(() => ({ ok: false as const, error: "save_failed" }));
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
   const patch = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
     method: "PATCH",
     body: JSON.stringify({ follow_up_at: null }),
@@ -1852,9 +1869,13 @@ export async function saveUnifiedContact(
 export async function saveUnifiedResumePath(
   orgId: string,
   key: string,
-  path: string
+  path: string,
+  sha256?: string
 ): Promise<boolean> {
-  if (key.startsWith("app_") && await applicationEditsPaused(orgId)) return false;
+  if (key.startsWith("app_") && applicationEditsChecked(orgId)) {
+    if (!sha256) return false;
+    return (await checkedApplicationEdit(key.slice(4), "resume", { resume_path: path, person_resume_sha256: sha256 })).ok;
+  }
   const target = key.startsWith("src_")
     ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
     : key.startsWith("app_")

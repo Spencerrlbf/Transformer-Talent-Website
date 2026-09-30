@@ -1,4 +1,5 @@
-import { applicationEditsPaused } from '@/lib/server/person-transition/acceptance';
+import { applicationEditReady, applicationEditsChecked } from '@/lib/server/person-transition/acceptance';
+import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
@@ -23,7 +24,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   if (!(await candidateInOrg(member.org.id, key)))
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  if (key.startsWith("app_") && await applicationEditsPaused(member.org.id))
+  // TT application rows: the checked edit must be admissible before anything is stored.
+  const checked = key.startsWith("app_") && applicationEditsChecked(member.org.id);
+  if (checked && !(await applicationEditReady(key.slice(4))))
     return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
 
   let form: FormData;
@@ -59,8 +62,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     return NextResponse.json({ error: "upload_failed" }, { status: 502 });
   }
 
-  if (!(await saveUnifiedResumePath(member.org.id, key, path)))
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (!(await saveUnifiedResumePath(member.org.id, key, path, sha256))) {
+    if (checked) {
+      // The checked edit became unavailable after the preflight: remove the unreferenced upload and retry later.
+      await fetch(`${base}/storage/v1/object/resumes/${path}`, { method: "DELETE", headers: { Authorization: `Bearer ${storageKey}`, apikey: storageKey } }).catch(() => null);
+      return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
+    }
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   // Phone (and any extra email) off the resume into the contact block —
   // gaps only, a typed value always wins. Local pdf-parse of the first
@@ -75,7 +85,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     ]);
     const phone = extractPhone(text);
     const emails = extractEmails(text);
-    if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
+    // Contact on a checked TT application row is not written here yet (pending the contact decision).
+    if (!checked && (phone || emails.length)) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
   } catch (err) {
     console.error("resume contact extraction failed", err);
   }
