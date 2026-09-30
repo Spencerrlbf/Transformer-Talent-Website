@@ -157,12 +157,17 @@ it does not complete the newer all-writer transition or tasks 9–11.
 
 **Gate:** Source coverage and accounting reconcile; zero unexplained omissions. **Undo:** Stop; normalized copies are retained and the existing app remains active.
 
-Task 8 accounting update (2026-09-26 22:39 UTC): the baseline and both source
-scans traversed their full scopes. Latest global results are 422,925 verified,
-123 same-snapshot source reviews and two date holds, with no missing/pending
-checks. These explicit unresolved outcomes block those people's publication.
-The external fingerprint was unstable; this is `review_required`, not a fully
-reconciled/live migration. See the handoff for exact runs and conflict overlap.
+Task 8 accounting update (2026-09-30): `person-reconcile-full-20260930`
+finished its complete source traversal and finalized once at 03:49:26 UTC as
+`review_required`. The recorded population is **423,590 = 420,939 verified +
+2,649 same-snapshot reviews + 2 date holds**, including 540 arrivals since September 27.
+No missing/pending/uncounted/beyond-cursor candidate remains in that scan. The
+external fingerprint changed; `external_stable=false`. Queue 2,429, unreconciled
+events 2,572 and 5,500 conflict rows / 9,379 people overlap these outcomes; do not add them
+as extra people. Do not resume or refinalize this closed run. Source-review
+outcomes still block those people's publication; source handling and a fresh
+boundary remain release prerequisites. Earlier accounting is historical. See the
+[runbook](2026-09-26-cutover-runbook.md) for exact timestamps and limitations.
 
 ### Task 9: Verify app behavior against the completed data
 
@@ -201,9 +206,13 @@ reconciled/live migration. See the handoff for exact runs and conflict overlap.
 - [x] If unfinished, give the safe current mode, exact checkpoint and remaining blocker. Leave no unmonitored non-resumable operation running.
 - [x] Keep April tables, old JSON, legacy email references and the external `legacy_pull.py` dependency intact. Their retirement is a separate later operation with exports, restore proof and the brief's observation/approval period.
 
-Task 12 update: the 22:46 UTC handoff records the current safe state and remaining
-canary/drain preparation. This checkpoint does not complete tasks 9–11 or authorize
-a release; the heartbeat continues while implementation remains unfinished.
+Task 12 update (September 30): application preparation is documented in the
+[writer inventory](2026-09-28-writer-coverage.md), with the prepared install,
+acceptance/drain and rollback sequence in the runbook. The final feature-plus-main
+preview and exact cleanup must be recorded in the private handoff before this
+verification stage closes. Tasks 9–11 remain incomplete where they require the
+owner-approved live schema, deployment, source boundary, scoped canaries,
+publication or guards. No hosted legacy-mode test is a live-cutover proof.
 
 ## Self-review
 

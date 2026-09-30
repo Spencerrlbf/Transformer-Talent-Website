@@ -41,7 +41,7 @@ rules until a separately reviewed resolution exists. Do not force dates, merge
 people, buy enrichment or erase evidence to clear review. At approved cutover,
 recheck current source deltas and the external boundary on the accepted pin.
 
-All nine workflows were active at08:12 UTC; no workflow was paused during this
+All nine workflows were active at09:30 UTC; no workflow was paused during this
 phase. Earlier temporary pauses were restored. Any new pause must record and
 restore its original state, while public application acceptance continues.
 
@@ -564,98 +564,42 @@ writer rollout and publication gates have passed. Then verify both the rejected
 legacy write and allowed attributed write with the guard enabled. Report failures
 immediately and follow the approved guard/queue rollback procedure.
 
-Prepared ownership migration `20260927020700` supplies the claimed application
-candidate/Harvest bridges and protects their receipts. It is insufficient to
-arm a drain by itself. Prepared normalization migration `20260927023000` adds
-exact-receipt save admission and private execution frames for normalized facts
-and shared lookups. Prepared proof migration `20260927025000` makes claimed audit
-authority database-derived and protects capture/anchor/operation/attribution evidence.
-Prepared projection migration `20260927035000` binds claimed compatibility updates,
-audit attribution and projection history/state to one synchronous operation.
-Prepared intake migration `20260927052000` adds exact seed/metadata/preferences
-frames and receipt-derived application finalization, including actual-row validation
-and private metadata replay witnesses. Prepared readiness migration `20260927060000`
-requires private metadata/projection/finalization/preference proof before a first
-binding commits and retains original preference ordering on replay. All remain uninstalled. The subsequent prepared migrations described below cover
-pipeline completion, public/tenant acceptance and conflict evidence. Remaining
-recruiter/directory/refresh/derivative writers and
-historical maintenance still require complete admission coverage. Do not use existing
-mutable identities or old unbound receipts as standalone write authorization.
+## Prepared writer coverage
+
+The [writer inventory](2026-09-28-writer-coverage.md) records the current reachable
+paths, accepted exclusions and verification limits. Earlier module notes described
+admissions that were still missing when each module was introduced. Those gaps are
+now covered by the later prepared chain; they are not reasons to enable a partial
+chain or claims that production has switched.
+
+| Prepared family | Current scope |
+|---|---|
+| Application ownership, normalization, proof, projection, intake and readiness | Exact receipts and private synchronous frames protect TT profile/source mutations, preference ordering, captured evidence and original processing identity |
+| Tenant binding and atomic completion | Immutable organization/LinkedIn binding, result/contact commit and work completion together; tenant rows remain organization-owned |
+| Public acceptance and enrichment | Queued inputs survive held TT processing; original source/cache dates and paid-review bounds remain; source telemetry is bound to admitted work |
+| Legacy-source, conflict and shared lookup fences | Checked website communications outcomes, experiences, collision evidence and normalized lookup mutations; external communications and `_v2` remain read-only |
+| Directory, refresh and recruiter families | Complete admitted lifecycle and checked source saves, including suppression/readmission, top-up and recruiter contact policy |
+| Application edits, contact, resume fill and Send | Checked TT mirrors, authenticated upload/path/hash provenance, preserved submitted contact/recruiter choices, effective-contact revalidation and exact Send insertion witness |
+| Derivative lifecycle, publication and hourly consumer | Durable claims, checked chunks and receipts, bounded worker; hourly workflow is the sole scheduled certified consumer |
+| Operator maintenance and publication | Held run-scoped catch-up/anchors, open named publication, explicit deferred work/window handling, conditional undo after coordinated drain/seal/disarm |
+
+These migrations remain **uninstalled**. Some proof/append-only/TRUNCATE protections
+apply upon installation even while the controller is disabled; flags off do not
+mean administrative writes are unrestricted. Preserve the full dependency order,
+concurrent index prebuild checks and explicit installation approval.
 
 ### 7. Release report and follow-up
 
 Verify the exact production commit, public application intake, tenancy cleanup,
 recruiter reads, Network/Send, schedules, queue health and bounded query latency.
-Spencer owns token rotation from the incident documented in the overnight handoff.
-Never reproduce that token in logs or messages.
+The main change integrated for final compatibility adds a deliberately token-authorized,
+cross-organization, read-only internal resume endpoint. The ordinary tenancy sweep
+does not cover that route; retain separate token/refusal/failure checks and its
+no-store response behavior. Never expose the private token or signed resume links
+in logs. Spencer owns token rotation from the incident documented in the overnight
+handoff; do not reproduce that token.
 
 Report historical copying, source reconciliation, writer activation, publication
 and derivative refresh separately, each with its actual run/commit/count. Include
 unresolved source reviews, identity conflicts and both holds. Keep April retirement,
 legacy deletion, duplicate-person merging and paid follow-up work outside this release.
-
-Prepared tenant binding migration `20260927065000` freezes a company-owned
-application key per company/LinkedIn identity. The first eligible application
-visible at binding wins, with deterministic date/ID ordering; subsequent late
-commits cannot retarget it. Missing identities stay on their own application.
-Both current and retained anchor ownership are rechecked under locks, and work
-must be admitted, started and unexpired. TT-held processing does not hold client
-applications. This migration is uninstalled; atomic results/contact completion
-must consume this binding before release. See `scripts/person-tenant-binding/README.md`.
-
-Prepared atomic completion migration `20260927070000` must follow tenant binding
-and TT readiness. Its private completion witness is required by all completed
-claim/finish/replay paths. Claimed workers stage one result and commit results,
-tenant contact additions and work completion together. General source fences,
-other families, derivatives, maintenance and complete canary/drain coverage remain
-unfinished. Do not install or activate this partial chain before release approval.
-
-Prepared acceptance/source migration `20260927080000` follows completion. Held
-public forms retain queued inputs without a work/budget reservation; duplicate
-future requests retain original immutable evidence. The TT source fence accepts
-only exact insertion/finalization/result frames, including previously unlinked
-rows. Editor pauses occur before storage or mirrors. Tenant raw writers and
-client-target Send are explicitly outside this TT-only fence; their broader
-admission, other source families, derivatives and maintenance remain prerequisites.
-Do not install or activate this partial chain. Verification and Unicode parser
-version are documented in `scripts/person-application-acceptance/README.md`.
-
-Prepared enrichment/source migration `20260927090000` follows acceptance. Checked
-Harvest writes retain exact private ownership and the first cache selection;
-historical cache reuse preserves original evidence, date and spend. Resume parser
-telemetry derives its identity from admitted TT readiness. OLD/NEW enrichment
-sources and legacy email writes are fenced while required; tenant spend without
-candidate links and exact anonymous JD INSERT telemetry remain compatible.
-Truncation is refused after installation even while disabled. See
-`scripts/person-application-enrichment/README.md`. This does not complete the
-other-writer, derivative, maintenance or production canary gates. Do not install
-or activate the partial chain before approval.
-
-Prepared legacy-source migration `20260927100000` follows enrichment. It fences
-website communication-outcome rows and non-person experience writes while
-normalization is required. Normalized experience rows retain TT/candidate scope
-through AFTER checks, while source replacement and historical soft-removal remain
-valid. No external communications project or _v2 schema changes occur. Disabled
-legacy upserts and tenant completion remain compatible. See
-`scripts/person-legacy-sources/README.md`; other admissions and complete canaries
-remain prerequisites. Do not install this partial chain before release approval.
-
-Prepared conflict migration `20260927110000` follows the legacy-source boundary.
-Required writes must prove their exact normalized source or synchronous checked
-application projection. Raw conflict insertion/resolution/deletion and truncate
-are refused. Genuine global kind/hash dedup preserves the existing row and
-returns zero, retaining conflict counters; suppressed inserts without retained
-evidence fail. Missing-employer maintenance remains compatible while disabled
-and refused while required until maintenance admission is implemented. No
-existing conflicts are resolved or removed. This remains an uninstalled partial
-chain; shared lookups, other writers, derivatives, maintenance and full canaries
-still block activation. See `scripts/person-conflict-evidence/README.md`.
-
-Prepared lookup migration `20260927120000` follows conflict evidence. The writer
-uses private resolvers only at the existing winning-source loop sites; required
-public resolver calls refuse. Exact one-use OLD/NEW proof and readback protect
-company/school/skill mutations. Existing matching, tier rules and skill dedup
-remain compatible. Typed primary-key predicates and FOR NO KEY UPDATE retain
-index access and FK-lock compatibility. See `scripts/person-lookup-mutations/README.md`.
-Other writer admissions, derivatives, maintenance and full canaries still block
-activation; this is not permission to install or enable the partial chain.
