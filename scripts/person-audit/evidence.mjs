@@ -60,6 +60,19 @@ export function collectEvidence(s,lib,external,out){
   for(const r of arr(s.recruiter_receipts)){
    if(!r.result){out.pending('recruiter_pending');continue;}
    const d=r.document,c=r.requested_contact;
+   const uploadOperations=arr(s.operations).filter(o=>o.writer==='recruiter'&&o.receipt_ref===`recruiter:${r.id}`);
+   const upload=uploadOperations[0]?.evidence?.resume_fill;
+   if(upload){
+    const input=upload.input,snapshot=upload.snapshot,a=snapshot?.application;
+    if(uploadOperations.length!==1||upload.version!==1||r.candidate_id!==id||!['live','shadow'].includes(r.mode)||upload.mode!==r.mode||upload.organization_id!==lib.TT_ORG_ID||upload.actor_id!==r.actor_id||input?.actorId!==r.actor_id||input?.candidateId!==id||a?.candidate_id!==id||a?.organization_id!==lib.TT_ORG_ID||a?.id!==input?.applicationId||a?.resume_path!==input?.path||a?.person_resume_sha256!==input?.sha256||!/^[a-f0-9]{64}$/.test(input?.sha256??'')||at(upload.edited_at)!==at(r.edited_at)||upload.input_hash!==r.input_hash||!same(snapshot?.contact,r.before_contact,lib)||!Array.isArray(snapshot?.contacts)||!Array.isArray(snapshot?.choices)) {out.review('resume_fill_receipt_invalid');return null;}
+    const hash=createHash('sha256').update(lib.stableStringify(input)).digest('hex');
+    const fill=lib.resumeFillPlan(snapshot,input.extracted);
+    const expected=lib.resumeFillDocument(id,r.id,at(r.edited_at),snapshot,input.extracted);
+    const flags=expected.contacts.map(x=>({kind:x.kind,value_normalized:x.value_normalized,existed:false,never_primary:null}));
+    if(hash!==r.input_hash||(!fill.phone&&!fill.email)||!same(fill.contact,c,lib)||!same(upload.requested,c,lib)||!same(expected,d,lib)||!same(uploadOperations[0].evidence.prior_contact_flags,flags,lib)){out.review('resume_fill_receipt_invalid');return null;}
+    receipts.set(`recruiter:${r.id}`,r);if(!add(d,`recruiter:${r.id}`))return null;
+    continue;
+   }
    if(r.candidate_id!==id||!['live','shadow'].includes(r.mode)||d?.source?.source!=='recruiter'||d.source.provider!=='website-recruiter'||d.source.source_ref!==r.id||at(d.source.fetched_at)!==at(r.edited_at)||!c){out.review('recruiter_receipt_invalid');return null;}
    const inputHash=createHash('sha256').update(lib.stableStringify(c)).digest('hex');
    const contacts=lib.mergeContacts([
@@ -93,7 +106,7 @@ export function collectEvidence(s,lib,external,out){
    }else{out.review('operation_invalid');return null;}
   }
   for(const l of arr(s.ledger))if(!add(ledgerDoc(l),`raw-ledger:${l.id}`,{admitted:false}))return null;
-  for(const a of arr(s.applications))if(!receipts.has(`application:${a.id}`)){
+  for(const a of arr(s.applications))if(!receipts.has(`application:${a.id}`)&&!sentApplication(s,a,lib)){
    if(a.organization_id!==lib.TT_ORG_ID||a.candidate_id!==id){out.review('application_owner_invalid');return null;}
    if(!add(lib.fromApplication(a,createdThePerson(a,s.anchor.before_image),id),`raw-application:${a.id}`,{admitted:false}))return null;
   }
@@ -107,4 +120,14 @@ export function collectEvidence(s,lib,external,out){
   }
   out.checks.documents={witnessed:docs.length,receipts:receipts.size};return {docs,receipts};
  }catch{out.review('source_reconstruction_failed');return null;}
+}
+/** A TT pipeline row created by the checked Network Send: witnessed, not a source.
+ * With an event, the witness must come from that insert's transaction. */
+export function sentApplication(s,row,lib,event=null){
+ const witnesses=arr(s.application_sends).filter(x=>x.application_id===row?.id);
+ if(witnesses.length!==1)return false;
+ const w=witnesses[0],e=w.insert_event,original=w.inserted_row;
+ if(!original||!e||w.candidate_id!==s.candidate_id||row.candidate_id!==s.candidate_id||row.organization_id!==lib.TT_ORG_ID||row.source!=='transformer_talent'||row.status!=='processed'||original.id!==row.id||original.candidate_id!==row.candidate_id||original.organization_id!==row.organization_id||original.source!==row.source||original.status!==row.status)return false;
+ const {resume_embedding,matching_embedding,resume_text,notes,...captured}=original;
+ return typeof w.row_hash==='string'&&/^[a-f0-9]{32}$/.test(w.row_hash)&&w.row_hash===w.actual_row_hash&&typeof w.event_hash==='string'&&/^[a-f0-9]{32}$/.test(w.event_hash)&&w.event_hash===e.actual_event_hash&&w.event_id===e.id&&e.candidate_id===s.candidate_id&&e.source_table==='website_applications'&&e.source_row_id===row.id&&e.operation==='INSERT'&&e.previous_payload==null&&w.transaction_id===e.transaction_id&&same(captured,e.payload,lib)&&(!event||(event.id===e.id&&event.transaction_id===e.transaction_id&&event.actual_event_hash===e.actual_event_hash&&same(event.payload,e.payload,lib)));
 }

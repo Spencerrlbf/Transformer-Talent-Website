@@ -15,6 +15,23 @@ on:
         description: "Drain only what is queued; add no engaged backfill"
         type: boolean
         default: false
+      write_mode:
+        description: "Canary override for this run only: person write mode (vars = repository setting)"
+        type: choice
+        options: [vars, legacy, shadow, live]
+        default: vars
+      transition_support:
+        description: "Canary override for this run only: transition support (vars = repository setting)"
+        type: choice
+        options: [vars, "off", "on"]
+        default: vars
+
+# One refresh run at a time: the Harvest spend cap is read from the database, and
+# overlapping runs would each see the same remaining budget. Embeddings run in the
+# hourly derivative-worker workflow (#82), which has its own group and cap.
+concurrency:
+  group: refresh-queue
+  cancel-in-progress: false
 
 jobs:
   refresh:
@@ -29,7 +46,9 @@ jobs:
       - run: node scripts/build-worker-lib.mjs
       - run: node scripts/refresh-worker.mjs
         env:
-          PERSON_WRITE_MODE: ${{ vars.PERSON_WRITE_MODE || 'legacy' }}
+          # Scheduled runs use the repository settings; a manual canary may override them for one run.
+          PERSON_WRITE_MODE: ${{ (inputs.write_mode && inputs.write_mode != 'vars') && inputs.write_mode || vars.PERSON_WRITE_MODE || 'legacy' }}
+          PERSON_TRANSITION_SUPPORT: ${{ (inputs.transition_support && inputs.transition_support != 'vars') && inputs.transition_support || vars.PERSON_TRANSITION_SUPPORT || 'off' }}
           PERSON_DATABASE_URL: ${{ secrets.PERSON_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

@@ -809,7 +809,7 @@ export default function CandidateDrawer({
       resumeUrl: string | null;
       resumeName: string | null;
       /** What the upload filled off the resume, if anything. */
-      filled?: { phone?: string | null; otherEmails?: string[] } | null;
+      filled?: { email?: string | null; phone?: string | null; otherEmails?: string[] } | null;
     };
     // Merge only the fields the fill can touch into the drawer's own view
     // of the person (which already folds sourced + application halves) —
@@ -825,6 +825,7 @@ export default function CandidateDrawer({
             contact: r.filled
               ? {
                   ...d.contact,
+                  email: r.filled.email !== undefined ? r.filled.email : d.contact.email,
                   phone: d.contact.phone || r.filled.phone || null,
                   otherEmails: r.filled.otherEmails ?? d.contact.otherEmails,
                 }
@@ -833,6 +834,7 @@ export default function CandidateDrawer({
         : d
     );
     if (r.filled && !editingRef.current) {
+      if (r.filled.email !== undefined) setCEmail(r.filled.email || "");
       if (r.filled.phone) setCPhone((v) => v || r.filled!.phone || "");
       if (r.filled.otherEmails) setCOther(r.filled.otherEmails.join(", "));
     }

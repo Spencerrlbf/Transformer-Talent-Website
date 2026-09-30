@@ -26,7 +26,7 @@ LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --tes
 
 if [[ "${AUDIT_FENCES_ONLY:-0}" != 1 ]]; then
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-audit/test-audit-planner.mjs
-node --test scripts/person-audit/test-audit-cli.mjs scripts/person-audit/test-audit-external.mjs scripts/person-audit/test-audit-time.mjs
+node --test scripts/person-audit/test-audit-cli.mjs scripts/person-audit/test-audit-external.mjs scripts/person-audit/test-audit-time.mjs scripts/person-audit/test-sent-application.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-audit/test-audit-writers.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-audit/test-audit-references.mjs
 fi
