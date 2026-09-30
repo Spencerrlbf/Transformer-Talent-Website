@@ -275,6 +275,9 @@ receipts. A flag flip alone is not proof that already-running legacy code stoppe
 comparison/publish dry run and retain its exact counts and limitations. Do not
 expect every historical source-review person to pass the anchor guard.
 
+With the controller armed and open, open a `publish` maintenance window for the
+run ID first, and close it after the invocation (`scripts/person-publish-admission/README.md`).
+Other admitted writers keep running. Draining refuses publication.
 Use an explicit ID set for the initial canary, with its own run ID:
 
 ```sh
@@ -299,6 +302,8 @@ traversal does not mean all profiles were published. Canary people encountered b
 the full scan normally become unchanged; do not double-count distinct people.
 Keep both run IDs for separate reporting and exact-history undo.
 
+While armed, undo is refused: first drain, seal and disarm (tested in
+`scripts/person-publish-admission`), then undo, then arm again if the rollback keeps the new path.
 Undo uses `person-publish-undo.mjs --run-id=EXACT_RUN` for a dry count, then `--apply`
 only within approved rollback scope. Newer edits/publications remain conflicts.
 Do not mass-trigger paid enrichment, embeddings or judging for storage-only changes.

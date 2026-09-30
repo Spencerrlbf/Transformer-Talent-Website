@@ -377,7 +377,10 @@ export async function compatibilityProjection(
 }
 /** Shared frozen compatibility serialization for checked intake writers. */
 export function projectionEnvelope(id: string, before: Record<string, any>, computed: ComputedProjection) {
-  const { original, after, invalidatedKinds } = computed;
+  const { original, invalidatedKinds } = computed;
+  // computeProjection has already swapped in the fallback email on a collision.
+  // The checked SQL decides the collision itself, so it receives the desired email.
+  const after = computed.emailCollision ? { ...computed.after, email: computed.projectionEmail } : computed.after;
   const fallback = { ...after, email: invalidatedKinds.has('email') ? null : (before.email ?? null) };
   const serialize = (value: unknown) => JSON.stringify(stable(value));
   return {
@@ -685,6 +688,10 @@ export interface PublishPersonResult {
  * Held people and people without normalized state are reported, not written.
  * A row that changed since its last projection is reported as drift and left
  * alone. Live writes go through the same audited path as savePerson. */
+/** Per-person reasons a checked publication is blocked (armed path). */
+const PUBLISH_PERSON_BLOCKS = new Set(["audit_anchor_required", "audit_anchor_uncertified", "audit_anchor_source", "audit_auxiliary_changed",
+  "audit_auxiliary_limit", "audit_source_hold", "audit_unattributed_change", "audit_proof_chain", "audit_event_limit", "audit_checkpoint_invalid",
+  "audit_candidate_missing", "audit_creation_anchor", "audit_creation_event", "audit_creation_receipt"]);
 export async function publishPersonProjectionOnConnection(
   client: PersonConnection,
   id: string,
@@ -771,6 +778,33 @@ export async function publishPersonProjectionOnConnection(
         computed.changedFields.length ? "dry_changed" : "dry_unchanged",
         summary,
       );
+    }
+    // Armed controller: publication goes through the operator's publish window and
+    // the shared checked projection path (writer fences stay on for everyone else).
+    const transitionInstalled = (await client.query("select to_regprocedure('public.person_transition_status()') is not null present")).rows[0].present;
+    if (transitionInstalled && (await client.query("select coalesce((public.person_transition_status()->>'enabled')::boolean,false) armed")).rows[0].armed) {
+      await client.query("savepoint person_publish_audit");
+      let r: { projected: boolean; historyId: string | null; changedFields: string[]; emailCollision: boolean };
+      try {
+        r = (await client.query("select public.person_publish_project($1,$2,$3,$4::jsonb) r",
+          [options.runId, id, revision, JSON.stringify(projectionEnvelope(id, before, computed))])).rows[0].r;
+      } catch (error) {
+        const reason = (error as Error).message;
+        if (reason === "legacy_projection_drift") {
+          await client.query("rollback to savepoint person_publish_audit");
+          await client.query("release savepoint person_publish_audit");
+          return await finish(done("drift", { revision }));
+        }
+        // Only this person's anchor or history blocks them; any other failure stops the run.
+        if (!PUBLISH_PERSON_BLOCKS.has(reason)) throw error;
+        await client.query("rollback to savepoint person_publish_audit");
+        await client.query("release savepoint person_publish_audit");
+        return await finish(done("audit_blocked", { ...summary, reason }));
+      }
+      await client.query("release savepoint person_publish_audit");
+      return await finish(done(r.projected ? "projected" : "unchanged", {
+        ...summary, changedFields: r.changedFields, emailCollision: r.emailCollision || computed.emailCollision, historyId: r.historyId,
+      }));
     }
     let audit: AuditOperation;
     await client.query("savepoint person_publish_audit");

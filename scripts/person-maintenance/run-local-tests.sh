@@ -96,5 +96,11 @@ if test -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql; t
  q -d $DB -1 -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql
 fi
 q -d $DB -1 -f supabase/migrations/20260928030000_person_maintenance_window.sql
+if test -f supabase/migrations/20260928040000_person_application_edits.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928040000_person_application_edits.sql
+fi
+if test -f supabase/migrations/20260928050000_person_publish_admission.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
+fi
 node scripts/build-worker-lib.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" node --test --test-concurrency=1 scripts/person-maintenance/test-maintenance.mjs
