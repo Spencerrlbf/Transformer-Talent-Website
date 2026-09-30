@@ -10,7 +10,7 @@
 //   profile still matches its projection; the directory has nothing pending.
 // pending: a raw fact or receipt exists that no writer has admitted yet.
 // review: anything that cannot be explained from the evidence. No repair.
-import {collectEvidence,sameSource as witnessedSource,same} from "./evidence.mjs";
+import {collectEvidence,sameSource as witnessedSource,same,sentApplication} from "./evidence.mjs";
 import {creationEvidence,metadataEvidence} from './mutations.mjs';
 import {exactStored} from "./integrity.mjs";
 import {attributionReferences} from "./references.mjs";
@@ -117,7 +117,7 @@ function rawFacts(snapshot,lib,out) {
         break;
       case "website_applications":
         if (e.operation === "DELETE") return out.review("application_deleted");
-        if (e.operation === "INSERT" && !admittedApplications.has(row.id)) pendingApplications++;
+        if (e.operation === "INSERT" && !admittedApplications.has(row.id) && !sentApplication(snapshot, row, lib, e)) pendingApplications++;
         if (e.operation === "UPDATE") {
           const keys=['candidate_id','pool_created_person','parsed_profile','name','email','contact','organization_id','linkedin_username','created_at','location','source'];
           const changed=keys.filter(k=>!same(e.previous_payload?.[k],e.payload?.[k],lib));
@@ -168,7 +168,7 @@ function integrity(snapshot, docs, lib, out) {
     row: snapshot.anchor.before_image,
     legacy: [], v2: [],
     ledger: arr(snapshot.ledger).filter((l) => l.provider === "harvest" && l.status === "ok"),
-    apps: arr(snapshot.applications),
+    apps: arr(snapshot.applications).filter((a) => !sentApplication(snapshot, a, lib)),
     comms: [], dir: null,
   };
   const tally = new Tally();

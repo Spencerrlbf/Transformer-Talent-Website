@@ -4,3 +4,4 @@ export { unifiedCandidateDetail, listUnifiedCandidates } from '../../lib/server/
 export { GET as readDetail } from '../../app/api/dashboard/candidates/v2/[key]/route';
 export { fillLinkedResumeContact, fillLinkedResumeContactOnConnection } from '../../lib/server/person/resume-fill';
 export { POST as uploadResume } from '../../app/api/dashboard/candidates/v2/[key]/resume/route';
+export { publishedPoolContactsOnConnection } from '../../lib/server/person/contacts';

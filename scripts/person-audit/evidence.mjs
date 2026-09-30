@@ -106,7 +106,7 @@ export function collectEvidence(s,lib,external,out){
    }else{out.review('operation_invalid');return null;}
   }
   for(const l of arr(s.ledger))if(!add(ledgerDoc(l),`raw-ledger:${l.id}`,{admitted:false}))return null;
-  for(const a of arr(s.applications))if(!receipts.has(`application:${a.id}`)){
+  for(const a of arr(s.applications))if(!receipts.has(`application:${a.id}`)&&!sentApplication(s,a,lib)){
    if(a.organization_id!==lib.TT_ORG_ID||a.candidate_id!==id){out.review('application_owner_invalid');return null;}
    if(!add(lib.fromApplication(a,createdThePerson(a,s.anchor.before_image),id),`raw-application:${a.id}`,{admitted:false}))return null;
   }
@@ -120,4 +120,14 @@ export function collectEvidence(s,lib,external,out){
   }
   out.checks.documents={witnessed:docs.length,receipts:receipts.size};return {docs,receipts};
  }catch{out.review('source_reconstruction_failed');return null;}
+}
+/** A TT pipeline row created by the checked Network Send: witnessed, not a source.
+ * With an event, the witness must come from that insert's transaction. */
+export function sentApplication(s,row,lib,event=null){
+ const witnesses=arr(s.application_sends).filter(x=>x.application_id===row?.id);
+ if(witnesses.length!==1)return false;
+ const w=witnesses[0],e=w.insert_event,original=w.inserted_row;
+ if(!original||!e||w.candidate_id!==s.candidate_id||row.candidate_id!==s.candidate_id||row.organization_id!==lib.TT_ORG_ID||row.source!=='transformer_talent'||row.status!=='processed'||original.id!==row.id||original.candidate_id!==row.candidate_id||original.organization_id!==row.organization_id||original.source!==row.source||original.status!==row.status)return false;
+ const {resume_embedding,matching_embedding,resume_text,notes,...captured}=original;
+ return typeof w.row_hash==='string'&&/^[a-f0-9]{32}$/.test(w.row_hash)&&w.row_hash===w.actual_row_hash&&typeof w.event_hash==='string'&&/^[a-f0-9]{32}$/.test(w.event_hash)&&w.event_hash===e.actual_event_hash&&w.event_id===e.id&&e.candidate_id===s.candidate_id&&e.source_table==='website_applications'&&e.source_row_id===row.id&&e.operation==='INSERT'&&e.previous_payload==null&&w.transaction_id===e.transaction_id&&same(captured,e.payload,lib)&&(!event||(event.id===e.id&&event.transaction_id===e.transaction_id&&event.actual_event_hash===e.actual_event_hash&&same(event.payload,e.payload,lib)));
 }

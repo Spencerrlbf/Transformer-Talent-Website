@@ -279,6 +279,73 @@ test('contact edit on an unlinked application with completed processing passes t
   assert.deepEqual((await row('website_applications', id)).contact, contact);
 });
 
+// A Send row built from the pool person's own record, as network.ts does.
+async function sendRow(cid, job, extra = {}) {
+  const c = (await pool.query('select * from candidates where id=$1', [cid])).rows[0] ?? {};
+  const t = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const canonical=(await (await import('./dist/contact.mjs')).publishedPoolContactsOnConnection(pool,[cid])).get(cid);
+  const email=canonical?canonical.contact.email:t(c.contact?.email)??t(c.email),phone=canonical?canonical.contact.phone:t(c.contact?.phone)??t(c.phone);
+  return { organization_id: TT, name: c.full_name || 'Candidate', email: email??'', linkedin_url: c.linkedin_url ?? null, linkedin_username: c.linkedin_username ?? null,
+    role_ids: [job], role_titles: [`Synthetic Role (#${job})`], status: 'processed', source: 'transformer_talent', candidate_id: cid,
+    parsed_profile: { current_title: t(c.current_title), current_company: t(c.current_company), location: t(c.location) }, harvest_profile: null, screening: null,
+    contact: canonical||email||phone?{email:email??null,phone:phone??null}:null, ...extra };
+}
+const send = async (row) => (await pool.query('select person_network_send($1::jsonb) r', [JSON.stringify(row)])).rows[0].r;
+
+test('send: a checked Send into the TT pipeline is witnessed and leaves the person audit verified', async () => {
+  const { cid } = await processed();
+  assert.equal((await plan(cid)).status, 'verified');
+  await assert.rejects(pool.query("insert into website_applications(organization_id,name,email,source,status,candidate_id,role_ids) values($1,'Raw','raw@example.test','transformer_talent','processed',$2,array['777'])", [TT, cid]), /application_source_fence/);
+  const r = await send(await sendRow(cid, '777'));
+  assert.equal(r.status, 'sent');
+  const a = await row('website_applications', r.applicationId);
+  assert.equal(a.candidate_id, cid); assert.equal(a.source, 'transformer_talent'); assert.deepEqual(a.role_ids, ['777']);
+  assert.equal(Number((await pool.query('select count(*) n from person_private.application_send_witnesses where application_id=$1 and candidate_id=$2', [r.applicationId, cid])).rows[0].n), 1);
+  const p = await plan(cid);
+  assert.equal(p.status, 'verified', JSON.stringify(p));
+  assert.deepEqual(await send(await sendRow(cid, '777')), { status: 'already_sent' });
+  assert.equal(Number((await pool.query('select count(*) n from person_private.application_send_frames')).rows[0].n), 0);
+});
+
+test('send: waits while draining; refuses tenants, other statuses and extra columns', async () => {
+  const { cid } = await processed();
+  await control('drain');
+  assert.deepEqual(await send(await sendRow(cid, '778')), { status: 'unavailable' });
+  await pool.query("update person_private.transition_control set phase='open' where singleton");
+  for (const bad of [await sendRow(cid, '779', { organization_id: randomUUID() }), await sendRow(cid, '779', { status: 'queued' }), await sendRow(cid, '779', { resume_text: 'x' }),
+    await sendRow(cid, '779', { role_ids: ['779', '780'] }), await sendRow(cid, '779', { source: 'apply' })])
+    await assert.rejects(send(bad), /network_send_input/, JSON.stringify(bad));
+  // Content must be the pool person's own record.
+  for (const bad of [await sendRow(cid, '779', { name: 'Forged Name' }), await sendRow(cid, '779', { linkedin_username: 'someone-else' }),
+    await sendRow(cid, '779', { parsed_profile: { current_title: 'CEO', current_company: null, location: null } })])
+    await assert.rejects(send(bad), /network_send_profile/, JSON.stringify(bad));
+  assert.deepEqual(await send(await sendRow(cid, '779', { email: 'forged@example.test' })), { status: 'contact_changed' });
+  assert.deepEqual(await send(await sendRow(cid, '779', { contact: { email: 'forged@example.test', phone: '+19999999999' } })), { status: 'contact_changed' });
+  assert.deepEqual(await send(await sendRow(randomUUID(), '779')), { status: 'candidate_not_found' });
+  const priv = (await pool.query("select has_function_privilege('service_role','public.person_network_send(jsonb,text)','execute') s, has_function_privilege('anon','public.person_network_send(jsonb,text)','execute') a")).rows[0];
+  assert.equal(priv.s, true); assert.equal(priv.a, false);
+});
+
+test('send: two concurrent Sends for the same person and role create one row', async () => {
+  const cid = randomUUID();
+  await pool.query("update person_private.transition_control set enabled=false where singleton");
+  try { await pool.query("insert into candidates(id,full_name,linkedin_username) values($1,'Synthetic No Username',null)", [cid]).catch(async () => pool.query("insert into candidates(id,full_name,linkedin_username) values($1,'Synthetic No Username',$2)", [cid, `synthetic-nouser-${cid}`])); }
+  finally { await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"); }
+  const row = await sendRow(cid, '881');
+  const a = await pool.connect(), b = await pool.connect();
+  try {
+    await a.query('begin'); await b.query('begin');
+    const first = (await a.query('select person_network_send($1::jsonb) r', [JSON.stringify(row)])).rows[0].r;
+    const second = b.query('select person_network_send($1::jsonb) r', [JSON.stringify(row)]);
+    await new Promise((r) => setTimeout(r, 150));
+    await a.query('commit');
+    const r2 = (await second).rows[0].r;
+    await b.query('commit');
+    assert.equal(first.status, 'sent'); assert.deepEqual(r2, { status: 'already_sent' });
+  } finally { a.release(); b.release(); }
+  assert.equal(Number((await pool.query("select count(*) n from website_applications where candidate_id=$1 and role_ids @> array['881']", [cid])).rows[0].n), 1);
+});
+
 test('linked resume fill is certified nonmanual evidence, preserves submitted contact, and replays once', async () => {
   const id = await app();
   assert.equal((await processApp(id, { contacts: {} })).status, 'processed');
@@ -474,4 +541,49 @@ test('linked resume leaves invalid and never-primary evidence unchanged while ad
     assert.deepEqual((await pool.query(query, [a.candidateId])).rows, before);
     assert.equal((await plan(a.candidateId)).status, 'verified');
   }
+});
+
+for (const action of ['suppress', 'alter']) test(`send witness ${action} rolls back instead of reporting sent`, async () => {
+ const {cid}=await processed(), c=await pool.connect();
+ try { await c.query('begin');
+  await c.query(`create function pg_temp.break_send_witness() returns trigger language plpgsql as $$begin ${action==='suppress'?'return null;':"new.row_hash := 'forged'; return new;"} end$$`);
+  await c.query('create trigger synthetic_send_witness before insert on person_private.application_send_witnesses for each row execute function pg_temp.break_send_witness()');
+  await assert.rejects(c.query('select person_network_send($1::jsonb)',[JSON.stringify(await sendRow(cid,'995'))]), /network_send_witness/);
+ } finally { await c.query('rollback'); c.release(); }
+ assert.equal((await pool.query("select count(*)::int n from website_applications where candidate_id=$1 and role_ids @> array['995']",[cid])).rows[0].n,0);
+});
+test('send admits an unpublished verification-only address with the normal pool policy', async () => {
+ const cid=randomUUID(); await pool.query('update person_private.transition_control set enabled=false where singleton');
+ try {await pool.query("insert into candidates(id,full_name,linkedin_username) values($1,'Synthetic',$2)",[cid,`synthetic-send-${cid}`]);
+  await pool.query("insert into candidate_emails(candidate_id,email_address,email_type,quality,result) values($1,'verified-only@example.test','personal','good','ok')",[cid]);
+ }finally {await pool.query('update person_private.transition_control set enabled=true where singleton');}
+ const r=await send(await sendRow(cid,'996',{email:'verified-only@example.test',contact:{email:'verified-only@example.test',phone:null}}));
+ assert.equal(r.status,'sent');assert.equal((await row('website_applications',r.applicationId)).email,'verified-only@example.test');
+});
+test('send refuses a stale contact snapshot after a certified recruiter save', async () => {
+ const {cid}=await processed();
+ const old=await sendRow(cid,'997',{email:'synthetic@example.test',contact:{email:'synthetic@example.test',phone:'+12025550123'}});
+ const recruiter=await import('../dist/worker-lib.mjs');
+ await recruiter.saveRecruiterContact({organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode:'live',contact:{email:'now@example.test',phone:'+12025550199',github:null,otherEmails:[]}});
+ assert.deepEqual(await send(old),{status:'contact_changed'});
+ assert.equal((await pool.query("select count(*)::int n from website_applications where candidate_id=$1 and role_ids @> array['997']",[cid])).rows[0].n,0);
+});
+
+test('Send waits for a racing recruiter commit and rejects its old contact snapshot',async()=>{
+ const {cid}=await processed(), old=await sendRow(cid,'998'), lib=await import('../dist/worker-lib.mjs'), c=await pool.connect();
+ let reached,release;const readyToCommit=new Promise(r=>reached=r),canCommit=new Promise(r=>release=r);
+ const wrapped={query:async(sql,values)=>{if(sql==='commit'){reached();await canCommit;}return c.query(sql,values);}};
+ const saving=lib.saveRecruiterContactOnConnection(wrapped,{organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode:'live',contact:{email:'racing@example.test',phone:'+12025550198',github:null,otherEmails:[]}});
+ let pending;
+ try {await readyToCommit;let settled=false;pending=send(old).finally(()=>settled=true);await new Promise(r=>setTimeout(r,70));assert.equal(settled,false);release();await saving;assert.deepEqual(await pending,{status:'contact_changed'});}
+ finally {release();await saving.catch(()=>{});if(pending)await pending.catch(()=>{});c.release();}
+ assert.equal((await send(await sendRow(cid,'998'))).status,'sent');
+});
+test('a witnessed Send stays audit verified after a checked resume edit and linked contact fill',async()=>{
+ const {cid}=await processed(),sent=await send(await sendRow(cid,'999'));
+ const path=`2026-09-30/${randomUUID()}-sent.pdf`,sha256='d'.repeat(64);
+ assert.equal((await edit(sent.applicationId,'resume',{resume_path:path,person_resume_sha256:sha256})).status,'saved');
+ const lib=await import('./dist/contact.mjs');
+ await lib.fillLinkedResumeContact({organizationId:TT,applicationId:sent.applicationId,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),path,sha256,mode:'live',phone:null,emails:['sent-fill@example.test']});
+ const audit=await plan(cid);assert.equal(audit.status,'verified',JSON.stringify(audit));
 });
