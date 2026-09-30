@@ -281,9 +281,9 @@ export function computeFacts(
   experiences: ExperienceRow[],
   skillTerms: string[],
   profileSkills: string[] = [],
-  education: unknown = null
+  education: unknown = null,
+  now: Date = new Date()
 ): CandidateFacts {
-  const now = new Date();
   const nowY = now.getUTCFullYear();
   const nowM = now.getUTCMonth() + 1;
   const rows = [...experiences].sort((a, b) => a.sort_order - b.sort_order);
@@ -524,7 +524,7 @@ export function seniorityOf(title: string | null | undefined): NonNullable<Profi
 }
 
 /** A skill tag as a key: "Rust (Programming Language)" and "rust" are one skill. */
-const skillKey = (tag: string) => tag.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9+#.]+/g, " ").trim();
+export const skillKey = (tag: string) => tag.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9+#.]+/g, " ").trim();
 const skillName = (tag: string) => tag.replace(/\s*\(.*?\)\s*$/, "").trim() || tag.trim();
 const MAX_PROFILE_SKILLS = 40;
 const MAX_JOB_SKILLS = 8;

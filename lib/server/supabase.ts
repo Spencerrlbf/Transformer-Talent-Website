@@ -1,3 +1,5 @@
+import { transitionRequestHeaders } from './person-transition/context';
+
 const url = () => {
   const u = process.env.SUPABASE_URL;
   if (!u) throw new Error("SUPABASE_URL not configured");
@@ -14,13 +16,23 @@ export async function sbRest(
   path: string,
   init: RequestInit & { prefer?: string } = {}
 ): Promise<Response> {
-  const headers: Record<string, string> = {
+  const headers = new Headers({
     apikey: key(),
     Authorization: `Bearer ${key()}`,
     "Content-Type": "application/json",
     ...(init.prefer ? { Prefer: init.prefer } : {}),
-    ...((init.headers as Record<string, string>) || {}),
-  };
+  });
+  new Headers(init.headers).forEach((value, name) => headers.set(name, value));
+  // Only the trusted async server context supplies work credentials. Caller
+  // HeadersInit can be an object, array or Headers, with arbitrary casing.
+  headers.delete('x-person-work-id');
+  headers.delete('x-person-work-token');
+  const admission = transitionRequestHeaders();
+  for (const [name, value] of Object.entries(admission)) headers.set(name, value);
+  // Initial claims and later lifecycle RPCs carry the token in JSON, even
+  // before/without an async admission context. Never redirect those bodies.
+  const carriesWork = !!admission['x-person-work-id'] ||
+    /^rpc\/person_(?:transition|application_work)_/.test(path);
   return fetch(`${url()}/rest/v1/${path}`, {
     // A socket killed by machine sleep otherwise hangs its await forever —
     // observed holding a sourcing run's lease hostage overnight. No PostgREST
@@ -28,6 +40,7 @@ export async function sbRest(
     signal: init.signal ?? AbortSignal.timeout(60_000),
     ...init,
     headers,
+    ...(carriesWork ? { redirect: 'error' as const } : {}),
   });
 }
 

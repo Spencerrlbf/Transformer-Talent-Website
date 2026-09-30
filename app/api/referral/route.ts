@@ -1,3 +1,5 @@
+import { acceptPublicApplication } from '@/lib/server/person-transition/acceptance';
+import { transitionSupport } from '@/lib/server/person-transition/context';
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
@@ -26,6 +28,7 @@ function clean(s: unknown, max: number): string {
 }
 
 export async function POST(req: NextRequest) {
+  const transition = transitionSupport();
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -158,7 +161,7 @@ export async function POST(req: NextRequest) {
       candidate_email: candidateEmail,
       amount,
       status: "duplicate",
-    }).catch((e) => console.error("duplicate referral insert failed", e));
+    }).catch((e) => console.error("duplicate referral insert failed", "storage_unavailable"));
     // Identical confirmation as the fresh path — the referrer must never be
     // able to tell we already knew the person.
     after(async () => {
@@ -174,8 +177,8 @@ export async function POST(req: NextRequest) {
 
   // Real referral: application row + the shared pipeline (name resolved from
   // the Harvest profile once enrichment runs).
-  const submission = await sbInsert<{ id: string }>(
-    "website_applications",
+  const submission = await acceptPublicApplication(
+    "referral",
     {
       organization_id: orgId,
       recruiter_profile_id: profile?.id ?? null,
@@ -188,14 +191,14 @@ export async function POST(req: NextRequest) {
       role_titles: [],
       resume_path: null,
       resume_text: null,
-      status: "processing",
+      status: transition ? "queued" : "processing",
+      ...(transition ? { person_processing_version: 1 } : {}),
       source: `referral: by ${referrerName} <${referrerEmail}>`,
       ip: ip === "unknown" ? null : ip,
       user_agent: clean(req.headers.get("user-agent"), 500),
-    },
-    true
+    }
   ).catch((e) => {
-    console.error("referral application insert failed", e);
+    console.error("referral application insert failed", "storage_unavailable");
     return null;
   });
   if (!submission) {
@@ -216,7 +219,7 @@ export async function POST(req: NextRequest) {
     amount,
     status: "new",
     application_id: submission.id,
-  }).catch((e) => console.error("referral insert failed", e));
+  }).catch((e) => console.error("referral insert failed", "storage_unavailable"));
 
   const boardOrg =
     orgId === ttOrgId

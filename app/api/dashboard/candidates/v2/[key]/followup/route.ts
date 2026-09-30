@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     return NextResponse.json({ error: "bad_key" }, { status: 400 });
 
   const res = await clearFollowUp(member.org.id, key);
-  if (!res.ok) return NextResponse.json({ error: res.error }, { status: res.error === "not_found" ? 404 : 500 });
+  if (!res.ok) return NextResponse.json({ error: res.error }, { status: res.error === "temporarily_unavailable" ? 503 : res.error === "not_found" ? 404 : 500 });
   await noteContacted(member.org.id, member.email, key);
   return NextResponse.json({ ok: true });
 }
@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ key: stri
       ? await updateFollowUpDate(member.org.id, key, body.at)
       : await updateFollowUp(member.org.id, key, body);
   if (!res.ok) {
-    const status = res.error === "not_found" ? 404 : res.error === "save_failed" ? 500 : 400;
+    const status = res.error === "temporarily_unavailable" ? 503 : res.error === "not_found" ? 404 : res.error === "save_failed" ? 500 : 400;
     return NextResponse.json({ error: res.error }, { status });
   }
   return NextResponse.json({ ok: true });

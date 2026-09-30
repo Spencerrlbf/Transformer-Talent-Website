@@ -1,3 +1,4 @@
+import { jobInOrg } from "@/lib/server/organization-access";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { sbRest } from "@/lib/server/supabase";
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const { id } = await params;
+  if (!(await jobInOrg(member.org.id, id))) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
   const { stages, custom } = await loadJobStages(member.org.id, id);
   return NextResponse.json({ stages, custom });
 }
@@ -25,6 +27,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const member = await requireMember(req);
   if (!member) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   const { id } = await params;
+  if (!(await jobInOrg(member.org.id, id))) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
 
   let body: { stages?: unknown };
   try {

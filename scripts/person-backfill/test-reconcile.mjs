@@ -1,0 +1,102 @@
+import assert from 'node:assert/strict';
+import pg from 'pg';
+import {pgSite,hashOf} from '../person-trial.mjs';
+import {reconcilePage} from '../person-reconcile.mjs';
+const originalUrl=process.env.LOCAL_DATABASE_URL;
+if(!originalUrl||!['127.0.0.1','localhost'].includes(new URL(originalUrl).hostname))throw Error('Local database required');
+const timedUrl=new URL(originalUrl);timedUrl.searchParams.set('options','-cstatement_timeout=8000');const url=timedUrl.toString();
+const db=new pg.Client({connectionString:url});await db.connect();const site=await pgSite(url);
+const lib=await import('../dist/worker-lib.mjs');
+const ids=['c0000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000002'];
+const config={run:'synthetic-reconcile',dry:false};
+const page=async()=>await site.rpc('person_reconcile_page',{p_run:config.run,p_size:100});
+const startArgs={p_commit:'synthetic-commit',p_limit:100,p_batch:100,p_resume:false,p_scope:'all',p_external_hash:'1'.repeat(32)};
+const restart=async(suffix,extra={})=>{config.run=`synthetic-reconcile-${suffix}`;await site.rpc('person_reconcile_start',{...startArgs,...extra,p_run:config.run});};
+try{
+ await db.query(`insert into candidates(id,full_name,linkedin_username,created_at,email,current_title,work_experience)
+ select x,'Synthetic reconciliation',x::text,'2025-01-01',x::text||'@example.com','Engineer',
+ '[{"title":"Engineer","company":"Synthetic Co","is_current":true,"start_date":{"year":2020}}]'::jsonb from unnest($1::uuid[]) x`,[ids]);
+ await restart('first');
+ const before=(await db.query('select to_jsonb(c) c from candidates c order by id')).rows;
+ const original=await page();
+ const counts=await db.query('select count(*)::int n from candidate_sources');
+ await reconcilePage({site,lib,config:{...config,dry:true},page:original});
+ assert.deepEqual((await db.query('select count(*)::int n from candidate_sources')).rows,counts.rows);
+ await reconcilePage({site,lib,config,page:original});
+ assert.equal((await db.query('select count(*)::int n from person_change_queue')).rows[0].n,0);
+ assert.equal((await db.query("select count(*)::int n from person_reconcile_people where status='verified'")).rows[0].n,2);
+ assert.equal(hashOf((await db.query('select to_jsonb(c) c from candidates c order by id')).rows),hashOf(before));
+ console.log('PASS new arrivals reconciled, legacy fields unchanged, dry run does not write');
+ const untimed=new pg.Client({connectionString:originalUrl});await untimed.connect();
+ try{await assert.rejects(untimed.query('select person_reconcile_finish($1,true)',[config.run]),/active_statement_timeout_required/);}finally{await untimed.end();}
+ assert.equal((await site.rpc('person_reconcile_finish',{p_run:config.run,p_external_stable:true})).status,'reconciled');
+ await restart('no-anchor',{p_scope:'queue',p_external_hash:'2'.repeat(32)});
+ assert.equal((await site.rpc('person_reconcile_finish',{p_run:config.run,p_external_stable:true})).status,'catchup_pending');
+ await restart('partial',{p_limit:1,p_external_hash:'3'.repeat(32)});
+ await reconcilePage({site,lib,config,page:await page()});
+ assert.equal((await site.rpc('person_reconcile_finish',{p_run:config.run,p_external_stable:true})).status,'catchup_pending');
+ const resumed=await site.rpc('person_reconcile_start',{...startArgs,p_limit:1,p_run:config.run,p_resume:true,p_external_hash:'4'.repeat(32)});
+ assert.equal(resumed.notes.external_hash,'3'.repeat(32));
+ console.log('PASS full scan required, external boundary hash retained on resume');
+ await restart('retry');
+ let crashed=false;
+ await assert.rejects(reconcilePage({site,lib,config,page:await page(),afterSave:async()=>{crashed=true;throw Error('synthetic process interruption');}}));
+ assert.ok(crashed);assert.equal((await db.query('select processed from backfill_runs where run_id=$1',[config.run])).rows[0].processed,0);
+ await reconcilePage({site,lib,config,page:await page()});
+ console.log('PASS interruption after commit resumes through verification and checkpoint');
+ await db.query("update candidates set status='Engaged' where id=$1",[ids[1]]);
+ await restart('ack-crash',{p_scope:'queue'});
+ await assert.rejects(reconcilePage({site,lib,config,page:await page(),afterRecord:async()=>{throw Error('synthetic death after acknowledgement');}}));
+ assert.equal((await db.query('select count(*)::int n from person_change_queue')).rows[0].n,0);
+ assert.equal((await page()).length,1,'uncheckpointed acknowledged evidence remains replayable');
+ await reconcilePage({site,lib,config,page:await page()});
+ assert.equal((await db.query('select processed from backfill_runs where run_id=$1',[config.run])).rows[0].processed,1);
+ console.log('PASS queue acknowledgement before process death never loses checkpoint accounting');
+ await restart('revision-race');
+ await reconcilePage({site,lib,config,page:await page(),beforeRecord:()=>db.query('update candidate_profile_state set rev=rev+1 where candidate_id=$1',[ids[1]])});
+ const pending=await site.rpc('person_reconcile_preview_page',{p_after:null,p_size:100,p_scope:'queue'});
+ assert.ok(pending.some(x=>x.id===ids[1]),'normalized-only change is included in catch-up even with no legacy event');
+ await restart('revision-reread',{p_scope:'queue'});await reconcilePage({site,lib,config,page:await page()});
+ console.log('PASS normalized revision race stays pending and catch-up can find it');
+ await restart('finish-race');await reconcilePage({site,lib,config,page:await page()});
+ await db.query(`create function public.synthetic_finish_delay() returns trigger language plpgsql as $$begin
+  if new.run_id like 'synthetic-reconcile-finish-%' and new.notes ? 'full_scan_complete' and not(old.notes ? 'full_scan_complete') then perform pg_sleep(0.4);end if;return new;end$$;
+ create trigger synthetic_finish_delay before update on backfill_runs for each row execute function synthetic_finish_delay()`);
+ const finishing=site.rpc('person_reconcile_finish',{p_run:config.run,p_external_stable:true});
+ let waiting=false;
+ for(let i=0;i<100;i++){
+  waiting=(await db.query("select exists(select 1 from pg_stat_activity where wait_event='PgSleep' and query like '%person_reconcile_finish%') sleeping")).rows[0].sleeping;
+  if(waiting)break;await new Promise(r=>setTimeout(r,5));
+ }
+ assert.ok(waiting,'finish reached the injected inter-statement window');
+ await Promise.all([finishing,db.query("update candidates set status='Later activity' where id=$1",[ids[1]])]);
+ const boundary=(await db.query('select max(e.recorded_at)>=r.finished_at ordered from person_change_events e cross join backfill_runs r where e.candidate_id=$1 and r.run_id=$2 group by r.finished_at',[ids[1],config.run])).rows[0];
+ assert.equal(boundary.ordered,true,'a captured write must commit entirely before or after the final boundary');
+ await restart('after-finish',{p_scope:'queue'});await reconcilePage({site,lib,config,page:await page()});
+ console.log('PASS finalization cannot overlook a write between queue and revision counts');
+ await restart('finish-timeout');await reconcilePage({site,lib,config,page:await page()});
+ const timeoutUrl=new URL(originalUrl);timeoutUrl.searchParams.set('options','-cstatement_timeout=50');
+ const short=new pg.Client({connectionString:timeoutUrl.toString()});await short.connect();
+ try{await assert.rejects(short.query('select person_reconcile_finish($1,true)',[config.run]),e=>e.code==='57014');}finally{await short.end();}
+ assert.equal((await db.query('select status from backfill_runs where run_id=$1',[config.run])).rows[0].status,'running');
+ await db.query("update candidates set status='After bounded timeout' where id=$1",[ids[1]]);
+ console.log('PASS actual caller timeout cancels finalization and releases the capture gate');
+ await db.query("update candidates set current_title='Unattributed edit' where id=$1",[ids[0]]);
+ await restart('ambiguous');await reconcilePage({site,lib,config,page:await page()});
+ assert.equal((await db.query('select status from person_reconcile_people where run_id=$1 and candidate_id=$2',[config.run,ids[0]])).rows[0].status,'review');
+ assert.equal((await db.query('select count(*)::int n from person_change_queue where candidate_id=$1',[ids[0]])).rows[0].n,1);
+ console.log('PASS same-date source mutation is retained for review and never acknowledged');
+ await restart('race');let edited=false;
+ await reconcilePage({site,lib,config,page:await page(),beforeRecord:async()=>{edited=true;await db.query("update candidates set status='Engaged' where id=$1",[ids[1]]);}});
+ assert.ok(edited);
+ assert.equal((await db.query('select status from person_reconcile_people where run_id=$1 and candidate_id=$2',[config.run,ids[1]])).rows[0].status,'pending');
+ assert.equal((await db.query('select count(*)::int n from person_change_queue where candidate_id=$1',[ids[1]])).rows[0].n,1);
+ await restart('race-retry');await reconcilePage({site,lib,config,page:await page()});
+ assert.equal((await db.query('select status from person_reconcile_people where run_id=$1 and candidate_id=$2',[config.run,ids[1]])).rows[0].status,'verified');
+ assert.equal((await db.query('select count(*)::int n from person_change_queue where candidate_id=$1',[ids[1]])).rows[0].n,0);
+ console.log('PASS a write during verification stays pending until a stable reread');
+ const final=await site.rpc('person_reconcile_finish',{p_run:config.run,p_external_stable:true});
+ assert.equal(final.status,'review_required');assert.ok(final.notes.unresolved_review>0);
+ assert.equal((await db.query("select has_function_privilege('anon','person_reconcile_record_many(text,jsonb)','execute') ok")).rows[0].ok,false);
+ console.log('PASS unresolved source ambiguity prevents a false completion claim; service-only RPCs');
+}finally{await site.end();await db.end();}

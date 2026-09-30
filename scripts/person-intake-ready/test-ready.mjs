@@ -1,0 +1,76 @@
+import test from 'node:test';import assert from 'node:assert/strict';import pg from 'pg';import {randomUUID} from 'node:crypto';
+const url=process.env.LOCAL_DATABASE_URL;if(!/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/person_intake_ready_test$/.test(url||''))throw Error('local fixture required');
+Object.assign(process.env,{PERSON_TRANSITION_SUPPORT:'on',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic'});
+for(const key of ['OPENAI_API_KEY','HARVEST_API_KEY','AIRTABLE_API_TOKEN','RESEND_API_KEY','LLAMA_CLOUD_API_KEY'])delete process.env[key];
+const pool=new pg.Pool({connectionString:url,max:8}),TT='801865a7-6533-41d2-9c45-e4a90e6ad51a';
+globalThis.fetch=async(input,init={})=>{
+ const u=new URL(String(input));assert.equal(u.origin,'http://local-only.invalid','outbound forbidden');const fn=u.pathname.split('/').at(-1);const b=JSON.parse(init.body||'{}');let args;
+ if(fn==='person_application_work_claim')args=[b.p_application,b.p_org,b.p_token,b.p_lease];
+ else if(fn==='person_application_work_start')args=[b.p_id,b.p_token];
+ else if(fn==='person_transition_renew')args=[b.p_id,b.p_token,b.p_lease];
+ else if(fn==='person_application_work_complete')args=[b.p_result];
+ else if(fn==='person_application_work_finish')args=[b.p_id,b.p_token,b.p_outcome];
+ else if(fn==='person_application_work_defer')args=[b.p_id,b.p_token,b.p_delay];
+ else if(fn==='person_application_harvest_store')args=[b.p_payload];
+ else if(fn==='person_application_harvest_cache')args=[b.p_since,b.p_ledger];else throw Error('unexpected_rpc');
+ const c=await pool.connect();try{await c.query('begin');const headers=new Headers(init.headers);await c.query("select set_config('request.headers',$1,true)",[JSON.stringify(Object.fromEntries([...headers].filter(([key])=>key.startsWith('x-person-'))))]);const result=(await c.query(`select public.${fn}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).rows[0].r;await c.query('commit');return Response.json(result);}catch{return Response.json({message:'synthetic_rpc_failed'},{status:409});}finally{await c.query('rollback');c.release();}
+};
+const lib=await import('./dist/processing.mjs');test.after(()=>pool.end());
+let serial=0;
+async function app(patch={},username=`synthetic-work-intake-${++serial}`,db=pool){
+ const id=randomUUID();await db.query("insert into website_applications(id,organization_id,name,email,linkedin_username,linkedin_url,status,source,person_processing_version,person_intent_hash,follow_up_at,preferred_roles,preferred_locations,preferred_workplace,contact) values($1,$2,$3,'synthetic@example.test',$4,$5,'queued','future',1,$6,$7,$8,'{}','{}',$9)",[id,TT,patch.name??'Synthetic',username,`https://www.linkedin.com/in/${username}`,randomUUID().replaceAll('-','').repeat(2),patch.follow_up_at??'2027-01-01',patch.preferred_roles??['Engineering'],patch.contact??{}]);return id;
+}
+async function processApp(id,{mutate,queryHook,harvest,sourceCheck,parsed={current_title:'Engineer',top_skills:['Synthetic Rust'],education_schools:['Synthetic University']},contacts={phone:'+12025550123'},afterIntake,mode="live",resumeText="Synthetic resume",vector}={}){
+ let result,error;const source=(await pool.query('select * from website_applications where id=$1',[id])).rows[0];
+ const status=await lib.runApplicationWork({submissionId:id,orgId:TT,boardOrg:null,fromQueue:true},async p=>{
+  await lib.startApplicationEffects();let harvestLedgerId;
+  if(sourceCheck)await sourceCheck(source);
+  if(harvest==='fresh')harvestLedgerId=await lib.storeApplicationHarvest(TT,source.linkedin_username,{id:123,firstName:'Synthetic',lastName:'Profile',skills:[]});
+  if(harvest==='cached')harvestLedgerId=(await lib.cachedApplicationHarvest(TT,source.linkedin_username,new Date(0).toISOString()))?.id;
+  if(harvest)assert.ok(harvestLedgerId);
+  if(mutate)await mutate();const c=await pool.connect();
+  const wrapped={query:async(sql,values)=>{if(queryHook){const override=await queryHook(sql,values,c);if(override)return override;}return c.query(sql,values);}};
+  try{result=await lib.saveApplicationPersonOnConnection(wrapped,{organizationId:TT,applicationId:id,linkedinUsername:source.linkedin_username,name:'Resolved Synthetic',parsed,resumeText,resumeContacts:contacts,harvestLedgerId,mode,matchingVector:vector});}
+  catch(e){error=e;throw e;}finally{c.release();}
+  if(afterIntake)await afterIntake(result);lib.stageApplicationResult({version:1,matched_role_ids:[],screening:null});return 'processed';
+ });return{status,result,error};
+}
+async function roleQuery(sql,args=[]){const c=await pool.connect();try{await c.query('begin');await c.query('set local role service_role');return await c.query(sql,args);}finally{await c.query('rollback');c.release();}}
+async function probe(c,fn){await c.query('savepoint synthetic_probe');try{return await fn();}finally{await c.query('rollback to savepoint synthetic_probe');await c.query('release savepoint synthetic_probe');}}
+
+import {prepareAuditFixture} from '../person-audit/local-fixture.mjs';
+const incumbent=randomUUID();await pool.query("insert into candidates(id,full_name,linkedin_username,created_at) values($1,'Synthetic',$2,'2020-01-01')",[incumbent,`ready-${incumbent}`]);await prepareAuditFixture(incumbent);
+test('arm readiness',async()=>{await pool.query("select person_private.transition_set('arm',1,1,'synthetic_test')");});
+for(const mode of ['live','shadow'])test(`new ${mode} intake retains first-transaction readiness`,async()=>{
+ const id=await app();const r=await processApp(id,{mode});assert.equal(r.status,'processed',r.error?.message);
+ const row=(await pool.query('select * from person_private.application_intake_ready where application_id=$1',[id])).rows[0];assert.ok(row);assert.equal(row.candidate_id,r.result.candidateId);assert.equal(row.write_mode,mode);assert.equal(row.preference_disposition,'applied');assert.equal(row.projection_disposition,'checked');
+});
+test('existing shadow intake records deliberate projection omission',async()=>{const id=await app({},`ready-${incumbent}`),r=await processApp(id,{mode:'shadow'});assert.equal(r.status,'processed',r.error?.message);assert.equal((await pool.query('select projection_disposition from person_private.application_intake_ready where application_id=$1',[id])).rows[0].projection_disposition,'shadow_existing');});
+for(const fn of ['person_application_candidate_details','person_application_finalize','person_application_preferences','person_application_project','person_application_intake_ready'])test(`omitting ${fn} cannot commit first intake`,async()=>{
+ const id=await app();let omitted=false;const r=await processApp(id,{queryHook:async(sql,values)=>{if(!sql.includes(fn+'('))return;omitted=true;return {rows:[{result:{revision:values?.[1],projected:false,semanticChanged:false,changedFields:[]}}]};}});
+ assert.equal(r.status,'failed');assert.ok(omitted);assert.match(r.error?.message||'',fn==='person_application_project'?/person_profile_unavailable|intake_ready_projection/:/intake_ready|intake_stage/);assert.equal((await pool.query('select count(*)::int n from person_private.application_candidates where application_id=$1',[id])).rows[0].n,0);
+});
+test('ordinary application has an explicit not-applicable preference stage',async()=>{const id=await app();await pool.query("update website_applications set source='applied',person_intent_hash=null,follow_up_at=null where id=$1",[id]);const r=await processApp(id);assert.equal(r.status,'processed',r.error?.message);assert.equal((await pool.query('select preference_disposition from person_private.application_intake_ready where application_id=$1',[id])).rows[0].preference_disposition,'not_applicable');});
+test('a malformed future input cannot masquerade as an inapplicable preference stage',async()=>{const id=await app();await pool.query('update website_applications set follow_up_at=null where id=$1',[id]);const r=await processApp(id);assert.equal(r.status,'failed');assert.match(r.error?.message||'',/intake_preference_input/);});
+test('an unlinked newer intent creates a frozen supersession witness',async()=>{const username=`ready-superseded-${++serial}`,old=await app({},username),newer=await app({preferred_roles:['New']},username);const r=await processApp(old);assert.equal(r.status,'processed',r.error?.message);const ready=(await pool.query('select * from person_private.application_intake_ready where application_id=$1',[old])).rows[0];assert.equal(ready.preference_disposition,'superseded');const stage=(await pool.query("select payload from person_private.application_intake_stages where operation_id=$1 and kind='preferences'",[ready.operation_id])).rows[0].payload;assert.equal(stage.newer_application_id,newer);assert.ok(BigInt(stage.newer_order)>BigInt(stage.intent_order));});
+test('the service cannot mint or edit readiness proof',async()=>{for(const table of ['application_intake_stages','application_intake_ready'])await assert.rejects(roleQuery(`insert into person_private.${table} select * from person_private.${table} where false`),/permission denied/);});
+test('unchanged metadata still supplies a private witness',async()=>{const id=await app({},`ready-${incumbent}`),r=await processApp(id,{mode:'shadow'});assert.equal(r.status,'processed',r.error?.message);const w=(await pool.query('select m.* from person_private.intake_metadata_witnesses m join person_private.application_intake_ready r using(operation_id) where r.application_id=$1',[id])).rows[0];assert.equal(w.before_resume_hash,w.after_resume_hash);});
+test('repeated finalize and preference stages do not create new decisions',async()=>{const id=await app();const r=await processApp(id,{queryHook:async(sql,v,c)=>{if(sql.includes('person_application_finalize(')||sql.includes('person_application_preferences('))await c.query(sql,v);}});assert.equal(r.status,'processed',r.error?.message);const counts=(await pool.query("select a.scope,count(*)::int n from person_change_attributions a join person_private.application_intake_ready r on r.operation_id=a.operation_id where r.application_id=$1 and a.scope in ('application_finalize','application_preferences') group by a.scope order by a.scope",[id])).rows;assert.deepEqual(counts,[{scope:'application_finalize',n:1},{scope:'application_preferences',n:1}]);});
+test('a foreign operation cannot mint readiness for this work',async()=>{let checked=false;const r=await processApp(await app(),{queryHook:async(sql,v,c)=>{if(!sql.includes('person_application_intake_ready('))return;checked=true;await probe(c,()=>assert.rejects(c.query(sql,[randomUUID()]),/intake_mutation_operation/));}});assert.equal(r.status,'processed',r.error?.message);assert.ok(checked);});
+test('a newer intent does not disguise corruption of the own input journal',async()=>{const username=`ready-mismatch-${++serial}`,id=await app({},username);await app({},username);const r=await processApp(id,{queryHook:async(sql,v,c)=>{if(sql.includes('person_application_preferences('))await c.query("update person_private.application_intents set input_snapshot=jsonb_set(input_snapshot,'{preferred_roles}','[\"Forged\"]') where application_id=$1",[id]);}});assert.equal(r.status,'failed');assert.match(r.error?.message||'',/intake_preference_input/);});
+for(const kind of ['metadata','projection','finalize','preferences'])test(`removing ${kind} proof before ready refuses first completion`,async()=>{const id=await app();const r=await processApp(id,{queryHook:async(sql,v,c)=>{if(sql.includes('person_application_intake_ready('))await c.query('delete from person_private.application_intake_stages where operation_id=$1 and kind=$2',[v[0],kind]);}});assert.equal(r.status,'failed');assert.match(r.error?.message||'',/intake_ready/);});
+test('deferred validation rejects readiness whose metadata proof disappeared before commit',async()=>{let operation;const id=await app();const r=await processApp(id,{queryHook:async(sql,v,c)=>{if(sql.includes('person_application_intake_ready('))operation=v[0];if(sql==='commit')await c.query('delete from person_private.intake_metadata_witnesses where operation_id=$1',[operation]);}});assert.equal(r.status,'failed');assert.match(r.error?.message||'',/intake_ready_metadata/);assert.equal((await pool.query('select count(*)::int n from person_private.application_intake_ready where application_id=$1',[id])).rows[0].n,0);});
+test('later genuine preferences do not rewrite or invalidate original ready proof on replay',async()=>{
+ const username=`ready-history-${++serial}`,id=await app({preferred_roles:['Old']},username);let original;
+ const r=await processApp(id,{afterIntake:async first=>{
+  original=(await pool.query('select to_jsonb(r) data from person_private.application_intake_ready r where application_id=$1',[id])).rows[0].data;
+  const newer=await processApp(await app({preferred_roles:['New']},username));assert.equal(newer.status,'processed',newer.error?.message);
+  const counts=(await pool.query('select count(*)::int n from person_private.application_preference_decisions where application_id=$1',[id])).rows[0].n;
+  const c=await pool.connect();try{await lib.saveApplicationPersonOnConnection(c,{organizationId:TT,applicationId:id,linkedinUsername:username,name:'Ignored',parsed:{current_title:'Ignored'},resumeText:'Ignored',mode:'live'});}finally{c.release();}
+  assert.equal((await pool.query('select count(*)::int n from person_private.application_preference_decisions where application_id=$1',[id])).rows[0].n,counts);
+  assert.deepEqual((await pool.query('select role_preferences from candidates where id=$1',[first.candidateId])).rows[0].role_preferences.roles,['New']);
+  assert.deepEqual((await pool.query('select to_jsonb(r) data from person_private.application_intake_ready r where application_id=$1',[id])).rows[0].data,original);
+ }});assert.equal(r.status,'processed',r.error?.message);
+});
+test('another valid operation in the same transaction cannot borrow completed stages',async()=>{let checked=false;const r=await processApp(await app(),{queryHook:async(sql,v,c)=>{if(!sql.includes('person_application_intake_ready('))return;checked=true;await probe(c,async()=>{const other=(await c.query('select person_application_audit_begin(false) operation')).rows[0].operation;await assert.rejects(c.query(sql,[other.id]),/intake_ready_stage/);});}});assert.equal(r.status,'processed',r.error?.message);assert.ok(checked);});
+test('a missing historical ready record cannot be reconstructed from current rows',async()=>{let checked=false;const id=await app();const r=await processApp(id,{afterIntake:async()=>{const c=await pool.connect();try{await c.query('begin');await c.query("select set_config('request.headers',$1,true)",[JSON.stringify(lib.transitionRequestHeaders())]);await c.query('delete from person_private.application_intake_ready where application_id=$1',[id]);const other=(await c.query('select person_application_audit_begin(false) operation')).rows[0].operation;await assert.rejects(c.query('select person_application_intake_ready($1)',[other.id]),/intake_ready_history/);checked=true;}finally{await c.query('rollback');c.release();}}});assert.equal(r.status,'processed',r.error?.message);assert.ok(checked);});

@@ -1,3 +1,6 @@
+import { acceptPublicApplication } from '@/lib/server/person-transition/acceptance';
+import { createHash } from 'node:crypto';
+import { transitionSupport } from '@/lib/server/person-transition/context';
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
@@ -33,11 +36,12 @@ async function uploadResume(path: string, buf: Buffer): Promise<boolean> {
     },
     body: new Uint8Array(buf),
   });
-  if (!res.ok) console.error("resume upload failed", res.status, await res.text());
+  if (!res.ok) console.error("resume upload failed", res.status);
   return res.ok;
 }
 
 export async function POST(req: NextRequest) {
+  const transition = transitionSupport();
   let form: FormData;
   try {
     form = await req.formData();
@@ -102,6 +106,7 @@ export async function POST(req: NextRequest) {
   // a fresh application: anything else would let a stranger type in someone's
   // LinkedIn and learn whether they applied to this company.
   const orgId = boardOrg?.id ?? (await getOrgId());
+  if (transition && !orgId) return NextResponse.json({ error: "Something went wrong saving your application. Please try again." }, { status: 502 });
   const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
   const dupUsername = linkedinUsername(linkedin) || "";
   const [dupByEmail, dupByLinkedin] = await Promise.all([
@@ -146,6 +151,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A resume is required." }, { status: 400 });
   }
   let resumePath: string | null = null;
+  let resumeSha: string | null = null;
   let resumeBuf: Buffer | null = null;
   let resumeSafeName = "resume.pdf";
   if (file instanceof File && file.size > 0) {
@@ -155,7 +161,13 @@ export async function POST(req: NextRequest) {
     resumeBuf = Buffer.from(await file.arrayBuffer());
     resumeSafeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
     const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${resumeSafeName}`;
-    if (await uploadResume(path, resumeBuf)) resumePath = path;
+    const uploaded = await uploadResume(path, resumeBuf).catch(() => false);
+    if (uploaded) {
+      resumePath = path;
+      if (transition) resumeSha = createHash('sha256').update(resumeBuf).digest('hex');
+    } else if (transition) {
+      return NextResponse.json({ error: "We couldn't save your resume. Please try again." }, { status: 502 });
+    }
   }
 
   // Tenant boards: roles come from that org's org_roles rows, shaped like
@@ -178,8 +190,8 @@ export async function POST(req: NextRequest) {
     if (rp && rp.organization_id === orgId) recruiterProfileId = rp.id;
   }
 
-  const submission = await sbInsert<{ id: string }>(
-    "website_applications",
+  const submission = await acceptPublicApplication(
+    "apply",
     {
       organization_id: orgId,
       recruiter_profile_id: recruiterProfileId,
@@ -192,17 +204,17 @@ export async function POST(req: NextRequest) {
       role_ids: applied.map((r) => r.jobId),
       role_titles: roleTitles,
       resume_path: resumePath,
+      ...(transition ? { person_resume_sha256: resumeSha, person_processing_version: 1 } : {}),
       resume_text: null,
-      status: "processing",
+      status: transition ? "queued" : "processing",
       source: [speculative ? "speculative" : null, note ? `note: ${note}` : null]
         .filter(Boolean)
         .join("; ") || null,
       ip: ip === "unknown" ? null : ip,
       user_agent: clean(req.headers.get("user-agent"), 500),
-    },
-    true
+    }
   ).catch((e) => {
-    console.error("application insert failed", e);
+    console.error("application insert failed", "storage_unavailable");
     return null;
   });
 

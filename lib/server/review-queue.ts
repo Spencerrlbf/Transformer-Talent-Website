@@ -1,3 +1,5 @@
+import { transitionSupport } from './person-transition/context';
+import { applicationQueueSnapshot, reviewApplicationWork } from './person-transition/queue';
 // The review queue: applications that arrived after their company's daily
 // allowance was used up (status "queued", see review-budget.ts). Reviewed
 // oldest first, each company within its own allowance; a company whose
@@ -44,6 +46,7 @@ async function resumeFile(path: string): Promise<Buffer | null> {
 }
 
 export async function queuedCount(): Promise<number> {
+  if (transitionSupport()) return (await applicationQueueSnapshot(1)).waiting;
   const res = await sbRest(`website_applications?status=eq.queued&select=id`, {
     prefer: "count=exact",
     headers: { Range: "0-0" },
@@ -61,6 +64,7 @@ export async function reviewQueued(opts: {
   dryRun?: boolean;
   orgIds?: string[];
 }): Promise<{ reviewed: number; failed: number; waiting: number }> {
+  if (transitionSupport()) return reviewApplicationWork(opts);
   const only = (opts.orgIds || []).filter((o) => /^[0-9a-f-]{36}$/i.test(o));
   const res = await sbRest(
     `website_applications?status=eq.queued${only.length ? `&organization_id=in.(${only.join(",")})` : ""}` +
@@ -97,7 +101,7 @@ export async function reviewQueued(opts: {
     const resumeSafeName =
       (a.resume_path || "").split("/").pop()?.replace(/^[0-9a-f-]{36}-/i, "") || "resume.pdf";
     try {
-      await runApplicantPipeline({
+      const outcome = await runApplicantPipeline({
         submissionId: a.id,
         name: a.name || "",
         email: a.email,
@@ -118,7 +122,8 @@ export async function reviewQueued(opts: {
         salaryFloor: isFuture ? a.comp_expectation : null,
         fromQueue: true,
       });
-      reviewed++;
+      if (outcome === "processed") reviewed++;
+      else failed++;
     } catch (err) {
       failed++;
       console.error(`queued review failed for application ${a.id}`, err);

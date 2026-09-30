@@ -1,3 +1,5 @@
+import { transitionSupport } from "./person-transition/context";
+import { applicationEditsChecked, checkedApplicationEdit } from './person-transition/acceptance';
 // Candidates v2: applicants + sourced people unified into one org-scoped,
 // sortable, paginated list, plus a per-person drawer detail and editable
 // contact info. Read-time union over website_applications and the sourcing
@@ -20,6 +22,11 @@ import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
 import { poolEmails } from "./network";
+import { publishedPoolProfiles } from "./person/profile-view";
+import { poolContacts } from "./person/pool-contact";
+import { saveRecruiterContact } from "./person/recruiter";
+import { personWriteMode } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
 import { poolDisplayPositions, poolEducation } from "./pool/profile";
 import type { Scorecard } from "./scorecard";
 import {
@@ -771,6 +778,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
   for (const [id, p] of people) usernameToSourced.set(p.linkedin_username.toLowerCase(), id);
 
   const rows: UnifiedRow[] = [];
+  const appPerson = new Map<string, string>(); // app_ key -> linked pool person
 
   for (const a of apps) {
     const roles = appRoles(a, pairings);
@@ -787,6 +795,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
       }
     }
     const best = bestOf(roles);
+    if (a.candidate_id) appPerson.set(`app_${a.id}`, a.candidate_id);
     rows.push({
       key: `app_${a.id}`,
       name: a.name,
@@ -1054,6 +1063,16 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
 
   const items = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  // Linked TT applicants show the pool person's contact (edited there, support on).
+  if (applicationEditsChecked(orgId)) {
+    const linked = items.filter((r) => appPerson.has(r.key));
+    const contacts = linked.length ? await poolContacts(linked.map((r) => appPerson.get(r.key)!)).catch(() => new Map()) : new Map();
+    for (const r of linked) {
+      const c = contacts.get(appPerson.get(r.key)!);
+      r.contact = { email: c?.email ?? null, phone: c?.phone ?? null };
+    }
+  }
+
   // ---- photo enrichment for this page only (profile JSON is heavy) ----
   const srcIds = items.filter((r) => r.key.startsWith("src_")).map((r) => r.key.slice(4));
   const appIds = items.filter((r) => r.key.startsWith("app_")).map((r) => r.key.slice(4));
@@ -1129,6 +1148,15 @@ export async function updateFollowUp(
   if (!row) return { ok: false, error: "not_found" };
   if (!row.follow_up_at) return { ok: false, error: "no_ask" };
 
+  if (applicationEditsChecked(orgId)) {
+    const r = await checkedApplicationEdit(id, "followup",
+      { follow_up_at: at, preferred_roles: roles, preferred_locations: locations, preferred_workplace: workplace,
+        comp_expectation: salary, visa_status: visa, location: null },
+      row.candidate_id ? { follow_up_at: at, role_preferences: { roles, locations, workplace, salary }, visa_status: visa } : null
+    ).catch(() => ({ ok: false as const, error: "save_failed" }));
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+
   const saved = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
     method: "PATCH",
     body: JSON.stringify({
@@ -1182,6 +1210,12 @@ export async function updateFollowUpDate(
   if (!row) return { ok: false, error: "not_found" };
   if (!row.follow_up_at) return { ok: false, error: "no_ask" };
 
+  if (applicationEditsChecked(orgId)) {
+    const r = await checkedApplicationEdit(id, "followup_date", { follow_up_at: date },
+      row.candidate_id ? { follow_up_at: date } : null).catch(() => ({ ok: false as const, error: "save_failed" }));
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+
   const saved = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
     method: "PATCH",
     body: JSON.stringify({ follow_up_at: date }),
@@ -1212,6 +1246,11 @@ export async function clearFollowUp(
   );
   const [row] = (res.ok ? await res.json() : []) as { id: string; candidate_id: string | null }[];
   if (!row) return { ok: false, error: "not_found" };
+  if (applicationEditsChecked(orgId)) {
+    const r = await checkedApplicationEdit(id, "followup_clear", { follow_up_at: null },
+      row.candidate_id ? { follow_up_at: null } : null).catch(() => ({ ok: false as const, error: "save_failed" }));
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
   const patch = await sbRest(`website_applications?id=eq.${id}&organization_id=eq.${orgId}`, {
     method: "PATCH",
     body: JSON.stringify({ follow_up_at: null }),
@@ -1429,10 +1468,11 @@ const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export async function unifiedCandidateDetail(orgId: string, key: string): Promise<UnifiedDetail | null> {
+  if (key.startsWith("net_") && orgId !== TT_ORG_ID) return null;
   const { byId: roleIdx, byExternal } = await orgRoleIndex(orgId);
 
   // Pool person from the internal Network page. Profile comes from the
-  // newest raw Harvest full_profile in the enrichment ledger; the pipeline
+  // checked published profile, else the legacy enrichment ledger; the pipeline
   // section shows their nightly network matches (display-only — no stages).
   if (key.startsWith("net_")) {
     const id = key.slice(4);
@@ -1441,7 +1481,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `email,phone,contact,profile_picture_url,current_title,current_company,created_at,` +
         `work_experience,education,profile_summary,top_skills,source,linkedin_enrichment_date&limit=1`
     );
-    const [p] = (res.ok ? await res.json() : []) as {
+    let [p] = (res.ok ? await res.json() : []) as {
       id: string; full_name: string | null; headline: string | null; location: string | null;
       linkedin_url: string | null; linkedin_username: string | null; email: string | null;
       phone: string | null; contact: UnifiedContact | null; profile_picture_url: string | null;
@@ -1451,8 +1491,11 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     }[];
     if (!p) return null;
 
+    const published = await publishedPoolProfiles([id]);
+    const canonical = published.get(id);
+    if (canonical) p = canonical.profile as typeof p;
     const [enrRes, vRes, emailMap] = await Promise.all([
-      sbRest(
+      canonical ? Promise.resolve(null) : sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
           `&raw_payload=not.is.null&select=raw_payload,created_at&order=created_at.desc&limit=1`
       ),
@@ -1460,9 +1503,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]])),
+      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published),
     ]);
-    const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
+    const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
       verdict: { scorecard?: Scorecard; v2?: VerdictView } | null;
@@ -1499,9 +1542,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     // the judge read. Either way it says where it came from and when.
     const monthDay = (iso: string | null | undefined) =>
       iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
-    let bits = profileBits(enr?.raw_payload ?? null);
-    let profileSource: string | null = enr?.raw_payload ? `Refreshed from LinkedIn, ${monthDay(enr.created_at)}` : null;
-    if (!enr?.raw_payload) {
+    let bits = profileBits(canonical?.harvest ?? enr?.raw_payload ?? null);
+    let profileSource: string | null = canonical ? "From the current stored profile" : enr?.raw_payload ? `Refreshed from LinkedIn, ${monthDay(enr.created_at)}` : null;
+    if (!canonical && !enr?.raw_payload) {
       const positions = poolDisplayPositions(p);
       const education = poolEducation(p);
       bits = {
@@ -1549,6 +1592,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       // contact overlay). otherEmails: user-curated list once saved; until
       // then, the verification tables' addresses minus the primary.
       contact: (() => {
+        if (published.has(id)) return published.get(id)!.contact;
         const primary = str(p.contact?.email) ?? (emailMap.get(id) || [])[0]?.email ?? null;
         const curated = Array.isArray(p.contact?.otherEmails) ? p.contact!.otherEmails! : null;
         const fallback = (emailMap.get(id) || [])
@@ -1671,7 +1715,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
 
     await appendAttached(orgId, key, pipeline, byExternal);
     await attachStages(orgId, key, pipeline);
-    const bits = profileBits(sourced?.profile || (a.harvest_profile as HarvestProfile | null));
+    const sentSnapshot = a.source === "transformer_talent" &&
+      (a.harvest_profile as Record<string, unknown> | null)?.profileStorageVersion === "tt-published-1";
+    const bits = profileBits(sentSnapshot ? a.harvest_profile as HarvestProfile : sourced?.profile || (a.harvest_profile as HarvestProfile | null));
     const best = bestOf(pipeline.map((x) => ({ ...x, via: x.via })));
     const resumePath = a.resume_path || sourced?.resume_path || null;
     return {
@@ -1697,7 +1743,12 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
           return `Asked to hear from you later, via your page · ${fmtDate(a.created_at)}`;
         return `Applied via your board · ${fmtDate(a.created_at)}`;
       })(),
-      contact: { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
+      // A linked TT applicant's contact is the pool person's (edited there, support on).
+      contact: applicationEditsChecked(orgId) && a.candidate_id
+        ? await poolContactOf(a.candidate_id)
+        : sentSnapshot
+        ? { ...(a.contact || {}), email: a.contact?.email ?? null, phone: a.contact?.phone ?? null }
+        : { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
       bestTag: best.tag,
       bestTagLabel: labelOf(best.tag),
       screeningPending: a.status === "processing" || a.status === "queued",
@@ -1774,13 +1825,67 @@ const cleanContact = (c: UnifiedContact): UnifiedContact | { error: string } => 
   return out;
 };
 
+/** The linked pool person of a TT application (support-on reads only). */
+export async function ttApplicationCandidate(applicationId: string): Promise<{ found: boolean; candidateId: string | null }> {
+  const res = await sbRest(`website_applications?id=eq.${applicationId}&organization_id=eq.${TT_ORG_ID}&select=id,candidate_id&limit=1`);
+  const [row] = (res.ok ? await res.json() : []) as { id: string; candidate_id: string | null }[];
+  return { found: !!row, candidateId: row?.candidate_id ?? null };
+}
+
+/** The pool person's current contact block: the published view when there is one. */
+export async function poolContactOf(candidateId: string): Promise<UnifiedContact> {
+  const c = await poolContacts([candidateId]).then((rows) => rows.get(candidateId)).catch(() => null);
+  if (!c) throw Error("pool_contact_unavailable");
+  return c;
+}
+
+/** The checked recruiter contact save for a pool person, with the drawer's error codes. */
+export async function saveRecruiterContactMapped(
+  orgId: string, candidateId: string, contact: UnifiedContact, edit?: { actorId: string; requestId: string }
+): Promise<{ contact?: UnifiedContact; error?: string }> {
+  if (orgId !== TT_ORG_ID) return { error: "not_found" };
+  if (personWriteMode() === "legacy") return { error: "temporarily_unavailable" };
+  if (!edit) return { error: "member_required" };
+  try {
+    const saved = await saveRecruiterContact({ organizationId: orgId, candidateId, actorId: edit.actorId,
+      requestId: edit.requestId, contact, mode: personWriteMode() as "shadow" | "live" });
+    return { contact: saved.contact };
+  } catch (error) {
+    const reason = (error as Error).message;
+    if (["invalid_email", "invalid_phone", "invalid_github", "email_unusable", "phone_unusable"].includes(reason)) return { error: reason };
+    if (reason === "person_recruiter_unavailable") return { error: "temporarily_unavailable" };
+    if (reason === "person_not_found") return { error: "not_found" };
+    if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
+    return { error: "save_failed" };
+  }
+}
+
 export async function saveUnifiedContact(
   orgId: string,
   key: string,
-  contact: UnifiedContact
+  contact: UnifiedContact,
+  edit?: { actorId: string; requestId: string }
 ): Promise<{ contact?: UnifiedContact; error?: string }> {
   const cleaned = cleanContact(contact);
   if ("error" in cleaned) return { error: cleaned.error };
+
+  // TT application rows (support on): a linked applicant's contact is the pool
+  // person's, saved through the checked recruiter path; the application keeps its
+  // submitted copy. Only an unlinked application edits its own copy (checked).
+  if (key.startsWith("app_") && applicationEditsChecked(orgId)) {
+    const linked = await ttApplicationCandidate(key.slice(4));
+    if (!linked.found) return { error: "not_found" };
+    if (linked.candidateId) return saveRecruiterContactMapped(orgId, linked.candidateId, cleaned, edit);
+    const r = await checkedApplicationEdit(key.slice(4), "contact", { contact: cleaned });
+    return r.ok ? { contact: cleaned } : { error: r.error === "linked" ? "contact_moved" : r.error };
+  }
+
+  // Enforce pool ownership in the service as well as the HTTP route.
+  if (key.startsWith("net_")) {
+    if (orgId !== TT_ORG_ID) return { error: "not_found" };
+    if (transitionSupport() && personWriteMode() === "legacy") return { error: "temporarily_unavailable" };
+    if (personWriteMode() !== "legacy") return saveRecruiterContactMapped(orgId, key.slice(4), cleaned, edit);
+  }
 
   // net_ = pool candidate (TT-internal; the API route gates org access).
   const target = key.startsWith("src_")
@@ -1810,8 +1915,13 @@ export async function saveUnifiedContact(
 export async function saveUnifiedResumePath(
   orgId: string,
   key: string,
-  path: string
+  path: string,
+  sha256?: string
 ): Promise<boolean> {
+  if (key.startsWith("app_") && applicationEditsChecked(orgId)) {
+    if (!sha256) return false;
+    return (await checkedApplicationEdit(key.slice(4), "resume", { resume_path: path, person_resume_sha256: sha256 })).ok;
+  }
   const target = key.startsWith("src_")
     ? `sourced_candidates?id=eq.${key.slice(4)}&organization_id=eq.${orgId}`
     : key.startsWith("app_")
