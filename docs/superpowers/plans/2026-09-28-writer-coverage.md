@@ -1,175 +1,159 @@
-# Stage 1 writer-coverage checklist
+# Candidate writer coverage and release evidence
 
-Parent at inventory time: `1c02b23`. Read-only inventory of every path that writes
-candidate-owned data, taken from source (no database or network access). This is
-the stage 1 exit test Spencer accepted on 2026-09-28:
+Updated September 30, 2026 against the prepared feature stack. This replaces the
+September 28 inventory of parent `1c02b23`; that inventory's open gaps are not the
+status of today's code. **Prepared coverage is not production activation.** All
+application/receipt/anchor/projection/guard SQL remains uninstalled. Main merge,
+deployment, canaries, publication and restrictive guards require Spencer's approval.
 
-> Every writer to candidate-owned data runs on the checked or admitted path, or is
-> explicitly out of scope by Spencer's decision. A retryable 503 pause is a safe
-> interim state, not coverage.
+The accepted stage 1 rule remains: every in-scope writer must have a reachable checked
+or admitted path, or an explicit scope exclusion. A retryable 503 is a safe failure
+mode, not evidence that the successful write path has been implemented.
 
-Two switches decide behaviour and are referred to below:
+## Switches and staging
 
-- **S1 profile guard**: `person_write_guard_set(true)`
-  (`20260926183000_person_publish_runbook.sql`). Hash-based; refuses profile-column
-  changes without an audit operation in the same transaction.
-- **S2 normalization fence**: controller armed via `transition_set('arm')`, or any
-  session carrying work headers (`person_private.normalization_required()`,
-  `20260927023000_person_normalization_fence.sql:18-24`). Almost every fence checks S2.
-- App side: `PERSON_WRITE_MODE` (legacy|shadow|live) and `PERSON_TRANSITION_SUPPORT`
-  (`on` enables the certified writers and the editor pauses).
+- S1: `person_write_guard_set(true)` checks same-transaction audit attribution for
+  profile changes. It is separate from the normalization fence.
+- S2: the armed transition controller or admitted work headers make
+  `person_private.normalization_required()` true and require exact write frames.
+- `PERSON_TRANSITION_SUPPORT=on` selects checked TT application edits independently
+  of whether the controller is armed. `PERSON_WRITE_MODE` selects legacy/shadow/live.
+  Support-on public acceptance must be verified before arming. Legacy-mode TT
+  processing leaves accepted applications queued; this does not stop paid tenant
+  processing in the all-org review queue.
+- Settle old Actions and Vercel callbacks before arming. Keep the review-queue
+  workflow disabled during its scoped isolated canary. Caps limit volume, not
+  candidate identity. Follow the [cutover runbook](2026-09-26-cutover-runbook.md).
 
-Status legend: **done** = checked/admitted path exists and is reachable; **paused** =
-503 before side effects; **legacy** = direct write, no new-path branch; **blocked** =
-would fail once S2 is armed; **n/a** = workflow/status data outside the profile.
+## Website writer matrix
 
-## 1. Blocking gaps (must be fixed before S2 can be armed)
-
-| # | Gap | Evidence | Needed |
-|---|---|---|---|
-| G1 | S2 refuses **every** unframed `candidates` UPDATE, including workflow columns (status, follow_up_at, role_preferences, visa_status, resume_text, matching_embedding, sync hashes). Rechecked 2026-09-28: this is intended; every post-cutover writer already uses a frame (application details via `person_application_candidate_details`, directory/refresh/recruiter certified saves). The legacy direct writes (`refresh.ts:397`, `directory.ts:407-563`, `intake.ts:342-411`, `applicants.ts:266`, `future-interest:178`, `applicant-pipeline:536`) run only with support off. | `20260927052000_person_intake_mutations.sql`; `intake.ts:156`, `:374` | Frames for the writers that remain: the paused TT editors' follow-up/preference mirror (`candidates-unified.ts:1155,1200,1231`) and `matching_embedding` publication for directory and refresh saves (certified paths defer derivatives; `directory.ts:742` is legacy-only) |
-| G2 | No Actions workflow sets `PERSON_TRANSITION_SUPPORT`; certified refresh/directory/application workers are unreachable from Actions | `grep PERSON_TRANSITION_SUPPORT .github/workflows` → none | Wire the flag (per workflow, not shared) |
-| G3 | No per-dispatch override; three workflows share `vars.PERSON_WRITE_MODE` (refresh-queue:32, review-queue:32, sync-candidates:38); the other six pass nothing | workflow inputs list only cap/dry_run/max/full/limit | Per-dispatch mode + support inputs for an isolated canary |
-| G4 | Runbook steps that must run while S2 is armed are refused: historical catch-up (`person_backfill_save*` via the `save_person` wrapper, `person_backfill_flag_missing_employers` raw conflict insert), `person_reconcile_record_many` and `person_audit_anchor_commit` (`audit_proof_maintenance`), and bulk publish/undo (`save.ts` writes `candidates` and `identity_conflicts` directly unless inside application processing; the candidates guard admits projection only through `person_application_project`). From code; not yet reproduced locally | `20260927025000:67-72,148`; `20260927110000:66-67`; `save.ts:403` | A maintenance admission (the `maintenance` work family already reserved in `transition_work`) that opens frames for these named runbook steps only, usable only in the controller state the runbook specifies. The transition README already lists this as required |
-| G5 | `identity_conflicts` has no UPDATE/DELETE under S2, so conflicts cannot be resolved while armed | `20260927110000` | Accept (resolve after cutover) or add an admitted resolver |
-| G6 | `companies/schools/skills` accept only framed lookup inserts/updates under S2; any app code that maintains companies directly is refused | `20260927120000:16,26-27` | Confirm no live app writer (enrichment status, logos) or admit it |
-| G7 | Derivative journal (`20260928010000`) refuses unframed `person_derivative_jobs` writes for any candidate with journal history **even when disarmed**; there is no admitted consumer, so claim/complete are refused | `20260928010000:196-201`; `150000:490-492` | Admitted consumer, and install order that cannot break today's drain |
-| G8 | Runbook section 2 lists 31 migrations; 13 more exist (`20260927130000` … `20260928010000`) | migration directory | Append in dependency order; `20260927190000` fails if any directory execution already completed |
-| G9 | `20260927170000` builds `candidates(lower(linkedin_username))` with a plain `create index` inside the migration (30 s timeout), blocking candidate writes | line 7 | Quiet window or a separately validated concurrent build (release doc already warns) |
-
-## 2. Website routes (Vercel)
-
-74 route files; no server actions; pages only read.
-
-| Writer | Tables | Status |
+| Path | Prepared behavior or accepted boundary | Evidence |
 |---|---|---|
-| Public apply, referral application row, future interest (`app/api/apply`, `referral:180`, `future-interest:261`) | website_applications | done (`person_application_accept`) |
-| Applicant pipeline, TT org (after response) | candidates, sources, contacts, identities, enrichments, results | done (`runApplicationWork` → claim/complete RPCs); legacy mode + support on leaves the row queued |
-| Applicant pipeline, tenant org | tenant binding, results, contacts | done (tenant bind/complete RPCs) |
-| Network contact edit, `net_` key (`candidates/v2/[key]/contact` PUT) | recruiter receipts, candidate_contacts, candidates.contact | done (`saveCertifiedRecruiter`) |
-| add-role (`apply/add-role:71`) | website_applications roles | paused |
-| TT application contact edit, resume upload, follow-up edits (`contact`, `resume`, `followup` routes, `app_` key) | website_applications, candidates mirror | paused |
-| Network Send to a TT job (`network/send`) | website_applications | paused |
-| Network Send to a **client** job (`network.ts:440-493`) | website_applications copy of pool profile, match_verdicts | **legacy** (pause check uses the client org, which is never paused) |
-| Email send clears a due follow-up (`inbox.ts:702`) | website_applications.follow_up_at (+candidates for TT) | **paused silently**: error swallowed, email still sends, date not cleared |
-| Referral record (`referral:154,211`) | referrals (candidate email/LinkedIn) | **legacy** |
-| Candidate notes (`timeline` POST, `notes/[id]` PATCH/DELETE) | candidate_notes | **legacy** (no fence) |
-| Email log (Nylas webhook, email send) | candidate_email_log | **legacy** (fence covers candidate_communications only) |
-| Tenant application contact/resume/follow-up (`app_` tenant keys) | website_applications | legacy by design (release doc: tenant writers stay available) |
-| Sourced people (`src_` keys, sourcing runs advance) | sourced_candidates, sourcing_run_candidates | legacy; tenant sourcing pool, no person path |
-| Verdicts and judge caches (pipeline, rolecard review/feedback/relabel, eval) | match_verdicts, verdict_cache, verdict_feedback, person_role_types, candidate_profiles.confirmed_facts, verdict_evals.person | legacy, unguarded derived data |
-| Talent refresh enqueue, JD telemetry | refresh_queue (fresh TT queued rows allowed), anonymous enrichment row | n/a (enqueue failure is swallowed at `spine.ts:430`) |
-| Status, stages, no-reply, tasks, inbox, lists, attachments, tracked links | workflow tables keyed by candidate key | n/a |
+| Public apply, referral application, future interest | Durable `person_application_accept`; held TT submissions retain inputs without work/budget reservation | Acceptance harness: 55 primitive+7 TT-fence tests; local controller rehearsal retains 12 synthetic submissions |
+| TT after-response pipeline and review retry | Claimed work, exact source/normalization/projection/readiness proof, atomic completion; legacy/support-on refuses TT effects before claim | Application/enrichment/completion suites and full-chain cross-family tests |
+| Tenant pipeline | Immutable tenant binding and atomic result/contact completion; no TT-pool admission | Tenant binding/completion suites and hosted tenancy |
+| Pool contact edit (`net_`) | Certified recruiter transaction, source policy, projection and receipts | Recruiter and contact-route tests |
+| TT application follow-up, preferences and add-role | Checked edit, exact candidate mirror and immutable edit receipts | #72/#76 full-chain edit and route tests |
+| TT application resume upload | Checked path/hash edit; linked parser fill binds authenticated upload, candidate, actor and parsed contacts; retains submitted contact and recruiter choices | #76 SQL061000; real local upload route with sealed parser/storage fixtures, replay/stale/drain/tenant tests |
+| Linked TT application contact edit (`app_`) | Routes to the pool's certified recruiter transaction; submitted application contact remains evidence | #76 contact/read-policy tests and real local drawer route |
+| Unlinked TT application contact edit | Checked application copy edit | Application edit and route tests |
+| Network Send into TT | Checked insertion with current effective-contact revalidation and exact stored-row/captured-event witness | #77 DB/route/audit tests, including later checked edit/resume fill |
+| Network Send into a client | Accepted tenant-scoped copy path outside TT source capture/fence | Tenant scope decision and hosted tenancy; client-safe profile/verdict contract retained |
+| Email-send follow-up clear | Uses checked TT follow-up/candidate mirror when support is on; no silent skipped clear | #72 checked-edit/route tests plus source inspection of email-follow-up orchestration; no `noteEmailSent` execution claim |
+| Tenant-owned application edits and sourced people | Accepted organization-owned legacy paths; never moved into the TT pool | Organization filters and hosted tenancy |
+| Notes, email logs and referral records | Accepted exclusions from the profile guard; retain their existing behavior | Source inspection; do not claim an armed live integration test |
+| Status/stages/tasks/inbox/lists/attachments/tracked links | Existing workflow stores; no blanket authority to mutate candidate profile rows | Source inventory; TT candidate mirrors use the checked path above |
+| Verdicts, judge caches, signals and shortlists | Accepted derived-data boundary; coordinate the nightly jobs for the approved migration sitting | Runbook pause/restoration/rebuild procedure; not a new database fence |
 
-Note: `applicationEditsPaused` returns false when `person_transition_status` reports
-`enabled:false`, so edits use raw writes while the controller is disarmed. That is
-consistent with S2 being off, but must flip together with arming.
+The later main change adds `/api/internal/resumes/[id]`: deliberately token-authorized,
+cross-organization and read-only for Spencer. It does not participate in candidate
+writes. The normal tenant-authenticated sweep does not exercise that endpoint;
+separate token/refusal/failure checks are required when recording final integration.
 
-## 3. Actions workers and scripts
+## Workers and operators
 
-| Workflow (UTC) | Legacy path | Shadow/live, support off | Support on (certified) |
-|---|---|---|---|
-| refresh-queue 08:00 → `refresh-worker.mjs` | direct candidates/enrichments/experiences/embeddings/refresh_queue; legacy retry re-patches failed rows (30 days) | savePerson path; queue top-up still direct | certified RPCs, derivatives deferred; **unreachable (G2)** |
-| sync-candidates 07:00 → `sync-directory.mjs` | direct candidates PATCH/POST incl. DNC; matching_embedding | savePerson path; directory embeddings via own guard | certified RPCs; **unreachable (G2)** |
-| review-queue 06:30 → `review-queue.mjs` | direct applications/candidates/enrichments/experiences/embeddings, verdicts | profile via savePerson, but follow-up/preferences/visa PATCH, resume-parse enrichment, application name/contact still direct | admitted work RPCs; **unreachable (G2)** |
-| compute-signals 07:30 | person_signals upsert | same | no guard, no journal |
-| build-shortlists 08:15 | role_shortlists delete+insert | same | no guard |
-| judge-shortlists 08:45 | match_verdicts, verdict_cache, network_matches (copies name/title/company) | same | no guard |
-| sourcing-resumer every 15 min | sourced_candidates, sourcing rows, orphan heal | same | tenant sourcing, no guard |
-| person-trial (manual) | new-path tools (save_person, backfill, trial undo hard-deletes) | reads neither switch | trial undo must never run after cutover |
+| Writer | Prepared path and operational boundary |
+|---|---|
+| Directory sync | Certified input/execution/publication/creation/outcome/suppression/readmission/current-source RPCs, including DNC and top-level fields; derivative work is durable |
+| Harvest refresh | Certified top-up, lifecycle, source save and completion; legacy retry is skipped on the admitted path; repository-wide `refresh-queue` concurrency, no cancellation of an in-flight run |
+| Application review queue | Support/mode dispatch inputs are wired; TT processing is admitted. Tenant processing can still have paid effects in legacy mode, so leave the scheduled workflow disabled for a scoped canary |
+| Certified embeddings | #70 lifecycle, #78 checked publication/worker, #82 sole scheduled consumer at minute 20 each hour; separate group and explicit daily cap; no certified embedding drain remains in refresh |
+| Compute signals / build shortlists / judge shortlists | Accepted temporary pause only for the approved migration sitting. Record original states, settle all nonterminal runs, restore only states changed by the migration |
+| Sourcing resumer | Accepted tenant sourcing scope; not a TT normalized writer |
+| Historical catch-up | Actual clean `c4d0e4e` checkout and fresh bundle, exact run-scoped held maintenance window; no code relabelling, no finalized-run resume |
+| Anchor preparation | Held anchors window; exact evidence/ownership checks; CLI transaction-level server timeout |
+| Publication | Named publish window while controller is open; source/anchor guard, revision-safe projection and evidence |
+| Undo | Approved drain/seal/disarm sequence before conditional undo; never overwrite a newer legitimate revision |
+| Trial undo and legacy maintenance | Old destructive trial undo is forbidden after shadow writes/cutover. Operator credentials do not authorize bypassing fences |
 
-Derivative entry guard (`requireLegacyDerivativeConsumer`, `derivatives.ts`) covers only
-the refresh derivative drain; it does not reach signals, shortlists, judge, directory
-embeddings or the REST embedding writers in `spine.ts`.
+Publish/transition sessions require a verified direct/session endpoint and await
+SET 20s on every checkout. Anchor RPCs use BEGIN/SET LOCAL 15s/RPC/COMMIT. The shared
+checkout listener handles transport errors throughout a held session, prevents
+further SQL after a broken connection or failed rollback, and disposes once.
+Offline socket probes and real loopback database tests are distinct from actual
+hosted-pooler verification.
 
-## 4. Database-side writers and fence coverage
+## Database scope and resolved inventory gaps
 
-- No pg_cron jobs.
-- Fenced under S2: candidates, candidate_sources, candidate_profile_state, identities,
-  educations, skills, contacts, experiences, legacy candidate_emails,
-  candidate_communications, candidate_enrichments, website_applications (TT rows),
-  refresh_queue and refresh attempts, companies/schools/skills, identity_conflicts,
-  projection state/history, derivative jobs, directory and recruiter tables, audit evidence.
-- **Not fenced:** candidate_emails_v2, candidate_embeddings, person_signals,
-  network_matches, match_verdicts, role_shortlists, candidate_role_statuses,
-  candidate_notes, candidate_list_members, stage_events, candidate_email_log,
-  verdict_cache, candidate_profiles, person_role_types, sourced_candidates,
-  sourcing_run_candidates, referrals.
-- Legacy SQL writers still allowed under S2: `refresh_network_matches`,
-  `refresh_network_matches_role`, trigger `match_verdicts_network` (all copy profile
-  fields into network_matches), sourcing RPCs (tenant tables).
-- Every fence is a trigger; an owner session with `session_replication_role=replica`
-  bypasses all of them. No code does this; keep it that way.
+Candidate facts, identities, normalized contacts/education/skills/experiences,
+legacy email/website communication outcomes, source enrichments, TT application
+rows, refresh attempts, shared lookups, identity conflicts, projection/audit proof,
+derivative journals and directory/recruiter receipts have the applicable prepared
+frames and proof guards. This does not authorize writes to `_v2` or the external
+communications project; both remain read-only. No repository code bypasses triggers
+with `session_replication_role=replica`; do not introduce such a bypass.
 
-## 5. Scope decisions for Spencer
+| Original gap | Current disposition |
+|---|---|
+| G1 candidate workflow mirrors / embeddings | Checked edits cover mirrors. Certified chunks provide embedding refresh; the search contract retains its existing matching_embedding/chunk selection |
+| G2/G3 unreachable workers / dispatch overrides | #74 wires support and per-dispatch mode/support for the three writer workflows; #82 wires the hourly embedding worker |
+| G4 maintenance/publish/undo refused | #71 held catch-up/anchors; #73 open publication; #79 deferred-work admission and truthful active/expired-window drain status; conditional undo after disarm |
+| G5 conflict resolution while armed | Accepted post-launch checked-resolver work. Keep reviews retained; no implicit person merge or resolver bypass |
+| G6 shared lookup maintenance | Repository source inspection found no independent companies/schools/skills writer outside the normalized writer. Other repositories were not audited |
+| G7 missing derivative consumer | #70/#78/#82 supply lifecycle, publication and one scheduled consumer; no activation tonight |
+| G8 incomplete migration inventory | Runbook lists the full dependency chain through 090000, including 061000; install only the reviewed whole chain |
+| G9 blocking index install | Concurrent prebuild outside the migration, followed by validity/readiness/shape checks. Migration skips CREATE INDEX entirely when the acceptable index exists; invalid/incompatible names fail closed |
 
-Recorded here as they are made; until then the suggested default applies.
+Accepted scope decisions (September 28): tenant-owned data stays legacy; notes,
+email logs and referrals stay outside the profile guard; the three derived nightly
+jobs pause for the approved sitting, and `network_matches` rebuilds from candidates
+after publication and after any undo. The old observations of 5,483 conflicts and
+94,952 Network rows are dated historical measurements, not current release counts.
 
-1. Tenant-owned data (tenant application edits, sourced_candidates): suggested
-   **out of scope**, stays legacy; it is organization data, not the TT pool.
-2. Derived data (verdicts, shortlists, signals, network_matches, embeddings chunks):
-   suggested **no fence**; instead drain them with the other writers and rebuild
-   network_matches after publication so copied name/title/company match.
-3. candidate_notes, candidate_email_log, referrals: suggested **out of scope for the
-   profile guard** (not profile fields), but they must keep working while S2 is armed.
+## Current source accounting
 
-## 6. Exit checklist
+`person-reconcile-full-20260930` is closed `review_required`, with complete traversal
+and `external_stable=false`. **423,590 = 420,939 verified + 2,649 same-snapshot
+reviews + 2 date holds.** No missing, pending, uncounted or beyond-cursor candidates
+remain in that recorded scan. The 5,500 conflict rows / 9,379 people, queue 2,429 and
+2,572 unreconciled events overlap these outcomes; they are not extra missing people.
+Do not resume/refinalize the closed run, infer dates or clear reviews through paid
+enrichment or person merges. Fresh source-boundary checks and reviewed provenance
+handling remain release gates. See the runbook for timestamps and limitations.
 
-`[x]` done, `[~]` partly done (see PR), `[ ]` open. Updated 2026-09-28.
+## Verification retained for this prepared stack
 
+- Full-chain cross-family tests: 504 Node cases and 48 SQL assertions passed. Relevant
+  child modules also ran their own fault/concurrency suites; these overlap and must
+  not be added together as distinct population coverage.
+- Contact/resume/Send integration:61 edit+13 contact-read+20 route tests,101 audit cases
+  including 14 Send-witness cases, and 23 recruiter tests passed on #77's combination.
+- Acceptance harness #80:55 primitive acceptance cases before later schema, then
+  7 TT-fence and 20 route cases with the complete prepared chain. Existing test guards
+  and assertions remain intact.
+- Application projection collision regressions already cover preexisting and racing
+  unique-email owners, a real index wait, fallback hashes and exact conflict evidence
+  in `scripts/person-application-projection/test-projection.mjs:90`. Their presence
+  closes the old missing-test TODO; this is not a claim that every old harness was
+  rerun on the final full chain.
+- #79/#83 controller/maintenance rehearsal: 8 current and 8 frozen-c4 cases. It tests
+  direct synthetic acceptance, parked/expired work, windows, anchors, publication
+  and undo. Incomplete processing is explicitly refused then parked; it does not
+  successfully exercise the entire hosted application pipeline.
+- #81 helper:27 offline pin/privacy/acquisition/capacity/recovery/endpoint/deadline
+  cases passed. #83: 16 offline transport cases plus 150 audit, 40 publish and 10 maintenance
+  cases passed on loopback Postgres. Actual production connections remain unverified.
+- Reviewed application child previews through #77 passed 913 hosted tenancy calls each
+  with strict 18 fixture checks and zero leftovers. Operator/workflow/harness-only
+  children retain that evidence only where app/library/package content is identical.
+  The final integration plus current main requires its own exact-preview gate.
+  The added offline internal-resume harness passes 13 token/refusal/storage-failure
+  and no-store checks with sealed synthetic transports; it does not access real resumes.
 
-- [x] G1 editor mirrors in #72; `matching_embedding` for directory/refresh saves not needed: search uses the nearest of it and the chunk embeddings (#78 keeps chunks current)
-- [x] G2 support flag wired per workflow (#74)
-- [x] G3 per-dispatch override for an isolated canary (#74)
-- [x] G4 maintenance admission: catch-up, reconcile and anchors in #71; publish while open in #73; undo by drain, seal, disarm (tested, #73)
-- [x] G5 accepted (Spencer, 2026-09-28): conflicts stay unresolvable while armed. None has ever been resolved (all 5,483 open in production) and there is no resolver in the app; new flags are still recorded. The post-launch duplicate-people project builds a checked resolver
-- [x] G6 lookup writers: no code in this repository writes companies/schools/skills outside the normalized writer, and there are no edge functions (checked 2026-09-29). Writers in other repositories were not checked
-- [x] G7 derivative consumer lifecycle in #70; publication and worker in #78; one refresh run at a time in #81
-- [x] G8 runbook migration list complete (#75)
-- [x] G9 index pre-built concurrently; migration uses IF NOT EXISTS (#75)
-- [x] Paused TT editors: follow-up, resume and add-role in #72; contact in #76; TT-target Send in #77
-- [x] Client-target Send: tenant rows, outside the TT fence and audit capture (decision 1); unchanged
-- [x] Email-send follow-up clear no longer silently skipped (#72)
-- [x] Review worker: with support on, every direct write in `applicant-pipeline.ts` is skipped under admitted processing (`!applicationProcessing()` guards); the admitted work path writes the rest (checked 2026-09-29)
-- [x] Refresh: with support on, `runCertifiedRefresh` tops up through `topUpCertifiedRefresh`; the legacy retry only runs in legacy mode (checked 2026-09-29)
-- [x] Scope decisions: 1 agreed (tenant data stays legacy); publish runs while open (agreed); 2 agreed 2026-09-28 (pause compute-signals, build-shortlists and judge-shortlists for the sitting; rebuild network_matches after publication and after any undo; runbook on #81; rebuild query counted 94,952 rows read-only, matching the current list); 3 agreed 2026-09-28 (notes, email log and referrals stay as they are, outside the profile guard)
-- [x] Tested drain with public submissions accepted throughout: CLI and full local rehearsal with real live, parked and expired work in #79
+## Historical stage 2 results and remaining live gates
 
-## 7. Found while building
+September 28's report compared a copy installed in production order with one in
+harness order and reported equal catalogs. It predates September 30 review fixes;
+do not treat it as current schema-equivalence proof. That report recorded 47 suites
+as written (15 older harnesses missing later schema),36 passing after added schema,
+48 trial assertions, 7 older suites expecting now-refused legacy writes, and 3 stub
+schemas not suitable for the full chain. The 7 also failed against the then-parent;
+no write expected to be refused became allowed. These are retained historical
+limitations, not a claim of an all-green global suite or a reason to weaken fences.
 
-- The shared projection envelope lost the email-collision conflict for every family that used it (application family included). Fixed in #73; an application-path collision test is still to add.
-- `scripts/person-application-acceptance/run-local-tests.sh` fails 5 tests on the unmodified parent: it does not install migrations the library now uses. Refresh it during stage 2.
-- The publish harness uses whatever worker lib is built; rebuild first.
-- A TT-target Send row without a witness made the sent person `review: raw_fact_not_admitted` in the audit. #77 adds the witness.
-
-## 8. Stage 2 verification (2026-09-28, local only)
-
-Combined branch: #81 head (whole stack) merged with #78 (on #70) and #80.
-
-- Install order: production has 072 to `20260926050355`. A local copy built in that
-  order followed by the runbook list, and a copy built in harness order, produced
-  identical functions, triggers, columns, grants, policies, indexes and constraints.
-  The runbook list stopped at `050000`; completed through `090000` on #81.
-- All 47 suites as written: every suite for the newer migrations passes; 15 older
-  suites fail because their harnesses stop before migrations the current library uses.
-- All suites with every missing migration installed before their tests: 36 pass in
-  full, and the trial suite passes 48/48 once its missing base pieces are added. 7
-  still fail; 3 use stub schemas that cannot take the full chain (queue, work, transition).
-- The 7 fail identically when upgraded only to the parent (`20260928010000`), so none
-  comes from stage 1. Every failure is a stricter refusal: the retired direct intake
-  path (`application_source_fence`, 100000), lookup and experience fences with newer
-  codes, service-role INSERT removed from attributions and epochs (025000), or a
-  knock-on of one of these. No write the old tests expected refused was allowed.
-  The old suites should be retired or moved to the accepted path after launch.
-- Rehearsal with the full chain including `080000`: 6/6 (harness fixed on #81).
-- Type check clean; production build succeeds; offline scripts pass (directory and
-  refresh write safeguards, email escaping, tenancy cleanup scope).
-- Not run: the tenancy sweep and the six scripts that write throwaway rows to the
-  shared database. They need a non-production database and `.env.scripts`.
-- Scope 3 fact: no pending migration references candidate_notes,
-  candidate_email_log, referrals, verdicts, shortlists, signals or network_matches,
-  and no route that writes notes, email log or referrals writes candidates. Checked
-  by reading; not run against a live database.
-- Scope 2 fact: network_matches copies full_name, current_title and current_company;
-  `refresh_network_matches(org)` rebuilds from candidates. The runbook does not yet
-  pause the derived nightly jobs or rebuild after publication.
+Before release, retain the final exact commit/preview/tenancy cleanup, independently
+verify the deployed database transport and capacity, install the approved complete
+schema, and prove support-on acceptance plus settlement of old callbacks before
+arming. Where an approved canary's exact target cannot be expressed, prepare and
+review a scoped invocation before dispatching it. No canary, paid expansion,
+publication, guard activation or final production audit is claimed here.
