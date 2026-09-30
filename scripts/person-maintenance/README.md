@@ -43,6 +43,47 @@ Publication, undo and source-hold resolution are **not** admitted here.
 - Every open and close is recorded in the append-only `maintenance_events`.
 - With the controller disabled, all four RPCs behave exactly as before.
 
+## Starting the catch-up run
+
+The window needs an already-running pinned checkpoint. Invoke the helper from the
+reviewed release checkout, with an absolute clean Git checkout of the actual
+`c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc` in `PINNED_RUNNER_DIR`:
+
+```sh
+# Credentials are already configured privately; do not place them on a command line.
+# Run/recovery/capacity and no-conflicting-process gates must pass first.
+PINNED_RUNNER_DIR=/absolute/pinned-checkout \
+BACKFILL_CONFIG='{"reconcile":true,"run-id":"NEW_RUN","scope":"queue","limit":1000,"batch-size":100,"dry-run":false}' \
+node scripts/person-maintenance/start-catchup.mjs
+```
+
+The helper verifies actual Git HEAD and a clean tracked tree independently of any
+commit label, rebuilds the ignored worker bundle from that tree, and records its
+hash. A source archive inside another checkout is refused. The pinned translators,
+fingerprint algorithm and options remain unchanged; the helper uses a bounded
+read-only directory connection using a verified Supabase direct/session endpoint
+on port 5432 (transaction poolers and custom proxies are refused; loopback fixtures
+are allowed), with a 10-second connect, 8-second server statement,
+9-second client query limit and pinned REST transport. `max-seconds` is checked
+after runtime preparation and again before creating the checkpoint; an expired
+fingerprint cannot start a run. It does not cancel an in-flight fingerprint: its
+individual queries retain the stated bounds. Existing run IDs and failed
+DB-capacity checks are refused before fingerprint/start. Output contains run status
+and hashes only; errors are sanitized and acquired resources are closed on failure.
+
+After a successful start, open that run's window and use the actual pinned CLI with
+the identical configuration plus `resume:true`. Inspect durable state after an
+ambiguous start: absent means diagnose and start again after gates pass; a matching
+running checkpoint means continue that run after opening its window, even if the
+start response was lost. Failed/paused checkpoints need diagnosis and matching
+configuration before resume. Finalized checkpoints stay closed. Never infer that
+an initial fingerprint timeout created a run, and never duplicate an active run.
+
+The September 30 helper change has 27 offline tests covering false commit labels,
+privacy, acquisition cleanup, capacity refusal, existing checkpoints, lost responses, endpoint refusal and expiry before start. These use synthetic transports. The historical restored-copy rehearsal
+reported on September 28 did not test this new helper. A live invocation and runtime
+connection proof remain approval-gated release checks.
+
 ## Operator sequence (from a direct session, `PERSON_PUBLISH_DATABASE_URL`)
 
 ```sql
@@ -61,6 +102,7 @@ reviews under the runner's own rule. The window does not change that outcome.
 ## Verification
 
 ```sh
+node --test scripts/person-maintenance/test-start-catchup*.mjs
 node scripts/build-worker-lib.mjs
 PSQL=/path/to/psql bash scripts/person-maintenance/run-local-tests.sh PORT
 # Same tests with the frozen runner code: a checkout of c4d0e4e with its worker lib built
