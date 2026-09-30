@@ -151,3 +151,38 @@ test('worker: while draining it makes no new claims', async () => {
     assert.equal((await job(d)).status, 'pending');
   } finally { await pool.query('update person_private.transition_control set enabled=$1,phase=$2 where singleton', [s.enabled, s.phase]); }
 });
+
+test('hourly entry point: publishes pending people through the certified worker', async () => {
+  const { main } = await import('../derivative-worker.mjs');
+  const [h] = await pending(1);
+  let calls = 0;
+  const stats = await main({ PERSON_TRANSITION_SUPPORT: 'on', PERSON_WRITE_MODE: 'live', OPENAI_API_KEY: 'synthetic', DERIVATIVE_DAILY_CAP: '10000' },
+    { importLib: async () => ({ ...lib, embedPersonDerivativeChunks: async (parts) => { calls++; return vectors(parts.length); } }), log: quiet });
+  assert.ok(stats.published >= 1, JSON.stringify(stats)); assert.ok(calls >= 1);
+  assert.equal((await job(h)).status, 'done');
+});
+
+test('hourly entry point: a limiting cap reaches the worker', async () => {
+  const { main } = await import('../derivative-worker.mjs');
+  await pending(1);
+  let calls = 0;
+  const stats = await main({ PERSON_TRANSITION_SUPPORT: 'on', PERSON_WRITE_MODE: 'live', OPENAI_API_KEY: 'synthetic', DERIVATIVE_DAILY_CAP: '0' },
+    { importLib: async () => ({ ...lib, embedPersonDerivativeChunks: async (parts) => { calls++; return vectors(parts.length); } }), log: quiet, warn: quiet });
+  assert.equal(stats.stopped, 'daily_cap'); assert.equal(stats.paid_people, 0); assert.equal(calls, 0);
+});
+
+test('pending order: new applicants first, then recruiter edits, then the rest oldest first', async () => {
+  const ids = await pending(3); // directory receipts, oldest first
+  const order = async () => (await lib.pendingCertifiedDerivatives(5000)).filter((id) => ids.includes(id));
+  assert.deepEqual(await order(), ids);
+  // Synthetic relabel of the newest two as an application and a recruiter edit (triggers bypassed locally).
+  await pool.query('alter table person_derivative_jobs disable trigger user');
+  try {
+    await pool.query("update person_derivative_jobs set receipt_ref='recruiter:'||gen_random_uuid() where candidate_id=$1", [ids[1]]);
+    await pool.query("update person_derivative_jobs set receipt_ref='application:'||gen_random_uuid() where candidate_id=$1", [ids[2]]);
+  } finally { await pool.query('alter table person_derivative_jobs enable trigger user'); }
+  const got = await order();
+  assert.deepEqual(got, [ids[2], ids[1], ids[0]]);
+  const all = await lib.pendingCertifiedDerivatives(5000);
+  assert.equal(all[0], ids[2]); // ahead of every older directory job in the backlog
+});
