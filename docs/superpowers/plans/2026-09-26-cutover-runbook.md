@@ -198,7 +198,65 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260927100000_person_legacy_source_fence.sql
 20260927110000_person_conflict_evidence.sql
 20260927120000_person_lookup_mutations.sql
+20260927130000_person_directory_input.sql
+20260927140000_person_directory_execution.sql
+20260927150000_person_directory_publication.sql
+20260927160000_person_directory_creation.sql
+20260927170000_person_directory_outcomes.sql
+20260927180000_person_directory_suppression.sql
+20260927190000_person_directory_readmission.sql
+20260927200000_person_directory_current.sql
+20260927210000_person_refresh_lifecycle.sql
+20260927220000_person_refresh_save.sql
+20260927230000_person_refresh_worker.sql
+20260928000000_person_recruiter_admission.sql
+20260928010000_person_derivative_journal.sql
+20260928020000_person_derivative_lifecycle.sql
+20260928030000_person_maintenance_window.sql
+20260928040000_person_application_edits.sql
+20260928050000_person_publish_admission.sql
+20260928080000_person_derivative_publish.sql
 ```
+
+Before applying the chain, build the directory identity index without blocking
+candidate writes. Run this block with `psql -X -v ON_ERROR_STOP=1`, outside a
+transaction, and require successful exit before installing any of the chain.
+The bounds apply to this prerequisite separately from each migration:
+
+```sql
+set lock_timeout='3s';
+set statement_timeout='5min';
+create index concurrently if not exists candidates_person_username_idx on public.candidates(lower(linkedin_username));
+do $$ begin
+ if not exists (
+  select 1 from pg_index i join pg_class c on c.oid=i.indexrelid
+  join pg_am a on a.oid=c.relam
+  where i.indexrelid=to_regclass('public.candidates_person_username_idx')
+   and i.indrelid='public.candidates'::regclass and i.indisvalid and i.indisready
+   and not i.indisunique and i.indpred is null and i.indnatts=1 and a.amname='btree'
+   and pg_get_expr(i.indexprs,i.indrelid) in ('lower(linkedin_username)','lower((linkedin_username)::text)')
+ ) then raise exception 'candidate identity index is not ready'; end if;
+end $$;
+reset statement_timeout;
+reset lock_timeout;
+```
+
+An interrupted concurrent build can leave an invalid index; `IF NOT EXISTS` on a
+retry does not prove success. A wrong expression, unique or partial index is also
+refused. If creation or validation fails, stop installation. Have the operator
+inspect the failed or conflicting index and arrange its approved repair, then
+repeat the whole prerequisite and require successful validation. Do not silently
+drop an existing index or continue after the notice that its name exists.
+
+The candidates heap was 660 MB on 2026-09-28; no production build duration is
+assumed. With a validated prebuild, `20260927170000` checks the catalog and never
+executes `CREATE INDEX`, avoiding its write-blocking lock even on the skip path.
+Its missing-index fallback is for fresh local fixtures; production must pass the
+prebuild gate above. `20260927190000` refuses to install
+if any directory execution already completed. Install the whole chain before any
+certified directory writer runs. Include only files merged into the released parent:
+`20260928020000` arrives with #70, `030000` to `050000` with #71 to #73, and `080000`
+with #78.
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
 attribution references, source ownership checks and committed reference epochs.
