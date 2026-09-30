@@ -71,6 +71,10 @@ async function rest(path, init = {}) {
 const [org] = await rest("organizations?slug=eq.transformer-talent&select=id");
 if (!org) throw new Error("organization not found");
 
+// Certified embeddings: people paid per UTC day across runs (fail closed on a bad value).
+const DERIVATIVE_DAILY_CAP = process.env.DERIVATIVE_DAILY_CAP === undefined || process.env.DERIVATIVE_DAILY_CAP === "" ? 200 : Number(process.env.DERIVATIVE_DAILY_CAP);
+if (!Number.isInteger(DERIVATIVE_DAILY_CAP) || DERIVATIVE_DAILY_CAP < 0 || DERIVATIVE_DAILY_CAP > 10000) throw new Error("DERIVATIVE_DAILY_CAP must be an integer 0..10000");
+
 if (PERSON_MODE !== "legacy") {
   const runRefresh = process.env.PERSON_TRANSITION_SUPPORT === "on"
     ? (await import("./person-refresh-worker/worker.mjs")).runCertifiedRefresh
@@ -91,6 +95,15 @@ if (PERSON_MODE !== "legacy") {
     },
   });
   if (stats.failed || stats.review || stats.uncertain) process.exitCode = 1;
+  // Certified embeddings for people whose sources changed (application, directory,
+  // refresh, recruiter). Live mode only; capped paid people per run; no key, no calls.
+  if (process.env.PERSON_TRANSITION_SUPPORT === "on" && PERSON_MODE === "live" && process.env.OPENAI_API_KEY) {
+    const d = await (await import("./person-derivative-worker/worker.mjs")).runCertifiedDerivatives({
+      lib: workerLib, apiKey: process.env.OPENAI_API_KEY, dailyCap: DERIVATIVE_DAILY_CAP,
+    });
+    // Errors and unknown paid results need a person to look; definite failures retry next run.
+    if (d.errors || d.unknown) process.exitCode = 1;
+  }
 } else {
 // Budget: paid Harvest calls already made today (site + worker share the cap).
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
