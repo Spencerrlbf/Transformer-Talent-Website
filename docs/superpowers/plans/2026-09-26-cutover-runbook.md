@@ -215,6 +215,8 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260928030000_person_maintenance_window.sql
 20260928040000_person_application_edits.sql
 20260928050000_person_publish_admission.sql
+20260928060000_person_application_contact.sql
+20260928061000_person_resume_contact_fill.sql
 20260928080000_person_derivative_publish.sql
 ```
 
@@ -255,6 +257,8 @@ Its missing-index fallback is for fresh local fixtures; production must pass the
 prebuild gate above. `20260927190000` refuses to install
 if any directory execution already completed. Install the whole chain before any
 certified directory writer runs. Include only files merged into the released parent:
+`060000` and `061000` arrive with #76 (linked contact routing and authenticated resume gap-fill). They remain prepared and require the same release approval.
+
 `20260928020000` arrives with #70, `030000` to `050000` with #71 to #73, and `080000`
 with #78.
 
