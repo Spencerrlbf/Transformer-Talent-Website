@@ -138,3 +138,5 @@ export { claimCertifiedRefreshOnConnection, startCertifiedRefreshProviderOnConne
 export { saveCertifiedRefreshOnConnection, saveCertifiedRefresh } from './person/refresh-save';
 export { pickCertifiedRefreshOnConnection, topUpCertifiedRefreshOnConnection, recoverCertifiedRefreshOnConnection, pickCertifiedRefresh, topUpCertifiedRefresh, recoverCertifiedRefresh } from './person/refresh-worker';
 export { claimCertifiedDerivativesOnConnection, startCertifiedDerivativesProviderOnConnection, storeCertifiedDerivativeVectorsOnConnection, recoverCertifiedDerivativesOnConnection, claimCertifiedDerivatives, startCertifiedDerivativesProvider, storeCertifiedDerivativeVectors, recoverCertifiedDerivatives, publishCertifiedDerivativesOnConnection, publishCertifiedDerivatives, failCertifiedDerivativesProviderOnConnection, failCertifiedDerivativesProvider, pendingCertifiedDerivatives, resumableCertifiedDerivatives, paidCertifiedDerivativesToday, attemptLimitedCertifiedDerivatives, DEFINITE_PROVIDER_FAILURES, certifiedDerivativesAdmitting } from './person/derivative-lifecycle';
+
+export { resumeFillPlan, resumeFillDocument } from './person/resume-fill-evidence';

@@ -60,6 +60,19 @@ export function collectEvidence(s,lib,external,out){
   for(const r of arr(s.recruiter_receipts)){
    if(!r.result){out.pending('recruiter_pending');continue;}
    const d=r.document,c=r.requested_contact;
+   const uploadOperations=arr(s.operations).filter(o=>o.writer==='recruiter'&&o.receipt_ref===`recruiter:${r.id}`);
+   const upload=uploadOperations[0]?.evidence?.resume_fill;
+   if(upload){
+    const input=upload.input,snapshot=upload.snapshot,a=snapshot?.application;
+    if(uploadOperations.length!==1||upload.version!==1||r.candidate_id!==id||!['live','shadow'].includes(r.mode)||upload.mode!==r.mode||upload.organization_id!==lib.TT_ORG_ID||upload.actor_id!==r.actor_id||input?.actorId!==r.actor_id||input?.candidateId!==id||a?.candidate_id!==id||a?.organization_id!==lib.TT_ORG_ID||a?.id!==input?.applicationId||a?.resume_path!==input?.path||a?.person_resume_sha256!==input?.sha256||!/^[a-f0-9]{64}$/.test(input?.sha256??'')||at(upload.edited_at)!==at(r.edited_at)||upload.input_hash!==r.input_hash||!same(snapshot?.contact,r.before_contact,lib)||!Array.isArray(snapshot?.contacts)||!Array.isArray(snapshot?.choices)) {out.review('resume_fill_receipt_invalid');return null;}
+    const hash=createHash('sha256').update(lib.stableStringify(input)).digest('hex');
+    const fill=lib.resumeFillPlan(snapshot,input.extracted);
+    const expected=lib.resumeFillDocument(id,r.id,at(r.edited_at),snapshot,input.extracted);
+    const flags=expected.contacts.map(x=>({kind:x.kind,value_normalized:x.value_normalized,existed:false,never_primary:null}));
+    if(hash!==r.input_hash||(!fill.phone&&!fill.email)||!same(fill.contact,c,lib)||!same(upload.requested,c,lib)||!same(expected,d,lib)||!same(uploadOperations[0].evidence.prior_contact_flags,flags,lib)){out.review('resume_fill_receipt_invalid');return null;}
+    receipts.set(`recruiter:${r.id}`,r);if(!add(d,`recruiter:${r.id}`))return null;
+    continue;
+   }
    if(r.candidate_id!==id||!['live','shadow'].includes(r.mode)||d?.source?.source!=='recruiter'||d.source.provider!=='website-recruiter'||d.source.source_ref!==r.id||at(d.source.fetched_at)!==at(r.edited_at)||!c){out.review('recruiter_receipt_invalid');return null;}
    const inputHash=createHash('sha256').update(lib.stableStringify(c)).digest('hex');
    const contacts=lib.mergeContacts([
