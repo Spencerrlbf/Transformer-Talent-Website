@@ -119,11 +119,17 @@ fi
 if test -f supabase/migrations/20260928060000_person_application_contact.sql; then
  q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
 fi
+if test -f supabase/migrations/20260928061000_person_resume_contact_fill.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
+fi
 if test -f supabase/migrations/20260928070000_person_network_send.sql; then
  q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 fi
 if test -f supabase/migrations/20260928080000_person_derivative_publish.sql; then
  q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
+fi
+if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 fi
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-completion/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-completion/dist/processing.mjs --log-level=warning

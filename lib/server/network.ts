@@ -1,4 +1,5 @@
-import { applicationEditsPaused } from './person-transition/acceptance';
+import { transitionSupport } from './person-transition/context';
+import { personWriteMode } from './person/intake';
 // Network matches: the internal-only surface over the nightly pool matcher.
 // match_verdicts (pool candidate × org role, scorecard verdicts as v2) is
 // aggregated person-first: one entry per pool person with all their matched
@@ -7,7 +8,7 @@ import { applicationEditsPaused } from './person-transition/acceptance';
 // "send" path is the only bridge to a client-visible surface: it creates a
 // normal website_applications row marked source=transformer_talent, which
 // renders in the job's pipeline as an applicant with the Via-TT badge.
-import { sbRest, sbInsert } from "./supabase";
+import { sbRest, sbInsert, sbRpc } from "./supabase";
 import { publishedPoolContacts, type ResolvedPoolContact } from "./person/contacts";
 import { publishedPoolProfiles } from "./person/profile-view";
 import { TT_ORG_ID } from "./person/normalize";
@@ -100,7 +101,8 @@ function emailScore(r: EmailRow): number {
 export async function poolEmails(
   candidateIds: string[],
   knownEmails: Map<string, string | null>,
-  published?: Map<string, ResolvedPoolContact>
+  published?: Map<string, ResolvedPoolContact>,
+  options: { requireComplete?: boolean } = {}
 ): Promise<Map<string, RankedEmail[]>> {
   const normalized = published ?? await publishedPoolContacts(candidateIds);
   const legacyIds = candidateIds.filter(id => !normalized.has(id));
@@ -115,6 +117,7 @@ export async function poolEmails(
         `candidate_emails_v2?candidate_id=in.(${chunk})&select=candidate_id,email:email_normalized,email_type,is_primary,quality,result`
       ),
     ]);
+    if (options.requireComplete && (!a.ok || !b.ok)) throw Error("pool_contact_unavailable");
     if (a.ok) rows.push(...((await a.json()) as EmailRow[]));
     if (b.ok) rows.push(...((await b.json()) as EmailRow[]));
   }
@@ -137,7 +140,7 @@ export async function poolEmails(
       seenEmails.add(known.toLowerCase());
       ranked.push({ email: known, verified: true });
     }
-    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y))) {
+    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y) || Buffer.compare(Buffer.from(str(x.email)!.toLowerCase()), Buffer.from(str(y.email)!.toLowerCase())) || Buffer.compare(Buffer.from(str(x.email)!), Buffer.from(str(y.email)!)))) {
       const e = str(r.email)!;
       if (seenEmails.has(e.toLowerCase())) continue;
       seenEmails.add(e.toLowerCase());
@@ -390,7 +393,8 @@ export async function sendNetworkCandidate(
     target = { orgId: linked.orgId, jobId: linked.jobId, title: client.title, roleUuid: client.id };
   }
 
-  if (await applicationEditsPaused(target.orgId)) return { ok: false, error: "temporarily_unavailable" };
+  // Into TT's own pipeline with support on, the checked Send writes the row (it waits while draining/held).
+  const checkedSend = target.orgId === TT_ORG_ID && transitionSupport();
 
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
   let [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
@@ -399,18 +403,21 @@ export async function sendNetworkCandidate(
   const canonical = published.get(candidateId);
   if (canonical) cand = canonical.profile as PoolRow;
   const bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : str(cand.contact?.phone) ?? str(cand.phone);
-  const bestEmail =
-    (
-      await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published)
-    ).get(candidateId)?.[0]?.email ?? null;
+  let bestEmail: string | null;
+  try {
+    bestEmail = (await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published, { requireComplete: checkedSend })).get(candidateId)?.[0]?.email ?? null;
+  } catch { return { ok: false, error: "temporarily_unavailable" }; }
 
   // One send per (person, target job) — pipelines never grow duplicates.
-  const dupRes = await sbRest(
-    `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
-      `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
-  );
-  if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
-    return { ok: false, error: "already_sent" };
+  // The checked Send decides this under the person's writer lock.
+  if (!checkedSend) {
+    const dupRes = await sbRest(
+      `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
+        `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
+    );
+    if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
+      return { ok: false, error: "already_sent" };
+  }
 
   // Published compatibility profile; raw Harvest remains the legacy fallback.
   const enrRes = canonical ? null : await sbRest(
@@ -437,9 +444,7 @@ export async function sendNetworkCandidate(
   const crossOrg = target.orgId !== orgId;
   const carried = crossOrg ? clientSafeVerdict(v?.verdict) : v?.verdict ?? null;
 
-  const inserted = await sbInsert<{ id: string }>(
-    "website_applications",
-    {
+  const row = {
       organization_id: target.orgId,
       name: cand.full_name || "Candidate",
       email: bestEmail || "",
@@ -461,9 +466,22 @@ export async function sendNetworkCandidate(
         canonical || bestEmail || bestPhone
           ? { email: bestEmail, phone: bestPhone }
           : null,
-    },
-    true
-  ).catch((e) => {
+  };
+  if (checkedSend) {
+    type SendResult = { status?: string; applicationId?: string };
+    const r: SendResult = await sbRpc<SendResult>("person_network_send", { p_row: row, p_mode: personWriteMode() }).catch((e): SendResult => {
+      const message = (e as Error).message ?? "";
+      console.error("checked network send failed");
+      // A refused row is a real failure, not a reason to retry.
+      return { status: /network_send_(input|profile|actual)/.test(message) ? "refused" : "unavailable" };
+    });
+    if (r.status === "sent" && r.applicationId) return { ok: true, applicationId: r.applicationId };
+    if (r.status === "already_sent") return { ok: false, error: "already_sent" };
+    if (r.status === "candidate_not_found") return { ok: false, error: "candidate_not_found" };
+    if (r.status === "refused") return { ok: false, error: "insert_failed" };
+    return { ok: false, error: "temporarily_unavailable" };
+  }
+  const inserted = await sbInsert<{ id: string }>("website_applications", row, true).catch((e) => {
     console.error("network send insert failed", e);
     return null;
   });
