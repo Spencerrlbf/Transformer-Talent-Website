@@ -148,3 +148,14 @@ test('dedicated CLI transport arms the database timeout before the RPC starts',a
  await assert.rejects(openAnchorDatabase({LOCAL_DATABASE_URL:'postgresql://invalid.example/test'}),/audit_database_url/);
  const site=await openAnchorDatabase({LOCAL_DATABASE_URL:url});try{const rows=await site.rpc('person_audit_anchor_page',{p_after:id(20),p_limit:2});assert.ok(Array.isArray(rows));await assert.rejects(site.rpc('unapproved_function',{}),/audit_database_method/);}finally{await site.end();}
 });
+
+test('the anchor database bounds every call itself when a pooler drops the startup timeout', async () => {
+ const {openAnchorDatabase}=await import('./database.mjs');
+ // statement_timeout undefined: nothing is sent at startup, exactly as through Supabase's poolers.
+ const site=await openAnchorDatabase({LOCAL_DATABASE_URL:url},{statement_timeout:undefined});
+ try{
+  const rows=await site.rpc('person_audit_anchor_page',{p_after:null,p_limit:2});assert.ok(Array.isArray(rows));
+  assert.ok(rows.length>0);const inputs=await site.rpc('person_audit_anchor_inputs',{p_ids:rows});assert.equal(inputs.length,rows.length);
+  const metrics=await site.rpc('person_backfill_metrics',{});assert.ok(Number.isFinite(Number(metrics.database_bytes)));
+ }finally{await site.end();}
+});
