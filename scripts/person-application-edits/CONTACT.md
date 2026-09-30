@@ -4,7 +4,7 @@ With `PERSON_TRANSITION_SUPPORT=on`, for Transformer Talent application keys (`a
 
 | Applicant | Contact edit and resume contact fill | Drawer shows |
 |---|---|---|
-| Linked to a pool person | Contact edit: the pool person's contact, through the certified recruiter path (`saveRecruiterContact`). Resume fill: not written automatically (see below) | The pool person's published contact (or their row, if unpublished), and Send and the candidate list use the same address |
+| Linked to a pool person | Contact edit: the pool person's contact, through the certified recruiter path (`saveRecruiterContact`). Resume fill: a distinct certified automatic gap-fill | The pool person's published contact (or their row, if unpublished), and Send and the candidate list use the same address |
 | Not linked | Contact edit: `person_application_edit(..., 'contact', ...)`. Resume fill: `person_application_contact_fill`, the old fill rule decided under the row lock | The application copy |
 
 The application keeps its original submitted contact as the historical record, and
@@ -15,26 +15,41 @@ the `contact` kind (`linked`). Tenant rows and support-off behavior are unchange
 shape check: email, phone, github, and up to 8 other emails. It lets the result and
 intake guards accept only that exact edit frame.
 
-**Deviation from the agreed wording: a linked applicant's resume fill is not written.**
-The only write path for a pool person's contact is the recruiter path. It records
-every value as the recruiter's own choice: it pins the primary and marks a parsed
-phone as typed. It also writes the whole block, so it could revert a recruiter's
-concurrent save. The pool person's contacts keep coming from their sources and
-from recruiter edits.
+Linked resume uploads use `fillLinkedResumeContact` and prepared migration
+`20260928061000_person_resume_contact_fill.sql`. A distinct, immutable binding
+records the authenticated actor, current application/candidate link, uploaded
+path/hash, extracted contacts and locked before-images. The existing certified
+transaction performs normalization, attribution and projection atomically. The
+source is `application` / `website-resume-upload`, with parser provenance;
+extracted values are never labelled manual or verified.
 
-If the drawer's pool read fails, it falls back to the application copy. A row that
-becomes linked during an edit returns `contact_moved`.
+Only new values fill gaps. Existing claimed, rejected and never-primary contacts
+are not promoted. A recruiter phone choice, including an explicit clear, blocks
+phone fill; the complete primary-choice snapshot stays unchanged. The existing
+secondary list is retained when there is no curated overlay. New active email
+values follow the normal ranking policy, so a newly selected primary is returned
+to the drawer along with eligible phone/secondary changes. Public-form eligibility
+rules are unchanged. A replay returns no new changes.
+
+If a linked person's pool read fails, the drawer refuses the read with a retryable
+503 rather than offering an editable empty contact. The list and email recipient
+remain empty; the submitted application address is never revived. Confirmed empty
+contact remains empty. Unpublished people use the same verification-table email
+selection as the pool drawer and Send. A row that becomes linked during an edit
+returns `contact_moved`.
 
 ## Verification
 
-- **Edit tests:** 38/38 including the shared suite. They cover the atomic fill and a
-  result-guard test that fails without its patch.
-- **Route tests:** 18/18. A linked applicant's contact waits in legacy mode and never
-  touches the application row. An unlinked applicant saves only through the checked edit.
-- **Recruiter suites:** 23/23 and 77/77.
-- **Other suites:** cross-family 504/504, publish 39/39, publish admission 11/11,
-  maintenance 10/10 (current and pinned runner).
-- **Type check:** `tsc` passes.
+- **Edit tests:** 52/52 including shared intake tests, real live contact/save/upload
+  routes, replay, concurrent recruiter writes, claimed contacts, explicit clears,
+  stale uploads/linkage, tenant refusal, draining, null contact and secondary-list
+  regressions, binding/document tampering, and independent audit reconstruction.
+  PDF parsing and storage are sealed local fixtures; database transactions are real.
+- **Recipient/read tests:** 13/13, with sealed external reads.
+- **Route pause tests:** 18/18.
+- **Cross-family regression:** 504 Node tests and 48 SQL checks on the combined
+  prepared chain. Type and email escaping checks pass.
 
-Not tested end to end: a linked contact save in live mode through the drawer route.
-The recruiter path it calls is covered by the recruiter suites.
+Independent review has no remaining Critical or Important findings. Exact-preview
+hosted tenancy remains the integration gate.
+Both prepared contact migrations remain uninstalled in production.

@@ -1,4 +1,5 @@
 import { transitionSupport } from './person-transition/context';
+import { personWriteMode } from './person/intake';
 // Network matches: the internal-only surface over the nightly pool matcher.
 // match_verdicts (pool candidate × org role, scorecard verdicts as v2) is
 // aggregated person-first: one entry per pool person with all their matched
@@ -100,7 +101,8 @@ function emailScore(r: EmailRow): number {
 export async function poolEmails(
   candidateIds: string[],
   knownEmails: Map<string, string | null>,
-  published?: Map<string, ResolvedPoolContact>
+  published?: Map<string, ResolvedPoolContact>,
+  options: { requireComplete?: boolean } = {}
 ): Promise<Map<string, RankedEmail[]>> {
   const normalized = published ?? await publishedPoolContacts(candidateIds);
   const legacyIds = candidateIds.filter(id => !normalized.has(id));
@@ -115,6 +117,7 @@ export async function poolEmails(
         `candidate_emails_v2?candidate_id=in.(${chunk})&select=candidate_id,email:email_normalized,email_type,is_primary,quality,result`
       ),
     ]);
+    if (options.requireComplete && (!a.ok || !b.ok)) throw Error("pool_contact_unavailable");
     if (a.ok) rows.push(...((await a.json()) as EmailRow[]));
     if (b.ok) rows.push(...((await b.json()) as EmailRow[]));
   }
@@ -137,7 +140,7 @@ export async function poolEmails(
       seenEmails.add(known.toLowerCase());
       ranked.push({ email: known, verified: true });
     }
-    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y))) {
+    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y) || Buffer.compare(Buffer.from(str(x.email)!.toLowerCase()), Buffer.from(str(y.email)!.toLowerCase())) || Buffer.compare(Buffer.from(str(x.email)!), Buffer.from(str(y.email)!)))) {
       const e = str(r.email)!;
       if (seenEmails.has(e.toLowerCase())) continue;
       seenEmails.add(e.toLowerCase());
@@ -400,10 +403,10 @@ export async function sendNetworkCandidate(
   const canonical = published.get(candidateId);
   if (canonical) cand = canonical.profile as PoolRow;
   const bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : str(cand.contact?.phone) ?? str(cand.phone);
-  const bestEmail =
-    (
-      await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published)
-    ).get(candidateId)?.[0]?.email ?? null;
+  let bestEmail: string | null;
+  try {
+    bestEmail = (await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published, { requireComplete: checkedSend })).get(candidateId)?.[0]?.email ?? null;
+  } catch { return { ok: false, error: "temporarily_unavailable" }; }
 
   // One send per (person, target job) — pipelines never grow duplicates.
   // The checked Send decides this under the person's writer lock.
@@ -466,9 +469,9 @@ export async function sendNetworkCandidate(
   };
   if (checkedSend) {
     type SendResult = { status?: string; applicationId?: string };
-    const r: SendResult = await sbRpc<SendResult>("person_network_send", { p_row: row }).catch((e): SendResult => {
+    const r: SendResult = await sbRpc<SendResult>("person_network_send", { p_row: row, p_mode: personWriteMode() }).catch((e): SendResult => {
       const message = (e as Error).message ?? "";
-      console.error("checked network send failed", message.slice(0, 120));
+      console.error("checked network send failed");
       // A refused row is a real failure, not a reason to retry.
       return { status: /network_send_(input|profile|actual)/.test(message) ? "refused" : "unavailable" };
     });

@@ -1,4 +1,4 @@
-// Local PostgreSQL only. The cutover sequence rehearsed end to end with the real
+// Local PostgreSQL only. The controller and maintenance sequence with the real
 // tools: the transition CLI, the historical reconcile runner, the anchor CLI, the
 // publish and undo runners and the post-cutover planner. Public applications must
 // be accepted durably in every phase.
@@ -109,10 +109,12 @@ test('3. drain then seal: accepted work drains, submissions stay durable while h
   d = await waitDrained(pool, { maxSeconds: 0, sleep: async () => {} });
   assert.equal(d.drained, false); assert.equal(d.live, 2, JSON.stringify(d.unresolved)); // live work is still owned
   await assert.rejects(setTransition(pool, 'seal', 'too_early', 'draining'), (e) => reasonOf(e) === 'transition_unresolved');
-  // The worker parks one and finishes the other before effects.
+  // Incomplete work cannot be labelled completed. Prove that refusal, then
+  // explicitly park both pre-effects items so the controller can safely seal.
   await pool.query('select person_application_work_defer($1,$2,60)', [work.park.id, work.park.token]);
-  await pool.query("select person_application_work_finish($1,$2,'completed')", [work.live.id, work.live.token]).catch(async () =>
-    pool.query('select person_application_work_defer($1,$2,60)', [work.live.id, work.live.token]));
+  await assert.rejects(pool.query("select person_application_work_finish($1,$2,'completed')", [work.live.id, work.live.token]),
+    (e) => e.message === 'application_completion_required');
+  await pool.query('select person_application_work_defer($1,$2,60)', [work.live.id, work.live.token]);
   const drained = await waitDrained(pool, { maxSeconds: 5, sleep: async () => {} });
   assert.equal(drained.drained, true, JSON.stringify(drained.unresolved));
   assert.ok(drained.unresolved.some((u) => u.status === 'deferred'), 'parked work remains parked through the hold');
@@ -164,4 +166,30 @@ test('6. rollback: drain, seal, disarm, undo the run, arm again', async () => {
   assert.equal((await transitionStatus(pool)).enabled, true);
   // Every submission in every phase is still there, none lost.
   assert.equal(await n("select count(*) n from website_applications where source='future' and name='Synthetic Applicant'"), 12);
+});
+
+for (const expired of [false, true]) test(`drain reports ${expired ? 'expired' : 'active'} maintenance until explicitly closed`, async () => {
+  if (expired) await pool.query("create function person_private.synthetic_short_cli_window() returns trigger language plpgsql as $$begin if new.family='maintenance' then new.lease_until:=clock_timestamp()+interval '200 milliseconds';end if;return new;end$$;create trigger aa_short_cli_window before insert on person_private.transition_work for each row execute function person_private.synthetic_short_cli_window()");
+  let w;
+  try { w = await openWindow(pool, 'publish', `rehearsal-drain-${expired}`, 1, 'drain_window_probe', 'open'); }
+  finally { if (expired) await pool.query('drop trigger aa_short_cli_window on person_private.transition_work;drop function person_private.synthetic_short_cli_window()'); }
+  const previousExit = process.exitCode;
+  try {
+    if (expired) await new Promise(r => setTimeout(r, 300));
+    await setTransition(pool, 'drain', 'window_probe_drain', 'open');
+    await assert.rejects(setTransition(pool, 'seal', 'window_probe_seal', 'draining'), e => reasonOf(e) === 'transition_unresolved');
+    const d = await waitDrained(pool, { maxSeconds: 1, sleep: async () => {} });
+    assert.equal(d.drained, false, 'CLI must agree with the seal refusal');
+    assert.ok(d.stuck.some(u => u.family === 'maintenance' && u.expired === expired));
+    assert.ok(d.windows.some(x => x.work_id === w.work_id && x.expired === expired));
+    const result = await main(['--wait-drained', '--max-seconds=1'], { env: { LOCAL_DATABASE_URL: url }, out: quiet });
+    assert.equal(result.drained, false); assert.equal(process.exitCode, 2);
+  } finally {
+    process.exitCode = previousExit;
+    await closeWindow(pool, w.work_id, 'window_probe_close');
+    assert.equal((await closeWindow(pool, w.work_id, 'window_probe_retry')).status, 'closed');
+    assert.equal((await waitDrained(pool, { maxSeconds: 1 })).drained, true);
+    await setTransition(pool, 'seal', 'window_probe_seal', 'draining');
+    await setTransition(pool, 'reopen', 'window_probe_reopen', 'held');
+  }
 });

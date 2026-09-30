@@ -8,7 +8,7 @@
 //   node scripts/person-transition.mjs --open-window=catchup|anchors|publish --run=RUN --minutes=N --expect-phase=P --reason=code
 //   node scripts/person-transition.mjs --close-window=WORK_ID --reason=code
 //
-// Every change and window names the phase the operator expects (--expect-phase);
+// Every controller change and window opening names the phase the operator expects (--expect-phase);
 // a different phase is refused. Output is status JSON only.
 import {pathToFileURL} from 'node:url';
 import {openDatabase,parseOptions,safeReason,log} from './person-publish/lib.mjs';
@@ -65,14 +65,15 @@ export async function closeWindow(pool,workId,reason){
 /** While draining, wait for live admitted TT work to finish. Parked (deferred)
  * work is resolved, as for seal. Expired or uncertain work never finishes by
  * waiting: it is reported as stuck at once (retire expired pre-effects work by
- * re-claiming it; review uncertain work). */
+ * re-claiming it; review uncertain work). Every maintenance window must be closed
+ * explicitly, even after expiry, before seal; expose its id in windows. */
 export async function waitDrained(pool,{maxSeconds,sleep=(ms)=>new Promise(r=>setTimeout(r,ms)),now=Date.now}){
  const started=now();
  for(;;){
   const s=await transitionStatus(pool);
   if(phaseOf(s)!=='draining')throw Error(`transition_expected:${phaseOf(s)}`);
-  const work=s.unresolved.filter(u=>u.family!=='maintenance'&&u.status!=='deferred');
-  const stuck=work.filter(u=>u.status==='uncertain'||u.expired);
+  const work=s.unresolved.filter(u=>u.status!=='deferred');
+  const stuck=work.filter(u=>u.family==='maintenance'||u.status==='uncertain'||u.expired);
   const live=work.filter(u=>u.status==='active'&&!u.expired).reduce((n,u)=>n+u.n,0);
   if(stuck.length)return {...s,drained:false,stuck};
   if(!live)return {...s,drained:true};

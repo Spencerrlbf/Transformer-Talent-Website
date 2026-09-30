@@ -1,4 +1,6 @@
 import { applicationEditReady, applicationEditsChecked } from '@/lib/server/person-transition/acceptance';
+import { fillLinkedResumeContact } from "@/lib/server/person/resume-fill";
+import { personWriteMode } from "@/lib/server/person/intake";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
@@ -78,7 +80,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   // pages, time-boxed: the upload is already saved, and a slow PDF must
   // never turn it into a failure. Returns only what changed so the drawer
   // can merge it into its own (sourced + application) view of the person.
-  let filled: Awaited<ReturnType<typeof fillExtractedContact>> = null;
+  let filled: { email?: string | null; phone?: string | null; otherEmails?: string[] } | null = null;
   try {
     const text = await Promise.race([
       pdfText(Buffer.from(bytes), 3),
@@ -87,18 +89,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     const phone = extractPhone(text);
     const emails = extractEmails(text);
     if (checked && (phone || emails.length)) {
-      // A linked TT applicant's contact is the pool person's, maintained from its sources
-      // and recruiter edits: a parsed resume is not written there automatically.
-      // An unlinked application fills its own copy atomically (a concurrent save wins).
+      // Linked fills use their own certified parser evidence, bound to this upload.
+      // An unlinked application fills its own copy atomically.
       const linked = await ttApplicationCandidate(key.slice(4));
-      if (linked.found && !linked.candidateId) {
+      const mode = personWriteMode();
+      if (linked.found && linked.candidateId && mode !== "legacy") {
+        filled = await fillLinkedResumeContact({ organizationId: member.org.id, applicationId: key.slice(4), candidateId: linked.candidateId, actorId: member.userId, requestId: crypto.randomUUID(), path, sha256, phone, emails, mode });
+      } else if (linked.found && !linked.candidateId) {
         const r = await sbRpc<{ status?: string; filled?: { phone?: string | null; otherEmails?: string[] } }>("person_application_contact_fill",
           { p_application: key.slice(4), p_phone: normalizePhone(phone), p_emails: emails }).catch(() => null);
         if (r?.status === "saved" && r.filled) filled = r.filled;
       }
     } else if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
   } catch (err) {
-    console.error("resume contact extraction failed", err);
+    console.error("resume contact extraction failed");
   }
 
   return NextResponse.json({
