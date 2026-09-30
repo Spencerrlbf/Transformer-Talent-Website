@@ -23,6 +23,46 @@ async function processed() {
 }
 const frames = async () => Number((await pool.query('select (select count(*) from person_private.application_edit_frames)+(select count(*) from person_private.application_edit_mirror_frames) n')).rows[0].n);
 
+test('linked drawer contact save uses the real live recruiter transaction and preserves submitted evidence', async () => {
+  const { id, cid } = await processed(), actor = randomUUID(), requestId = randomUUID();
+  const before = await row('website_applications', id);
+  const priorFetch = globalThis.fetch;
+  const { saveContact, candidateContact } = await import('./dist/contact.mjs');
+  globalThis.fetch = async (input, init = {}) => {
+    const u = new URL(String(input));
+    assert.equal(u.origin, 'http://local-only.invalid', 'outbound forbidden');
+    assert.equal(init.method ?? 'GET', 'GET', 'all contact mutations must use the certified transaction');
+    if (u.pathname.endsWith('/auth/v1/user')) return Response.json({ id: actor, email: 'synthetic@example.test' });
+    if (u.pathname.endsWith('/org_members')) return Response.json([{ member_role: 'owner', organizations: { id: TT, slug: 'transformer-talent', name: 'Synthetic' } }]);
+    assert.ok(u.pathname.endsWith('/website_applications'));
+    assert.equal(u.searchParams.get('id'), `eq.${id}`);
+    assert.equal(u.searchParams.get('organization_id'), `eq.${TT}`);
+    return Response.json([await row('website_applications', id)]);
+  };
+  const contact = { email: 'recruiter-live@example.test', phone: '+12025550199', github: null, otherEmails: [] };
+  const req = () => ({ headers: new Headers({ authorization: 'Bearer synthetic', 'idempotency-key': requestId }), json: async () => contact });
+  const ctx = { params: Promise.resolve({ key: `app_${id}` }) };
+  try {
+    const response = await saveContact(req(), ctx);
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.deepEqual((await response.json()).contact, contact);
+    assert.deepEqual((await row('website_applications', id)).contact, before.contact);
+    assert.equal((await row('candidates', cid)).contact.email, 'recruiter-live@example.test');
+    assert.equal((await candidateContact(TT, `app_${id}`)).email, 'recruiter-live@example.test');
+    assert.equal((await plan(cid)).status, 'verified');
+    assert.equal((await saveContact(req(), ctx)).status, 200);
+    assert.equal((await pool.query('select count(*)::int n from person_recruiter_receipts where id=$1', [requestId])).rows[0].n, 1);
+    await control('drain');
+    const blocked = await saveContact({ headers: new Headers({ authorization: 'Bearer synthetic', 'idempotency-key': randomUUID() }), json: async () => ({ ...contact, email: 'blocked@example.test' }) }, ctx);
+    assert.equal(blocked.status, 503);
+    assert.equal((await row('candidates', cid)).contact.email, 'recruiter-live@example.test');
+    assert.deepEqual((await row('website_applications', id)).contact, before.contact);
+  } finally {
+    globalThis.fetch = priorFetch;
+    await pool.query("update person_private.transition_control set phase='open' where singleton");
+  }
+});
+
 test('edit: a follow-up reschedule saves the application and pool person and stays audit neutral', async () => {
   const { id, cid } = await processed();
   const before = await plan(cid);
@@ -217,6 +257,14 @@ test('fill: a phone on the sourced record wins, and linked applications are neve
   assert.deepEqual(await fill(linked, '+1 202 555 0147', ['x@example.test']), { status: 'linked' });
 });
 
+test('unlinked resume fill preserves a normalized phone extension and the extracted email', async () => {
+  const id = await unlinkedRow();
+  const r = await fill(id, '+1 202 555 0147 ext 123', ['extension@example.test']);
+  assert.equal(r.status, 'saved');
+  assert.deepEqual(r.filled, { phone: '+1 202 555 0147 ext 123', otherEmails: ['extension@example.test'] });
+  assert.equal((await row('website_applications', id)).contact.phone, '+1 202 555 0147 ext 123');
+});
+
 test('contact edit on an unlinked application with completed processing passes the result guard', async () => {
   const id = await unlinkedRow();
   // A completed processing record behind the row, so the result guard evaluates the edit frame.
@@ -235,10 +283,12 @@ test('contact edit on an unlinked application with completed processing passes t
 async function sendRow(cid, job, extra = {}) {
   const c = (await pool.query('select * from candidates where id=$1', [cid])).rows[0] ?? {};
   const t = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-  return { organization_id: TT, name: c.full_name || 'Candidate', email: '', linkedin_url: c.linkedin_url ?? null, linkedin_username: c.linkedin_username ?? null,
+  const canonical=(await (await import('./dist/contact.mjs')).publishedPoolContactsOnConnection(pool,[cid])).get(cid);
+  const email=canonical?canonical.contact.email:t(c.contact?.email)??t(c.email),phone=canonical?canonical.contact.phone:t(c.contact?.phone)??t(c.phone);
+  return { organization_id: TT, name: c.full_name || 'Candidate', email: email??'', linkedin_url: c.linkedin_url ?? null, linkedin_username: c.linkedin_username ?? null,
     role_ids: [job], role_titles: [`Synthetic Role (#${job})`], status: 'processed', source: 'transformer_talent', candidate_id: cid,
     parsed_profile: { current_title: t(c.current_title), current_company: t(c.current_company), location: t(c.location) }, harvest_profile: null, screening: null,
-    contact: null, ...extra };
+    contact: canonical||email||phone?{email:email??null,phone:phone??null}:null, ...extra };
 }
 const send = async (row) => (await pool.query('select person_network_send($1::jsonb) r', [JSON.stringify(row)])).rows[0].r;
 
@@ -267,10 +317,12 @@ test('send: waits while draining; refuses tenants, other statuses and extra colu
     await assert.rejects(send(bad), /network_send_input/, JSON.stringify(bad));
   // Content must be the pool person's own record.
   for (const bad of [await sendRow(cid, '779', { name: 'Forged Name' }), await sendRow(cid, '779', { linkedin_username: 'someone-else' }),
-    await sendRow(cid, '779', { parsed_profile: { current_title: 'CEO', current_company: null, location: null } }), await sendRow(cid, '779', { email: 'forged@example.test' })])
+    await sendRow(cid, '779', { parsed_profile: { current_title: 'CEO', current_company: null, location: null } })])
     await assert.rejects(send(bad), /network_send_profile/, JSON.stringify(bad));
+  assert.deepEqual(await send(await sendRow(cid, '779', { email: 'forged@example.test' })), { status: 'contact_changed' });
+  assert.deepEqual(await send(await sendRow(cid, '779', { contact: { email: 'forged@example.test', phone: '+19999999999' } })), { status: 'contact_changed' });
   assert.deepEqual(await send(await sendRow(randomUUID(), '779')), { status: 'candidate_not_found' });
-  const priv = (await pool.query("select has_function_privilege('service_role','public.person_network_send(jsonb)','execute') s, has_function_privilege('anon','public.person_network_send(jsonb)','execute') a")).rows[0];
+  const priv = (await pool.query("select has_function_privilege('service_role','public.person_network_send(jsonb,text)','execute') s, has_function_privilege('anon','public.person_network_send(jsonb,text)','execute') a")).rows[0];
   assert.equal(priv.s, true); assert.equal(priv.a, false);
 });
 
@@ -292,4 +344,246 @@ test('send: two concurrent Sends for the same person and role create one row', a
     assert.equal(first.status, 'sent'); assert.deepEqual(r2, { status: 'already_sent' });
   } finally { a.release(); b.release(); }
   assert.equal(Number((await pool.query("select count(*) n from website_applications where candidate_id=$1 and role_ids @> array['881']", [cid])).rows[0].n), 1);
+});
+
+test('linked resume fill is certified nonmanual evidence, preserves submitted contact, and replays once', async () => {
+  const id = await app();
+  assert.equal((await processApp(id, { contacts: {} })).status, 'processed');
+  const before = await row('website_applications', id), cid = before.candidate_id;
+  const path = `2026-09-30/${randomUUID()}-resume.pdf`, sha256 = 'a'.repeat(64);
+  await edit(id, 'resume', { resume_path: path, person_resume_sha256: sha256 });
+  const lib = await import('./dist/contact.mjs');
+  assert.equal(typeof lib.fillLinkedResumeContact, 'function', 'linked fill service is required');
+  const input = { organizationId: TT, applicationId: id, candidateId: cid, actorId: randomUUID(), requestId: randomUUID(), path, sha256, phone: '+12025550147', emails: ['resume-fill@example.test'], mode: 'live' };
+  const filled = await lib.fillLinkedResumeContact(input);
+  assert.equal(filled?.phone, '+12025550147');
+  assert.deepEqual((await row('website_applications', id)).contact, before.contact);
+  const source = (await pool.query("select * from candidate_contacts where candidate_id=$1 and kind='phone'", [cid])).rows[0];
+  assert.equal(source.is_manual, false); assert.equal(source.source_detail, 'application_resume');
+  assert.equal(await lib.fillLinkedResumeContact(input), null);
+  assert.equal((await pool.query('select count(*)::int n from person_recruiter_receipts where id=$1', [input.requestId])).rows[0].n, 1);
+  const audited = await plan(cid); assert.equal(audited.status, 'verified', JSON.stringify(audited));
+});
+
+async function resumeInput({ contacts = {}, username, applicationId } = {}) {
+  const id = applicationId ?? await app({}, username);
+  if (!applicationId) assert.equal((await processApp(id, { contacts })).status, 'processed');
+  const cid = (await row('website_applications', id)).candidate_id;
+  const input = { organizationId: TT, applicationId: id, candidateId: cid, actorId: randomUUID(), requestId: randomUUID(), path: `2026-09-30/${randomUUID()}-resume.pdf`, sha256: 'b'.repeat(64), phone: '+12025550149', emails: ['new-upload@example.test'], mode: 'live' };
+  await edit(id, 'resume', { resume_path: input.path, person_resume_sha256: input.sha256 });
+  return input;
+}
+
+test('linked resume fill keeps recruiter choices and explicit phone clears, including absent primary rows', async () => {
+  const lib = await import('./dist/contact.mjs');
+  const a = await resumeInput();
+  const c = await pool.connect();
+  try {
+    const save = await import('../dist/worker-lib.mjs');
+    await save.saveRecruiterContactOnConnection(c, { organizationId: TT, candidateId: a.candidateId, actorId: a.actorId, requestId: randomUUID(), mode: 'live', contact: { email: 'preferred@example.test', phone: null, github: null, otherEmails: [] } });
+  } finally { c.release(); }
+  const choices = (await pool.query('select * from person_recruiter_primary where candidate_id=$1 order by kind', [a.candidateId])).rows;
+  await lib.fillLinkedResumeContact(a);
+  assert.deepEqual((await pool.query('select * from person_recruiter_primary where candidate_id=$1 order by kind', [a.candidateId])).rows, choices);
+  assert.equal((await pool.query("select count(*)::int n from candidate_contacts where candidate_id=$1 and kind='phone'", [a.candidateId])).rows[0].n, 0);
+  assert.equal((await row('candidates', a.candidateId)).contact.email, 'preferred@example.test');
+  assert.equal((await plan(a.candidateId)).status, 'verified');
+});
+
+test('linked resume fill refuses replaced resumes, wrong linkage and tenant ownership; draining adds no receipt', async () => {
+  const lib = await import('./dist/contact.mjs'), a = await resumeInput();
+  for (const change of [{ sha256: 'c'.repeat(64) }, { path: `2026-09-30/${randomUUID()}-replacement.pdf` }, { candidateId: randomUUID() }]) assert.equal(await lib.fillLinkedResumeContact({ ...a, ...change }), null);
+  const c = await pool.connect();
+  try { await assert.rejects(lib.fillLinkedResumeContactOnConnection(c, { ...a, organizationId: randomUUID() }), /resume_fill_scope/); } finally { c.release(); }
+  await control('drain');
+  assert.equal(await lib.fillLinkedResumeContact(a), null);
+  assert.equal((await pool.query('select count(*)::int n from person_recruiter_receipts where id=$1', [a.requestId])).rows[0].n, 0);
+});
+
+test('linked resume fill does not promote a claimed value from another public application', async () => {
+  const username = `synthetic-resume-claimed-${randomUUID()}`;
+  const first = await resumeInput({ username });
+  const later = await app({ preferred_roles: ['Different'] }, username);
+  assert.equal((await processApp(later, { contacts: { phone: '+12025550149' } })).status, 'processed');
+  const a = await resumeInput({ applicationId: later });
+  const lib = await import('./dist/contact.mjs');
+  await lib.fillLinkedResumeContact({ ...a, emails: [] });
+  const contacts = (await pool.query("select status,is_manual,rank from candidate_contacts where candidate_id=$1 and kind='phone'", [first.candidateId])).rows;
+  assert.deepEqual(contacts, [{ status: 'claimed', is_manual: false, rank: null }]);
+  assert.equal((await plan(first.candidateId)).status, 'verified');
+});
+
+test('linked resume fill rechecks concurrent recruiter saves under the candidate lock', async () => {
+  const a = await resumeInput(), lib = await import('./dist/contact.mjs');
+  const c = await pool.connect();
+  let release, locked;
+  const atLock = new Promise(r => { locked = r; }), releaseLock = new Promise(r => { release = r; });
+  const save = await import('../dist/worker-lib.mjs');
+  const saving = save.saveRecruiterContactOnConnection({ query: async (sql, args) => {
+    const r = await c.query(sql, args);
+    if (sql.includes('person_private.recruiter_begin')) { locked(); await releaseLock; }
+    return r;
+  } }, { organizationId: TT, candidateId: a.candidateId, actorId: a.actorId, requestId: randomUUID(), mode: 'live', contact: { email: 'concurrent@example.test', phone: '+12025550101', github: null, otherEmails: [] } });
+  try {
+    await atLock;
+    const filling = lib.fillLinkedResumeContact({ ...a, emails: [] });
+    release(); await saving;
+    assert.equal(await filling, null);
+    assert.equal((await row('candidates', a.candidateId)).contact.phone, '+12025550101');
+    assert.equal((await plan(a.candidateId)).status, 'verified');
+  } finally { release(); await saving.catch(() => {}); c.release(); }
+});
+
+test('linked resume binding is immutable and a forged manual document rolls back', async () => {
+  const lib = await import('./dist/contact.mjs'), a = await resumeInput();
+  const c = await pool.connect();
+  try {
+    for (const corrupt of [
+      d => { d.contacts[0].is_manual = true; },
+      d => { d.contacts[0].label = 'mobile'; },
+      d => { d.contacts[0].invented_verification = true; },
+      d => { delete d.contacts[0].quality; },
+      d => { d.source.invented = true; },
+    ]) await assert.rejects(lib.fillLinkedResumeContactOnConnection({ query: (sql, args) => {
+      if (sql.includes('person_private.recruiter_seal')) { args = structuredClone(args); corrupt(args[1]); }
+      return c.query(sql, args);
+    } }, a), /resume_fill_contact|resume_fill_document/);
+    assert.equal((await pool.query('select count(*)::int n from person_recruiter_receipts where id=$1', [a.requestId])).rows[0].n, 0);
+    await lib.fillLinkedResumeContact(a);
+    await assert.rejects(pool.query('delete from person_private.resume_contact_fills where id=$1', [a.requestId]), /resume_fill_immutable/);
+    await assert.rejects(pool.query("update person_private.resume_contact_fills set evidence='{}' where id=$1", [a.requestId]), /resume_fill_immutable/);
+    await assert.rejects(lib.fillLinkedResumeContactOnConnection(c, { ...a, phone: '+12025550111' }), /resume_fill_replay_conflict/);
+    assert.equal((await plan(a.candidateId)).status, 'verified');
+  } finally { c.release(); }
+});
+
+test('live resume upload route writes only certified pool contact with parser provenance', async () => {
+  const a = await resumeInput(), before = await row('website_applications', a.applicationId);
+  const priorFetch = globalThis.fetch, storage = [];
+  const { uploadResume } = await import('./dist/contact.mjs');
+  globalThis.fetch = async (input, init = {}) => {
+    const u = new URL(String(input)), method = init.method ?? 'GET';
+    assert.equal(u.origin, 'http://local-only.invalid', 'outbound forbidden');
+    if (u.pathname.endsWith('/auth/v1/user')) return Response.json({ id: a.actorId });
+    if (u.pathname.endsWith('/org_members')) return Response.json([{ member_role: 'owner', organizations: { id: TT, slug: 'transformer-talent', name: 'Synthetic' } }]);
+    if (u.pathname.endsWith('/website_applications')) {
+      assert.equal(method, 'GET'); assert.equal(u.searchParams.get('id'), `eq.${a.applicationId}`); assert.equal(u.searchParams.get('organization_id'), `eq.${TT}`);
+      return Response.json([await row('website_applications', a.applicationId)]);
+    }
+    if (u.pathname.endsWith('/person_application_edit_ready')) return Response.json({ status: await ready(a.applicationId) });
+    if (u.pathname.endsWith('/person_application_edit')) {
+      const b = JSON.parse(init.body); assert.equal(b.p_kind, 'resume');
+      return Response.json(await edit(b.p_application, b.p_kind, b.p_patch));
+    }
+    if (u.pathname.startsWith('/storage/v1/object/sign/resumes/')) return Response.json({ signedURL: '/synthetic-resume' });
+    if (u.pathname.startsWith('/storage/v1/object/resumes/')) { assert.equal(method, 'POST'); storage.push(u.pathname); return Response.json({}); }
+    assert.fail(`unexpected sealed route: ${u.pathname}`);
+  };
+  try {
+    const form = new FormData(); form.set('file', new File(['Synthetic Resume\nPhone: +1 202 555 0187\nnew-route@example.test'], 'resume.pdf', { type: 'application/pdf' }));
+    const r = await uploadResume({ headers: new Headers({ authorization: 'Bearer synthetic' }), formData: async () => form }, { params: Promise.resolve({ key: `app_${a.applicationId}` }) });
+    assert.equal(r.status, 200); const body = await r.json();
+    assert.equal(body.filled?.phone, '+12025550187'); assert.equal(storage.length, 1);
+    const saved = await row('website_applications', a.applicationId); assert.deepEqual(saved.contact, before.contact);
+    const receipt = (await pool.query("select o.evidence->'resume_fill' e from person_audit_operations o where candidate_id=$1 and evidence ? 'resume_fill'", [a.candidateId])).rows[0].e;
+    assert.equal(receipt.input.sha256, saved.person_resume_sha256); assert.equal(receipt.input.path, saved.resume_path); assert.equal(receipt.actor_id, a.actorId);
+    assert.equal((await plan(a.candidateId)).status, 'verified');
+  } finally { globalThis.fetch = priorFetch; }
+});
+
+async function existingResumeInput({ mode = 'shadow', contact = null, emails = [], blocked = null } = {}) {
+  const cid = randomUUID(), username = `synthetic-resume-existing-${cid}`;
+  await pool.query('update person_private.transition_control set enabled=false where singleton');
+  try {
+    await pool.query("insert into candidates(id,full_name,linkedin_username,created_at,contact) values($1,'Synthetic Existing',$2,'2020-01-01',$3)", [cid, username, contact]);
+    if (blocked === 'never_primary') await pool.query("update candidates set profile_summary='Synthetic profile: blocked@example.test' where id=$1", [cid]);
+    if (blocked === 'invalid') await pool.query("insert into candidate_emails(candidate_id,email_address,email_source,quality,result,created_at) values($1,'blocked@example.test','secondary','bad','invalid','2020-01-01')", [cid]);
+    for (const email of emails) await pool.query("insert into candidate_emails(candidate_id,email_address,email_source,created_at) values($1,$2,'secondary','2020-01-01')", [cid, email]);
+    const { prepareAuditFixture } = await import('../person-audit/local-fixture.mjs');
+    await prepareAuditFixture(cid);
+  } finally { await pool.query('update person_private.transition_control set enabled=true where singleton'); }
+  const id = await app({}, username);
+  const out = await processApp(id, { contacts: {}, mode }); assert.equal(out.status, 'processed', out.error?.message);
+  const a = await resumeInput({ applicationId: id }); a.mode = mode;
+  return a;
+}
+for (const mode of ['shadow', 'live']) test(`linked resume fills a null contact before-image in ${mode} mode`, async () => {
+  const a = await existingResumeInput(), lib = await import('./dist/contact.mjs');
+  assert.equal((await row('candidates', a.candidateId)).contact, null);
+  const c = await pool.connect();
+  let r; try { r = await lib.fillLinkedResumeContactOnConnection(c, { ...a, mode, emails: [] }); } finally { c.release(); }
+  assert.equal(r?.phone, '+12025550149');
+  assert.equal((await plan(a.candidateId)).status, 'verified');
+});
+test('linked resume preserves derived secondary emails when there is no curated overlay', async () => {
+  const a = await existingResumeInput({ mode: 'live', emails: ['first@example.test', 'second@example.test'] }), lib = await import('./dist/contact.mjs');
+  assert.equal((await row('candidates', a.candidateId)).contact?.otherEmails, undefined);
+  const r = await lib.fillLinkedResumeContact({ ...a, phone: null, emails: ['third@example.test'] });
+  assert.deepEqual(r?.otherEmails, ['second@example.test', 'third@example.test']);
+  assert.equal((await plan(a.candidateId)).status, 'verified');
+});
+test('linked resume preserves the previous primary when a new personal address ranks first', async () => {
+  const a = await existingResumeInput({ mode: 'live', emails: ['first@example.test', 'second@example.test'] }), lib = await import('./dist/contact.mjs');
+  const r = await lib.fillLinkedResumeContact({ ...a, phone: null, emails: ['synthetic-resume@gmail.com'] });
+  assert.equal(r?.email, 'synthetic-resume@gmail.com');
+  assert.deepEqual(r?.otherEmails, ['first@example.test', 'second@example.test']);
+  assert.equal((await plan(a.candidateId)).status, 'verified');
+});
+
+test('linked resume leaves invalid and never-primary evidence unchanged while admitting a new value', async () => {
+  const lib = await import('./dist/contact.mjs');
+  for (const blocked of ['invalid', 'never_primary']) {
+    const a = await existingResumeInput({ blocked });
+    const query = "select status,never_primary,is_manual,rank from candidate_contacts where candidate_id=$1 and value_normalized='blocked@example.test'";
+    const before = (await pool.query(query, [a.candidateId])).rows;
+    assert.equal(before.length, 1); assert.equal(before[0].rank, null);
+    await lib.fillLinkedResumeContact({ ...a, mode: 'live', phone: null, emails: ['blocked@example.test', 'fresh@example.test'] });
+    assert.deepEqual((await pool.query(query, [a.candidateId])).rows, before);
+    assert.equal((await plan(a.candidateId)).status, 'verified');
+  }
+});
+
+for (const action of ['suppress', 'alter']) test(`send witness ${action} rolls back instead of reporting sent`, async () => {
+ const {cid}=await processed(), c=await pool.connect();
+ try { await c.query('begin');
+  await c.query(`create function pg_temp.break_send_witness() returns trigger language plpgsql as $$begin ${action==='suppress'?'return null;':"new.row_hash := 'forged'; return new;"} end$$`);
+  await c.query('create trigger synthetic_send_witness before insert on person_private.application_send_witnesses for each row execute function pg_temp.break_send_witness()');
+  await assert.rejects(c.query('select person_network_send($1::jsonb)',[JSON.stringify(await sendRow(cid,'995'))]), /network_send_witness/);
+ } finally { await c.query('rollback'); c.release(); }
+ assert.equal((await pool.query("select count(*)::int n from website_applications where candidate_id=$1 and role_ids @> array['995']",[cid])).rows[0].n,0);
+});
+test('send admits an unpublished verification-only address with the normal pool policy', async () => {
+ const cid=randomUUID(); await pool.query('update person_private.transition_control set enabled=false where singleton');
+ try {await pool.query("insert into candidates(id,full_name,linkedin_username) values($1,'Synthetic',$2)",[cid,`synthetic-send-${cid}`]);
+  await pool.query("insert into candidate_emails(candidate_id,email_address,email_type,quality,result) values($1,'verified-only@example.test','personal','good','ok')",[cid]);
+ }finally {await pool.query('update person_private.transition_control set enabled=true where singleton');}
+ const r=await send(await sendRow(cid,'996',{email:'verified-only@example.test',contact:{email:'verified-only@example.test',phone:null}}));
+ assert.equal(r.status,'sent');assert.equal((await row('website_applications',r.applicationId)).email,'verified-only@example.test');
+});
+test('send refuses a stale contact snapshot after a certified recruiter save', async () => {
+ const {cid}=await processed();
+ const old=await sendRow(cid,'997',{email:'synthetic@example.test',contact:{email:'synthetic@example.test',phone:'+12025550123'}});
+ const recruiter=await import('../dist/worker-lib.mjs');
+ await recruiter.saveRecruiterContact({organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode:'live',contact:{email:'now@example.test',phone:'+12025550199',github:null,otherEmails:[]}});
+ assert.deepEqual(await send(old),{status:'contact_changed'});
+ assert.equal((await pool.query("select count(*)::int n from website_applications where candidate_id=$1 and role_ids @> array['997']",[cid])).rows[0].n,0);
+});
+
+test('Send waits for a racing recruiter commit and rejects its old contact snapshot',async()=>{
+ const {cid}=await processed(), old=await sendRow(cid,'998'), lib=await import('../dist/worker-lib.mjs'), c=await pool.connect();
+ let reached,release;const readyToCommit=new Promise(r=>reached=r),canCommit=new Promise(r=>release=r);
+ const wrapped={query:async(sql,values)=>{if(sql==='commit'){reached();await canCommit;}return c.query(sql,values);}};
+ const saving=lib.saveRecruiterContactOnConnection(wrapped,{organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode:'live',contact:{email:'racing@example.test',phone:'+12025550198',github:null,otherEmails:[]}});
+ let pending;
+ try {await readyToCommit;let settled=false;pending=send(old).finally(()=>settled=true);await new Promise(r=>setTimeout(r,70));assert.equal(settled,false);release();await saving;assert.deepEqual(await pending,{status:'contact_changed'});}
+ finally {release();await saving.catch(()=>{});if(pending)await pending.catch(()=>{});c.release();}
+ assert.equal((await send(await sendRow(cid,'998'))).status,'sent');
+});
+test('a witnessed Send stays audit verified after a checked resume edit and linked contact fill',async()=>{
+ const {cid}=await processed(),sent=await send(await sendRow(cid,'999'));
+ const path=`2026-09-30/${randomUUID()}-sent.pdf`,sha256='d'.repeat(64);
+ assert.equal((await edit(sent.applicationId,'resume',{resume_path:path,person_resume_sha256:sha256})).status,'saved');
+ const lib=await import('./dist/contact.mjs');
+ await lib.fillLinkedResumeContact({organizationId:TT,applicationId:sent.applicationId,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),path,sha256,mode:'live',phone:null,emails:['sent-fill@example.test']});
+ const audit=await plan(cid);assert.equal(audit.status,'verified',JSON.stringify(audit));
 });
