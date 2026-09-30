@@ -2,6 +2,7 @@
 // PostgreSQL through the website project's server-only URL, never REST and
 // never the communications database. Logs carry ids, counts and statuses only.
 import pg from 'pg';
+import {checkout} from '../person-db-session.mjs';
 import {execFileSync} from 'node:child_process';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,13 +24,32 @@ export function databaseConfig(env=process.env,applicationName='tt-person-publis
  ))throw Error('publish_session_connection_required');
  // Every transaction sets its own local lock/statement timeouts; this bounds
  // the reads and checkpoints made outside them.
- return {connectionString:url,max:2,statement_timeout:20000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:applicationName};
+ return {connectionString:url,max:2,statement_timeout:20000,query_timeout:21000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:applicationName};
 }
-export async function openDatabase(env=process.env,applicationName){
- const pool=new pg.Pool(databaseConfig(env,applicationName));
+/** A pool whose every session carries a 20s statement_timeout. Supabase's session
+ * pooler drops the startup option, so each checkout sets it before use,
+ * awaited; a session that cannot set it is discarded, never used unbounded. These
+ * CLIs refuse transaction poolers, so a session setting persists. `overrides` is
+ * only for tests that simulate a pooler dropping startup options. */
+export async function openDatabase(env=process.env,applicationName,overrides={}){
+ const pool=new pg.Pool({...databaseConfig(env,applicationName),...overrides});
  pool.on('error',()=>{});
- try{await pool.query('select 1');}catch(e){await pool.end();throw e;}
- return pool;
+ const connect=async()=>{
+  const client=await checkout(pool);
+  try{await client.query("set statement_timeout='20s'");return client;}
+  catch(error){client.release(error);throw error;}
+ };
+ const db={
+  connect,
+  async query(...args){
+   const client=await connect();
+   try{return await client.query(...args);}finally{client.release();}
+  },
+  end:()=>pool.end(),
+  on:(...args)=>pool.on(...args),
+ };
+ try{await db.query('select 1');}catch(e){await pool.end();throw e;}
+ return db;
 }
 /** Serialize publish and undo for the same run across independent processes.
  * Keep one session for the whole runner; each person's transaction remains

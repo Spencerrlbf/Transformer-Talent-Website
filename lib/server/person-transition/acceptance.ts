@@ -39,3 +39,31 @@ export async function applicationEditsPaused(orgId: string): Promise<boolean> {
     return status?.enabled !== false;
   } catch { return true; }
 }
+
+export type ApplicationEditKind = 'followup' | 'followup_date' | 'followup_clear' | 'resume' | 'roles' | 'contact';
+export type CheckedEditResult = { ok: true; mirrored: boolean } | { ok: false; error: 'temporarily_unavailable' | 'not_found' | 'linked' };
+/** TT application rows are edited through the checked function whenever support is on. */
+export function applicationEditsChecked(orgId: string): boolean {
+  return transitionSupport() && orgId === TT_ORG_ID;
+}
+/** One atomic checked edit: the application columns for `kind`, and the pool
+ * person's follow-up mirror when given. It waits while the application is still
+ * processing or the transition is draining/held (retryable). */
+export async function checkedApplicationEdit(applicationId: string, kind: ApplicationEditKind,
+  patch: Record<string, unknown>, mirror: Record<string, unknown> | null = null): Promise<CheckedEditResult> {
+  if (!transitionUuid(applicationId)) return { ok: false, error: 'not_found' };
+  let r: { status?: unknown; mirrored?: unknown };
+  // A missing function (support on before the migration) or a transient failure is retryable.
+  try { r = await sbRpc('person_application_edit', { p_application: applicationId, p_kind: kind, p_patch: patch, p_mirror: mirror }); }
+  catch (error) { console.error('checked application edit failed', (error as Error).message?.slice(0, 120)); return { ok: false, error: 'temporarily_unavailable' }; }
+  if (r?.status === 'saved') return { ok: true, mirrored: r.mirrored === true };
+  if (r?.status === 'not_found') return { ok: false, error: 'not_found' };
+  if (r?.status === 'linked') return { ok: false, error: 'linked' };
+  return { ok: false, error: 'temporarily_unavailable' };
+}
+/** Preflight before side effects such as a storage upload. */
+export async function applicationEditReady(applicationId: string): Promise<boolean> {
+  if (!transitionUuid(applicationId)) return false;
+  try { return (await sbRpc<{ status?: unknown }>('person_application_edit_ready', { p_application: applicationId }))?.status === 'ready'; }
+  catch { return false; }
+}

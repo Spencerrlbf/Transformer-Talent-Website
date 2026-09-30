@@ -16,6 +16,7 @@
 // and long id lists are chunked so no URL can outgrow the gateway.
 import { sbRest } from "./supabase";
 import { clearFollowUp } from "./candidates-unified";
+import { applicationEditsChecked } from "./person-transition/acceptance";
 import { orgEmailVisibility, viewerMailboxEmails } from "./email-compose";
 import { getRoles } from "@/lib/roles";
 
@@ -699,8 +700,11 @@ export async function noteEmailSent(args: {
   const kind = arrivalKind(a);
   if (a.follow_up_at && a.follow_up_at <= today) {
     // The follow-up is what this email was: clear the date like Mark contacted.
-    await clearFollowUp(orgId, key).catch(() => null);
-    await markInbox(orgId, viewer, `fdue:${a.id}`, { handled: "email", kind: "fdue", candidateKey: key, label: subject }).catch(() => {});
+    // The email is already sent; a follow-up clear that cannot run now stays due
+    // (visible in Tasks) rather than disappearing silently.
+    const cleared = await clearFollowUp(orgId, key).catch(() => ({ ok: false, error: "save_failed" }));
+    if (!cleared.ok && applicationEditsChecked(orgId)) console.warn("follow-up not cleared after send", cleared.error);
+    else await markInbox(orgId, viewer, `fdue:${a.id}`, { handled: "email", kind: "fdue", candidateKey: key, label: subject }).catch(() => {});
   }
   if (kind !== "app") {
     await markInbox(orgId, viewer, `arr:${a.id}`, { handled: "email", kind, candidateKey: key, label: KIND_TITLE[kind] }).catch(() => {});
