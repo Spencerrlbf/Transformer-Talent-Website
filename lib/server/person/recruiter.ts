@@ -72,7 +72,7 @@ function cleanContact(input: PoolContact): PoolContact {
   }
   return { email, phone, github, otherEmails: others };
 }
-async function currentContact(
+export async function currentContact(
   c: PersonConnection,
   id: string,
   mode: "shadow" | "live",
@@ -382,24 +382,35 @@ async function saveCertifiedRecruiter(
       choices,
       JSON.stringify(priorContactFlags),
     ]);
+    const contact = await finishCertifiedContact(c, a.requestId, a.candidateId, a.mode);
+    await c.query("commit");
+    return { contact, replayed: false };
+  } catch (error) {
+    await c.query("rollback").catch(() => {});
+    throw error;
+  }
+}
+
+// Shared certified mutation stages; admission and provenance are operation-specific.
+export async function finishCertifiedContact(c: PersonConnection, requestId: string, candidateId: string, mode: "shadow" | "live") {
     await c.query("select person_private.recruiter_audit_begin($1)", [
-      a.requestId,
+      requestId,
     ]);
     await c.query("select person_private.recruiter_normalize($1)", [
-      a.requestId,
+      requestId,
     ]);
-    await c.query("select person_private.recruiter_contact($1)", [a.requestId]);
-    if (a.mode === "live") {
-      const tables = await readPersonProjection(c, a.candidateId);
+    await c.query("select person_private.recruiter_contact($1)", [requestId]);
+    if (mode === "live") {
+      const tables = await readPersonProjection(c, candidateId);
       const state = (
         await c.query(
           "select * from public.candidate_profile_state where candidate_id=$1",
-          [a.candidateId],
+          [candidateId],
         )
       ).rows[0];
       const before = (
         await c.query("select person_private.publication_candidate($1) value", [
-          a.candidateId,
+          candidateId,
         ])
       ).rows[0].value;
       const computed = await compatibilityProjection(
@@ -409,19 +420,14 @@ async function saveCertifiedRecruiter(
         async () => false,
       );
       await c.query("select person_private.recruiter_project($1,$2)", [
-        a.requestId,
-        projectionEnvelope(a.candidateId, before, computed),
+        requestId,
+        projectionEnvelope(candidateId, before, computed),
       ]);
     }
-    const contact = await currentContact(c, a.candidateId, a.mode);
+    const contact = await currentContact(c, candidateId, mode);
     await c.query("select person_private.recruiter_complete($1,$2)", [
-      a.requestId,
+      requestId,
       contact,
     ]);
-    await c.query("commit");
-    return { contact, replayed: false };
-  } catch (error) {
-    await c.query("rollback").catch(() => {});
-    throw error;
-  }
+    return contact;
 }

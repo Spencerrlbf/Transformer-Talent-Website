@@ -4,8 +4,22 @@ alter table person_private.directory_executions add column disposition text not 
 alter table person_private.directory_executions add column outcome_hash text;
 -- Prepared build only. Nonunique preserves legacy mixed-case identities. The
 -- bounded lock/statement timeouts apply when this chain is eventually approved.
--- The runbook pre-builds this index CONCURRENTLY outside a transaction; this is a no-op then.
-create index if not exists candidates_person_username_idx on public.candidates(lower(linkedin_username));
+-- Production must pre-build this CONCURRENTLY using the runbook. Do not issue
+-- CREATE INDEX (even IF NOT EXISTS) for a prebuilt index: it takes ShareLock on
+-- candidates until this migration commits. Fresh local fixtures can still build it.
+do $$ begin
+ if to_regclass('public.candidates_person_username_idx') is null then
+  create index candidates_person_username_idx on public.candidates(lower(linkedin_username));
+ end if;
+ if not exists (
+  select 1 from pg_index i join pg_class c on c.oid=i.indexrelid
+  join pg_am a on a.oid=c.relam
+  where i.indexrelid=to_regclass('public.candidates_person_username_idx')
+   and i.indrelid='public.candidates'::regclass and i.indisvalid and i.indisready
+   and not i.indisunique and i.indpred is null and i.indnatts=1 and a.amname='btree'
+   and pg_get_expr(i.indexprs,i.indrelid) in ('lower(linkedin_username)','lower((linkedin_username)::text)')
+ ) then raise exception 'candidate identity index is not ready'; end if;
+end $$;
 create function person_private.directory_identity_owners(p_contact uuid,p_identities jsonb) returns table(id uuid)
 language sql stable set search_path='' as $$
  select c.id from public.candidates c where lower(c.linkedin_username)=any(array(select x.value from jsonb_to_recordset(p_identities) x(kind text,value text) where x.kind='linkedin_username'))

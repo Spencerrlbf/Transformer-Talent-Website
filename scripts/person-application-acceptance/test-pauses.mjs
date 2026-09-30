@@ -52,3 +52,9 @@ test('send into the TT pipeline saves only through the checked Send',async()=>{
  candidateFound=true;sendStatus='sent';const r=await routes.send(req({candidateId:id,jobId:'1'}));assert.ok(r.status<300,String(r.status));
  assert.equal(sends.length,1);assert.deepEqual(writes.filter(w=>/website_applications|match_verdicts/.test(w.path)),[]);
 });
+
+test('a failed verification-table read cannot turn checked Send into an empty contact',async()=>{
+ candidateFound=true;sendStatus='sent';const original=globalThis.fetch;
+ globalThis.fetch=async(input,init)=>String(input).includes('/candidate_emails_v2?')?Response.json({},{status:503}):original(input,init);
+ try{const r=await routes.send(req({candidateId:id,jobId:'1'}));assert.equal(r.status,503);assert.equal(sends.length,0);}finally{globalThis.fetch=original;}
+});

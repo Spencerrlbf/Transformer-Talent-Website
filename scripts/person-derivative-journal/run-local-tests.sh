@@ -106,9 +106,11 @@ fi
 if test -f supabase/migrations/20260928060000_person_application_contact.sql; then
  q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
 fi
+q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
 if test -f supabase/migrations/20260928070000_person_network_send.sql; then
  q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 fi
+q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-input/test-input.mjs

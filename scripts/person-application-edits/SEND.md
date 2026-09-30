@@ -1,44 +1,47 @@
 # Network Send into the TT pipeline
 
-With `PERSON_TRANSITION_SUPPORT=on`, a Network Send to one of Transformer Talent's
-own roles creates the pipeline row through `person_network_send(row)`, from
-`20260928070000_person_network_send.sql`.
+With `PERSON_TRANSITION_SUPPORT=on`, a Network Send to Transformer Talent's own
+role uses `person_network_send(row, mode)` from prepared migration
+`20260928070000_person_network_send.sql`. Client-target Sends keep their existing
+organization-scoped path.
 
-- **What the row is.** The row is the one Send has always created: status
-  `processed`, source `transformer_talent`, linked to the pool person, carrying the
-  published profile snapshot, contact and TT's verdict.
-- **Checks.** The function checks the columns and one target role. It waits while
-  draining or held (`unavailable`). It decides `already_sent` under the applicant
-  username lock, and inserts the exact row under a frame the TT source fence
-  accepts.
-- **Witness.** It records a private witness for the send. The post-cutover audit
-  snapshot carries these witnesses (`application_sends`). The planner then treats a
-  witnessed Send row as a pipeline entry, not a source: it is not pending, not a raw
-  document, and not an integrity input. Without that rule, a sent person drops to
-  `review: raw_fact_not_admitted` (tested).
-- **Content bound to the pool record.** Name, LinkedIn URL and username, title,
-  company and location must equal the pool person's own row, which the published
-  profile is read from. The email must be one of the person's addresses, or empty.
-  A service-role caller cannot plant a different identity or profile under a
-  witness (`network_send_profile`). Contact phone, screening and the Harvest
-  snapshot are still taken as given, as before the fence.
-- **Locks.** The person's writer lock serializes concurrent Sends; every production
-  candidate also has a username, so the username lock applies too. Refused rows
-  report as failures (`insert_failed`), not as retryable.
-- **Deploy order.** Install the migration before switching support on.
-- **Client roles unchanged.** Sends into a client company's role create tenant rows,
-  which the TT fence and the audit capture don't touch. They keep their writer.
+The checked function holds the transition, username and candidate writer locks.
+It refuses draining/held phases, validates the pool identity/profile, and decides
+duplicates atomically. It recomputes the same effective email/phone as the caller:
+eligible ranked contacts for published live people; existing contact and complete
+verification-table reads for unpublished/legacy people. Tied legacy addresses
+have a deterministic order. A changed contact snapshot returns a retryable refusal
+without inserting a row. Verification-read failures cannot silently send blanks.
 
-## Verification (local, synthetic)
+The pipeline row retains source `transformer_talent`, status `processed`, the
+pool profile/contact and TT verdict. It is a pipeline entry, not a new person
+source. An immutable private witness binds the full original inserted row, its
+hash and the exact captured INSERT event ID/transaction/hash. The function checks
+both the application row and the complete stored witness before reporting success.
+Suppressed or altered proof rolls back the Send.
 
-| Suite | Result |
-|---|---|
-| Edit suite, including Send: witness, audit stays `verified`, duplicate, concurrent Sends, draining, input and forged-content refusals, grants | 41/41 |
-| Routes (a TT-target Send waits or saves only through the checked function) | 19/19 |
-| Post-cutover audit suite, including the witness rule's edge cases | 91/91 |
-| Cross-family | 504/504 |
-| Publish | 39/39 |
-| Publish admission | 11/11 |
-| Maintenance, current and pinned runner | 10/10 each |
-| Recruiter suites | 23/23 and 77/77 |
-| `tsc` | passes |
+The audit snapshot includes that original insertion event even if it predates the
+anchor. The independent auditor checks the witness and original payload, rather
+than requiring the current application row to remain unchanged. Later checked
+resume uploads and linked contact fills therefore retain a verified audit.
+Missing or changed insertion proof never exempts the row from source accounting.
+
+Name, LinkedIn identity, title, company and location match the pool record. The
+contact snapshot is rechecked under the writer lock. Screening and the Harvest
+snapshot retain the existing caller behavior. No paid provider is called here.
+
+## Verification
+
+- 61 edit tests plus13 recipient/read tests, including concurrent Sends, a racing
+  recruiter commit, verification-only address, failed verification read, forged
+  contact, suppressed/altered witness and post-Send resume upload/fill auditing.
+- 20 actual route tests with sealed external I/O.
+- 101 post-cutover audit tests, including14 insertion-witness cases.
+- 504 cross-family tests and48 SQL assertions on the combined prepared chain.
+- 11 publication-admission tests,10 maintenance tests with each of the current and
+  frozen runners,23 recruiter tests, TypeScript and email escaping pass.
+- Independent review has no remaining Critical or Important findings. Exact
+  preview tenancy remains the integration gate.
+
+Install order is061000→070000→080000. No prepared migration or application flag
+has been activated in production; release remains subject to Spencer's approval.

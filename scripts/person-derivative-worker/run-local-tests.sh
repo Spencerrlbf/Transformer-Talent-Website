@@ -1,5 +1,5 @@
 #!/bin/bash
-# Local PostgreSQL only: checked TT application edits. Resets only person_directory_worker_test.
+# Local PostgreSQL only: certified embedding publication and worker. Resets only person_directory_worker_test.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
@@ -91,26 +91,9 @@ q -d $DB -1 -f supabase/migrations/20260928000000_person_recruiter_admission.sql
 if test -f supabase/migrations/20260928010000_person_derivative_journal.sql; then
  q -d $DB -1 -f supabase/migrations/20260928010000_person_derivative_journal.sql
 fi
-if test -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql; then
- q -d $DB -1 -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql
-fi
-if test -f supabase/migrations/20260928030000_person_maintenance_window.sql; then
- q -d $DB -1 -f supabase/migrations/20260928030000_person_maintenance_window.sql
-fi
-if test -f supabase/migrations/20260928040000_person_application_edits.sql; then
- q -d $DB -1 -f supabase/migrations/20260928040000_person_application_edits.sql
-fi
-if test -f supabase/migrations/20260928050000_person_publish_admission.sql; then
- q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
-fi
-if test -f supabase/migrations/20260928060000_person_application_contact.sql; then
- q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
-fi
-q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
-q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
+q -d $DB -1 -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql
 q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
-npx --yes esbuild@0.28.2 scripts/person-application-edits/contact-entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --alias:next/server=./scripts/person-application-queue/next-fixture.ts --alias:pdf-parse/lib/pdf-parse.js=./scripts/person-application-edits/resume-parser-fixture.ts --outfile=scripts/person-application-edits/dist/contact.mjs --log-level=warning
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-edits/test-edits.mjs
-node --test scripts/person-application-edits/test-contact-recipient.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-derivative-worker/test-worker.mjs
+node --test scripts/person-derivative-worker/test-hourly.mjs

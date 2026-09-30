@@ -215,20 +215,52 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260928030000_person_maintenance_window.sql
 20260928040000_person_application_edits.sql
 20260928050000_person_publish_admission.sql
+20260928060000_person_application_contact.sql
+20260928061000_person_resume_contact_fill.sql
+20260928080000_person_derivative_publish.sql
 ```
 
 Before applying the chain, build the directory identity index without blocking
-candidate writes, outside a transaction (`20260927170000` then skips it):
+candidate writes. Run this block with `psql -X -v ON_ERROR_STOP=1`, outside a
+transaction, and require successful exit before installing any of the chain.
+The bounds apply to this prerequisite separately from each migration:
 
 ```sql
+set lock_timeout='3s';
+set statement_timeout='5min';
 create index concurrently if not exists candidates_person_username_idx on public.candidates(lower(linkedin_username));
+do $$ begin
+ if not exists (
+  select 1 from pg_index i join pg_class c on c.oid=i.indexrelid
+  join pg_am a on a.oid=c.relam
+  where i.indexrelid=to_regclass('public.candidates_person_username_idx')
+   and i.indrelid='public.candidates'::regclass and i.indisvalid and i.indisready
+   and not i.indisunique and i.indpred is null and i.indnatts=1 and a.amname='btree'
+   and pg_get_expr(i.indexprs,i.indrelid) in ('lower(linkedin_username)','lower((linkedin_username)::text)')
+ ) then raise exception 'candidate identity index is not ready'; end if;
+end $$;
+reset statement_timeout;
+reset lock_timeout;
 ```
 
-The candidates heap was 660 MB on 2026-09-28, so a blocking build would take seconds,
-but pre-building removes even that write pause. `20260927190000` refuses to install
+An interrupted concurrent build can leave an invalid index; `IF NOT EXISTS` on a
+retry does not prove success. A wrong expression, unique or partial index is also
+refused. If creation or validation fails, stop installation. Have the operator
+inspect the failed or conflicting index and arrange its approved repair, then
+repeat the whole prerequisite and require successful validation. Do not silently
+drop an existing index or continue after the notice that its name exists.
+
+The candidates heap was 660 MB on 2026-09-28; no production build duration is
+assumed. With a validated prebuild, `20260927170000` checks the catalog and never
+executes `CREATE INDEX`, avoiding its write-blocking lock even on the skip path.
+Its missing-index fallback is for fresh local fixtures; production must pass the
+prebuild gate above. `20260927190000` refuses to install
 if any directory execution already completed. Install the whole chain before any
 certified directory writer runs. Include only files merged into the released parent:
-`20260928020000` arrives with #70, and `030000` to `050000` arrive with #71 to #73.
+`060000` and `061000` arrive with #76 (linked contact routing and authenticated resume gap-fill). They remain prepared and require the same release approval.
+
+`20260928020000` arrives with #70, `030000` to `050000` with #71 to #73, and `080000`
+with #78.
 
 The chain includes the prepared reference-ownership correction: candidate-indexed
 attribution references, source ownership checks and committed reference epochs.

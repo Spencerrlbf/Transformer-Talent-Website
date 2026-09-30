@@ -201,7 +201,8 @@ export async function candidateContact(
     // A linked TT applicant's contact is edited on the pool person (support on): mail what the drawer shows.
     if (row.candidate_id && applicationEditsChecked(orgId)) {
       const pool = (await poolContacts([row.candidate_id]).catch(() => new Map())).get(row.candidate_id);
-      if (pool?.email) return { name: row.name || "", email: pool.email };
+      // Empty or unavailable canonical contact must not revive a submitted address.
+      return { name: row.name || "", email: pool?.email ?? null };
     }
     return { name: row.name || "", email: row.contact?.email || row.email || null };
   }
