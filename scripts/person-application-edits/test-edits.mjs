@@ -23,6 +23,46 @@ async function processed() {
 }
 const frames = async () => Number((await pool.query('select (select count(*) from person_private.application_edit_frames)+(select count(*) from person_private.application_edit_mirror_frames) n')).rows[0].n);
 
+test('linked drawer contact save uses the real live recruiter transaction and preserves submitted evidence', async () => {
+  const { id, cid } = await processed(), actor = randomUUID(), requestId = randomUUID();
+  const before = await row('website_applications', id);
+  const priorFetch = globalThis.fetch;
+  const { saveContact, candidateContact } = await import('./dist/contact.mjs');
+  globalThis.fetch = async (input, init = {}) => {
+    const u = new URL(String(input));
+    assert.equal(u.origin, 'http://local-only.invalid', 'outbound forbidden');
+    assert.equal(init.method ?? 'GET', 'GET', 'all contact mutations must use the certified transaction');
+    if (u.pathname.endsWith('/auth/v1/user')) return Response.json({ id: actor, email: 'synthetic@example.test' });
+    if (u.pathname.endsWith('/org_members')) return Response.json([{ member_role: 'owner', organizations: { id: TT, slug: 'transformer-talent', name: 'Synthetic' } }]);
+    assert.ok(u.pathname.endsWith('/website_applications'));
+    assert.equal(u.searchParams.get('id'), `eq.${id}`);
+    assert.equal(u.searchParams.get('organization_id'), `eq.${TT}`);
+    return Response.json([await row('website_applications', id)]);
+  };
+  const contact = { email: 'recruiter-live@example.test', phone: '+12025550199', github: null, otherEmails: [] };
+  const req = () => ({ headers: new Headers({ authorization: 'Bearer synthetic', 'idempotency-key': requestId }), json: async () => contact });
+  const ctx = { params: Promise.resolve({ key: `app_${id}` }) };
+  try {
+    const response = await saveContact(req(), ctx);
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.deepEqual((await response.json()).contact, contact);
+    assert.deepEqual((await row('website_applications', id)).contact, before.contact);
+    assert.equal((await row('candidates', cid)).contact.email, 'recruiter-live@example.test');
+    assert.equal((await candidateContact(TT, `app_${id}`)).email, 'recruiter-live@example.test');
+    assert.equal((await plan(cid)).status, 'verified');
+    assert.equal((await saveContact(req(), ctx)).status, 200);
+    assert.equal((await pool.query('select count(*)::int n from person_recruiter_receipts where id=$1', [requestId])).rows[0].n, 1);
+    await control('drain');
+    const blocked = await saveContact({ headers: new Headers({ authorization: 'Bearer synthetic', 'idempotency-key': randomUUID() }), json: async () => ({ ...contact, email: 'blocked@example.test' }) }, ctx);
+    assert.equal(blocked.status, 503);
+    assert.equal((await row('candidates', cid)).contact.email, 'recruiter-live@example.test');
+    assert.deepEqual((await row('website_applications', id)).contact, before.contact);
+  } finally {
+    globalThis.fetch = priorFetch;
+    await pool.query("update person_private.transition_control set phase='open' where singleton");
+  }
+});
+
 test('edit: a follow-up reschedule saves the application and pool person and stays audit neutral', async () => {
   const { id, cid } = await processed();
   const before = await plan(cid);
@@ -215,6 +255,14 @@ test('fill: a phone on the sourced record wins, and linked applications are neve
   assert.deepEqual(r, { status: 'unchanged' });
   const { id: linked } = await processed();
   assert.deepEqual(await fill(linked, '+1 202 555 0147', ['x@example.test']), { status: 'linked' });
+});
+
+test('unlinked resume fill preserves a normalized phone extension and the extracted email', async () => {
+  const id = await unlinkedRow();
+  const r = await fill(id, '+1 202 555 0147 ext 123', ['extension@example.test']);
+  assert.equal(r.status, 'saved');
+  assert.deepEqual(r.filled, { phone: '+1 202 555 0147 ext 123', otherEmails: ['extension@example.test'] });
+  assert.equal((await row('website_applications', id)).contact.phone, '+1 202 555 0147 ext 123');
 });
 
 test('contact edit on an unlinked application with completed processing passes the result guard', async () => {

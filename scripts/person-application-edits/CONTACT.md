@@ -22,13 +22,27 @@ phone as typed. It also writes the whole block, so it could revert a recruiter's
 concurrent save. The pool person's contacts keep coming from their sources and
 from recruiter edits.
 
-If the drawer's pool read fails, it falls back to the application copy. A row that
-becomes linked during an edit returns `contact_moved`.
+If a linked person's pool read fails, the drawer refuses the read with a retryable
+503 rather than offering an editable empty contact. The list and email recipient
+remain empty; the submitted application address is never revived. Confirmed empty
+contact remains empty. Unpublished people use the same verification-table email
+selection as the pool drawer and Send. A row that becomes linked during an edit
+returns `contact_moved`.
+
+The linked resume-fill omission remains a release blocker, not an accepted scope
+change. It needs a certified gap-fill operation that records extracted evidence
+without changing recruiter choices or replacing a concurrent contact edit.
 
 ## Verification
 
-- **Edit tests:** 38/38 including the shared suite. They cover the atomic fill and a
-  result-guard test that fails without its patch.
+- **Edit tests:** 40/40 including the shared suite. They cover atomic fill, phone
+  extensions, and a real live drawer save through the certified recruiter
+  transaction, including replay, audit verification, preserved submitted copy,
+  and refusal while draining.
+- **Recipient/read tests:** 13/13 with sealed external reads, covering absent or
+  unavailable pool contact, verification-table selection, and tenant/support-off
+  behavior. The stale-recipient, stale-display and resolver failures were
+  reproduced before the fixes.
 - **Route tests:** 18/18. A linked applicant's contact waits in legacy mode and never
   touches the application row. An unlinked applicant saves only through the checked edit.
 - **Recruiter suites:** 23/23 and 77/77.
@@ -36,5 +50,5 @@ becomes linked during an edit returns `contact_moved`.
   maintenance 10/10 (current and pinned runner).
 - **Type check:** `tsc` passes.
 
-Not tested end to end: a linked contact save in live mode through the drawer route.
-The recruiter path it calls is covered by the recruiter suites.
+Hosted tenancy for the combined head remains pending. The prepared migration has
+not been installed in production, and linked automatic resume fill is unfinished.

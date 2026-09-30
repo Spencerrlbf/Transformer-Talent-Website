@@ -1069,7 +1069,7 @@ export async function listUnifiedCandidates(params: UnifiedListParams): Promise<
     const contacts = linked.length ? await poolContacts(linked.map((r) => appPerson.get(r.key)!)).catch(() => new Map()) : new Map();
     for (const r of linked) {
       const c = contacts.get(appPerson.get(r.key)!);
-      if (c) r.contact = { email: c.email, phone: c.phone };
+      r.contact = { email: c?.email ?? null, phone: c?.phone ?? null };
     }
   }
 
@@ -1745,7 +1745,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       })(),
       // A linked TT applicant's contact is the pool person's (edited there, support on).
       contact: applicationEditsChecked(orgId) && a.candidate_id
-        ? await poolContactOf(a.candidate_id).catch(() => ({ ...(a.contact || {}), email: a.contact?.email ?? a.email ?? null }))
+        ? await poolContactOf(a.candidate_id)
         : sentSnapshot
         ? { ...(a.contact || {}), email: a.contact?.email ?? null, phone: a.contact?.phone ?? null }
         : { ...(sourced?.contact || {}), ...(a.contact || {}), email: a.contact?.email ?? sourced?.contact?.email ?? a.email ?? null },
@@ -1834,8 +1834,9 @@ export async function ttApplicationCandidate(applicationId: string): Promise<{ f
 
 /** The pool person's current contact block: the published view when there is one. */
 export async function poolContactOf(candidateId: string): Promise<UnifiedContact> {
-  const c = (await poolContacts([candidateId])).get(candidateId);
-  return c ?? { email: null, phone: null, github: null, otherEmails: [] };
+  const c = await poolContacts([candidateId]).then((rows) => rows.get(candidateId)).catch(() => null);
+  if (!c) throw Error("pool_contact_unavailable");
+  return c;
 }
 
 /** The checked recruiter contact save for a pool person, with the drawer's error codes. */

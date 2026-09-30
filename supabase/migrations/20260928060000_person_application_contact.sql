@@ -54,7 +54,7 @@ language plpgsql security definer set search_path='' set timezone='UTC' as $$
 declare a public.website_applications;src jsonb;cur jsonb;known text[];extra text;others jsonb;filled jsonb:='{}'::jsonb;r jsonb;username text;
 begin
  if current_setting('transaction_isolation')<>'read committed' then raise exception 'application_edit_isolation';end if;
- if p_application is null or (p_phone is not null and (length(p_phone)>40 or p_phone !~ '^\+?[0-9 ().-]{7,40}$')) or jsonb_typeof(coalesce(p_emails,'[]'::jsonb))<>'array' or
+ if p_application is null or (p_phone is not null and (length(p_phone)>40 or p_phone !~ '^\+?[0-9 ().-]{7,40}( ext [0-9]{1,6})?$')) or jsonb_typeof(coalesce(p_emails,'[]'::jsonb))<>'array' or
   jsonb_array_length(coalesce(p_emails,'[]'::jsonb))>10 or
   exists(select 1 from jsonb_array_elements(coalesce(p_emails,'[]'::jsonb)) e where jsonb_typeof(e)<>'string' or length(e#>>'{}')>160 or e#>>'{}' !~ '^[^\s@]+@[^\s@]+\.[^\s@]+$')
  then raise exception 'application_edit_input';end if;

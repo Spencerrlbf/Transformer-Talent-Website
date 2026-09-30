@@ -100,7 +100,8 @@ function emailScore(r: EmailRow): number {
 export async function poolEmails(
   candidateIds: string[],
   knownEmails: Map<string, string | null>,
-  published?: Map<string, ResolvedPoolContact>
+  published?: Map<string, ResolvedPoolContact>,
+  options: { requireComplete?: boolean } = {}
 ): Promise<Map<string, RankedEmail[]>> {
   const normalized = published ?? await publishedPoolContacts(candidateIds);
   const legacyIds = candidateIds.filter(id => !normalized.has(id));
@@ -115,6 +116,7 @@ export async function poolEmails(
         `candidate_emails_v2?candidate_id=in.(${chunk})&select=candidate_id,email:email_normalized,email_type,is_primary,quality,result`
       ),
     ]);
+    if (options.requireComplete && (!a.ok || !b.ok)) throw Error("pool_contact_unavailable");
     if (a.ok) rows.push(...((await a.json()) as EmailRow[]));
     if (b.ok) rows.push(...((await b.json()) as EmailRow[]));
   }

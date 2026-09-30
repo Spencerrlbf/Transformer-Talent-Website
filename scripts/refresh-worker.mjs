@@ -91,6 +91,8 @@ if (PERSON_MODE !== "legacy") {
     },
   });
   if (stats.failed || stats.review || stats.uncertain) process.exitCode = 1;
+  // Certified embeddings for the people this run refreshed are written by the hourly
+  // derivative-worker workflow (scripts/derivative-worker.mjs), its only scheduled caller.
 } else {
 // Budget: paid Harvest calls already made today (site + worker share the cap).
 const todayStart = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
