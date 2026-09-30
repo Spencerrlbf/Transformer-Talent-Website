@@ -217,7 +217,9 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260928050000_person_publish_admission.sql
 20260928060000_person_application_contact.sql
 20260928061000_person_resume_contact_fill.sql
+20260928070000_person_network_send.sql
 20260928080000_person_derivative_publish.sql
+20260928090000_person_maintenance_deferred.sql
 ```
 
 Before applying the chain, build the directory identity index without blocking
@@ -296,6 +298,15 @@ pending, review, queue and external-boundary outcomes. An unstable external
 observation is reported explicitly; Spencer's tolerance for drift does not turn it
 into a verified stable fingerprint or authorize bypassing the writer's guard.
 
+Every controller change and window opening names the phase you expect (`--expect-phase`).
+Before seal, `--wait-drained` must report drained. Retire expired pre-effects application
+work by re-claiming it; parked (deferred) work is fine to hold. Use `scripts/person-transition.mjs` for every controller and window change (see
+`scripts/person-transition-cli/README.md`); the controller/maintenance/publication sequence is rehearsed locally by
+`scripts/person-transition-cli/run-local-tests.sh`. This does not exercise the
+full application pipeline, hosted traffic or complete release audit. Closing an
+exact maintenance work ID is idempotent and takes no expected phase. Active or
+expired windows block `--wait-drained`; stop their owner and close them explicitly
+before sealing.
 While the controller is armed, the catch-up and anchor steps need operator
 maintenance windows (`scripts/person-maintenance/README.md`). Arm, drain and seal
 to `held`. Open a `catchup` window for the exact catch-up run ID, run the pinned

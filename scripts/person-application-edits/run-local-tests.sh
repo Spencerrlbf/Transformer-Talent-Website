@@ -109,6 +109,7 @@ fi
 q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
 q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
+q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
 npx --yes esbuild@0.28.2 scripts/person-application-edits/contact-entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --alias:next/server=./scripts/person-application-queue/next-fixture.ts --alias:pdf-parse/lib/pdf-parse.js=./scripts/person-application-edits/resume-parser-fixture.ts --outfile=scripts/person-application-edits/dist/contact.mjs --log-level=warning

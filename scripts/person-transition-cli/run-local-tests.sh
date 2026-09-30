@@ -1,11 +1,11 @@
 #!/bin/bash
-# Local PostgreSQL only: operator maintenance windows (catch-up and anchors while held).
-# Resets only the disposable person_maintenance_test database.
+# Local PostgreSQL only: the controller and maintenance sequence.
+# Resets only the disposable person_transition_rehearsal_test database.
 set -euo pipefail
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
-DB=person_maintenance_test
+DB=person_transition_rehearsal_test
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 q -d postgres -c "drop database if exists $DB" -c "create database $DB"
 q -d $DB -f scripts/person-trial/local-schema.sql
@@ -96,12 +96,8 @@ if test -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql; t
  q -d $DB -1 -f supabase/migrations/20260928020000_person_derivative_lifecycle.sql
 fi
 q -d $DB -1 -f supabase/migrations/20260928030000_person_maintenance_window.sql
-if test -f supabase/migrations/20260928040000_person_application_edits.sql; then
- q -d $DB -1 -f supabase/migrations/20260928040000_person_application_edits.sql
-fi
-if test -f supabase/migrations/20260928050000_person_publish_admission.sql; then
- q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
-fi
+q -d $DB -1 -f supabase/migrations/20260928040000_person_application_edits.sql
+q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
 if test -f supabase/migrations/20260928060000_person_application_contact.sql; then
  q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
 fi
@@ -110,6 +106,8 @@ if test -f supabase/migrations/20260928070000_person_network_send.sql; then
  q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 fi
 q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
-q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
+if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; then
+ q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
+fi
 node scripts/build-worker-lib.mjs
-LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" node --test --test-concurrency=1 scripts/person-maintenance/test-maintenance.mjs
+PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-rehearsal.mjs

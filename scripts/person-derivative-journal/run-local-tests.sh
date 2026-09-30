@@ -111,6 +111,7 @@ if test -f supabase/migrations/20260928070000_person_network_send.sql; then
  q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 fi
 q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
+q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test scripts/person-directory-input/test-input.mjs
