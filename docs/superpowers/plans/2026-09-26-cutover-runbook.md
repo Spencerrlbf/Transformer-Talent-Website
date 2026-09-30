@@ -234,6 +234,13 @@ pending, review, queue and external-boundary outcomes. An unstable external
 observation is reported explicitly; Spencer's tolerance for drift does not turn it
 into a verified stable fingerprint or authorize bypassing the writer's guard.
 
+While the controller is armed, the catch-up and anchor steps need operator
+maintenance windows (`scripts/person-maintenance/README.md`). Arm, drain and seal
+to `held`. Open a `catchup` window for the exact catch-up run ID, run the pinned
+catch-up, and close the window. Then open an `anchors` window, run the anchor CLI
+below, and close it. Only then reopen. The controller refuses `reopen` while a window is
+open or expired. Publication and undo are not admitted by these windows.
+
 Then prepare anchors using the unchanged translator and installed audit chain:
 
 ```sh
