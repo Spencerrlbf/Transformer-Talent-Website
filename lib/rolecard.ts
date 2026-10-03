@@ -869,6 +869,24 @@ export function reviewOnRows(review: Review, rows: CardRow[]): Review {
   return { ...review, fits, gaps };
 }
 
+/** The plain first line of a code-written pass: what the role needs, then what the
+ *  person has ("Pass: the role needs 3+ years; about 1.1 years in engineering roles."). */
+export function passLine(no: CardRow[]): string {
+  if (!no.length) return "Pass: a Required row is not met.";
+  const r = no[0];
+  const bar = yearsBar(r.label);
+  const tidy = (t: string) => t.replace(/\s+/g, " ").trim().replace(/[.;,\s]+$/, "");
+  let first: string;
+  if (bar != null) {
+    const m = /^(\d+(?:\.\d+)?) years? (in engineering roles|of career)/.exec(r.evidence.trim());
+    first = m ? `the role needs ${bar}+ years; about ${m[1]} ${m[1] === "1" ? "year" : "years"} ${m[2]}` : `the role needs ${bar}+ years; ${tidy(r.evidence)}`;
+  } else {
+    first = `${r.short || chipLabel(r.label)}: ${tidy(r.evidence)}`;
+  }
+  const more = no.length > 1 ? ` Also not met: ${no.slice(1).map((x) => x.short || chipLabel(x.label)).join(", ")}.` : "";
+  return `Pass: ${first}.${more}`;
+}
+
 /** A review written by code from the rows alone, for when the model call
  *  fails or leaves nothing usable. Plain, but never wrong. */
 export function fallbackReview(rows: CardRow[], label: VerdictLabel): Review {
@@ -879,7 +897,7 @@ export function fallbackReview(rows: CardRow[], label: VerdictLabel): Review {
   const gaps = open.map((r) => ({ text: r.status === "short" || r.status === "no" ? `${r.label}: ${r.evidence}` : `${r.label}: not shown on the profile or resume.`, rowIds: [r.id] }));
   const bottomLine =
     label === "contact" ? (open.length ? `Every Required row is met or set for the call; confirm ${open.map((r) => r.short || chipLabel(r.label)).join(", ")}.` : "Every Required row is met.")
-    : label === "pass" ? (() => { const no = open.filter((r) => r.status === "no"); return no.length ? `Against on ${no.map((r) => r.short || chipLabel(r.label)).join(", ")}: ${no[0].evidence}`.replace(/\.\.$/, ".") : "Against on a Required row."; })()
+    : label === "pass" ? passLine(open.filter((r) => r.status === "no"))
     : open.length ? `Worth a call to confirm ${open.map((r) => r.short || chipLabel(r.label)).join(", ")}.` : "Worth a message.";
   return guardReview({ bottomLine, fits, gaps, ask: [] }, rows);
 }
