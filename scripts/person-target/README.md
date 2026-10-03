@@ -64,7 +64,15 @@ installs a `fetch` guard (`lib/server/outbound-guard.ts`, from `instrumentation.
 on the server and from the worker bundle on import). Requests to a listed host (exact
 or `.suffix`) fail with `outbound_denied:<host>` before leaving the process and are
 counted (`deniedRequests()`). Unset in production: nothing is installed. OpenAI and
-the selected Supabase project stay reachable unless listed.
+the selected Supabase project stay reachable unless listed. Scope: the guard covers
+`fetch` (every provider client in `lib/server` and the workers uses it); it does not
+intercept raw `node:net`/`node:https` sockets, which nothing in the release uses for
+providers. Trailing-dot hostnames are matched like their plain form.
+
+The role utilities (`sync-org-roles.mjs`, `embed-roles.mjs`) accept only a hosted
+`https://<ref>.supabase.co` URL; they have no loopback mode. The workers that build
+their own REST helpers (`review-queue.mjs`, `refresh-worker.mjs`, `sync-directory.mjs`)
+call `assertServerTarget()` before their first request.
 
 ## Deployment checklist
 

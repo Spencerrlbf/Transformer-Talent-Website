@@ -15,6 +15,8 @@ test('host list parsing: exact and suffix entries, invalid entries refused',()=>
  assert.equal(hostDenied('airtable.com',['.airtable.com']),true);
  assert.equal(hostDenied('notairtable.com',['.airtable.com']),false);
  assert.equal(hostDenied('API.RESEND.COM',['api.resend.com']),true);
+ assert.equal(hostDenied('api.resend.com.',['api.resend.com']),true);
+ assert.equal(hostDenied('api.airtable.com.',['.airtable.com']),true);
 });
 test('unset: nothing is installed and every request reaches the transport',async()=>{
  assert.deepEqual(installOutboundGuard({}),[]);

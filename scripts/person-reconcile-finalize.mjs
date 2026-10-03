@@ -59,7 +59,7 @@ export async function main(argv=process.argv.slice(2),{env=process.env,readFile=
   try{
    const file=path.join(tmp,'finish.sql');
    fs.writeFileSync(file,finalizeSql(run),{mode:0o600});
-   const output=exec(env.SUPABASE_CLI??'supabase',['db','query','--linked','--workdir',directory,'-f',file],{encoding:'utf8',timeout:30000,maxBuffer:1024*1024});
+   const output=exec(env.SUPABASE_CLI??'supabase',['db','query','--linked','--workdir',directory,'-f',file],{encoding:'utf8',timeout:30000,maxBuffer:1024*1024,stdio:['ignore','pipe','pipe']});
    out(output);return {run,target:target.ref,via:'cli'};
   }finally{fs.rmSync(tmp,{recursive:true,force:true});}
  }
@@ -83,8 +83,12 @@ export async function main(argv=process.argv.slice(2),{env=process.env,readFile=
    return res.json();
   }:undefined;
   const identity=await verifyRuntimeIdentity({readRest,readDatabase});
-  const result=(await client.query(finalizeSql(run))).at?.(-2)??null; // multi-statement: the finish select is second to last
-  const finish=result?.rows?.[0]??null;
+  // Multi-statement text: pg returns one result per statement. Take the finish SELECT
+  // by content, never by position; anything else is a changed script, not a success.
+  const results=await client.query(finalizeSql(run));
+  const result=Array.isArray(results)?results.find(r=>r?.rows?.[0]&&Object.hasOwn(r.rows[0],'person_reconcile_finish')):null;
+  if(!result)throw Error('finalize_result');
+  const finish=result.rows[0];
   out(JSON.stringify({phase:'reconcile_finalized',run,target:target.ref,system_identifier:identity.system_identifier,result:finish})+'\n');
   return {run,target:target.ref,via:'postgres',result:finish};
  }finally{await client.end().catch(()=>{});}

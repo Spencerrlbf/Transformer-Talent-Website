@@ -189,6 +189,8 @@ async function main() {
   const mode = process.env.PERSON_WRITE_MODE || 'legacy';
   requireDirectoryExecution(mode);
   if (!['legacy', 'shadow', 'live'].includes(mode)) throw Error('invalid_person_write_mode');
+  // One selected project before any REST or PostgreSQL client in either mode (RR-07).
+  (await import('./dist/worker-lib.mjs')).assertServerTarget();
   if (mode !== 'legacy') return (await import('./person-directory/worker.mjs')).main();
   const { COMMS_DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY } = process.env;
   const DRY_RUN = !!process.env.DRY_RUN;

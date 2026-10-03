@@ -18,7 +18,9 @@ try {
 } catch {}
 
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase creds required");
-const { reviewQueued, queuedCount } = await import("./dist/worker-lib.mjs");
+const { reviewQueued, queuedCount, assertServerTarget } = await import("./dist/worker-lib.mjs");
+// One selected project before any REST request from this script (RR-07).
+assertServerTarget();
 
 const dryRun = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
 // Hard ceiling per run on top of each company's allowance (cost discipline).

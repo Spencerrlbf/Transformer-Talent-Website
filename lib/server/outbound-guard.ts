@@ -26,7 +26,7 @@ export function deniedHosts(env: Record<string, string | undefined> = process.en
 }
 
 export function hostDenied(hostname: string, hosts: string[]): boolean {
-  const h = hostname.toLowerCase();
+  const h = hostname.toLowerCase().replace(/\.$/, ""); // a trailing-dot FQDN resolves identically
   return hosts.some((d) => (d.startsWith(".") ? h === d.slice(1) || h.endsWith(d) : h === d));
 }
 

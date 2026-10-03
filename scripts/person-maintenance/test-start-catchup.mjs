@@ -99,3 +99,7 @@ test('a destination without the release identity function is refused before the 
  const f=fixture({identityError:Object.assign(Error('secret-sentinel'),{code:'PGRST202'})});
  await assert.rejects(main([],f.deps),e=>reasonOf(e)==='person_target:identity_rest');assert.ok(!f.calls.includes('open_comms'));assert.equal(starts(f.calls).length,0);assert.deepEqual(f.calls.slice(-1),['site_end']);
 });
+test('a communications URL that is no recognizable endpoint is a credentials failure, not a target failure',async()=>{
+ const f=fixture({env:{COMMS_DATABASE_URL:'postgresql://synthetic:secret-sentinel@unknown.example:5432/db'}});
+ await assert.rejects(main([],f.deps),/catchup_start:credentials/);assert.ok(!f.calls.includes('open_site'));
+});

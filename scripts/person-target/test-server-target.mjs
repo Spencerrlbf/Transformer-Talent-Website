@@ -62,6 +62,11 @@ test('a consistent selection passes and is cached per configuration',()=>{
   assert.equal(lib.assertServerTarget(),TARGET);assert.equal(lib.assertServerTarget(),TARGET);
   process.env.PERSON_DATABASE_URL=pooler(OTHER);
   assert.throws(()=>lib.assertServerTarget(),/person_target:database_mismatch/);
+  process.env.PERSON_DATABASE_URL=pooler(TARGET);assert.equal(lib.assertServerTarget(),TARGET);
+  // Keys for different projects have the same length: a swapped key must miss the cache.
+  assert.equal(jwt(OTHER).length,jwt(TARGET).length);
+  process.env.SUPABASE_SERVICE_ROLE_KEY=jwt(OTHER);
+  assert.throws(()=>lib.assertServerTarget(),/person_target:key_mismatch/);
  });
 });
 test('REST on the copy while PostgreSQL names the original: refused before any socket',async()=>{

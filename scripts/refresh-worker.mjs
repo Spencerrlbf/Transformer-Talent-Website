@@ -35,6 +35,8 @@ try {
 // the admission support check, including legacy and precompute invocations.
 requireRefreshExecution({ certified: true });
 const workerLib = await import("./dist/worker-lib.mjs");
+// One selected project before this script's own REST helper issues anything (RR-07).
+workerLib.assertServerTarget();
 const {
   computeFacts,
   formatFacts,

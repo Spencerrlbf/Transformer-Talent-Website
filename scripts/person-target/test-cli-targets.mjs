@@ -46,6 +46,17 @@ for(const script of ROLE_UTILITIES){
   assert.equal(r.status,1);assert.match(r.stderr,/person_target:key_mismatch/);assert.equal(r.attempts,'');
  });
 }
+// RR-07: the three workers that build their own REST helpers stop before any request
+// when the configuration is mixed. They import the worker bundle, built by the runner.
+const WORKERS=['scripts/review-queue.mjs','scripts/refresh-worker.mjs','scripts/sync-directory.mjs'];
+const mixed={PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',PERSON_TRANSITION_SUPPORT:'on',SUPABASE_URL:`https://${OTHER}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),
+ PERSON_DATABASE_URL:`postgres://postgres.${TARGET}:secret-sentinel@aws-0-us-east-2.pooler.supabase.com:6543/postgres`,COMMS_DATABASE_URL:'postgresql://synthetic:secret-sentinel@127.0.0.1:55487/fixture',OPENAI_API_KEY:'synthetic',HARVEST_API_KEY:'synthetic',REFRESH_DAILY_CAP:'1',CONCURRENCY:'1',MAX:'1'};
+for(const script of WORKERS)test(`${script}: REST on another project than the selection stops before any request`,()=>{
+ if(!fs.existsSync(path.join(root,'scripts/dist/worker-lib.mjs')))assert.fail('worker bundle missing: run scripts/person-target/run-offline-tests.sh');
+ const r=run(script,mixed);
+ assert.equal(r.status,1,r.stderr.slice(0,400));assert.match(r.stderr,/person_target:rest_mismatch/);assert.equal(r.attempts,'');
+ assert.doesNotMatch(r.stderr,/secret-sentinel/);
+});
 test('package.json sync-roles references only scripts that exist (RR-15)',()=>{
  const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
  const refs=[...pkg.scripts['sync-roles'].matchAll(/node (scripts\/[^ &]+)/g)].map(m=>m[1]);
@@ -110,6 +121,12 @@ test('finalizer stops when REST and PostgreSQL are different clusters',async()=>
  const fetchFn=async()=>({ok:true,json:async()=>({system_identifier:'7000000000000000001'})});
  await assert.rejects(finalize(['--run-id=run-1'],{env,connect:f.connect,fetchFn}),/person_target:identity_mismatch/);
  assert.equal(f.sql.filter(x=>x.startsWith('begin;')).length,0);assert.equal(f.ended(),1);
+});
+test('finalizer refuses a changed multi-statement result instead of reporting success',async()=>{
+ const f=fakeClient();
+ f.client.query=async(text)=>{f.sql.push(text);if(text.includes('person_target_identity'))return {rows:[{identity:{system_identifier:'7000000000000000001'}}]};return [{},{},{},{},{rows:[{something_else:1}]},{}];};
+ await assert.rejects(finalize(['--run-id=run-1'],{env:{PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:session(TARGET)},connect:f.connect}),/finalize_result/);
+ assert.equal(f.ended(),1);
 });
 test('finalizer stops when the destination lacks the identity function',async()=>{
  const f=fakeClient();f.client.query=async(text)=>{f.sql.push(text);throw Object.assign(Error('secret-sentinel'),{code:'42883'});};

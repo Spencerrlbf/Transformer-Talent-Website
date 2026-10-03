@@ -8,6 +8,7 @@
 // or PERSON_TARGET_PROJECT_REF is set at all, every client must name the one
 // selected project or no connection is opened. Legacy mode with no selection
 // keeps today's production behavior unchanged.
+import { createHash } from "node:crypto";
 import {
   checkDatabaseUrl,
   checkRestUrl,
@@ -40,7 +41,8 @@ function cacheKey(env: Env): string {
     env.PERSON_TRANSITION_SUPPORT,
     env.SUPABASE_URL,
     env.PERSON_DATABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY?.length,
+    // Keys for different projects share a length; hash the whole value.
+    env.SUPABASE_SERVICE_ROLE_KEY === undefined ? "" : createHash("sha256").update(env.SUPABASE_SERVICE_ROLE_KEY).digest("hex"),
   ].join("\u0000");
 }
 

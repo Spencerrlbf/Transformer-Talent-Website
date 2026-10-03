@@ -66,7 +66,8 @@ export async function main(argv=process.argv.slice(2),{env=process.env,verify=ve
   if(target.local)throw Error('catchup_start:target');
   checkRestUrl(env.SUPABASE_URL,target);
   checkServiceKey(env.SUPABASE_SERVICE_ROLE_KEY,target);
-  if(databaseIdentity(env.COMMS_DATABASE_URL).ref===target.ref)throw Error('catchup_start:credentials');
+  let source;try{source=databaseIdentity(env.COMMS_DATABASE_URL);}catch{throw Error('catchup_start:credentials');}
+  if(source.ref===target.ref)throw Error('catchup_start:credentials');
   const {options}=await importPinned(runtime.root,'person-backfill.mjs');
   const {restSite,commsColumns}=await importPinned(runtime.root,'person-trial.mjs');
   const {externalFingerprint}=await importPinned(runtime.root,'person-reconcile.mjs');
