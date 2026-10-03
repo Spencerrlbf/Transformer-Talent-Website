@@ -13,16 +13,23 @@ import {
   checkRestUrl,
   checkServiceKey,
   hasSelectedTarget,
+  isLoopbackDatabaseUrl,
+  isSealedRestUrl,
   selectedTarget,
 } from "../../../scripts/person-target.mjs";
 
 type Env = Record<string, string | undefined>;
 
+/** A selection is required whenever one is set, or whenever a normalized-storage
+ * path is enabled and either client could reach a hosted project. A sealed local
+ * fixture (loopback PostgreSQL, loopback or `.invalid` REST) has nothing hosted
+ * to protect and needs none. */
 export function personTargetRequired(env: Env = process.env): boolean {
   if (hasSelectedTarget(env)) return true;
   const mode = env.PERSON_WRITE_MODE;
-  if (mode !== undefined && mode !== "" && mode !== "legacy") return true;
-  return env.PERSON_TRANSITION_SUPPORT === "on";
+  const normalized = (mode !== undefined && mode !== "" && mode !== "legacy") || env.PERSON_TRANSITION_SUPPORT === "on";
+  if (!normalized) return false;
+  return !(isSealedRestUrl(env.SUPABASE_URL) && isLoopbackDatabaseUrl(env.PERSON_DATABASE_URL));
 }
 
 let checked: { key: string; ref: string } | undefined;

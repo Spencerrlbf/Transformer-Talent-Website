@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
  selectedTarget,hasSelectedTarget,restProjectRef,checkRestUrl,keyProjectRef,checkServiceKey,
- databaseIdentity,checkDatabaseUrl,checkLinkedWorkdir,checkTargetEnvironment,verifyRuntimeIdentity,identityValue,isTargetError,
+ databaseIdentity,checkDatabaseUrl,checkLinkedWorkdir,checkTargetEnvironment,verifyRuntimeIdentity,identityValue,isTargetError,isSealedRestUrl,isLoopbackDatabaseUrl,
 } from '../person-target.mjs';
 
 const COPY='abcdefghijklmnopqrst',ORIGINAL='tsrqponmlkjihgfedcba';
@@ -35,7 +35,16 @@ test('REST URLs must name the selected project exactly',()=>{
  assert.equal(restProjectRef('https://localhost:54321'),null);
  const local={ref:'local',local:true};
  assert.equal(checkRestUrl('http://127.0.0.1:54321',local),'local');
+ assert.equal(checkRestUrl('http://local-only.invalid',local),'local');
  rejects(()=>checkRestUrl(`https://${COPY}.supabase.co`,local),'rest_mismatch');
+ rejects(()=>checkRestUrl('https://api.example.test',local),'rest_mismatch');
+});
+test('sealed and loopback classification used by the server gate',()=>{
+ assert.equal(isSealedRestUrl(undefined),true);assert.equal(isSealedRestUrl('http://local-only.invalid'),true);assert.equal(isSealedRestUrl('http://127.0.0.1:54321'),true);
+ assert.equal(isSealedRestUrl(`https://${COPY}.supabase.co`),false);assert.equal(isSealedRestUrl('https://api.example.test'),false);assert.equal(isSealedRestUrl('not a url'),false);
+ assert.equal(isLoopbackDatabaseUrl(undefined),true);assert.equal(isLoopbackDatabaseUrl('postgresql://postgres@127.0.0.1:55487/x'),true);
+ assert.equal(isLoopbackDatabaseUrl(`postgres://postgres.${COPY}:pw@aws-0-us-east-2.pooler.supabase.com:6543/postgres`),false);
+ assert.equal(isLoopbackDatabaseUrl('postgres://x@unknown.example:5432/db'),false);assert.equal(isLoopbackDatabaseUrl('garbage'),false);
 });
 
 test('service keys: claim must match; claimless keys are accepted only when permitted',()=>{

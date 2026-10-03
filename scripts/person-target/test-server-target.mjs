@@ -37,11 +37,25 @@ test('legacy mode with no selection keeps today\'s behavior: no target check',()
  });
  withEnv({},()=>assert.equal(lib.personTargetRequired(),false));
 });
-test('shadow/live mode or transition support requires an explicit selection',()=>{
- withEnv({PERSON_WRITE_MODE:'shadow'},()=>{assert.equal(lib.personTargetRequired(),true);assert.throws(()=>lib.assertServerTarget(),/person_target:missing/);});
- withEnv({PERSON_WRITE_MODE:'live'},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
- withEnv({PERSON_TRANSITION_SUPPORT:'on'},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+test('shadow/live mode or transition support with a hosted client requires an explicit selection',()=>{
+ const hosted={SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)};
+ withEnv({PERSON_WRITE_MODE:'shadow',...hosted},()=>{assert.equal(lib.personTargetRequired(),true);assert.throws(()=>lib.assertServerTarget(),/person_target:missing/);});
+ withEnv({PERSON_WRITE_MODE:'live',...hosted},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ withEnv({PERSON_TRANSITION_SUPPORT:'on',...hosted},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ // Either hosted client alone is enough to require the selection.
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',PERSON_DATABASE_URL:pooler(TARGET)},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ // An unknown REST host (custom domain, proxy) is treated as hosted.
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'https://api.example.test',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
  withEnv({PERSON_TARGET_PROJECT_REF:TARGET},()=>assert.equal(lib.personTargetRequired(),true));
+});
+test('a sealed local fixture (loopback PostgreSQL, loopback or .invalid REST) needs no selection',()=>{
+ withEnv({PERSON_WRITE_MODE:'live',PERSON_TRANSITION_SUPPORT:'on',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>{
+  assert.equal(lib.personTargetRequired(),false);assert.equal(lib.assertServerTarget(),null);
+ });
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://127.0.0.1:54321',PERSON_DATABASE_URL:'postgresql://postgres@localhost:5432/fixture'},()=>assert.equal(lib.personTargetRequired(),false));
+ // With an explicit local selection, the same fixture is checked and passes.
+ withEnv({PERSON_TARGET_PROJECT_REF:'local',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>assert.equal(lib.assertServerTarget(),'local'));
 });
 test('a consistent selection passes and is cached per configuration',()=>{
  withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},()=>{

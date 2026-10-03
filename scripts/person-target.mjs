@@ -48,10 +48,22 @@ export function restProjectRef(url){
  const m=/^([a-z]{20})\.supabase\.co$/.exec(u.hostname);
  return m?m[1]:null;
 }
+/** A REST URL that cannot reach any hosted project: loopback, or the reserved
+ * `.invalid` TLD that fixtures use as a sealed sentinel (RFC 2606). */
+export function isSealedRestUrl(url){
+ if(url===undefined||url==='')return true;
+ let u;try{u=new URL(url);}catch{return false;}
+ return LOOPBACK.has(u.hostname)||u.hostname.endsWith('.invalid');
+}
+/** A PostgreSQL URL that stays on this machine. */
+export function isLoopbackDatabaseUrl(url){
+ if(url===undefined||url==='')return true;
+ try{return databaseIdentity(url).kind==='local';}catch{return false;}
+}
 export function checkRestUrl(url,target=selectedTarget()){
  if(target.local){
   const u=parseUrl(url,'rest_url');
-  if(!LOOPBACK.has(u.hostname)||u.username||u.password||u.hash)throw fail('rest_mismatch');
+  if(!isSealedRestUrl(url)||u.username||u.password||u.hash)throw fail('rest_mismatch');
   return target.ref;
  }
  const ref=restProjectRef(url);
