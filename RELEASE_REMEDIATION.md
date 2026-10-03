@@ -27,7 +27,7 @@ Three statements this ledger keeps apart:
 | Testing branch `verify/stage2-combined` | `23d7860`, unchanged; local checkout clean |
 | Prepared parent `feat/person-00-storage-unification` | `c8fda5b` on origin, unchanged (local branch pointer lags; the `candidate-unification` checkout is detached at `8da8341`, same tree, with an uncommitted `packageManager` line and 43 untracked duplicate-name files, all left untouched) |
 | `main` | `9a3240c`, unchanged |
-| Remediation branch | `fix/person-90-release-remediation`, worktree `pl/remediation`, 6 commits on top of `c8fda5b` (see manifest) |
+| Remediation branch | `fix/person-90-release-remediation`, worktree `pl/remediation`, 11 commits on top of `c8fda5b` (last executable change `8bd8fd3`; the docs commit on top adds no executable file) (see manifest) |
 | Test copy `qsqlgibgsxzlimoegcjx` | read-only snapshot at 15:16 UTC: 423,052 candidates; 38,798,797,971 bytes; controller enabled/open gen 4 rev 5; no live work; `person_network_send(p_row jsonb)` one-argument body; witness table with 5 columns; 1 witness; no `20261003*` migrations; publish runs canary complete (5), full paused (1,986 + 13 + 1); 0 audit runs; cluster identifier `7550817586112808987` |
 | Original project `kmuihequfurvjxpnugxf` | not queried, not written |
 | Local disposable PostgreSQL | 127.0.0.1:55487 (Homebrew 15.13, loopback only, `person_*_test` databases) used for every database test below |
@@ -89,12 +89,15 @@ No workflow was dispatched, no deployment made, nothing pushed.
   NULL proof under an all-or-none check constraint and `sentApplication()` then treats
   the Send as an unproved raw application (pending, never admitted). Snapshot export
   upgraded to the release fragment (`inserted_row`, `insert_event`, size limit).
-- **Tests / results**: upgrade harness: `recovered=1, unresolved=1`; the recovered
+- **Tests / results**: upgrade harness (5 phases): `recovered=1, unresolved=1`; the recovered
   witness's `inserted_row` reproduces the original hash, its event hash recomputes,
   and the planner reports the person `verified` again; the altered witness stays
   NULL, is still immutable, and its person is not `verified`; a half-proved row is
-  refused by the constraint. Pure verifier cases: `scripts/person-audit/test-sent-application.mjs`
-  within the audit suite (101/101).
+  refused by the constraint; the planner reports the unresolved Send as exactly one
+  unadmitted application. A clean release-chain install and the upgraded database
+  have identical catalogs for every touched object (phase 5). Pure verifier cases:
+  `scripts/person-audit/test-sent-application.mjs` within the audit suite (101/101).
+  Reconstruction uses exactly the four columns the capture trigger strips.
 - **Database implications**: on the copy, the single existing witness would be
   recovered or left unresolved by the same rule; the result is reported by the
   migration's NOTICE. No row is deleted or rewritten beyond the three proof columns.
@@ -119,7 +122,9 @@ No workflow was dispatched, no deployment made, nothing pushed.
   publishing session's backend is terminated (`pg_terminate_backend`) at COMMIT
   through the CLI's own `openDatabase` wrapper → the run fails with a sanitized
   reason, no `uncaughtException`, no history/result/frames; `--resume` publishes the
-  person once and its profile equals an uninterrupted control person's.
+  person once and its profile equals an uninterrupted control person's. Case 5b
+  (COMMIT durable, acknowledgement lost): resume reuses the durable outcome, one
+  history row, one result row.
 - **Status: verified.**
 
 ### RR-06 Copy procedures tied to the original project
@@ -132,7 +137,7 @@ No workflow was dispatched, no deployment made, nothing pushed.
   `embed-roles.mjs` require `SUPABASE_URL` and have no default; publish/undo/guard/
   transition and anchor CLIs require the selection for hosted URLs. Migration
   `20261003090000_person_target_identity.sql` adds the identity RPC.
-- **Tests / results**: `scripts/person-target/run-offline-tests.sh` 40/40 including
+- **Tests / results**: `scripts/person-target/run-offline-tests.sh` 44/44 including
   sealed child processes for the role utilities and finalizer (zero sockets on
   missing/mismatched destinations); start-catchup mismatch cases; publish and anchor
   config regressions updated to the explicit contract.
@@ -148,8 +153,12 @@ No workflow was dispatched, no deployment made, nothing pushed.
   `vars.PERSON_TARGET_PROJECT_REF` to the four normalized writers. Legacy mode with
   no selection is unchanged (production today).
 - **Tests / results**: `test-server-target.mjs` 10/10: REST-copy/PG-original,
+  same-length key swap misses the gate cache;
   PG-copy/REST-original, foreign key claim, missing selection with support on → all
   refused with zero pools and zero requests; consistent configuration proceeds.
+  The workers with their own REST helpers (`review-queue.mjs`, `refresh-worker.mjs`,
+  `sync-directory.mjs`) call the gate before any request: sealed process tests show
+  zero requests under a mixed configuration.
 - **Deployment evidence (read-only, 2026-10-03)**: the testing preview branch has
   15 branch-scoped variables; `PERSON_WRITE_MODE=live`, `PERSON_TRANSITION_SUPPORT=on`
   are readable; sensitive values are not retrievable through Vercel's API (as the
@@ -253,10 +262,10 @@ No workflow was dispatched, no deployment made, nothing pushed.
 ### RR-14 Exact artifact lacks complete current verification
 
 - **Done on this branch** (final source, no live IO): `tsc --noEmit`; `next build`
-  with an empty environment; offline suites (target 40, transport 16, start-catchup
+  with an empty environment; offline suites (target 44, transport 16, start-catchup
   33, internal resume 13, forward definitions 4); database suites on the loopback
-  fixture: application edits 61 + 13 (clean), upgrade harness 25 + 4 + 61 + 13,
-  transition rehearsal 8 + recovery 6 (current and pinned), maintenance 10 (current
+  fixture: application edits 61 + 13 (clean), upgrade harness 25 + 4 + 61 + 13 + 4 + 3,
+  transition rehearsal 8 + recovery 7 (current and pinned), maintenance 10 (current
   and pinned), publish 10 + 18 + 4 + 8, post-cutover audit 15 + 9 + 13 + 25 + 20 + 19,
   directory outcomes 6 + 40 + 35 + 12.
 - **Not done**: hosted `scripts/test-tenancy.mjs --base <preview>` (creates users/
@@ -273,6 +282,21 @@ No workflow was dispatched, no deployment made, nothing pushed.
   selection when set.
 - **Tests / results**: `test-cli-targets.mjs` static resolution + sealed processes.
 - **Status: verified.**
+
+## Independent review
+
+Two reviewers (read-only, separate areas) examined the integrated changes after
+implementation. Neither found a blocking defect. Their findings and the fixes:
+gate cache keyed on the full key hash; worker scripts gated before their own REST
+helpers; trailing-dot hostnames in the guard; finalizer selects the finish result by
+content and captures CLI stderr; start-catchup reports an unrecognizable comms URL
+as a credentials failure; recovery reconstruction uses the trigger's exact stripped
+set; catalog parity phase; in-doubt commit case; pre-publication profile comparison
+in the undo case; Send-specific pending assertions. All are in commits `315918d` and
+`8bd8fd3` with regression tests. Noted but not changed: the guard covers `fetch` only;
+clean harnesses other than application-edits do not install the `20261003*` files
+(the upgrade harness's phase 5 does); the `DISABLE TRIGGER` step takes a share-row-
+exclusive lock and belongs in the held phase.
 
 ## Remaining owner actions (in order)
 
