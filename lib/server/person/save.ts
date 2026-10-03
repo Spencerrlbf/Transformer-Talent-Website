@@ -1,5 +1,6 @@
 // Server/worker only. One checked-out PostgreSQL connection owns the complete
 // transaction, including the existing TypeScript projection and before-image.
+import { assertServerTarget } from "./target";
 import { createHash, randomUUID } from "node:crypto";
 import { applicationProcessing } from "../person-transition/application";
 import { project, type ProjectionInput } from "./project";
@@ -857,6 +858,8 @@ export async function withPersonConnection<T>(
   if (typeof window !== "undefined") throw Error("server_only");
   const url = process.env.PERSON_DATABASE_URL;
   if (!url) throw Error("PERSON_DATABASE_URL is required for atomic saves");
+  // Fail closed on a URL that names another project than the selected one.
+  assertServerTarget();
   // Cache before the asynchronous import yields, so concurrent first requests
   // cannot each allocate their own connection pool.
   poolPromise ??= import("pg")

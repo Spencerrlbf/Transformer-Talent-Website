@@ -140,3 +140,12 @@ export { pickCertifiedRefreshOnConnection, topUpCertifiedRefreshOnConnection, re
 export { claimCertifiedDerivativesOnConnection, startCertifiedDerivativesProviderOnConnection, storeCertifiedDerivativeVectorsOnConnection, recoverCertifiedDerivativesOnConnection, claimCertifiedDerivatives, startCertifiedDerivativesProvider, storeCertifiedDerivativeVectors, recoverCertifiedDerivatives, publishCertifiedDerivativesOnConnection, publishCertifiedDerivatives, failCertifiedDerivativesProviderOnConnection, failCertifiedDerivativesProvider, pendingCertifiedDerivatives, resumableCertifiedDerivatives, paidCertifiedDerivativesToday, attemptLimitedCertifiedDerivatives, DEFINITE_PROVIDER_FAILURES, certifiedDerivativesAdmitting } from './person/derivative-lifecycle';
 
 export { resumeFillPlan, resumeFillDocument } from './person/resume-fill-evidence';
+
+// One selected project for every worker (RR-06/07) and, on a disposable test
+// deployment, denied provider transports (RR-08). The guard is a no-op unless
+// OUTBOUND_DENY_HOSTS is set; it is installed here so every worker that
+// imports this bundle is covered before its first provider call.
+export { assertServerTarget, personTargetRequired } from './person/target';
+export { installOutboundGuard, deniedRequests, deniedHosts, isOutboundDenied } from './outbound-guard';
+import { installOutboundGuard as installGuardOnLoad } from './outbound-guard';
+installGuardOnLoad();

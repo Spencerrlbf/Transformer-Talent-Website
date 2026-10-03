@@ -1,8 +1,11 @@
 import { transitionRequestHeaders } from './person-transition/context';
+import { assertServerTarget } from './person/target';
 
 const url = () => {
   const u = process.env.SUPABASE_URL;
   if (!u) throw new Error("SUPABASE_URL not configured");
+  // The selected project must own this URL whenever normalized storage is on.
+  assertServerTarget();
   return u;
 };
 

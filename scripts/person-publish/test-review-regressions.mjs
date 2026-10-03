@@ -29,14 +29,23 @@ async function fixture({anchor=true, job=true}={}) {
 }
 test.after(() => pool.end());
 
-test('run CLIs require a dedicated direct/session connection, never the app transaction pooler', () => {
-  const direct='postgresql://postgres:synthetic@db.synthetic.supabase.co:5432/postgres?sslmode=require';
-  const session='postgresql://postgres.synthetic:synthetic@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require';
-  assert.equal(databaseConfig({PERSON_PUBLISH_DATABASE_URL:direct}).connectionString,direct);
-  assert.equal(databaseConfig({PERSON_PUBLISH_DATABASE_URL:session}).connectionString,session);
-  for(const url of [direct.replace(':5432/',':6543/'),session.replace(':5432/',':6543/'),direct.replace('db.synthetic.supabase.co','unknown-proxy.example.test')])
-    assert.throws(()=>databaseConfig({PERSON_PUBLISH_DATABASE_URL:url}),/publish_session_connection_required/);
-  assert.throws(()=>databaseConfig({PERSON_DATABASE_URL:session}),/publish_database_url_required/);
+test('run CLIs require a dedicated direct/session connection on the explicitly selected project', () => {
+  // Fictional project refs: the selected target and a different project.
+  const ref='abcdefghijklmnopqrst', other='tsrqponmlkjihgfedcba';
+  const direct=`postgresql://postgres:synthetic@db.${ref}.supabase.co:5432/postgres?sslmode=require`;
+  const session=`postgresql://postgres.${ref}:synthetic@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require`;
+  const env={PERSON_TARGET_PROJECT_REF:ref};
+  assert.equal(databaseConfig({...env,PERSON_PUBLISH_DATABASE_URL:direct}).connectionString,direct);
+  assert.equal(databaseConfig({...env,PERSON_PUBLISH_DATABASE_URL:session}).connectionString,session);
+  for(const url of [direct.replace(':5432/',':6543/'),session.replace(':5432/',':6543/'),direct.replace(`db.${ref}.supabase.co`,'unknown-proxy.example.test')])
+    assert.throws(()=>databaseConfig({...env,PERSON_PUBLISH_DATABASE_URL:url}),/publish_session_connection_required/);
+  assert.throws(()=>databaseConfig({...env,PERSON_DATABASE_URL:session}),/publish_database_url_required/);
+  // RR-06/07: a hosted URL without a selection, or for another project, is refused.
+  assert.throws(()=>databaseConfig({PERSON_PUBLISH_DATABASE_URL:session}),/person_target:missing/);
+  assert.throws(()=>databaseConfig({...env,PERSON_PUBLISH_DATABASE_URL:session.replace(`postgres.${ref}`,`postgres.${other}`)}),/person_target:database_mismatch/);
+  assert.throws(()=>databaseConfig({...env,PERSON_PUBLISH_DATABASE_URL:direct.replace(ref,other)}),/person_target:database_mismatch/);
+  // Loopback fixtures need no selection.
+  assert.equal(databaseConfig({LOCAL_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'}).connectionString,'postgresql://postgres@127.0.0.1:55487/fixture');
 });
 
 test('unchanged publication without an anchor writes no publication state', async () => {

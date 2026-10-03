@@ -18,11 +18,15 @@ try {
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
   }
 } catch {}
-const { orgRoleRow, facetTexts, embedTexts, EMBED_MODEL, EMBED_DIMS } = await import("./dist/worker-lib.mjs");
-
-const SUPABASE_URL = (process.env.SUPABASE_URL || "https://kmuihequfurvjxpnugxf.supabase.co").trim();
+// The destination is explicit: no built-in project URL (release review RR-06).
+// With PERSON_TARGET_PROJECT_REF set, the URL and key must name that project.
+import { restProjectRef, checkTargetEnvironment, hasSelectedTarget } from "./person-target.mjs";
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL || !restProjectRef(SUPABASE_URL)) throw new Error("SUPABASE_URL (https://<ref>.supabase.co) required");
 if (!KEY || !process.env.OPENAI_API_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY and OPENAI_API_KEY required");
+if (hasSelectedTarget()) checkTargetEnvironment(process.env, { restUrl: SUPABASE_URL, serviceKey: KEY });
+const { orgRoleRow, facetTexts, embedTexts, EMBED_MODEL, EMBED_DIMS } = await import("./dist/worker-lib.mjs");
 
 const roles = JSON.parse(fs.readFileSync(new URL("../data/roles.json", import.meta.url)));
 const profiles = JSON.parse(fs.readFileSync(new URL("../data/matching-profiles.json", import.meta.url)));

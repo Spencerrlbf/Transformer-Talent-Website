@@ -49,6 +49,9 @@ jobs:
           # Scheduled runs use the repository settings; a manual canary may override them for one run.
           PERSON_WRITE_MODE: ${{ (inputs.write_mode && inputs.write_mode != 'vars') && inputs.write_mode || vars.PERSON_WRITE_MODE || 'legacy' }}
           PERSON_TRANSITION_SUPPORT: ${{ (inputs.transition_support && inputs.transition_support != 'vars') && inputs.transition_support || vars.PERSON_TRANSITION_SUPPORT || 'off' }}
+          # The one project these writers may touch (scripts/person-target.mjs). Shadow/live
+          # work refuses to start when this is unset or names another project than the URLs.
+          PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_DATABASE_URL: ${{ secrets.PERSON_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
