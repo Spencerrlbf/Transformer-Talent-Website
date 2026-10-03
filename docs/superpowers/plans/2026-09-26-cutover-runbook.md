@@ -209,7 +209,24 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260928070000_person_network_send.sql
 20260928080000_person_derivative_publish.sql
 20260928090000_person_maintenance_deferred.sql
+20261003090000_person_target_identity.sql
+20261003100000_person_forward_application_contact.sql
+20261003110000_person_forward_network_send.sql
+20261003120000_person_forward_identity_index.sql
 ```
+
+The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md).
+On a fresh install they are no-ops after the chain. On a database that installed
+the earlier bodies of `20260927170000`, `20260928060000` or `20260928070000` (the
+2026-09-28 test copy did), they are the only supported upgrade: they replace the
+contact-fill and Send definitions, complete each existing Send witness's insertion
+proof only where its captured INSERT event reproduces the recorded row hash
+(anything else stays unresolved for the audit, nothing is fabricated), and
+re-validate the identity index without creating one. Never re-run an
+already-applied version file to "refresh" its body. Both paths are verified by
+`scripts/person-application-edits/run-local-tests.sh` (clean) and
+`scripts/person-release-upgrade/run-upgrade-tests.sh` (upgrade), on a loopback
+PostgreSQL only.
 
 Before applying the chain, build the directory identity index without blocking
 candidate writes. Run this block with `psql -X -v ON_ERROR_STOP=1`, outside a
@@ -274,6 +291,20 @@ receipt, anchor or attribution evidence as a routine rollback.
 
 Supply secrets through server-only configuration, never chat or committed files:
 
+- `PERSON_TARGET_PROJECT_REF`: the one Supabase project every normalized-storage
+  process may touch (`scripts/person-target/README.md`). Set it on Vercel for the
+  deployment, as the `PERSON_TARGET_PROJECT_REF` repository variable for the four
+  normalized workflows, and in every operator shell. With shadow/live mode or
+  transition support on, the server, the workers and the publish/anchor/catch-up/
+  finalize CLIs refuse to open a connection unless `SUPABASE_URL`, the JWT key
+  claims and every PostgreSQL URL (pooler username `postgres.<ref>`) name this
+  project. A rehearsal copy is selected the same way with its own ref; nothing
+  defaults to the website project any more.
+- `OUTBOUND_DENY_HOSTS` (rehearsal deployments only): comma-separated provider
+  hosts the process must never reach, for example
+  `api.us.nylas.com,api.resend.com,.airtable.com,api.harvest-api.com`. A copied
+  database carries real mailbox grants and Airtable ids; this denies the request
+  before it leaves. Leave it unset in production.
 - `PERSON_DATABASE_URL`: website app/worker PostgreSQL URL, transaction pooler
   supported; also used by the anchor CLI.
 - `PERSON_PUBLISH_DATABASE_URL`: dedicated website direct/session endpoint on
@@ -382,7 +413,18 @@ Inspect durable state after every unsuccessful or ambiguous start:
   until its owner is stopped/settled and its exact work ID is explicitly closed.
 
 Once the window is open, run the bounded pinned queue catch-up, then its finalizer
-inside that same window, inspect its exact outcome, and close the window. Neither
+inside that same window, inspect its exact outcome, and close the window. The
+starter (`scripts/person-maintenance/start-catchup.mjs`) and the finalizer
+(`scripts/person-reconcile-finalize.mjs`) both take the destination from
+`PERSON_TARGET_PROJECT_REF`; the starter records the REST cluster identity
+(`person_target_identity()`) with the run, and the finalizer proves the REST and
+PostgreSQL identities agree before finishing:
+
+```sh
+PERSON_TARGET_PROJECT_REF=<ref> PERSON_PUBLISH_DATABASE_URL=<5432 session url> \
+  SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… \
+  node scripts/person-reconcile-finalize.mjs --run-id=<run-id>
+``` Neither
 an unstable boundary nor a review outcome is converted into a stable audit anchor.
 Historical copy observations reported cold fingerprint timeouts and faster warm
 queries. Those observations do not establish production capacity or justify

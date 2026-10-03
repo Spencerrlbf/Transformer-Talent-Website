@@ -87,11 +87,20 @@ promise that outside systems will stop changing after it. Run final catch-up
 again before the later approved application cutover.
 
 A completed source scan pauses with `source_scan_complete` and an external
-boundary result. Finalize locally using the already-linked website CLI project:
+boundary result. Finalize locally against the explicitly selected project
+(`PERSON_TARGET_PROJECT_REF`; see `scripts/person-target/README.md`), through
+the 5432 session endpoint or a Supabase CLI workdir linked to that same project:
 
 ```sh
-node scripts/person-reconcile-finalize.mjs --run-id=<run-id> --workdir=<linked-website-workdir>
+PERSON_TARGET_PROJECT_REF=<ref> PERSON_PUBLISH_DATABASE_URL=<5432 session url> \
+  node scripts/person-reconcile-finalize.mjs --run-id=<run-id>
+# or
+PERSON_TARGET_PROJECT_REF=<ref> node scripts/person-reconcile-finalize.mjs --run-id=<run-id> --workdir=<workdir linked to <ref>>
 ```
+
+With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` also set, the PostgreSQL path
+first proves that REST and PostgreSQL reach the same cluster
+(`public.person_target_identity()`, migration `20261003090000`).
 
 This executes `SET LOCAL statement_timeout='8s'` before the finish statement.
 Finish rejects an unbounded caller and briefly gates normalized/capture commits

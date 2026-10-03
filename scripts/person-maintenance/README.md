@@ -52,14 +52,20 @@ reviewed release checkout, with an absolute clean Git checkout of the actual
 ```sh
 # Credentials are already configured privately; do not place them on a command line.
 # Run/recovery/capacity and no-conflicting-process gates must pass first.
+PERSON_TARGET_PROJECT_REF=<ref of the selected website database> \
 PINNED_RUNNER_DIR=/absolute/pinned-checkout \
 BACKFILL_CONFIG='{"reconcile":true,"run-id":"NEW_RUN","scope":"queue","limit":1000,"batch-size":100,"dry-run":false}' \
 node scripts/person-maintenance/start-catchup.mjs
 ```
 
-The helper verifies actual Git HEAD and a clean tracked tree independently of any
-commit label, rebuilds the ignored worker bundle from that tree, and records its
-hash. A source archive inside another checkout is refused. The pinned translators,
+The destination is the explicitly selected project (`scripts/person-target/README.md`):
+`SUPABASE_URL` and the service key's `ref` claim must name `PERSON_TARGET_PROJECT_REF`,
+the communications URL may not name it, and the REST destination must answer
+`person_target_identity()`, whose cluster identifier is recorded in the start
+output. There is no built-in website project. The helper verifies actual Git HEAD
+and a clean tracked tree independently of any commit label, rebuilds the ignored
+worker bundle from that tree, and records its hash. A source archive inside another
+checkout is refused. The pinned translators,
 fingerprint algorithm and options remain unchanged; the helper uses a bounded
 read-only directory connection using a verified Supabase direct/session endpoint
 on port 5432 (transaction poolers and custom proxies are refused; loopback fixtures
