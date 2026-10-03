@@ -111,3 +111,6 @@ if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; t
 fi
 node scripts/build-worker-lib.mjs
 PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-rehearsal.mjs
+# Recovery cases on the same state: socket loss at COMMIT, window close/expiry during
+# an admitted publication, undo after a legitimate edit (release review section 7).
+PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-recovery.mjs
