@@ -16,17 +16,21 @@ alter table person_private.application_send_witnesses add column if not exists e
 alter table person_private.application_send_witnesses add column if not exists event_hash text;
 
 -- 2. Complete the proof of old witnesses from their own captured INSERT event.
---    The capture trigger strips large columns (resume text, embeddings, notes)
---    from its payload; a Send row never carries values in them, so the inserted
---    row is the payload plus every other table column as null. That
---    reconstruction is accepted only when it reproduces the witness's recorded
---    row hash exactly, from exactly one INSERT event in the witness transaction.
---    The immutability trigger is disabled for this statement only.
+--    The capture trigger (20260926031057) strips exactly resume_embedding,
+--    matching_embedding, resume_text and notes from its payload; a Send row never
+--    carries values in them, so the inserted row is the payload plus those
+--    columns (the ones that exist in this database) as null. That reconstruction
+--    is accepted only when it reproduces the witness's recorded row hash exactly,
+--    from exactly one INSERT event in the witness transaction. The immutability
+--    trigger is disabled for this statement only. Unresolved witnesses can be
+--    listed afterwards with: select application_id from
+--    person_private.application_send_witnesses where inserted_row is null.
 do $$
 declare recovered integer:=0;unresolved integer:=0;nulls jsonb;
 begin
  if exists(select 1 from person_private.application_send_witnesses where inserted_row is null) then
-  select jsonb_object_agg(column_name,null::text) into nulls from information_schema.columns where table_schema='public' and table_name='website_applications';
+  select coalesce(jsonb_object_agg(column_name,null::text),'{}'::jsonb) into nulls from information_schema.columns
+   where table_schema='public' and table_name='website_applications' and column_name in ('resume_embedding','matching_embedding','resume_text','notes');
   alter table person_private.application_send_witnesses disable trigger application_send_immutable;
   with candidates as (
    select w.application_id,e.id event_id,

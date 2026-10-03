@@ -37,7 +37,7 @@ test('old Sends: one recoverable witness, one whose proof cannot be recovered',a
  // The release verifier (already the current code) cannot recognize an old witness:
  // the Send row is an unproved raw application until the upgrade completes its proof.
  const before=await plan(a.cid);
- assert.notEqual(before.status,'verified');
+ assert.equal(before.status,'pending',JSON.stringify(before));assert.equal(before.checks.raw_facts.pending_applications,1,'the Send row is an unadmitted application');
  // Simulate an unrecoverable witness: alter its recorded hash as a superuser with the
  // immutability trigger off. (A real one would be a witness whose INSERT event is
  // missing or does not reproduce the row.)

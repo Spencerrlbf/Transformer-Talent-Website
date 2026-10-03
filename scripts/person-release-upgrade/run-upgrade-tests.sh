@@ -10,7 +10,9 @@ PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
 DB=person_directory_worker_test
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
-install_old(){
+# install_chain old|clean: the reviewed OLDER bodies (what the copy has) or the release chain.
+install_chain(){
+ local variant="$1"
  q -d postgres -c "drop database if exists $DB" -c "create database $DB"
 q -d $DB -f scripts/person-trial/local-schema.sql
  q -d $DB -f scripts/person-trial/local-site-extras.sql
@@ -77,7 +79,7 @@ q -d $DB -f scripts/person-trial/local-schema.sql
   q -d $DB -1 -f supabase/migrations/20260927150000_person_directory_publication.sql
  fi
  q -d $DB -1 -f supabase/migrations/20260927160000_person_directory_creation.sql
- q -d $DB -1 -f scripts/person-release-upgrade/fixtures/old-20260927170000_person_directory_outcomes.sql
+ if [ "$variant" = old ]; then q -d $DB -1 -f scripts/person-release-upgrade/fixtures/old-20260927170000_person_directory_outcomes.sql; else q -d $DB -1 -f supabase/migrations/20260927170000_person_directory_outcomes.sql; fi
  if test -f supabase/migrations/20260927180000_person_directory_suppression.sql; then
   q -d $DB -1 -f supabase/migrations/20260927180000_person_directory_suppression.sql
  fi
@@ -108,8 +110,14 @@ q -d $DB -f scripts/person-trial/local-schema.sql
  if test -f supabase/migrations/20260928050000_person_publish_admission.sql; then
   q -d $DB -1 -f supabase/migrations/20260928050000_person_publish_admission.sql
  fi
- q -d $DB -1 -f scripts/person-release-upgrade/fixtures/old-20260928060000_person_application_contact.sql
- q -d $DB -1 -f scripts/person-release-upgrade/fixtures/old-20260928070000_person_network_send.sql
+ if [ "$variant" = old ]; then
+  q -d $DB -1 -f scripts/person-release-upgrade/fixtures/old-20260928060000_person_application_contact.sql
+  q -d $DB -1 -f scripts/person-release-upgrade/fixtures/old-20260928070000_person_network_send.sql
+ else
+  q -d $DB -1 -f supabase/migrations/20260928060000_person_application_contact.sql
+  q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
+  q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
+ fi
  q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
  q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 }
@@ -119,7 +127,7 @@ upgrade(){
   q -d $DB -1 -f "supabase/migrations/$migration.sql"
  done
 }
-install_old
+install_chain old
 node scripts/build-worker-lib.mjs
 npx --yes esbuild@0.28.2 scripts/person-application-enrichment/entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --outfile=scripts/person-application-enrichment/dist/processing.mjs --log-level=warning
 npx --yes esbuild@0.28.2 scripts/person-application-edits/contact-entry.ts --bundle --platform=node --external:pg --format=esm --alias:@="$PWD" --alias:next/server=./scripts/person-application-queue/next-fixture.ts --alias:pdf-parse/lib/pdf-parse.js=./scripts/person-application-edits/resume-parser-fixture.ts --outfile=scripts/person-application-edits/dist/contact.mjs --log-level=warning
@@ -132,7 +140,18 @@ upgrade
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scripts/person-release-upgrade/dist/state.json node --test --test-concurrency=1 scripts/person-release-upgrade/test-upgrade-after.mjs
 # Phase 4: the same upgrade on a fresh older install, then the complete clean-install
 # edits suite (Send races, witness audit, resume fills) must pass on the upgraded schema.
-install_old
+install_chain old
 upgrade
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-edits/test-edits.mjs
 node --test scripts/person-application-edits/test-contact-recipient.mjs
+# Phase 5: a clean install of the release chain in a second database; its catalog must
+# equal the upgraded database's for every object the forward migrations touch.
+node --test scripts/person-release-upgrade/test-forward-definitions.mjs
+CLEAN=person_release_clean_test
+DB_SAVED=$DB; DB=$CLEAN
+install_chain clean
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index; do
+ q -d $DB -1 -f "supabase/migrations/$migration.sql"
+done
+DB=$DB_SAVED
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" CLEAN_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$CLEAN" node --test scripts/person-release-upgrade/test-catalog-parity.mjs

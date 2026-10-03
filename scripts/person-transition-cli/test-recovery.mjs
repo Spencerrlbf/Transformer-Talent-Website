@@ -31,8 +31,8 @@ const site = await pgSite(url);
 const TT = lib.TT_ORG_ID, PIN = 'c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc', quiet = () => {};
 const id = (n) => `ae000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 // Fresh people for this file: a control, the socket-loss subject, two window subjects, two undo subjects.
-const CONTROL = id(11), LOSS = id(12), CLOSE = id(13), EXPIRE = id(14), EDIT = id(15), NOTE = id(16);
-const ALL = [CONTROL, LOSS, CLOSE, EXPIRE, EDIT, NOTE];
+const CONTROL = id(11), LOSS = id(12), CLOSE = id(13), EXPIRE = id(14), EDIT = id(15), NOTE = id(16), DOUBT = id(17);
+const ALL = [CONTROL, LOSS, CLOSE, EXPIRE, EDIT, NOTE, DOUBT];
 const n = async (sql, args = []) => Number((await pool.query(sql, args)).rows[0].n);
 const one = async (sql, args = []) => (await pool.query(sql, args)).rows[0];
 const phase = async () => (await transitionStatus(pool)).phase;
@@ -57,14 +57,14 @@ const onUncaught = (e) => uncaught.push(e);
 process.on('uncaughtException', onUncaught);
 test.after(async () => { process.off('uncaughtException', onUncaught); await site.end?.(); await pool.end(); });
 
-test('setup: six new people arrive while disarmed, then are reconciled and anchored through a held window', async () => {
+test('setup: seven new people arrive while disarmed, then are reconciled and anchored through a held window', async () => {
   assert.equal(await phase(), 'open');
   // Raw legacy inserts are fenced while armed (candidate_mutation_frame): these people
   // arrive the way the pool did before the controller existed, with it disabled.
   for (const [a, from] of [['drain', 'open'], ['seal', 'draining'], ['disarm', 'held']]) await setTransition(pool, a, `recovery_setup_${a}`, from);
   for (const [i, cid] of ALL.entries()) await person(cid, 11 + i);
   await setTransition(pool, 'arm', 'recovery_setup_arm', 'disabled');
-  assert.equal(await n('select count(*) n from person_change_queue where candidate_id=any($1::uuid[])', [ALL]), 6);
+  assert.equal(await n('select count(*) n from person_change_queue where candidate_id=any($1::uuid[])', [ALL]), 7);
   await setTransition(pool, 'drain', 'recovery_drain', 'open');
   const drained = await waitDrained(pool, { maxSeconds: 5, sleep: async () => {} });
   assert.equal(drained.drained, true, JSON.stringify(drained.unresolved));
@@ -146,6 +146,54 @@ test('5. actual connection loss at COMMIT: controlled failure, no partial state,
   for (const k of ['current_title', 'current_company', 'profile_hash', 'contact']) assert.deepEqual(loss[k], control[k], k);
 });
 
+test('5b. in-doubt commit: COMMIT reaches the server, the acknowledgement is lost; resume reuses the durable outcome', async () => {
+  const run = 'recovery-doubt';
+  const w = await openWindow(pool, 'publish', run, 60, 'doubt_publish', 'open');
+  const db = await openDatabase({ LOCAL_DATABASE_URL: url }, 'tt-person-recovery-test');
+  let killed = 0;
+  const wrapped = {
+    ...db,
+    connect: async () => {
+      const client = await db.connect();
+      const pid = (await client.query('select pg_backend_pid() pid')).rows[0].pid;
+      return {
+        query: async (...args) => {
+          const text = typeof args[0] === 'string' ? args[0] : args[0]?.text;
+          const result = await client.query(...args);
+          if (text === 'commit' && killed === 0) {
+            // The commit is durable; the client never learns it: kill the backend now.
+            killed++;
+            await pool.query('select pg_terminate_backend($1)', [pid]);
+            await sleep(100);
+            throw Object.assign(Error('acknowledgement lost'), { code: '57P01' });
+          }
+          return result;
+        },
+        release: (e) => client.release(e),
+      };
+    },
+  };
+  let failure;
+  try { await runPublish({ pool: wrapped, lib, options: publishOptions(run, [DOUBT]), onProgress: quiet }); }
+  catch (e) { failure = e; }
+  finally { await db.end().catch(() => {}); }
+  assert.ok(failure); assert.equal(killed, 1);
+  await sleep(200);
+  assert.equal(uncaught.length, 0);
+  // Durable side: the person was published once and its outcome recorded, the run checkpoint was not.
+  assert.equal(await histories(DOUBT), 1);
+  assert.equal(await n('select count(*) n from person_publish_results where run_id=$1 and candidate_id=$2', [run, DOUBT]), 1);
+  let s;
+  try { s = await runPublish({ pool, lib, options: publishOptions(run, [DOUBT], ['--resume']), onProgress: quiet }); }
+  finally { await closeWindow(pool, w.work_id, 'doubt_done'); }
+  assert.equal(s.projected + s.unchanged, 1, JSON.stringify(s));
+  assert.equal(await histories(DOUBT), 1, 'no second publication');
+  assert.equal(await n('select count(*) n from person_publish_results where run_id=$1 and candidate_id=$2', [run, DOUBT]), 1);
+  assert.equal((await plan(DOUBT)).status, 'verified');
+  const control = await profile(CONTROL), doubt = await profile(DOUBT);
+  for (const k of ['current_title', 'current_company', 'profile_hash', 'contact']) assert.deepEqual(doubt[k], control[k], k);
+});
+
 test('6a. maintenance close during an admitted publication waits for the whole commit', async () => {
   const run = 'recovery-close';
   const w = await openWindow(pool, 'publish', run, 60, 'close_publish', 'open');
@@ -218,6 +266,7 @@ test('6b. window expiry before admission aborts the publication wholly; the pers
 
 test('7. undo after a legitimate checked contact edit conflicts and keeps the edit; an unrelated note edit survives undo', async () => {
   const run = 'recovery-undo';
+  const prePublish = await profile(NOTE);
   const w = await openWindow(pool, 'publish', run, 60, 'undo_publish', 'open');
   let s;
   try { s = await runPublish({ pool, lib, options: publishOptions(run, [EDIT, NOTE]), onProgress: quiet }); }
@@ -249,13 +298,15 @@ test('7. undo after a legitimate checked contact edit conflicts and keeps the ed
   assert.deepEqual(await profile(EDIT), edited);
   const restored = await profile(NOTE);
   assert.equal(await n("select count(*) n from candidate_notes where candidate_key=$1 and body='note written after publication'", [NOTE]), 1, 'the note survives the undo');
-  assert.equal(restored.notes, noted.notes);
-  assert.deepEqual(restored.contact, noted.contact);
+  assert.notDeepEqual(noted, prePublish, 'publication changed the profile, so the undo restores something');
+  assert.deepEqual(restored, prePublish, 'undo restores the pre-publication profile exactly');
   assert.equal(await n('select count(*) n from person_projection_history where candidate_id=$1 and restored_at is not null', [NOTE]), 1);
   assert.equal(await n('select count(*) n from person_projection_history where candidate_id=$1 and restored_at is not null', [EDIT]), 0);
   // Repeating the undo adds nothing.
   const again = await runUndo({ pool, lib, options: parseOptions([`--run-id=${run}`, '--apply'], UNDO), onProgress: quiet });
   assert.equal(again.restored, 1); assert.equal(again.conflict, 1);
+  assert.deepEqual(await profile(NOTE), prePublish); assert.deepEqual(await profile(EDIT), edited);
+  assert.equal(await n('select count(*) n from person_projection_history where candidate_id=$1 and restored_at is not null', [NOTE]), 1);
   for (const cid of [EDIT, NOTE]) assert.equal((await plan(cid)).status, 'verified', cid);
   await setTransition(pool, 'arm', 'recovery_rearm', 'disabled');
   assert.equal(await phase(), 'open');

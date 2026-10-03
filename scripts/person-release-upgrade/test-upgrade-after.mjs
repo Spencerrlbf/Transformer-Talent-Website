@@ -42,14 +42,14 @@ test('the recoverable witness carries exact insertion proof and its Send is reco
  const eventHash=(await pool.query('select md5(jsonb_build_array(e.id,e.candidate_id,e.source_table,e.source_row_id,e.operation,e.transaction_id::text,e.previous_payload,e.payload)::text) h from person_change_events e where e.id=$1',[w.event_id])).rows[0].h;
  assert.equal(eventHash,w.event_hash);
  const after=await plan(state.recoverable.candidate);
- assert.equal(after.status,'verified',JSON.stringify(after));
+ assert.equal(after.status,'verified',JSON.stringify(after));assert.equal(after.checks.raw_facts.pending_applications,0);
 });
 test('the unrecoverable witness is retained without fabricated proof and its person is not verified',async()=>{
  const w=(await pool.query('select * from person_private.application_send_witnesses where application_id=$1',[state.unresolved.application])).rows[0];
  assert.ok(w,'witness retained');
  assert.equal(w.inserted_row,null);assert.equal(w.event_id,null);assert.equal(w.event_hash,null);
  const after=await plan(state.unresolved.candidate);
- assert.notEqual(after.status,'verified');
+ assert.equal(after.status,'pending',JSON.stringify(after));assert.equal(after.checks.raw_facts.pending_applications,1,'the Send row is an unadmitted application');
  // Still immutable.
  await assert.rejects(pool.query('delete from person_private.application_send_witnesses where application_id=$1',[state.unresolved.application]),/application_send_immutable/);
 });
