@@ -2097,6 +2097,20 @@ td.cv2-icons { display: table-cell; white-space: nowrap; }
 .cv2d-edu-yr { font-size: 12px; color: var(--disabled); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cv2d-skills { display: flex; flex-wrap: wrap; gap: 7px; }
 .cv2d-skills span { padding: 4px 11px; border-radius: var(--r-pill); background: rgba(0,0,0,.05); font-size: 12px; font-weight: 500; color: var(--body); }
+/* Profile tab: Experience on the left; Education and Skills in a side column so they
+   show without scrolling past the career. Falls back to one column when narrow. */
+.cv2d-prof-wrap { container-type: inline-size; }
+.cv2d-prof { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 32%); gap: 0 28px; align-items: start; }
+.cv2d-prof-side { border-left: 1px solid var(--row-line); padding-left: 22px; min-width: 0; }
+.cv2d-prof-side .cv2d-sec-gap { margin-top: 26px; }
+.cv2d-prof-side .cv2d-edu { flex-direction: column; gap: 4px; }
+@container (max-width: 640px) {
+  .cv2d-prof { grid-template-columns: 1fr; }
+  .cv2d-prof-side { border-left: 0; padding-left: 0; margin-top: 26px; }
+}
+@supports not (container-type: inline-size) {
+  @media (max-width: 900px) { .cv2d-prof { grid-template-columns: 1fr; } .cv2d-prof-side { border-left: 0; padding-left: 0; margin-top: 26px; } }
+}
 
 /* Pipeline tab */
 .cv2d-ptable-wrap { border: 1px solid rgba(0,0,0,.09); border-radius: var(--r-menu); overflow-x: auto; }
@@ -4620,7 +4634,7 @@ tr.cv2-selrow td { background: var(--accent-tint); }
 .vc-factsblock dd.none { font-weight: 400; color: var(--muted); }
 /* The second degree, greyed under the first. */
 .vc-factsblock dd .vc-school2 { display: block; }
-.vc-factsblock dd .vc-top { color: var(--pos); font-weight: 600; }
+.vc-factsblock dd .vc-top-tag { color: var(--pos); font-weight: 600; }
 .vc-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 26px; }
 .vc-who, .vc-review { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .vc-review { gap: 10px; border-left: 1px solid var(--hair); padding-left: 26px; }
