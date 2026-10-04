@@ -13,7 +13,7 @@ executable file.
 | Branch | `fix/person-90-release-remediation` (worktree `pl/remediation`) |
 | Base | `c8fda5bfd50e8c40f22a3083e38c6eea71d0a803` (`feat/person-00-storage-unification`, tree `d43305e1…`, includes `main` `9a3240c`) |
 | Merged in | `origin/fix/drawer-profile-layout` `dad9549`, `origin/feat/drawer-also-a-match` `c042c21` |
-| Head (executable content) | `132e6a6` (armed sweep mode; previous executable head `8bd8fd34d52a322798bfe3e09b1a56c12cff0984`) |
+| Head (executable content) | `6df67d8` (armed sweep: anchors with current audit code; previous `132e6a6`, `8bd8fd3`) |
 | Commits on top of base | `47005c2`, `4ecdffb` (UI merges), `3862042` (target isolation), `4f23107` (forward migrations), `924f233` (recovery tests), `0617a92` (docs), `2033980` (ledger/manifest), `315918d` (review fixes: gate cache, worker gates, guard, finalizer), `8bd8fd3` (review hardening: exact stripped set, catalog parity, in-doubt commit) |
 | Diff vs base | 59 files, +2,881 / −53 |
 | Excluded testing-branch content | diagnostic route and diagnostic log lines (`5db31f1`, `ce72331`, `8bc18b9`) |
@@ -78,14 +78,17 @@ definitions, witness columns/constraints/triggers, identity index and privileges
 | Upgrade path | `bash scripts/person-release-upgrade/run-upgrade-tests.sh 55487` | 25 (old schema) + 4 (after) + 61 + 13 (fresh old install + upgrade) + 4 (static parity) + 3 (catalog parity upgraded == clean) |
 | Transition rehearsal + recovery | `bash scripts/person-transition-cli/run-local-tests.sh 55487` (current and `PINNED_RUNNER_DIR=pl/pinned`) | 8 + 7, twice |
 | Leak test armed-mode orchestration | `bash scripts/tenancy/run-armed-local-tests.sh 55487` | 4/4 |
+| Leak test, disabled controller (disposable local stack, exact build) | `node scripts/test-tenancy.mjs --base http://127.0.0.1:3400` | 913 calls, PASS, nothing left |
+| Leak test, armed controller (same) | `node scripts/test-tenancy.mjs --base http://127.0.0.1:3400 --armed` (pinned runner) | 913 calls, PASS, 3 retained pool people |
+| Runtime attestation (same) | identity RPC REST = PG; wrong selection refused (`person_target:rest_mismatch`); provider call refused (`outbound_denied:api.resend.com`) | all as expected |
 | Maintenance windows | `bash scripts/person-maintenance/run-local-tests.sh 55487` (current and pinned) | 10, twice |
 | Publish/undo/guard | `bash scripts/person-publish/run-local-tests.sh 55487` | 10 + 18 + 4 + 8 |
 | Post-cutover audit | `bash scripts/person-audit/run-postcutover-audit-tests.sh 55487` | 15 + 9 + 13 + 25 + 20 + 19 |
 | Directory outcomes / index | `bash scripts/person-directory-outcomes/run-local-tests.sh 55487` | 6 + 40 + 35 + 12 |
 
-Not executed (needs a deployment this branch may not make): hosted
-`node scripts/test-tenancy.mjs --base <preview>`; browser smoke of the drawer
-changes; runtime destination attestation of the exact deployment.
+Not executed: the same sweep and attestation against the Vercel-hosted deployment
+(its effective configuration is not readable through the API); browser smoke of the
+drawer changes.
 
 ## Retained data exceptions and remaining approvals
 

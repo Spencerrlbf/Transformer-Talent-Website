@@ -168,14 +168,22 @@ No workflow was dispatched, no deployment made, nothing pushed.
      sensitive values are not retrievable through Vercel's API); the gate's rules are
      proven offline (44 cases) and the same module validated the copy's own file
      values as all naming one project.
-  3. *Server/database runtime*: **not yet established.** It requires a request
-     through `sbRest`/`withPersonConnection` on the deployed server against a
-     database whose cluster identity is then compared (`person_target_identity()`),
-     which is what the disposable-environment sweep below provides. The preview is
-     currently configured for the read-only baseline copy and must not be signed
-     into; it will be repointed at the disposable project.
-- **Status: implemented; configuration validated; runtime attestation pending
-  the disposable environment** (see "Disposable environment").
+  3. *Server/database runtime* (2026-10-04, disposable local stack, exact commit
+     `6df67d8`'s production build): `person_target_identity()` through REST and
+     through PostgreSQL returned the same cluster identifier (`7692807888100020262`;
+     the baseline copy is `7550817586112808987`, the local fixture server
+     `7689662122152206805`, so the check tells clusters apart). With the correct
+     selection a signed-in dashboard read through `sbRest` answered 200; the same
+     build started with `PERSON_TARGET_PROJECT_REF` naming another project refused
+     the same request (500, server log `person_target:rest_mismatch`) while public
+     pages still served. The anon role cannot call the identity RPC (401).
+  4. *Not established*: the Vercel-hosted deployment's own effective configuration.
+     The branch preview is still configured for the read-only baseline copy and must
+     not be signed into; the same identity comparison and gate probe have to be run
+     against whichever deployment will serve traffic (a disposable hosted project, or
+     production at the sitting once the identity migration is installed).
+- **Status: implemented; runtime behaviour verified on the exact artifact against a
+  disposable database; hosted-deployment attestation outstanding.**
 
 ### RR-08 Copied grants and inherited provider credentials
 
@@ -184,12 +192,17 @@ No workflow was dispatched, no deployment made, nothing pushed.
   request leaves; counted; no-op when unset.
 - **Tests / results**: `test-outbound-guard.mjs` 4/4 (Nylas/Resend/Airtable/Harvest
   denied incl. `Request`/`URL` inputs, Supabase/OpenAI pass, reinstall replaces).
-- **Remaining**: the copy still holds one mailbox grant; the testing preview's
-  provider keys are `disabled-on-test-copy` placeholders set earlier but inherits a
-  live Harvest key from the project. For the rehearsal deployment set
-  `OUTBOUND_DENY_HOSTS` on the branch; Supabase Auth SMTP on the copy is a project
+- **Runtime (2026-10-04, exact build on the disposable stack)**: with placeholder
+  provider keys and the deny list set, the team-invite route tried to send through
+  Resend and the server refused it before the request left the process (route 502
+  `email_failed`, server log `outbound_denied:api.resend.com`); both leak-test runs
+  completed 913 provider-bound and database-bound calls with zero real provider
+  requests possible.
+- **Remaining**: the copy still holds one mailbox grant; the testing preview inherits
+  a live Harvest key from the project; Supabase Auth SMTP on the copy is a project
   setting outside this repo and was not changed.
-- **Status: implemented; verified offline; deployment attestation blocked.**
+- **Status: implemented; verified offline and at runtime on the exact artifact;
+  hosted-deployment attestation outstanding.**
 
 ### RR-09 Copy does not establish complete migration or preservation
 
@@ -284,10 +297,20 @@ No workflow was dispatched, no deployment made, nothing pushed.
   the local full chain (`scripts/tenancy/run-armed-local-tests.sh`, 4 cases:
   normalized + anchored + armed/open; raw candidate write refused while armed while
   a public accept is admitted; disarm; normalized people are retained evidence).
-- **Not done**: the HTTP sweep itself (disabled and armed) against a disposable
-  database with the preview and the fixture pointing at it; browser smoke of the
-  drawer changes. Both need the disposable environment below. The baseline copy
-  stays read-only: no fixture or controller change was run against it.
+- **Hosted sweep done on the disposable local stack (2026-10-04)**, exact commit's
+  production build (`next build && next start`) and the fixture pointing at the same
+  loopback Supabase stack (Auth, REST, Storage, PostgreSQL; full chain `001…20261003*`
+  installed by the CLI), live mode + support on, every provider denied:
+  - *controller disabled*: 913 calls, **PASS**, cleanup nothing left;
+  - *controller armed* (`--armed`, pinned `c4d0e4e` runner for the baseline, anchors,
+    armed/open read back through REST during the probes, drained/sealed/disarmed
+    before teardown): 913 calls, **PASS**, cleanup nothing left, 3 normalized pool
+    people retained as evidence (disposable database, disposed with `supabase stop`).
+  Labels: the armed run is the armed-state acceptance; the disabled run is reported
+  separately and does not substitute for it.
+- **Not done**: browser smoke of the drawer changes; the sweep against the
+  Vercel-hosted deployment itself. The baseline copy stays read-only: no fixture,
+  controller change or migration was run against it.
 - **Manifest**: `RELEASE_MANIFEST.md`.
 - **Status: implementation complete; hosted verification blocked** (needs push +
   preview deployment approval).
@@ -308,9 +331,11 @@ The sweep needs Supabase Auth + REST + PostgreSQL. Two ways to get a disposable 
    `supabase db reset` to install `001…20261003*`, `next build && next start` with
    loopback URLs, `PERSON_TARGET_PROJECT_REF=local`, `OUTBOUND_DENY_HOSTS`, no provider
    keys; run `test-tenancy.mjs --base http://127.0.0.1:3000` disabled and `--armed`.
-   Blocked on 2026-10-04: Docker Desktop's engine did not come up on this Mac (its
-   window was not inspected, access declined) and it was quit again.
-2. **New Supabase project (recommended if Docker stays down)**: in organization
+   **Used on 2026-10-04** after Spencer raised Docker Desktop's disk limit from 60 GB
+   to 120 GB (its virtual disk was full; settings backed up first, nothing deleted).
+   Procedure in `scripts/tenancy/DISPOSABLE.md`. Results above.
+2. **New Supabase project (only if the Vercel-hosted deployment must be attested
+   before the sitting)**: in organization
    "Transformer Talent" (`nanvovpwibjdlhhfmfix`), region `us-east-2`, Micro compute:
    `supabase projects create tt-disposable-tenancy --org-id nanvovpwibjdlhhfmfix --region us-east-2 --size micro --db-password <generated, never printed>`.
    Cost: Micro compute is billed hourly (about $0.0134/hour, $10/month equivalent);
@@ -341,10 +366,11 @@ exclusive lock and belongs in the held phase.
 
 ## Remaining owner actions (in order)
 
-1. Done 2026-10-03: branch pushed, preview built with branch variables. Still to
-   decide: the disposable environment (Docker on this Mac, or approve the new
-   Supabase project above) so the hosted sweep, the runtime attestation and the
-   drawer smoke can run without touching the baseline copy.
+1. Done: branch pushed; leak test (disabled and armed) and runtime attestation on
+   the exact artifact against the disposable local stack. Still open: the
+   Vercel-hosted deployment's own attestation (disposable hosted project, or at the
+   sitting) and the drawer smoke; decide whether the preview stays pointed at the
+   baseline copy (it must not be signed into while it is).
 2. Decide when the four `20261003*` migrations are installed on the copy (not a
    read-only step; the migration NOTICE reports the witness recovery result).
 3. Decide the RR-10 disposition (keep/document or reviewed cleanup).
