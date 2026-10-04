@@ -14,7 +14,8 @@ const both=(sql,args)=>Promise.all([one(upgraded,sql,args),one(clean,sql,args)])
 test('function definitions are identical',async()=>{
  for(const fn of ['public.person_network_send(jsonb,text)','person_private.postcutover_snapshot(uuid)','public.person_application_contact_fill(uuid,text,jsonb)','public.person_target_identity()','person_private.application_source_guard()',
   // 20261005090000: ranking, the patched certified writer and its helper
-  'public.person_contact_ranks(uuid)','person_private.recruiter_normalize(uuid)','person_private.recruiter_write(uuid,text,jsonb,jsonb)','person_private.recruiter_primary_suppressed(uuid,text,jsonb,jsonb,jsonb)']){
+  'public.person_contact_ranks(uuid)','person_private.recruiter_normalize(uuid)','person_private.recruiter_write(uuid,text,jsonb,jsonb)','person_private.recruiter_primary_suppressed(uuid,text,jsonb,jsonb,jsonb)',
+  'public.person_catchup_contact_snapshot(uuid[])']){
   const [a,b]=await both('select pg_get_functiondef($1::regprocedure) v',[fn]);
   assert.equal(a,b,fn);
  }
@@ -34,7 +35,7 @@ test('witness table: columns, nullability and constraints are identical',async()
 test('identity index and privileges are identical',async()=>{
  const idx="select jsonb_build_object('def',pg_get_indexdef(i.indexrelid),'valid',i.indisvalid,'unique',i.indisunique) v from pg_index i where i.indexrelid=to_regclass('public.candidates_person_username_idx')";
  const [a,b]=await both(idx);assert.deepEqual(a,b);
- for(const fn of ['public.person_network_send(jsonb,text)','public.person_application_contact_fill(uuid,text,jsonb)','public.person_target_identity()']){
+ for(const fn of ['public.person_network_send(jsonb,text)','public.person_application_contact_fill(uuid,text,jsonb)','public.person_target_identity()','public.person_catchup_contact_snapshot(uuid[])']){
   const [c,d]=await both("select coalesce(to_jsonb(proacl::text[]),'null') v from pg_proc where oid=$1::regprocedure",[fn]);
   assert.deepEqual(c,d,fn);
   for(const role of ['anon','authenticated']){const [e,f]=await both("select has_function_privilege($1,$2::regprocedure,'execute') v",[role,fn]);assert.equal(e,false,`${role} ${fn}`);assert.equal(f,false);}

@@ -128,9 +128,9 @@ upgrade(){
   q -d $DB -1 -f "supabase/migrations/$migration.sql"
  done
 }
-# The 2026-10-05 forward files (explicit clears; Send honours decisions).
+# The 2026-10-05 forward files (explicit clears, receipt correction and catch-up snapshot).
 upgrade_clears(){
- for migration in 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions; do
+ for migration in 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions 20261005110000_person_historical_shadow_clears 20261005120000_person_catchup_contact_snapshot; do
   q -d $DB -1 -f "supabase/migrations/$migration.sql"
  done
 }
@@ -145,7 +145,7 @@ LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scr
 upgrade
 # Phase 2b: historical recruiter decisions as the pre-2026-10-05 writer left them,
 # created BEFORE the clears migration (unpublished shadow clears, a published live NULL,
-# a phone-only clear), then the two 2026-10-05 forward files.
+# a phone-only clear, and real published-then-shadow clears), then the forward files.
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scripts/person-release-upgrade/dist/state.json node --test --test-concurrency=1 scripts/person-release-upgrade/test-upgrade-clears-before.mjs
 upgrade_clears
 # Phase 3: preserved witnesses and converged definitions; preserved clears.
@@ -164,7 +164,7 @@ node --test scripts/person-release-upgrade/test-forward-definitions.mjs
 CLEAN=person_release_clean_test
 DB_SAVED=$DB; DB=$CLEAN
 install_chain clean
-for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions; do
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions 20261005110000_person_historical_shadow_clears 20261005120000_person_catchup_contact_snapshot; do
  q -d $DB -1 -f "supabase/migrations/$migration.sql"
 done
 DB=$DB_SAVED

@@ -215,6 +215,8 @@ earlier function bodies; do not move publication/review helpers to the end:
 20261003120000_person_forward_identity_index.sql
 20261005090000_person_recruiter_explicit_clear.sql
 20261005100000_person_send_decisions.sql
+20261005110000_person_historical_shadow_clears.sql
+20261005120000_person_catchup_contact_snapshot.sql
 ```
 
 The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md);
@@ -224,7 +226,17 @@ with a default, a constraint, the ranking function, in-place patches of the cert
 writer and of the Send RPC, and a one-time classification of historical NULL
 decisions (unpublished people's clears kept and reranked; published people's left
 automatic and counted by the NOTICE for owner review, see the ledger).
-On a fresh install they are no-ops after the chain. On a database that installed
+`20261005110000` then corrects published-then-shadow clears only when the current
+decision points to a completed shadow receipt with explicit NULL requested and
+effective contact. It preserves receipts, legacy fields, later choices and projection
+state. It acquires both target-table locks with `NOWAIT`: drain migration activity
+first; if it refuses, stop and retry only after the conflicting activity settles.
+It restores each trigger's original mode and reports only the restored count.
+`20261005120000` installs the read-only, service-role-only scalar snapshot used by
+the compatible catch-up verifier. Install both forward versions in order; do not
+edit or replay an older installed migration to obtain these changes.
+On a fresh install apply the same forward versions once; the upgrade harness
+checks that its catalog matches an older install upgraded in this order. On a database that installed
 the earlier bodies of `20260927170000`, `20260928060000` or `20260928070000` (the
 2026-09-28 test copy did), they are the only supported way to bring those
 definitions to the release: they replace the contact-fill and Send definitions,
@@ -251,6 +263,8 @@ copy is therefore:
 20261003120000_person_forward_identity_index.sql
 20261005090000_person_recruiter_explicit_clear.sql
 20261005100000_person_send_decisions.sql
+20261005110000_person_historical_shadow_clears.sql
+20261005120000_person_catchup_contact_snapshot.sql
 ```
 
 An install that already has `20260928061000` (any install from the prepared parent
@@ -446,10 +460,19 @@ Inspect durable state after every unsuccessful or ambiguous start:
 
 Once the window is open, run the bounded pinned queue catch-up through the reviewed
 runner (`scripts/person-maintenance/run-catchup.mjs`, see
-`scripts/person-maintenance/README.md`: it verifies the pin, refuses late inputs and a
-queue holding explicitly cleared contacts, and handles the directory connection's
-transport failures), then its finalizer inside that same window, inspect its exact
-outcome, and close the window. The
+`scripts/person-maintenance/README.md`: it verifies the pin, refuses late or
+unsupported inputs, and handles the directory connection's transport failures;
+its reviewed compatibility artifact supports explicit clears without changing the
+historical translator or checkpoint policy), then its finalizer inside that same window, inspect its exact
+outcome, and close the window. Hosted use also requires explicit acceptance of
+`PERSON_CATCHUP_COMPATIBILITY_ID=c4d0e4e-explicit-contact-clear-v1` plus
+`PERSON_CATCHUP_ARTIFACT_SHA256=<approved composite hash>` from the release manifest.
+The generated hash must match before the runner imports or connects. The runtime is separately
+identified; the database checkpoint retains the historical base pin. A later clear
+that loses the revision/capture comparison remains pending, and an already-visited
+ID requires a new bounded queue run. Source conflicts such as
+`same_snapshot_mutation` remain review outcomes; never change a recruiter decision
+to make the historical verifier pass. The
 starter (`scripts/person-maintenance/start-catchup.mjs`) and the finalizer
 (`scripts/person-reconcile-finalize.mjs`) both take the destination from
 `PERSON_TARGET_PROJECT_REF`; the starter records the REST cluster identity

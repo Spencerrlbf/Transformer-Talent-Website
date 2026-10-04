@@ -34,6 +34,7 @@ test.after(async()=>{await site.end();await comms.end();});
 const RUN=`catchup-${randomUUID().slice(0,8)}`;
 const WS=randomUUID();
 const people=Array.from({length:4},(_,i)=>({id:randomUUID(),contact:randomUUID(),n:i}));
+const clears=Array.from({length:3},(_,n)=>({id:randomUUID(),n,kinds:n===0?['email']:n===1?['phone']:['email','phone']}));
 const runnerEnv={PATH:env.PATH,HOME:env.HOME,PINNED_RUNNER_DIR:env.PINNED_RUNNER_DIR,PERSON_TARGET_PROJECT_REF:'local',SUPABASE_URL:env.SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY:env.SUPABASE_SERVICE_ROLE_KEY,
  COMMS_DATABASE_URL:env.COMMS_DATABASE_URL,COMMS_WORKSPACE:'Synthetic directory',
  BACKFILL_CONFIG:JSON.stringify({'run-id':RUN,reconcile:true,scope:'queue','dry-run':false,resume:true,limit:100,'batch-size':1,'max-seconds':600})};
@@ -62,6 +63,12 @@ test('setup: synthetic directory and four queued directory-linked legacy people 
   await comms.query(`insert into comms.emails values($1,$2,$2,'personal','{"status":"Verified","primary":true,"checked_at":"2026-08-01"}')`,[p.contact,`${u}@example.test`]);
   await site.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,current_title,current_company,source,directory_contact_id,created_at) values($1,$2,$3::text,'https://www.linkedin.com/in/'||$3::text,$4::text,'Senior Engineer','Synthetic Co','directory',$5,'2025-01-01')",
    [p.id,`Synthetic Directory ${p.n}`,u,`${u}@example.test`,p.contact]);
+ }
+ for(const p of clears){
+  await site.query("insert into candidates(id,full_name,linkedin_username,email,phone,source,created_at) values($1,'Synthetic Suppressed',$2,$3,'+12025550100','leaktest','2025-01-01')",[p.id,`suppressed-${p.id.slice(0,8)}`,`clear-${p.id}@example.test`]);
+  const receipt=randomUUID();
+  await site.query("insert into person_recruiter_receipts(id,candidate_id,actor_id,input_hash,edited_at,requested_contact,document,mode) values($1,$2,$3,'synthetic',clock_timestamp(),'{}'::jsonb,'{}'::jsonb,'shadow')",[receipt,p.id,randomUUID()]);
+  for(const kind of p.kinds)await site.query('insert into person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) values($1,$2,null,$3,true)',[p.id,kind,receipt]);
  }
  assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=any($1::uuid[])',[people.map(p=>p.id)])).rows[0].n,4);
  // The pinned fingerprint covers every directory-linked person in the website
@@ -135,9 +142,9 @@ test('pinned directory client + listener: idle loss is not uncaught; a loss insi
 });
 
 const runnerScript=path.resolve('scripts/person-maintenance/run-catchup.mjs');
-function runRunner({onLine}){
+function runRunner({onLine,config}){
  return new Promise((resolve)=>{
-  const child=spawn(process.execPath,[runnerScript],{env:runnerEnv,stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,[runnerScript],{env:config?{...runnerEnv,BACKFILL_CONFIG:JSON.stringify(config)}:runnerEnv,stdio:['ignore','pipe','pipe']});
   let out='',err='';
   const feed=(chunk,sink)=>{const text=chunk.toString();if(sink==='out')out+=text;else err+=text;for(const line of text.split('\n'))if(line.trim())onLine?.(line,sink,child);};
   child.stdout.on('data',(c)=>feed(c,'out'));child.stderr.on('data',(c)=>feed(c,'err'));
@@ -175,14 +182,14 @@ test('the actual run: the directory connection is lost between pages → control
  }});
  assert.equal(r.code,1,`runner exit\n${r.out}\n${r.err}`);
  assert.match(r.out,/"phase":"catchup_runner"/);
- assert.match(r.out,/"runner":"pinned"/);
+ assert.match(r.out,/"runner":"derived_pinned"/);
  assert.match(r.err,/"phase":"reconcile_stopped"/,'the pinned loop\'s own failure path ran');
  assert.match(r.err,/catchup_comms_connection_lost/,'the loss was recorded by the listener');
  assert.doesNotMatch(r.out,/source_scan_complete/,'no false success');
  assert.doesNotMatch(r.err,/uncaught|Unhandled/i);
  const row=await runRow();
  assert.equal(row.status,'failed');assert.equal(row.notes.reconciliation_pending,true);
- assert.ok(row.processed>=1&&row.processed<people.length,`processed ${row.processed} of ${people.length} before the loss`);
+ assert.ok(row.processed>=1&&row.processed<people.length+clears.length,`processed ${row.processed} of ${people.length} before the loss`);
  const rows=await recorded();
  assert.equal(rows.length,row.processed,'exactly the committed checkpoints are recorded');
  assert.equal(new Set(rows.map(x=>x.candidate_id)).size,rows.length,'no person recorded twice');
@@ -200,26 +207,6 @@ test('late inputs against the real pinned tree are refused before any transport:
   assert.doesNotMatch(r.out,/catchup_runner|reconcile_start/,`${label}: nothing started`);
  }
  assert.deepEqual(await runRow(),before,'the failed run was not touched');
-});
-
-test('a person with an explicitly cleared contact pending in the queue: the pinned translator cannot verify them; the runner refuses with their id before the run',async()=>{
- // a queued legacy person with a suppressed email decision (what a recruiter clear
- // followed by a legacy change produces after 20261005090000)
- const cid=randomUUID(),receipt=randomUUID();
- await site.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,source,created_at) values($1,'Synthetic Cleared',$2::text,'https://www.linkedin.com/in/'||$2::text,'cleared@example.test','leaktest','2025-01-01')",[cid,`cleared-${cid.slice(0,8)}`]);
- await site.query("insert into person_recruiter_receipts(id,candidate_id,actor_id,input_hash,edited_at,requested_contact,document,mode) values($1,$2,$3,'synthetic',clock_timestamp(),'{\"email\":null}'::jsonb,'{}'::jsonb,'shadow')",[receipt,cid,randomUUID()]);
- await site.query("insert into person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) values($1,'email',null,$2,true)",[cid,receipt]);
- assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=$1',[cid])).rows[0].n,1);
- const r=await runRunner({});
- assert.equal(r.code,1,r.out+r.err);
- assert.match(r.out,/"phase":"catchup_runner_refused"/);
- assert.match(r.out,new RegExp(`"catchup_run:suppressed_pending".*${cid}`));
- assert.doesNotMatch(r.out,/"phase":"catchup_runner"|reconcile_start|reconcile_checkpoint/,'no page was processed');
- // out of the queue (the owner's resolution: the current translator or a re-save), the runner proceeds again
- await site.query('delete from person_recruiter_primary where candidate_id=$1',[cid]);
- await site.query('delete from person_recruiter_receipts where id=$1',[receipt]);
- await site.query('delete from person_change_queue where candidate_id=$1',[cid]);
- await site.query('delete from candidates where id=$1',[cid]);
 });
 
 test('resume with the identical configuration completes the run; committed work is preserved, every person recorded once',async()=>{
@@ -241,4 +228,194 @@ test('resume with the identical configuration completes the run; committed work 
  assert.ok(rows.every(x=>['verified','review'].includes(x.status)),JSON.stringify(rows.map(x=>x.status)));
  assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=any($1::uuid[])',[people.map(p=>p.id)])).rows[0].n,0,'the queue is drained for them');
  console.log(JSON.stringify({evidence:'resume_pass',exit:r.code,processed:row.processed,status:row.status,external_stable:row.notes.external_stable,recorded:rows.length,mine:mine.length,runner:(r.out.split('\n').find(l=>l.includes('"phase":"catchup_runner"'))??'').slice(0,400)}));
+});
+
+test('explicit email, phone and both clears actually verify and checkpoint with decisions and history preserved',async()=>{
+ for(const p of clears){
+  const r=(await site.query('select status,checks,counted from person_reconcile_people where run_id=$1 and candidate_id=$2',[RUN,p.id])).rows[0];
+  assert.equal(r.status,'verified');assert.equal(r.counted,true);assert.equal(r.checks.integrity_ok,true);
+  const decisions=(await site.query('select kind,chosen_value,suppressed from person_recruiter_primary where candidate_id=$1 order by kind',[p.id])).rows;
+  assert.deepEqual(decisions,p.kinds.map(kind=>({kind,chosen_value:null,suppressed:true})));
+  const contacts=(await site.query('select kind,rank from candidate_contacts where candidate_id=$1',[p.id])).rows;
+  for(const kind of p.kinds){assert.ok(contacts.some(c=>c.kind===kind));assert.ok(contacts.filter(c=>c.kind===kind).every(c=>c.rank===null));}
+  assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=$1',[p.id])).rows[0].n,0);
+ }
+});
+
+async function derivedIO(){
+ const {prepareCompatibilityRuntime}=await import('./contact-compat-runtime.mjs');
+ const runtime=prepareCompatibilityRuntime({root:path.resolve(env.PINNED_RUNNER_DIR)});
+ const trial=await import(pathToFileURL(runtime.root+'/scripts/person-trial.mjs'));
+ const reconcile=await import(pathToFileURL(runtime.root+'/scripts/person-reconcile.mjs'));
+ const lib=await import(pathToFileURL(runtime.root+'/scripts/dist/worker-lib.mjs'));
+ const rest=trial.restSite(env.SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY);
+ const directory=await trial.openComms(env.COMMS_DATABASE_URL);
+ return {trial,reconcile,lib,rest,directory,cols:await trial.commsColumns(directory)};
+}
+async function startRun(io,run,{limit=500,batch=500}={}){
+ const hash=await io.reconcile.externalFingerprint(io.rest,io.directory,io.cols,io.lib);
+ return io.rest.rpc('person_reconcile_start',{p_run:run,p_commit:'c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc',p_limit:limit,p_batch:batch,p_resume:false,p_scope:'queue',p_external_hash:hash});
+}
+async function certifiedClear(cid){
+ const before=process.env.PERSON_TRANSITION_SUPPORT;process.env.PERSON_TRANSITION_SUPPORT='on';
+ const current=await import('../dist/worker-lib.mjs');
+ const connection=await site.connect();
+ try{return await current.saveRecruiterContactOnConnection(connection,{organizationId:'801865a7-6533-41d2-9c45-e4a90e6ad51a',candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode:'shadow',contact:{email:null,phone:null,github:null,otherEmails:[]}});}
+ finally{connection.release();if(before===undefined)delete process.env.PERSON_TRANSITION_SUPPORT;else process.env.PERSON_TRANSITION_SUPPORT=before;}
+}
+for(const variant of [{curated:false,outcome:'verified'},{curated:true,outcome:'review'}])test(`certified clear race (${variant.curated?'curated':'scalar'} contacts): pending CAS, advanced checkpoint, new queue run ${variant.outcome}`,async()=>{
+ const cid=randomUUID(),run=`race-${randomUUID().slice(0,8)}`;
+ await site.query("insert into candidates(id,full_name,linkedin_username,email,phone,source,created_at,contact) values($1,'Synthetic Race',$2,$3,'+12025550101','leaktest','2025-01-01',$4::jsonb)",[cid,`race-${cid.slice(0,8)}`,`race-${cid}@example.test`,variant.curated?JSON.stringify({email:`race-${cid}@example.test`,phone:'+12025550101'}):null]);
+ const io=await derivedIO();
+ try{
+  const baseline=`baseline-${randomUUID().slice(0,8)}`;
+  await startRun(io,baseline);
+  const initial=(await io.rest.rpc('person_reconcile_page',{p_run:baseline,p_size:500})).filter(p=>p.id===cid);
+  await io.reconcile.reconcilePage({site:io.rest,lib:io.lib,comms:io.directory,cols:io.cols,config:{run:baseline,dry:false},page:initial});
+  assert.equal((await site.query('select status from person_reconcile_people where run_id=$1 and candidate_id=$2',[baseline,cid])).rows[0].status,'verified');
+  const {openAnchorDatabase}=await import('../person-audit/database.mjs');
+  const current=await import('../dist/worker-lib.mjs');
+  const anchor=await openAnchorDatabase({LOCAL_DATABASE_URL:env.WEBSITE_DATABASE_URL});
+  try{
+   const snapshots=await anchor.rpc('person_audit_anchor_inputs',{p_ids:[cid]});
+   const prepared=snapshots.map(current.prepareLegacyAuditAnchor);assert.equal(prepared[0].status,'ready');
+   assert.equal((await anchor.rpc('person_audit_anchor_commit',{p_items:prepared}))[0].status,'created');
+  }finally{await anchor.end();}
+  await site.query("update backfill_runs set status='paused' where run_id=$1",[baseline]);
+  await site.query('insert into person_change_queue(candidate_id,version) select $1,max(id) from person_change_events where candidate_id=$1 on conflict(candidate_id) do update set version=excluded.version',[cid]);
+  await startRun(io,run);
+  const page=(await io.rest.rpc('person_reconcile_page',{p_run:run,p_size:500})).filter(p=>p.id===cid);
+  assert.equal(page.length,1);
+  let snapshotRevision;
+  await io.reconcile.reconcilePage({site:io.rest,lib:io.lib,comms:io.directory,cols:io.cols,config:{run,dry:false},page,beforeRecord:async()=>{
+   snapshotRevision=(await site.query('select rev from candidate_profile_state where candidate_id=$1',[cid])).rows[0].rev;
+   const saved=await certifiedClear(cid);assert.equal(saved.contact.email,null);assert.equal(saved.contact.phone,null);
+  }});
+  const recorded=(await site.query('select status,counted,revision from person_reconcile_people where run_id=$1 and candidate_id=$2',[run,cid])).rows[0];
+  assert.equal(recorded.status,'pending');assert.equal(recorded.counted,true);assert.equal(Number(recorded.revision),Number(snapshotRevision));
+  const row=(await site.query('select last_id,processed from backfill_runs where run_id=$1',[run])).rows[0];
+  assert.equal(row.last_id,cid);assert.equal(row.processed,1);
+  const version=(await site.query('select version from person_change_queue where candidate_id=$1',[cid])).rows[0].version;
+  assert.ok(Number(version)>Number(page[0].captured_version));
+  assert.ok(Number((await site.query('select rev from candidate_profile_state where candidate_id=$1',[cid])).rows[0].rev)>Number(snapshotRevision));
+  assert.ok(!(await io.rest.rpc('person_reconcile_page',{p_run:run,p_size:500})).some(p=>p.id===cid),'same-run resume does not revisit older id');
+  // Close the synthetic partial run before preparing the new bounded queue run.
+  await site.query("update backfill_runs set status='paused' where run_id=$1",[run]);
+  const follow=`follow-${randomUUID().slice(0,8)}`;await startRun(io,follow);
+  const next=(await io.rest.rpc('person_reconcile_page',{p_run:follow,p_size:500})).filter(p=>p.id===cid);assert.equal(next.length,1);
+  await io.reconcile.reconcilePage({site:io.rest,lib:io.lib,comms:io.directory,cols:io.cols,config:{run:follow,dry:false},page:next});
+  const review=(await site.query('select status,checks,counted from person_reconcile_people where run_id=$1 and candidate_id=$2',[follow,cid])).rows[0];
+  assert.equal(review.status,variant.outcome);if(variant.curated)assert.equal(review.checks.reason,'same_snapshot_mutation');else assert.equal(review.checks.integrity_ok,true);assert.equal(review.counted,true);
+  assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=$1',[cid])).rows[0].n,variant.curated?1:0,'review stays queued; verified scalar clear drains');
+  const decisions=(await site.query('select kind,chosen_value,suppressed from person_recruiter_primary where candidate_id=$1 order by kind',[cid])).rows;
+  assert.deepEqual(decisions,['email','phone'].map(kind=>({kind,chosen_value:null,suppressed:true})));
+  assert.ok((await site.query('select rank from candidate_contacts where candidate_id=$1',[cid])).rows.every(c=>c.rank===null));
+  assert.ok((await site.query('select count(*)::int n from candidate_contacts where candidate_id=$1',[cid])).rows[0].n>=2,'email and phone history retained');
+ }finally{await io.directory.end();await io.rest.end?.();}
+});
+
+test('normalized selected contact later bounced uses SQL eligible fallback accepted by both historical and derived verifiers',async()=>{
+ const cid=randomUUID(),receipt=randomUUID();
+ await site.query("insert into candidates(id,full_name,linkedin_username,source,created_at) values($1,'Synthetic Bounced',$2,'leaktest','2025-01-01')",[cid,`bounced-${cid.slice(0,8)}`]);
+ await site.query("insert into person_recruiter_receipts(id,candidate_id,actor_id,input_hash,edited_at,requested_contact,document,mode) values($1,$2,$3,'synthetic',clock_timestamp(),'{}'::jsonb,'{}'::jsonb,'shadow')",[receipt,cid,randomUUID()]);
+ await site.query("insert into person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) values($1,'email','selected@example.test',$2,false)",[cid,receipt]);
+ await site.query("insert into candidate_contacts(candidate_id,kind,value_raw,value_normalized,source,status) values($1,'email','selected@example.test','selected@example.test','legacy_import','active'),($1,'email','fallback@example.test','fallback@example.test','legacy_import','active')",[cid]);
+ await site.query('select person_rerank_contacts($1)',[cid]);
+ assert.equal((await site.query('select value_normalized from candidate_contacts where candidate_id=$1 and rank=1',[cid])).rows[0].value_normalized,'selected@example.test');
+ await site.query("update candidate_contacts set status='bounced',rank=null where candidate_id=$1 and value_normalized='selected@example.test'",[cid]);
+ await site.query('select person_rerank_contacts($1)',[cid]);
+ assert.equal((await site.query('select value_normalized from candidate_contacts where candidate_id=$1 and rank=1',[cid])).rows[0].value_normalized,'fallback@example.test');
+ const io=await derivedIO();
+ try{
+  await site.query('insert into candidate_profile_state(candidate_id,rev) values($1,1)',[cid]);
+  const stored=await io.trial.readNew(io.rest,[cid],{globalCounts:false});
+  const old=await import(pathToFileURL(path.join(env.PINNED_RUNNER_DIR,'scripts/person-trial.mjs')));
+  for(const mod of [old,io.trial]){const tally=new mod.Tally();mod.checkStored(tally,cid,{row:{work_experience:[]},legacy:[],v2:[],ledger:[],apps:[]},[],stored,{project:()=>({})});assert.equal(tally.fail.size,0);}
+  assert.equal(stored.decisions.get(`${cid}:email`).chosen_value,'selected@example.test');
+ }finally{await io.directory.end();await io.rest.end?.();}
+});
+
+test('actual scalar REST snapshot bypasses row cap and finds affected candidate after >1001 global suppressed decisions',async()=>{
+ const fillers=Array.from({length:1002},()=>`00000000${randomUUID().slice(8)}`),cid=`ffffffff${randomUUID().slice(8)}`;
+ const ids=[...fillers,cid];
+ await site.query("insert into candidates(id,full_name,linkedin_username,source,created_at) select id,'Synthetic Cap','cap-'||id::text,'leaktest','2025-01-01' from unnest($1::uuid[]) id",[ids]);
+ await site.query("insert into person_recruiter_receipts(id,candidate_id,actor_id,input_hash,edited_at,requested_contact,document,mode) select gen_random_uuid(),id,gen_random_uuid(),'synthetic',clock_timestamp(),'{}'::jsonb,'{}'::jsonb,'shadow' from unnest($1::uuid[]) id",[ids]);
+ await site.query("insert into person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) select candidate_id,'email',null,id,true from person_recruiter_receipts where candidate_id=any($1::uuid[])",[ids]);
+ await site.query("insert into candidate_contacts(candidate_id,kind,value_raw,value_normalized,source,status) select $1,'email','cap-'||n||'@example.test','cap-'||n||'@example.test','legacy_import','active' from generate_series(1,1500) n",[cid]);
+ // The unrelated historical decision population is outside this run's pending queue.
+ await site.query('update person_change_events set reconciled_at=clock_timestamp() where candidate_id=any($1::uuid[])',[fillers]);
+ await site.query('delete from person_change_queue where candidate_id=any($1::uuid[])',[fillers]);
+ const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:`Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`};
+ const cap=await fetch(`${env.SUPABASE_URL}/rest/v1/candidate_contacts?candidate_id=eq.${cid}&select=id&limit=2000`,{headers});assert.equal(cap.ok,true);assert.equal((await cap.json()).length,1000,'actual PostgREST row cap');
+ const scan=await fetch(`${env.SUPABASE_URL}/rest/v1/person_recruiter_primary?suppressed=eq.true&select=candidate_id&order=candidate_id.asc&limit=1001`,{headers});assert.equal(scan.ok,true);assert.ok(!(await scan.json()).some(r=>r.candidate_id===cid),'old global scan would miss target');
+ const io=await derivedIO();
+ try{
+  await site.query('insert into candidate_profile_state(candidate_id,rev) values($1,1)',[cid]);
+  const stored=await io.trial.readNew(io.rest,[cid],{globalCounts:false});assert.equal(stored.contacts.get(cid).length,1500);assert.equal(stored.decisions.get(`${cid}:email`).suppressed,true);
+  const run=`cap-${randomUUID().slice(0,8)}`;await startRun(io,run,{limit:100,batch:1});
+  const config={...JSON.parse(runnerEnv.BACKFILL_CONFIG),'run-id':run};
+  const r=await runRunner({config});assert.equal(r.code,0,r.out+r.err);
+  const record=(await site.query('select status,checks,counted from person_reconcile_people where run_id=$1 and candidate_id=$2',[run,cid])).rows[0];
+  assert.equal(record.status,'verified');assert.equal(record.counted,true);assert.equal(record.checks.integrity_ok,true);
+  assert.equal((await site.query('select count(*)::int n from candidate_contacts where candidate_id=$1',[cid])).rows[0].n,1500);
+  assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=$1',[cid])).rows[0].n,0);
+ }finally{await io.directory.end();await io.rest.end?.();}
+});
+test('real REST snapshot row and serialized-byte capacity failures abort without truncating evidence',async()=>{
+ const rowCid=randomUUID(),byteCid=randomUUID();
+ for(const cid of [rowCid,byteCid]){
+  await site.query("insert into candidates(id,full_name,linkedin_username,source,created_at) values($1,'Synthetic Capacity',$2,'leaktest','2025-01-01')",[cid,`capacity-${cid.slice(0,8)}`]);
+  await site.query('insert into candidate_profile_state(candidate_id,rev) values($1,1)',[cid]);
+ }
+ await site.query("insert into candidate_contacts(candidate_id,kind,value_raw,value_normalized,source,status) select $1,'email','row-'||n||'@example.test','row-'||n||'@example.test','legacy_import','active' from generate_series(1,10001) n",[rowCid]);
+ await site.query("insert into candidate_contacts(candidate_id,kind,value_raw,value_normalized,source,status) values($1,'email',repeat('x',1048576),'byte@example.test','legacy_import','active')",[byteCid]);
+ const io=await derivedIO();
+ try{
+  assert.equal((await io.trial.readNew(io.rest,[byteCid],{globalCounts:false})).contacts.get(byteCid).length,1,'below byte budget succeeds');
+  await assert.rejects(io.trial.readNew(io.rest,[rowCid],{globalCounts:false}),/contact_snapshot_capacity/);
+  await site.query("update candidate_contacts set value_raw=repeat('x',9000000) where candidate_id=$1",[byteCid]);
+  await assert.rejects(io.trial.readNew(io.rest,[byteCid],{globalCounts:false}),/contact_snapshot_capacity/);
+  assert.equal((await site.query('select count(*)::int n from candidate_contacts where candidate_id=$1',[rowCid])).rows[0].n,10001,'capacity refusal preserves all stored rows');
+  // Exactly 10,000 small rows approach the serialized budget from below, then
+  // cross it by one extra raw byte per row. No full aggregation occurs above it.
+  const nearCid=randomUUID();
+  await site.query("insert into candidates(id,full_name,linkedin_username,source,created_at) values($1,'Synthetic Near Capacity',$2,'leaktest','2025-01-01')",[nearCid,`near-${nearCid.slice(0,8)}`]);
+  await site.query('insert into candidate_profile_state(candidate_id,rev) values($1,1)',[nearCid]);
+  await site.query("insert into candidate_contacts(candidate_id,kind,value_raw,value_normalized,source,status) select $1,'email','x',n::text,'legacy_import','active' from generate_series(1,10000) n",[nearCid]);
+  const budget=Number((await site.query("select (select sum(octet_length(to_jsonb(c)::text)) from candidate_contacts c where candidate_id=$1)+(select octet_length(to_jsonb(s)::text) from candidate_contact_summary s where candidate_id=$1)+(select octet_length(to_jsonb(s)::text) from candidate_profile_state s where candidate_id=$1)+16*(10000+4)+1024 n",[nearCid])).rows[0].n);
+  assert.ok(budget<8388608);
+  const pad=1+Math.floor((8388608-budget-1024)/10000);
+  await site.query("update candidate_contacts set value_raw=repeat('x',$2) where candidate_id=$1",[nearCid,pad]);
+  assert.equal((await io.trial.readNew(io.rest,[nearCid],{globalCounts:false})).contacts.get(nearCid).length,10000);
+  await site.query("update candidate_contacts set value_raw=repeat('x',$2) where candidate_id=$1",[nearCid,pad+2]);
+  await assert.rejects(io.trial.readNew(io.rest,[nearCid],{globalCounts:false}),/contact_snapshot_capacity/);
+
+ }finally{await io.directory.end();await io.rest.end?.();}
+});
+test('real reconcile page snapshot failures and stripped decision evidence cannot record or checkpoint; retry succeeds',async()=>{
+ const cid=randomUUID(),receipt=randomUUID(),run=`evidence-${randomUUID().slice(0,8)}`;
+ await site.query("insert into candidates(id,full_name,linkedin_username,email,source,created_at) values($1,'Synthetic Evidence',$2,$3,'leaktest','2025-01-01')",[cid,`evidence-${cid.slice(0,8)}`,`evidence-${cid}@example.test`]);
+ await site.query("insert into person_recruiter_receipts(id,candidate_id,actor_id,input_hash,edited_at,requested_contact,document,mode) values($1,$2,$3,'synthetic',clock_timestamp(),'{}'::jsonb,'{}'::jsonb,'shadow')",[receipt,cid,randomUUID()]);
+ await site.query("insert into person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) values($1,'email',null,$2,true)",[cid,receipt]);
+ const io=await derivedIO();
+ try{
+  await startRun(io,run);
+  const page=(await io.rest.rpc('person_reconcile_page',{p_run:run,p_size:500})).filter(p=>p.id===cid);assert.equal(page.length,1);
+  for(const mode of ['unavailable','partial','rank1','rank2']){
+   const fault={...io.rest,rpc:async(name,args)=>{
+    if(name==='person_catchup_contact_snapshot'){
+     if(mode==='unavailable')throw Error('fixture_snapshot_unavailable');
+     if(mode==='rank1'||mode==='rank2')await site.query('update candidate_contacts set rank=$2 where candidate_id=$1 and kind=\'email\'',[cid,mode==='rank1'?1:2]);
+     const snapshot=await io.rest.rpc(name,args);assert.equal(snapshot.decisions.length,1);return mode==='partial'?{...snapshot,decisions:[]}:snapshot;
+    }
+    return io.rest.rpc(name,args);
+   }};
+   await assert.rejects(io.reconcile.reconcilePage({site:fault,lib:io.lib,comms:io.directory,cols:io.cols,config:{run,dry:false},page}),mode==='unavailable'?/fixture_snapshot_unavailable/:mode==='partial'?/contact_snapshot/:/post_save_integrity:one_primary_email/);
+   if(mode==='rank1'||mode==='rank2')await site.query('update candidate_contacts set rank=null where candidate_id=$1',[cid]);
+   assert.equal((await site.query('select count(*)::int n from person_reconcile_people where run_id=$1',[run])).rows[0].n,0);
+   const checkpoint=(await site.query('select processed,last_id from backfill_runs where run_id=$1',[run])).rows[0];assert.equal(checkpoint.processed,0);assert.equal(checkpoint.last_id,null);
+  }
+  await io.reconcile.reconcilePage({site:io.rest,lib:io.lib,comms:io.directory,cols:io.cols,config:{run,dry:false},page});
+  assert.equal((await site.query('select status,counted from person_reconcile_people where run_id=$1 and candidate_id=$2',[run,cid])).rows[0].status,'verified');
+ }finally{await io.directory.end();await io.rest.end?.();}
 });

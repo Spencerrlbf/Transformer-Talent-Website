@@ -45,6 +45,8 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261003120000_person_forward_identity_index.sql',
   '20261005090000_person_recruiter_explicit_clear.sql',
   '20261005100000_person_send_decisions.sql',
+  '20261005110000_person_historical_shadow_clears.sql',
+  '20261005120000_person_catchup_contact_snapshot.sql',
  ]);
- assert.equal(last,'20261005100000_person_send_decisions.sql');
+ assert.equal(last,'20261005120000_person_catchup_contact_snapshot.sql');
 });

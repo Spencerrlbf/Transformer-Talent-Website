@@ -24,7 +24,7 @@ async function unpublishedLinked(){
  const cid=randomUUID(),username=`upgrade-clear-${cid.slice(0,8)}`;
  const url=process.env.LOCAL_DATABASE_URL;
  return disabled(async()=>{
-  await pool.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,current_title,current_company,source,created_at) values($1,'Synthetic Upgrade',$2::text,'https://www.linkedin.com/in/'||$2::text,'submitted@example.test','Engineer','Example Corp','future','2025-01-01')",[cid,username]);
+  await pool.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,current_title,current_company,source,created_at) values($1,'Synthetic Upgrade',$2::text,'https://www.linkedin.com/in/'||$2::text,$3,'Engineer','Example Corp','future','2025-01-01')",[cid,username,`${cid}@example.test`]);
   const {pgSite}=await import('../person-trial.mjs'),{reconcilePage}=await import('../person-reconcile.mjs');
   const {openAnchorDatabase}=await import('../person-audit/database.mjs'),{prepareAnchors}=await import('../person-audit-anchors.mjs');
   const lib=await import('../dist/worker-lib.mjs');
@@ -84,5 +84,47 @@ test('C: unpublished phone-only clear with a stale scalar phone',async()=>{
  const {id,cid}=await unpublishedLinked();
  await oldClear(cid,'shadow',{email:false,scalarPhone:'+15125550199'});
  saved.clearC={id,cid};
+});
+test('D: certified shadow clears AFTER publication on the old schema retain their receipts and publication',async()=>{
+ process.env.PERSON_TRANSITION_SUPPORT='on';
+ const {saveRecruiterContactOnConnection}=await import('../dist/worker-lib.mjs');
+ saved.publishedShadow=[];
+ for(const kinds of [['email'],['phone'],['email','phone']]){
+  const {id,cid}=await unpublishedLinked();
+  const chosen={email:`published-${cid}@example.test`,phone:'+15125550177',github:null,otherEmails:[]};
+  const c=await pool.connect();
+  try{
+   const save=async(contact,mode,requestId=randomUUID())=>saveRecruiterContactOnConnection(c,{organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId,mode,contact});
+   await save(chosen,'live');
+   const projection=(await c.query('select to_jsonb(p) value from person_projection_state p where candidate_id=$1',[cid])).rows[0].value;
+   const requestId=randomUUID(),contact={...chosen,...Object.fromEntries(kinds.map(k=>[k,null]))};
+   const result=await save(contact,'shadow',requestId);
+   assert.deepEqual(result.contact,contact,'the actual old writer returned the explicit clear');
+   assert.deepEqual((await c.query('select to_jsonb(p) value from person_projection_state p where candidate_id=$1',[cid])).rows[0].value,projection,'shadow save retains publication');
+   const receipt=(await c.query('select to_jsonb(r) value from person_recruiter_receipts r where id=$1',[requestId])).rows[0].value;
+   assert.ok(receipt.result,'completed receipt');
+   assert.equal((await c.query('select completed_at is not null done from person_private.recruiter_saves where id=$1',[requestId])).rows[0].done,true);
+   for(const kind of kinds){
+    assert.equal(receipt.requested_contact[kind],null);assert.equal(receipt.effective_contact[kind],null);
+    assert.ok((await c.query('select count(*)::int n from candidate_contacts where candidate_id=$1 and kind=$2 and rank=1',[cid,kind])).rows[0].n>0,'old ranking retains the historical contact');
+   }
+   saved.publishedShadow.push({id,cid,kinds,contact,receipt,projection});
+  }finally{c.release();}
+ }
+});
+test('E: a later certified choice supersedes a historical shadow clear',async()=>{
+ process.env.PERSON_TRANSITION_SUPPORT='on';
+ const {saveRecruiterContactOnConnection}=await import('../dist/worker-lib.mjs');
+ const {id,cid}=await unpublishedLinked(),c=await pool.connect();
+ const chosen={email:`later-${cid}@example.test`,phone:'+15125550188',github:null,otherEmails:[]};
+ try{
+  const save=(contact,mode)=>saveRecruiterContactOnConnection(c,{organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode,contact});
+  await save(chosen,'live');
+  await save({...chosen,email:null},'shadow');
+  const later=await save(chosen,'shadow');
+  assert.equal(later.contact.email,chosen.email);
+  const receipt=(await c.query('select to_jsonb(r) value from person_recruiter_primary p join person_recruiter_receipts r on r.id=p.receipt_id where p.candidate_id=$1 and p.kind=\'email\'',[cid])).rows[0].value;
+  saved.supersededClear={id,cid,chosen,receipt};
+ }finally{c.release();}
 });
 test.after(()=>fs.writeFileSync(state,JSON.stringify(saved)));

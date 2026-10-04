@@ -69,6 +69,50 @@ test('the upgraded schema: suppressed column, Send honours decisions, NOTICE cla
  assert.equal((await pool.query("select count(*)::int n from information_schema.columns where table_name='person_recruiter_primary' and column_name='suppressed'")).rows[0].n,1);
  assert.equal((await pool.query("select position('dec_email' in pg_get_functiondef('public.person_network_send(jsonb,text)'::regprocedure))>0 v")).rows[0].v,true);
 });
+test('receipt correction refuses an in-flight contact reader without partial writes or waiting',async()=>{
+ const reader=await pool.connect(),migration=await pool.connect();
+ const sql=fs.readFileSync(new URL('../../supabase/migrations/20261005110000_person_historical_shadow_clears.sql',import.meta.url),'utf8');
+ const cid=saved.publishedShadow[0].cid,before=await decisions(cid);
+ try{
+  await reader.query('begin');
+  await reader.query('select count(*) from candidate_contacts where candidate_id=$1',[cid]);
+  // An unbounded lock attempt would wait here, or deadlock with a subsequent save.
+  await migration.query("set statement_timeout='1500ms'");
+  await assert.rejects(migration.query(sql),e=>e.code==='55P03');
+  assert.deepEqual(await decisions(cid),before);
+ }finally{await reader.query('rollback');await migration.query('reset statement_timeout');reader.release();migration.release();}
+});
+test('receipt correction is idempotent and restores disabled, replica and always trigger modes',async()=>{
+ const fixture=saved.publishedShadow[0],cid=fixture.cid,kind=fixture.kinds[0];
+ const sql=fs.readFileSync(new URL('../../supabase/migrations/20261005110000_person_historical_shadow_clears.sql',import.meta.url),'utf8');
+ const c=await pool.connect();
+ try{
+  await c.query('begin');
+  // Reproduce the old misclassification inside a rolled-back test transaction.
+  await c.query('alter table person_recruiter_primary disable trigger user');
+  await c.query('update person_recruiter_primary set suppressed=false where candidate_id=$1 and kind=$2',[cid,kind]);
+  await c.query('alter table person_recruiter_primary enable trigger user');
+  await c.query('alter table candidate_contacts disable trigger user');
+  await c.query('update candidate_contacts set rank=1 where id=(select id from candidate_contacts where candidate_id=$1 and kind=$2 order by value_normalized limit 1)',[cid,kind]);
+  await c.query('alter table candidate_contacts enable trigger user');
+  await c.query(`create function public.upgrade_trigger_probe() returns trigger language plpgsql as $$begin raise exception 'correction left a trigger enabled';end$$;
+   create trigger upgrade_probe_disabled after update on person_recruiter_primary for each row execute function public.upgrade_trigger_probe();
+   create trigger upgrade_probe_replica after update on person_recruiter_primary for each row execute function public.upgrade_trigger_probe();
+   create trigger upgrade_probe_always after update on candidate_contacts for each row execute function public.upgrade_trigger_probe();
+   alter table person_recruiter_primary disable trigger upgrade_probe_disabled;
+   alter table person_recruiter_primary enable replica trigger upgrade_probe_replica;
+   alter table candidate_contacts enable always trigger upgrade_probe_always;`);
+  const modes=async()=>(await c.query("select tgrelid::regclass::text relation,tgname,tgenabled from pg_trigger where tgrelid in ('person_recruiter_primary'::regclass,'candidate_contacts'::regclass) and not tgisinternal order by 1,2")).rows;
+  const before=await modes();
+  await c.query(sql);
+  assert.deepEqual(await modes(),before,'every original trigger mode restored');
+  assert.equal((await c.query('select suppressed from person_recruiter_primary where candidate_id=$1 and kind=$2',[cid,kind])).rows[0].suppressed,true);
+  assert.equal((await c.query('select count(*)::int n from candidate_contacts where candidate_id=$1 and kind=$2 and rank is not null',[cid,kind])).rows[0].n,0);
+  await c.query(sql);
+  assert.deepEqual(await modes(),before,'no-op repeat preserves trigger modes too');
+  assert.deepEqual((await c.query('select to_jsonb(r) value from person_recruiter_receipts r where id=$1',[fixture.receipt.id])).rows[0].value,fixture.receipt);
+ }finally{await c.query('rollback');c.release();}
+});
 test('A: the historical unpublished shadow clear is still a clear everywhere; publication keeps it',async()=>{
  const {id,cid}=saved.clearA;
  assert.deepEqual(await decisions(cid),[{kind:'email',chosen_value:null,suppressed:true},{kind:'phone',chosen_value:null,suppressed:true}]);
@@ -98,4 +142,43 @@ test('C: the historical phone-only clear is still a clear on the Network ranking
  const s=await send(await sendRow(cid,'9803'));
  assert.equal(s.status,'sent',JSON.stringify(s));
  const a=await row('website_applications',s.applicationId);assert.equal(a.contact?.phone??null,null);assert.ok(a.email);
+});
+test('D: published-then-shadow clears survive upgrade, checked Send and later publication without rewriting evidence',async()=>{
+ const {saveRecruiterContactOnConnection}=await import('../dist/worker-lib.mjs');
+ for(const [index,fixture] of saved.publishedShadow.entries()){
+  const {id,cid,kinds,contact,receipt,projection}=fixture;
+  for(const decision of await decisions(cid))assert.equal(decision.suppressed,kinds.includes(decision.kind),`${kinds.join('+')}: ${decision.kind} decision`);
+  assert.deepEqual((await pool.query('select to_jsonb(r) value from person_recruiter_receipts r where id=$1',[receipt.id])).rows[0].value,receipt,'immutable receipt unchanged');
+  assert.deepEqual((await pool.query('select to_jsonb(p) value from person_projection_state p where candidate_id=$1',[cid])).rows[0].value,projection,'upgrade does not publish or change the legacy projection');
+  const found=await reads(id,cid);
+  assert.equal(found.detail,contact.email);assert.equal(found.compose,contact.email);assert.equal(found.net,contact.email);
+  assert.equal(found.detailPhone,contact.phone);assert.equal(found.netPhone,contact.phone);
+  for(const kind of kinds)assert.ok((await ranks(cid,kind)).every(r=>r.rank===null),'history retained but not ranked');
+  // The prior publication is stale after the real shadow edit. Live Send must
+  // refuse it until a certified live save republishes; do not bypass that gate.
+  await assert.rejects(sendRow(cid,String(9810+index)),/person_profile_unavailable/);
+  const c=await pool.connect();
+  try{
+   // Replaying the completed request in live mode must not publish it or alter its receipt.
+   const replay=await saveRecruiterContactOnConnection(c,{organizationId:TT,candidateId:cid,actorId:receipt.actor_id,requestId:receipt.id,mode:'live',contact});
+   assert.equal(replay.replayed,true);assert.equal(replay.contact.email,contact.email);assert.equal(replay.contact.phone,contact.phone);
+   const later=await saveRecruiterContactOnConnection(c,{organizationId:TT,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),mode:'live',contact});
+   assert.equal(later.contact.email,contact.email);assert.equal(later.contact.phone,contact.phone);
+  }finally{c.release();}
+  const published=(await lib.publishedPoolContactsOnConnection(pool,[cid])).get(cid)?.contact;
+  assert.equal(published?.email,contact.email);assert.equal(published?.phone,contact.phone);
+  const snapshot=await sendRow(cid,String(9810+index));
+  assert.equal(snapshot.email,contact.email??'');assert.equal(snapshot.contact?.phone??null,contact.phone);
+  const sent=await send(snapshot);assert.equal(sent.status,'sent',JSON.stringify(sent));
+  assert.deepEqual(await send(snapshot),{status:'already_sent'});
+  assert.deepEqual((await pool.query('select to_jsonb(r) value from person_recruiter_receipts r where id=$1',[receipt.id])).rows[0].value,receipt);
+ }
+});
+test('E: an older clear cannot override the later chosen contact or its current receipt',async()=>{
+ const {id,cid,chosen,receipt}=saved.supersededClear;
+ const email=(await decisions(cid)).find(d=>d.kind==='email');
+ assert.deepEqual(email,{kind:'email',chosen_value:chosen.email,suppressed:false});
+ const found=await reads(id,cid);
+ assert.equal(found.detail,chosen.email);assert.equal(found.compose,chosen.email);assert.equal(found.net,chosen.email);
+ assert.deepEqual((await pool.query('select to_jsonb(r) value from person_recruiter_receipts r where id=$1',[receipt.id])).rows[0].value,receipt);
 });

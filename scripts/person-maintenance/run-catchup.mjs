@@ -1,35 +1,11 @@
 #!/usr/bin/env node
-// Runs the PINNED catch-up (the historical translator at c4d0e4e, exactly as the
-// runbook's "actual pinned CLI with the identical configuration plus resume:true")
-// from the release checkout, with the one thing the pinned runner lacks: explicit
-// handling of the directory connection's transport failures.
-//
-//   PINNED_RUNNER_DIR=<clean c4d0e4e checkout> PERSON_TARGET_PROJECT_REF=<ref> \
-//   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… COMMS_DATABASE_URL=… \
-//   BACKFILL_CONFIG='{"run-id":"…","reconcile":true,"scope":"queue","dry-run":false,"resume":true,…}' \
-//   node scripts/person-maintenance/run-catchup.mjs
-//
-// What stays pinned: scripts/person-reconcile.mjs (the loop, the external
-// fingerprint, the page translator reconcilePage), scripts/person-trial.mjs (restSite
-// for the website over REST, openComms for the directory), dist/worker-lib.mjs (the
-// translator bundle, rebuilt from the clean pinned tree and hashed), and every SQL
-// checkpoint (person_reconcile_start/page/record_many: last_id advances only inside
-// record_many's transaction, so a client failure can never advance it).
-//
-// What this helper adds, outside the pinned tree:
-//   - the same Git/clean-tree/bundle verification the start helper performs;
-//   - the configuration contract (reconcile, queue scope, not dry, resume) and the
-//     explicit website selection (PERSON_TARGET_PROJECT_REF: REST URL and key claim);
-//   - an 'error' listener on every pg.Client the pinned code creates, attached when
-//     it connects. Without it an idle directory connection dropped by the server is
-//     an uncaught exception: the process dies, the run stays `running` and the
-//     pinned loop's own failure path (status `failed`, `reconcile_stopped`) never
-//     runs. With it the loss is recorded (`catchup_comms_connection_lost:<code>`),
-//     the client stays unusable (pg refuses further queries on it) and the pinned
-//     loop fails the run in a controlled way at its next directory read; the run is
-//     then resumed with the same configuration. A failure inside a directory query
-//     already rejects that query; it is logged the same way.
-// The pinned code itself is not modified or replaced.
+// Runs a narrowly derived historical catch-up runtime. The clean PIN remains
+// untouched; only readNew/checkStored contact evidence supports explicit clears.
+// Translator bundle, external fingerprint, reconciliation loop and SQL semantics
+// stay historical. The derived manifest proves every input/output SHA256.
+// Hosted use requires compatibility ID and exact artifact SHA256 acknowledgement.
+// Transport listeners turn idle directory loss into the historical controlled
+// failure/resume path. No decision scan occurs before the bounded page snapshot.
 import fs from 'node:fs';
 import path from 'node:path';
 import {createRequire} from 'node:module';
@@ -37,13 +13,14 @@ import {pathToFileURL} from 'node:url';
 import {PIN,verifyPinnedRuntime,reasonOf as startReason} from './start-catchup.mjs';
 import {selectedTarget,checkRestUrl,checkServiceKey,databaseIdentity,isTargetError} from '../person-target.mjs';
 import {checkNode} from '../check-node.mjs';
+import {prepareCompatibilityRuntime,checkCompatibilityApproval,checkArtifactApproval} from './contact-compat-runtime.mjs';
 
-const CODES=new Set(['config','credentials','target','pin','runner_exit','arguments','aliases','pinned_env_file','environment_changed','options_mismatch','suppressed_pending']);
+const CODES=new Set(['config','credentials','target','pin','runner_exit','arguments','aliases','pinned_env_file','environment_changed','options_mismatch','compatibility_source','compatibility_approval','artifact_approval']);
 // Environment the pinned modules read (person-trial.mjs, person-backfill.mjs options()).
 // Anything here must be exactly what was validated: the pinned tree's ignored
 // `.env.scripts` fills MISSING variables at import time, and the pinned parser prefers
 // CLI arguments and BACKFILL_* aliases over BACKFILL_CONFIG.
-const PINNED_READS=['LOCAL_DATABASE_URL','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','COMMS_DATABASE_URL','COMMS_WORKSPACE','BACKFILL_CONFIG','GITHUB_SHA','PERSON_TARGET_PROJECT_REF'];
+const PINNED_READS=['LOCAL_DATABASE_URL','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','COMMS_DATABASE_URL','COMMS_WORKSPACE','BACKFILL_CONFIG','GITHUB_SHA','PERSON_TARGET_PROJECT_REF','PERSON_CATCHUP_COMPATIBILITY_ID','PERSON_CATCHUP_ARTIFACT_SHA256'];
 const ALIASES=/^BACKFILL_(RUN_ID|MODE|COHORT|BULK|LIMIT|BATCH_SIZE|CONCURRENCY|DRY_RUN|RESUME|MAX_DB_BYTES|MAX_SECONDS)$/;
 const envSnapshot=(env)=>Object.fromEntries(PINNED_READS.map(k=>[k,env[k]]));
 export function reasonOf(error){
@@ -112,35 +89,16 @@ export function checkConfig(env){
  return {run:raw['run-id'],target:target.ref};
 }
 
-/** The pinned translator's integrity rule requires one primary wherever an eligible
- * contact exists; a kind the recruiter explicitly cleared (20261005090000) has none.
- * Such a person pending in the legacy queue cannot be verified by the pinned
- * translator: it would fail `post_save_integrity:one_primary_*` before any checkpoint.
- * Refuse with the ids so the operator resolves them deliberately (see README). */
-export async function checkSuppressedPending(env,{fetchFn=fetch}={}){
- const base=env.SUPABASE_URL.replace(/\/+$/,'');
- const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:`Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`};
- const res=await fetchFn(`${base}/rest/v1/person_recruiter_primary?suppressed=eq.true&select=candidate_id&limit=1001`,{headers,signal:AbortSignal.timeout(15000)});
- if(!res.ok)throw Error('catchup_run:suppressed_pending');
- const ids=[...new Set((await res.json()).map(r=>r.candidate_id))];
- if(!ids.length)return [];
- const pending=[];
- for(let i=0;i<ids.length;i+=100){
-  const chunk=ids.slice(i,i+100);
-  const r=await fetchFn(`${base}/rest/v1/person_reconcile_pending?candidate_id=in.(${chunk.map(x=>`"${x}"`).join(',')})&select=candidate_id`,{headers,signal:AbortSignal.timeout(15000)});
-  if(!r.ok)throw Error('catchup_run:suppressed_pending');
-  pending.push(...(await r.json()).map(x=>x.candidate_id));
- }
- return [...new Set(pending)].sort();
-}
-
-export async function main({env=process.env,argv=process.argv.slice(2),verify=verifyPinnedRuntime,fetchFn=fetch,out=(x)=>console.log(JSON.stringify(x))}={}){
+export async function main({env=process.env,argv=process.argv.slice(2),verify=verifyPinnedRuntime,out=(x)=>console.log(JSON.stringify(x))}={}){
  checkNode();
  checkInputs(env,argv);
  const {run,target}=checkConfig(env);
+ checkCompatibilityApproval(env,target);
  const before=envSnapshot(env);
- const runtime=verify(env.PINNED_RUNNER_DIR);
- checkPinnedTree(runtime.root);
+ const pinned=verify(env.PINNED_RUNNER_DIR);
+ checkPinnedTree(pinned.root);
+ const runtime=prepareCompatibilityRuntime(pinned);
+ checkArtifactApproval(env,target,runtime.manifest);
  const listener=installTransportListener(runtime.root);
  const previous=process.cwd();
  process.chdir(runtime.root);
@@ -163,11 +121,7 @@ export async function main({env=process.env,argv=process.argv.slice(2),verify=ve
    const raw=JSON.parse(env.BACKFILL_CONFIG);
    const effective=options([],process.env);
    if(effective.run!==raw['run-id']||effective.commit!==PIN||effective.dry!==false||effective.resume!==true||effective.limit!==raw.limit||effective.batch!==raw['batch-size']||(raw['max-seconds']!==undefined&&effective.maxSeconds!==raw['max-seconds'])||(raw['max-db-bytes']!==undefined&&effective.maxBytes!==raw['max-db-bytes']))throw Error('catchup_run:options_mismatch');
-   // First transport: a read-only look at the queue for people the pinned translator
-   // cannot verify (explicitly cleared contacts). Refused with their ids.
-   const pending=await checkSuppressedPending(env,{fetchFn});
-   if(pending.length){out({phase:'catchup_runner_refused',run,reason:'catchup_run:suppressed_pending',candidate_ids:pending});throw Error('catchup_run:suppressed_pending');}
-   out({phase:'catchup_runner',run,target,commit:PIN,bundle_sha256:runtime.bundleHash,runner:'pinned',website_adapter:'restSite (REST, fetch)',directory_adapter:'openComms (pg.Client) + transport listener',listener_installed:listener.installed,node:process.version,
+   out({phase:'catchup_runner',run,target,commit:PIN,bundle_sha256:runtime.bundleHash,runner:'derived_pinned',compatibility:runtime.manifest,website_adapter:'restSite (REST, fetch)',directory_adapter:'openComms (pg.Client) + transport listener',listener_installed:listener.installed,node:process.version,
     effective:{run:effective.run,scope:raw.scope,dry:effective.dry,resume:effective.resume,limit:effective.limit,batch:effective.batch,max_seconds:effective.maxSeconds,max_db_bytes:effective.maxBytes}});
    await pinnedMain();
   }finally{if(saved===undefined)delete process.env.GITHUB_SHA;else process.env.GITHUB_SHA=saved;}
