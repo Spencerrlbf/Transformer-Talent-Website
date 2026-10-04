@@ -29,10 +29,18 @@ globalThis.fetch = async (input, init = {}) => {
       role_ids: [], role_titles: [], matched_role_ids: [], linkedin_username: null,
       contact: { email: 'application@example.test' }, candidate_id: linked ? PERSON : null }]);
   }
+  if (u.pathname.endsWith('/person_recruiter_primary')) {
+    assert.equal(u.searchParams.get('candidate_id'), `in.("${PERSON}")`);
+    assert.equal(u.searchParams.get('kind'), 'eq.email');
+    if (poolResponse === 'preferences-unavailable') return Response.json({}, { status: 503 });
+    if (poolResponse === 'cleared') return Response.json([{ candidate_id: PERSON, chosen_value: null }]);
+    if (poolResponse === 'chosen') return Response.json([{ candidate_id: PERSON, chosen_value: 'chosen@example.test' }]);
+    return Response.json([]);
+  }
   if (['candidate_emails', 'candidate_emails_v2'].includes(u.pathname.split('/').at(-1))) {
     assert.equal(u.searchParams.get('candidate_id'), `in.("${PERSON}")`);
     if (poolResponse === 'verification-unavailable') return Response.json({}, { status: 503 });
-    return Response.json(poolResponse === 'verified' && u.pathname.endsWith('/candidate_emails')
+    return Response.json(['verified', 'cleared', 'chosen', 'preferences-unavailable'].includes(poolResponse) && u.pathname.endsWith('/candidate_emails')
       ? [{ candidate_id: PERSON, email: 'verified@example.test', email_type: 'personal', is_primary: true, quality: 'good', result: 'ok' },
         { candidate_id: PERSON, email: 'secondary@example.test', email_type: 'personal', is_primary: false, quality: 'good', result: 'ok' },
         { candidate_id: PERSON, email: 'invalid@example.test', email_type: 'personal', is_primary: false, quality: 'bad', result: 'invalid' }]
@@ -45,8 +53,8 @@ globalThis.fetch = async (input, init = {}) => {
   if (poolResponse === 'network-error') throw Error('synthetic transport failure');
   if (poolResponse === 'unavailable') return Response.json({}, { status: 503 });
   if (poolResponse === 'missing') return Response.json([]);
-  return Response.json([{ id: PERSON, email: null, phone: null,
-    contact: { email: poolResponse === 'current' ? 'pool@example.test' : null } }]);
+  return Response.json([{ id: PERSON, email: poolResponse === 'cleared' ? 'stale-scalar@example.test' : null, phone: null,
+    contact: { email: poolResponse === 'current' ? 'pool@example.test' : poolResponse === 'chosen' ? 'Chosen@example.test' : null, otherEmails: poolResponse === 'chosen' ? ['kept@example.test'] : undefined } }]);
 };
 const { candidateContact, unifiedCandidateDetail, listUnifiedCandidates, readDetail } = await import('./dist/contact.mjs');
 test('linked TT mail uses the current pool recipient', async () => {
@@ -67,7 +75,7 @@ for (const state of ['unlinked', 'tenant', 'support-off']) {
     assert.equal(poolReads, 0);
   });
 }
-for (const state of ['missing', 'unavailable', 'network-error', 'verification-unavailable']) {
+for (const state of ['missing', 'unavailable', 'network-error', 'verification-unavailable', 'preferences-unavailable']) {
   test(`linked drawer refuses editable data when the pool is ${state}, while the list remains empty`, async () => {
     poolResponse = state;
     await assert.rejects(unifiedCandidateDetail(TT, `app_${APP}`), /pool_contact_unavailable/);
@@ -84,4 +92,20 @@ test('unpublished linked contact uses the same verified primary and secondary em
   assert.deepEqual(detail.contact.otherEmails, ['secondary@example.test']);
   assert.equal((await candidateContact(TT, `app_${APP}`)).email, 'verified@example.test');
   assert.equal((await listUnifiedCandidates({ orgId: TT })).items[0].contact.email, 'verified@example.test');
+});
+// R2-03: the recruiter's explicit decision is honoured before any fallback.
+test('an explicit recruiter clear stays NULL on detail, list and compose despite verified history and a stale scalar', async () => {
+  poolResponse = 'cleared';
+  const detail = await unifiedCandidateDetail(TT, `app_${APP}`);
+  assert.equal(detail.contact.email, null);
+  assert.deepEqual(detail.contact.otherEmails, []);
+  assert.deepEqual(await candidateContact(TT, `app_${APP}`), { name: 'Synthetic', email: null });
+  assert.equal((await listUnifiedCandidates({ orgId: TT })).items[0].contact.email, null);
+});
+test('an explicit recruiter choice is shown in the overlay\'s spelling with its curated other addresses', async () => {
+  poolResponse = 'chosen';
+  const detail = await unifiedCandidateDetail(TT, `app_${APP}`);
+  assert.equal(detail.contact.email, 'Chosen@example.test');
+  assert.deepEqual(detail.contact.otherEmails, ['kept@example.test']);
+  assert.equal((await candidateContact(TT, `app_${APP}`)).email, 'Chosen@example.test');
 });

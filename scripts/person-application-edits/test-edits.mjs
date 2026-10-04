@@ -587,3 +587,119 @@ test('a witnessed Send stays audit verified after a checked resume edit and link
  await lib.fillLinkedResumeContact({organizationId:TT,applicationId:sent.applicationId,candidateId:cid,actorId:randomUUID(),requestId:randomUUID(),path,sha256,mode:'live',phone:null,emails:['sent-fill@example.test']});
  const audit=await plan(cid);assert.equal(audit.status,'verified',JSON.stringify(audit));
 });
+
+// ---- R2-03: an explicit recruiter clear must survive every linked read -----------
+// Shadow mode (PERSON_WRITE_MODE=shadow: published views are not consulted, every
+// read goes through the candidates row and the verification tables): the real
+// certified recruiter save clears the email while a historical verified address
+// stays in candidate_emails (history is never deleted). Linked detail, list and
+// compose read the pool person through REST; here REST GETs are answered from the
+// rows the save actually produced.
+const restFromDatabase = () => async (input, init = {}) => {
+  const u = new URL(String(input));
+  assert.equal(u.origin, 'http://local-only.invalid', 'outbound forbidden');
+  assert.equal(init.method ?? 'GET', 'GET', 'reads only');
+  if (u.pathname.endsWith('/auth/v1/user')) return Response.json({ id: ACTOR, email: 'synthetic@example.test' });
+  if (u.pathname.endsWith('/org_members')) return Response.json([{ member_role: 'owner', organizations: { id: TT, slug: 'transformer-talent', name: 'Synthetic' } }]);
+  const table = u.pathname.split('/').at(-1);
+  // Only the tables on the pool-contact path are served from the database; the rest of
+  // the drawer/list reads (statuses, notes, tasks, roles) are empty, as in the recipient suite.
+  if (!['candidates', 'candidate_emails', 'candidate_emails_v2', 'website_applications', 'person_recruiter_primary'].includes(table)) return Response.json([]);
+  if (!(await pool.query('select to_regclass($1) r', [`public.${table}`])).rows[0].r) return Response.json([]);
+  const where = [], args = [];
+  const columns = new Set((await pool.query('select column_name from information_schema.columns where table_schema=$1 and table_name=$2', ['public', table])).rows.map((r) => r.column_name));
+  // A selected column the local schema lacks (photo, title...) reads as NULL, as an
+  // absent value would through PostgREST on a narrower row.
+  const expr = (e) => (columns.has(e.split(/->|->>/)[0]) ? e.replace(/(->>?)([a-z_]+)/g, "$1'$2'") : 'null');
+  let select = '*', limit = '';
+  for (const [key, raw] of u.searchParams) {
+    if (key === 'select') { select = raw.split(',').map((item) => { const [a, b] = item.split(':'); return b ? `${expr(b)} as "${a}"` : `${expr(a)} as "${a}"`; }).join(','); continue; }
+    if (key === 'limit') { limit = ` limit ${Number(raw)}`; continue; }
+    if (key === 'order') continue;
+    const m = /^(eq|in|is)\.(.*)$/s.exec(raw); if (!m) return Response.json({ message: `unsupported filter ${key}` }, { status: 400 });
+    if (m[1] === 'eq') { args.push(m[2]); where.push(`${key}=$${args.length}`); }
+    else if (m[1] === 'is') where.push(`${key} is ${m[2]}`);
+    else { args.push(m[2].slice(1, -1).split(',').map((v) => v.replace(/^"|"$/g, ''))); where.push(`${key}=any($${args.length}::text[]::${key === 'id' || key === 'candidate_id' ? 'uuid' : 'text'}[])`); }
+  }
+  const rows = (await pool.query(`select ${select} from ${table}${where.length ? ` where ${where.join(' and ')}` : ''}${limit}`, args)).rows;
+  return Response.json(rows);
+};
+const ACTOR = randomUUID();
+// A legacy pool person with the history the pool holds (a verified address recorded by
+// an earlier import, and in one variant a stale scalar), normalized and anchored the
+// supported way (reconcile + anchors, as the catch-up does), then linked by a shadow
+// intake. The history therefore pre-dates the anchor, as it does for every real person.
+async function shadowLinkedPerson({ scalarEmail = null } = {}) {
+  const username = `synthetic-clear-${randomUUID()}`, cid = randomUUID();
+  const url = process.env.LOCAL_DATABASE_URL;
+  await pool.query("update person_private.transition_control set enabled=false where singleton");
+  try {
+    await pool.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,current_title,current_company,source,created_at) values($1,'Resolved Synthetic',$2::text,'https://www.linkedin.com/in/'||$2::text,$3::text,'Engineer','Example Corp','future','2025-01-01')", [cid, username, scalarEmail]);
+    await pool.query("insert into candidate_emails(candidate_id,email_address,email_type,quality,result) values($1,'historical@example.test','personal','good','ok')", [cid]);
+    const { pgSite } = await import('../person-trial.mjs'), { reconcilePage } = await import('../person-reconcile.mjs');
+    const { openAnchorDatabase } = await import('../person-audit/database.mjs'), { prepareAnchors } = await import('../person-audit-anchors.mjs');
+    const lib = await import('../dist/worker-lib.mjs');
+    const site = await pgSite(url), run = `clear-${cid.slice(0, 8)}`;
+    try {
+      await site.rpc('person_reconcile_start', { p_run: run, p_commit: 'c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc', p_limit: 1000, p_batch: 100, p_resume: false, p_scope: 'queue', p_external_hash: '1'.repeat(32) });
+      let page; while ((page = await site.rpc('person_reconcile_page', { p_run: run, p_size: 100 }))?.length) await reconcilePage({ site, lib, config: { run, dry: false }, page });
+    } finally { await site.end?.(); }
+    assert.equal((await pool.query("select status from person_reconcile_people where run_id=$1 and candidate_id=$2", [run, cid])).rows[0]?.status, 'verified');
+    const anchors = await openAnchorDatabase({ LOCAL_DATABASE_URL: url });
+    try { await prepareAnchors({ site: anchors, prepare: lib.prepareLegacyAuditAnchor, options: { save: true, limit: 1000, batch: 50, after: null, maxSeconds: 60, maxBytes: 1e12 }, onProgress: () => {} }); }
+    finally { await anchors.end(); }
+    assert.equal((await pool.query('select count(*)::int n from person_audit_anchors where candidate_id=$1', [cid])).rows[0].n, 1, 'anchored with the history in place');
+  } finally { await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"); }
+  const id = await app({ email: 'submitted@example.test' }, username);
+  const out = await processApp(id, { mode: 'shadow' });
+  assert.equal(out.status, 'processed', out.error?.message);
+  assert.equal((await row('website_applications', id)).candidate_id, cid, 'the application links the existing pool person');
+  assert.equal((await row('candidates', cid)).email, scalarEmail);
+  return { id, cid };
+}
+const recruiter = await import('../dist/worker-lib.mjs');
+const clear = { email: null, phone: null, github: null, otherEmails: [] };
+const linkedReads = async (id) => {
+  const lib = await import('./dist/contact.mjs');
+  const detail = await lib.unifiedCandidateDetail(TT, `app_${id}`);
+  let list = null;
+  for (let page = 1; page <= 20 && !list; page++) {
+    const out = await lib.listUnifiedCandidates({ orgId: TT, pageSize: 100, page });
+    list = out.items.find((r) => r.key === `app_${id}`) ?? null;
+    if (!out.items.length) break;
+  }
+  assert.ok(list, 'the linked application is listed');
+  const compose = await lib.candidateContact(TT, `app_${id}`);
+  return { detail: detail.contact.email, detailOthers: detail.contact.otherEmails, list: list?.contact?.email ?? null, compose: compose.email };
+};
+for (const variant of [{ name: 'NULL scalar', scalarEmail: null }, { name: 'stale non-NULL scalar', scalarEmail: 'stale@example.test' }]) {
+  test(`R2-03: a certified shadow clear stays NULL on linked detail, list and compose (${variant.name}); history is kept`, async () => {
+    const { id, cid } = await shadowLinkedPerson(variant);
+    const priorFetch = globalThis.fetch, priorMode = process.env.PERSON_WRITE_MODE;
+    globalThis.fetch = restFromDatabase(); process.env.PERSON_WRITE_MODE = 'shadow';
+    try {
+      // Control: with no recruiter decision the verified history is a legitimate fallback.
+      assert.equal((await pool.query('select count(*)::int n from person_recruiter_primary where candidate_id=$1', [cid])).rows[0].n, 0);
+      const before = await linkedReads(id);
+      assert.equal(before.compose, variant.scalarEmail ?? 'historical@example.test');
+      // The real certified save: an explicit clear.
+      const saved = await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: clear });
+      assert.equal(saved.contact.email, null, 'the save reports the clear');
+      const c = await row('candidates', cid);
+      assert.equal(c.contact.email, null);
+      assert.deepEqual((await pool.query("select chosen_value from person_recruiter_primary where candidate_id=$1 and kind='email'", [cid])).rows, [{ chosen_value: null }], 'the recruiter decision is an explicit NULL');
+      assert.equal((await pool.query("select count(*)::int n from candidate_emails where candidate_id=$1 and email_address='historical@example.test'", [cid])).rows[0].n, 1, 'history preserved');
+      // Every linked read must honour the clear.
+      assert.deepEqual(await linkedReads(id), { detail: null, detailOthers: [], list: null, compose: null });
+      // A later legitimate choice supersedes the clear.
+      await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: { ...clear, email: 'later@example.test' } });
+      const after = await linkedReads(id);
+      assert.equal(after.detail, 'later@example.test'); assert.equal(after.list, 'later@example.test'); assert.equal(after.compose, 'later@example.test');
+      // ...and clearing again returns to NULL, with the history still stored.
+      await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: clear });
+      assert.deepEqual(await linkedReads(id), { detail: null, detailOthers: [], list: null, compose: null });
+      assert.equal((await pool.query("select count(*)::int n from candidate_emails where candidate_id=$1 and email_address='historical@example.test'", [cid])).rows[0].n, 1, 'no address was deleted to satisfy the reads');
+      assert.equal((await plan(cid)).status, 'verified');
+    } finally { globalThis.fetch = priorFetch; process.env.PERSON_WRITE_MODE = priorMode; }
+  });
+}
