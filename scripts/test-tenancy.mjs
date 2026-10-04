@@ -12,10 +12,16 @@
 //
 //   node scripts/test-tenancy.mjs --base https://transformer-talent-preview.vercel.app
 //   node scripts/test-tenancy.mjs --base http://localhost:3000 --keep   (leave the data for debugging)
+//   node scripts/test-tenancy.mjs --base <url> --armed                   (probes with the controller armed)
 //   node scripts/test-tenancy.mjs --cleanup                              (remove leftovers of a crashed run)
 //
 // Needs .env.scripts with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
 // SUPABASE_ANON_KEY. Response bodies are scanned in memory and never printed.
+// --armed additionally needs PERSON_TARGET_PROJECT_REF and PERSON_PUBLISH_DATABASE_URL
+// (5432) and puts the controller through its operator sequence around the probes
+// (scripts/tenancy/armed.mjs): seeding and teardown stay disabled, the probes run
+// armed. Never point this at a database you must keep unchanged: it writes.
+import { armForSweep, disarmAfterSweep, controllerViaRest } from "./tenancy/armed.mjs";
 import { newRun, setup, teardown, leftovers, svc } from "./tenancy/fixture.mjs";
 
 const args = process.argv.slice(2);
@@ -311,10 +317,18 @@ async function publicPages(W) {
 
 let W = null;
 const started = Date.now();
+const ARMED = flag("--armed");
+let controller = null; // what the deployment's database reports during the probes
 try {
   console.log(`run ${run.id} against ${BASE}`);
   W = await setup(run);
   const { A, B, TT } = W;
+  if (ARMED) {
+    const armed = await armForSweep({ runId: run.id, candidateIds: [TT.sent.id, TT.unsent.id, TT.second.id] });
+    console.log(`controller armed for the probes (reconciled ${armed.reconciled}, anchored ${armed.anchored}, ${armed.pinned ? "pinned" : "current"} runner)`);
+  }
+  controller = await controllerViaRest(svc).catch(() => null);
+  if (ARMED && !(controller?.enabled && controller?.phase === "open")) throw Error(`controller not armed/open during probes: ${JSON.stringify(controller)}`);
   for (const [n, id] of [
     ["A org", A.org.id], ["B org", B.org.id], ["TT org", TT.tt.id],
     ["A applicant", A.app.id], ["B applicant", B.app.id],
@@ -471,9 +485,20 @@ try {
 } catch (e) {
   findings.push({ kind: "CRASH", actor: "-", what: "test run", detail: e.message });
 } finally {
+  if (ARMED) {
+    try { const d = await disarmAfterSweep(); console.log(`controller ${d.skipped ? "was not armed" : "drained, sealed and disarmed"} before teardown`); }
+    catch (e) { findings.push({ kind: "CRASH", actor: "-", what: "disarm after probes", detail: e.message }); }
+  }
   if (!flag("--keep")) {
     const td = await teardown({ runId: run.id, keys: collectKeys(W) });
-    const left = await leftovers(run.id);
+    let left = await leftovers(run.id);
+    if (ARMED && W?.TT) {
+      // Normalized, anchored pool people cannot be deleted (immutable audit evidence);
+      // they are retained synthetic rows in the disposable database.
+      const retained = left.filter((l) => /^candidates\b/.test(l));
+      left = left.filter((l) => !/^candidates\b/.test(l));
+      if (retained.length) console.log(`retained (armed mode, normalized evidence): ${retained.join("; ")}`);
+    }
     console.log(`cleanup: ${JSON.stringify(td)}${left.length ? ` LEFTOVERS: ${left.join("; ")}` : " (nothing left)"}`);
   } else {
     console.log(`--keep: data left in place; remove with: node scripts/test-tenancy.mjs --cleanup`);
@@ -494,8 +519,10 @@ for (const c of calls) byGroup.set(c.group, (byGroup.get(c.group) || 0) + 1);
 console.log(`\n${calls.length} calls in ${Math.round((Date.now() - started) / 1000)}s: ${[...byGroup].map(([g, n]) => `${g || "other"} ${n}`).join(" · ")}`);
 const order = ["CRASH", "SETUP", "BLIND", "BROKEN", "WRITE LEAK", "READ LEAK", "NOT REFUSED", "ERROR"];
 findings.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+const mode = controller ? `controller ${controller.enabled ? `armed, phase ${controller.phase}` : "disabled"} during the probes` : "controller state not reported";
+console.log(`coverage: ${mode}; seeding and teardown always run with the controller disabled`);
 if (!findings.length) {
-  console.log("PASS: no cross-organization reads or writes found.");
+  console.log(`PASS: no cross-organization reads or writes found (${mode}).`);
 } else {
   console.log(`\n${findings.length} finding(s):`);
   for (const f of findings) console.log(`${f.kind.padEnd(11)} ${f.what}  ->  ${f.detail}`);

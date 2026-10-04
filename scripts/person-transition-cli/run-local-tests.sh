@@ -110,6 +110,12 @@ if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; t
  q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 fi
 node scripts/build-worker-lib.mjs
+# TRANSITION_SUITE=armed runs only the leak test's armed-mode orchestration on the fresh chain
+# (scripts/tenancy/run-armed-local-tests.sh); the default runs the rehearsal and recovery cases.
+if [ "${TRANSITION_SUITE:-}" = armed ]; then
+ PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/tenancy/test-armed.mjs
+ exit 0
+fi
 PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-rehearsal.mjs
 # Recovery cases on the same state: socket loss at COMMIT, window close/expiry during
 # an admitted publication, undo after a legitimate edit (release review section 7).
