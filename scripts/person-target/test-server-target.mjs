@@ -106,6 +106,36 @@ test('a consistent live configuration proceeds to the (sealed) clients',async()=
   assert.equal(fetched.at(-1),`${TARGET}.supabase.co`);
  });
 });
+// R2-01: query options that move pg's effective destination are refused by the
+// server gate before any pool exists, including a loopback authority whose `host`
+// option names a hosted database (it must not pass as a sealed fixture either).
+test('PostgreSQL URL overrides are refused before any pool (R2-01)',async()=>{
+ const base={PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)};
+ for(const url of [`${pooler(TARGET)}?user=postgres.${OTHER}`,`${pooler(TARGET)}?host=db.${OTHER}.supabase.co`,`${pooler(TARGET)}?%68ost=db.${OTHER}.supabase.co`,`${pooler(TARGET)}?port=5432`,`${pooler(TARGET)}?sslmode=require&sslmode=disable`])
+  await withEnv({...base,PERSON_DATABASE_URL:url},async()=>{
+   const before=pools.length,beforeFetch=fetched.length;
+   await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'database_options');
+   await rejectsTarget(lib.sbRest('organizations?select=id'),'database_options');
+   assert.equal(pools.length,before);assert.equal(fetched.length,beforeFetch);
+  });
+ // Loopback authority, hosted override, no selection: this is NOT a sealed fixture.
+ await withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:`postgresql://postgres@127.0.0.1:55487/fixture?host=db.${OTHER}.supabase.co`},async()=>{
+  assert.equal(lib.personTargetRequired(),true);
+  const before=pools.length;
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'missing');
+  assert.equal(pools.length,before);
+ });
+ // ...and with a local selection it is refused as an option, not accepted as local.
+ await withEnv({PERSON_TARGET_PROJECT_REF:'local',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:`postgresql://postgres@127.0.0.1:55487/fixture?host=db.${OTHER}.supabase.co`},async()=>{
+  const before=pools.length;
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'database_options');
+  assert.equal(pools.length,before);
+ });
+ // The supported TLS option still passes the gate (the sealed pool is then constructed).
+ await withEnv({...base,PERSON_DATABASE_URL:`${pooler(TARGET)}?sslmode=require`},async()=>{
+  assert.equal(lib.assertServerTarget(),TARGET);
+ });
+});
 test('a local selection accepts loopback clients only',async()=>{
  await withEnv({PERSON_TARGET_PROJECT_REF:'local',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://127.0.0.1:54321',SUPABASE_SERVICE_ROLE_KEY:'local-key',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},async()=>{
   assert.equal(lib.assertServerTarget(),'local');

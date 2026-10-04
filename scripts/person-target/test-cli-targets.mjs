@@ -94,6 +94,19 @@ test('finalizer refuses a destination for another project before opening anythin
  await assert.rejects(finalize(['--run-id=run-1'],{env:{PERSON_TARGET_PROJECT_REF:TARGET},connect:async()=>{connects++;}}),/finalize_destination_required/);
  assert.equal(connects,0);
 });
+// R2-01: a destination whose query options would move pg to another host, role or
+// port is refused before any client is opened, with or without REST credentials
+// (without them the identity comparison cannot catch the wrong project).
+test('finalizer refuses PostgreSQL URL overrides before opening anything',async()=>{
+ let connects=0,fetches=0;
+ const connect=async()=>{connects++;};
+ const fetchFn=async()=>{fetches++;throw Error('sealed');};
+ for(const url of [`${session(TARGET)}?user=postgres.${OTHER}`,`${session(TARGET)}?host=db.${OTHER}.supabase.co`,`${session(TARGET)}?%68ost=db.${OTHER}.supabase.co`,`${session(TARGET)}?port=6543`,`${session(TARGET)}?sslmode=require&sslmode=disable`,`${session(TARGET)}?options=x`]){
+  await assert.rejects(finalize(['--run-id=run-1'],{env:{PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:url},connect,fetchFn}),/person_target:database_options/);
+  await assert.rejects(finalize(['--run-id=run-1'],{env:{PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:url,SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)},connect,fetchFn}),/person_target:database_options/);
+ }
+ assert.equal(connects,0);assert.equal(fetches,0);
+});
 test('finalizer with a linked workdir requires that workdir to be linked to the selection',async()=>{
  let execs=0;
  const deps={env:{PERSON_TARGET_PROJECT_REF:TARGET},readFile:()=>`${OTHER}\n`,exec:()=>{execs++;return '';}};

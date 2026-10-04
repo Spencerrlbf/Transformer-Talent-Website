@@ -92,6 +92,59 @@ test('database URLs are bound to the selection and optional transport ports',()=
  rejects(()=>checkDatabaseUrl(session,local),'database_mismatch');
 });
 
+// R2-01: pg gives URL query options precedence over the authority. Every option that
+// could move the driver's effective destination, and every option the validator does
+// not understand, is refused; the validated identity must be the one pg connects to.
+test('PostgreSQL query options cannot change the validated destination (R2-01)',async()=>{
+ const target={ref:COPY,local:false};
+ const direct=`postgresql://postgres:pw@db.${COPY}.supabase.co:5432/postgres`;
+ const pooler=`postgres://postgres.${COPY}:pw@aws-0-us-east-2.pooler.supabase.com:5432/postgres`;
+ const overrides=[
+  [`${pooler}?user=postgres.${ORIGINAL}`,'pooler user override'],
+  [`${direct}?host=db.${ORIGINAL}.supabase.co`,'direct host override'],
+  [`${direct}?port=6543`,'port override'],
+  [`${direct}?%68ost=db.${ORIGINAL}.supabase.co`,'percent-encoded parameter name'],
+  [`${direct}?sslmode=require&host=db.${ORIGINAL}.supabase.co`,'override next to an allowed option'],
+  [`${direct}?sslmode=require&sslmode=disable`,'duplicate TLS option (last one wins in pg)'],
+  [`${direct}?dbname=other`,'unknown option'],
+  [`${direct}?password=x`,'credential option'],
+  [`${direct}?options=-c%20search_path%3Dx`,'session options'],
+  [`${direct}?application_name=x`,'any other option'],
+  [`${direct}?=x`,'empty parameter name'],
+ ];
+ for(const [url,why] of overrides){
+  rejects(()=>databaseIdentity(url),'database_options');
+  rejects(()=>checkDatabaseUrl(url,target),'database_options');
+  assert.equal(isLoopbackDatabaseUrl(url),false,why);
+ }
+ // A loopback authority with a hosted override is NOT local: it must not switch
+ // the hosted target checks off.
+ const loopbackOverride=`postgresql://postgres@127.0.0.1:55487/x?host=db.${ORIGINAL}.supabase.co`;
+ rejects(()=>databaseIdentity(loopbackOverride),'database_options');
+ assert.equal(isLoopbackDatabaseUrl(loopbackOverride),false);
+ rejects(()=>checkDatabaseUrl(loopbackOverride,{ref:'local',local:true}),'database_options');
+ rejects(()=>checkDatabaseUrl(`postgresql://postgres@127.0.0.1:55487/x?port=5432`,{ref:'local',local:true}),'database_options');
+ // The one supported option, once, keeps working.
+ assert.equal(databaseIdentity(`${direct}?sslmode=verify-full`).ref,COPY);
+ assert.equal(checkDatabaseUrl(`${pooler}?sslmode=require`,target,{ports:['5432']}).kind,'pooler');
+ assert.equal(databaseIdentity('postgresql://postgres@127.0.0.1:55487/x?sslmode=disable').kind,'local');
+ assert.equal(databaseIdentity(`${direct}?`).ref,COPY);
+ // Agreement with the installed driver, without connecting: for every accepted URL
+ // pg's effective host/port/user equal the validated identity.
+ const {default:pg}=await import('pg');
+ const effective=(url)=>{const p=new pg.Client({connectionString:url}).connectionParameters;return {host:p.host,port:String(p.port),role:p.user};};
+ for(const url of [direct,`${direct}?sslmode=verify-full`,pooler,`${pooler}?sslmode=require`,'postgresql://postgres@127.0.0.1:55487/x','postgresql://postgres@localhost:5432/x']){
+  const id=databaseIdentity(url);
+  const role=id.kind==='pooler'?`${id.role}.${id.ref}`:id.role;
+  assert.deepEqual(effective(url),{host:id.host,port:id.port,role},url);
+ }
+ // ...and for every refused override the driver WOULD have gone elsewhere, which is
+ // why they are refused rather than compared.
+ for(const [url,why] of [...overrides.slice(0,5),[loopbackOverride,'loopback authority, hosted host override']])
+  assert.notDeepEqual(effective(url),effective(url.replace(/\?.*$/,'')),why);
+ assert.equal(effective(loopbackOverride).host,`db.${ORIGINAL}.supabase.co`);
+});
+
 test('linked CLI workdirs',()=>{
  const target={ref:COPY,local:false};
  assert.equal(checkLinkedWorkdir(`${COPY}\n`,target),COPY);

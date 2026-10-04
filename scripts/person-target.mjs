@@ -92,10 +92,23 @@ export function checkServiceKey(key,target=selectedTarget(),{requireClaim=false}
  if(ref!==target.ref)throw fail('key_mismatch');
  return ref;
 }
-/** Parse a PostgreSQL URL into its identity signals without exposing the password. */
+// pg (pg-connection-string) applies URL query options AFTER the authority: `?host=`,
+// `?port=`, `?user=` and their percent-encoded spellings move the connection to a
+// destination the authority does not name, and a repeated `sslmode` lets the last
+// value win. The validated identity must be the destination pg uses, so only one
+// `sslmode`, at most once, is accepted; every other option is refused.
+const DATABASE_OPTIONS=new Set(['sslmode']);
+function checkDatabaseOptions(u){
+ const keys=[...u.searchParams.keys()];
+ if(keys.some(k=>!DATABASE_OPTIONS.has(k)))throw fail('database_options');
+ for(const k of DATABASE_OPTIONS)if(u.searchParams.getAll(k).length>1)throw fail('database_options');
+}
+/** Parse a PostgreSQL URL into its identity signals without exposing the password.
+ * The result describes the destination pg connects to: option overrides are refused. */
 export function databaseIdentity(url){
  const u=parseUrl(url,'database_url');
  if(!['postgres:','postgresql:'].includes(u.protocol)||u.hash)throw fail('database_url');
+ checkDatabaseOptions(u);
  const host=u.hostname.replace(/^\[|\]$/g,'');
  const port=u.port||'5432';
  const username=decodeURIComponent(u.username||'');

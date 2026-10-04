@@ -36,12 +36,15 @@ fixture (loopback PostgreSQL, loopback or `.invalid` REST) needs no selection.
 | pooler PostgreSQL | `*.pooler.supabase.com` **and** username `<role>.<ref>` (the host is shared by every project in the region) | same |
 | CLI workdir | `<workdir>/supabase/.temp/project-ref` | `person-reconcile-finalize.mjs --workdir` |
 | transport | publish/anchor/finalize CLIs additionally require port 5432 session endpoints | CLIs |
+| PostgreSQL options | only `sslmode`, at most once; `host`, `port`, `user`, encoded names and every other option are refused because pg applies them *after* the authority (a loopback authority with `?host=db.<ref>.supabase.co` connects to the hosted database) | `databaseIdentity`, every consumer |
 
 Every check runs before a connection, queue claim, write or provider call. Failures
 are `person_target:<code>` (`missing`, `invalid`, `rest_mismatch`, `key_mismatch`,
 `key_unverifiable`, `database_mismatch`, `database_host`, `database_port`,
-`pooler_username`, `workdir_mismatch`, `identity_rest`, `identity_database`,
-`identity_mismatch`) and never contain the configured values.
+`database_options`, `pooler_username`, `workdir_mismatch`, `identity_rest`,
+`identity_database`, `identity_mismatch`) and never contain the configured values.
+`test-target.mjs` compares every accepted URL with the installed driver's
+`connectionParameters` (host, port, user) without connecting.
 
 ## Runtime identity
 
