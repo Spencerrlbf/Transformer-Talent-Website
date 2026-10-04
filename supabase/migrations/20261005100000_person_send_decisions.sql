@@ -11,6 +11,7 @@
 -- Patched in place from the installed definition (same technique as 20261003110000);
 -- a clean install and an upgraded install converge (catalog parity test).
 do $$declare d text;n text;r text;begin
+ if to_regprocedure('public.person_network_send(jsonb,text)') is null then raise notice 'person_send_decisions: two-argument person_network_send not installed here; nothing to patch';return;end if;
  d:=pg_get_functiondef('public.person_network_send(jsonb,text)'::regprocedure);
  if position('dec_email' in d)>0 then raise notice 'person_send_decisions: already applied';return;end if;
  n:=' else
