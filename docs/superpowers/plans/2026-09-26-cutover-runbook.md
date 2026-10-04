@@ -213,9 +213,14 @@ earlier function bodies; do not move publication/review helpers to the end:
 20261003100000_person_forward_application_contact.sql
 20261003110000_person_forward_network_send.sql
 20261003120000_person_forward_identity_index.sql
+20261005090000_person_recruiter_explicit_clear.sql
 ```
 
-The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md).
+The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md);
+`20261005090000` (explicit recruiter clears across publication) follows them and is
+additive: a column with a default, a constraint, the ranking function and an in-place
+patch of the certified writer; its NOTICE counts the historical NULL decisions left
+as automatic (owner review, see the ledger).
 On a fresh install they are no-ops after the chain. On a database that installed
 the earlier bodies of `20260927170000`, `20260928060000` or `20260928070000` (the
 2026-09-28 test copy did), they are the only supported way to bring those
@@ -241,6 +246,7 @@ copy is therefore:
 20261003100000_person_forward_application_contact.sql
 20261003110000_person_forward_network_send.sql
 20261003120000_person_forward_identity_index.sql
+20261005090000_person_recruiter_explicit_clear.sql
 ```
 
 An install that already has `20260928061000` (any install from the prepared parent

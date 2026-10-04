@@ -10,7 +10,7 @@ exact production build of this branch. Nothing here can reach a hosted project:
 supabase init                                   # once; config.toml stays uncommitted
 cp scripts/tenancy/local-bootstrap.sql supabase/migrations/000_local_bootstrap.sql   # local only, never commit
 supabase start -x studio,imgproxy,mailpit,logflare,vector,supavisor,edge-runtime,realtime,postgres-meta
-# -> installs 000 (base tables that predate the repo's migrations) and 001 … 20261003* in order
+# -> installs 000 (base tables that predate the repo's migrations) and 001 … 20261005* in order
 curl -X POST "$SUPABASE_URL/storage/v1/bucket" -H "apikey: $SERVICE" -H "Authorization: Bearer $SERVICE" \
   -H 'Content-Type: application/json' -d '{"id":"resumes","name":"resumes","public":false}'   # buckets are project settings
 
@@ -40,6 +40,12 @@ PINNED_RUNNER_DIR=<c4d0e4e checkout> LOCAL_DATABASE_URL=<local pg> PERSON_TARGET
 #    Harvest, Nylas and Airtable is scripts/person-target/test-provider-denial.mjs plus the
 #    deployment's configured list.
 
+# 5b. Browser smoke with realistic synthetic data (sign-in by the local Auth's magic link; set
+#     site_url in the local config.toml to the smoke server first): scripts/tenancy/smoke-seed.mjs
+#     seeds a TT login, two roles, a full-profile person linked to an application, verdicts for
+#     "Also a match", normalizes/anchors/publishes the person and leaves the controller armed/open.
+# 5c. The production catch-up combination (pinned runner, REST website, pg directory):
+#     scripts/person-maintenance/run-catchup-local-tests.sh <loopback pg port>.
 # 6. Stopping and deleting are separate actions (CLI 2.84.2):
 supabase stop                                   # stops the containers; the data volumes REMAIN
 supabase stop --no-backup                       # stops AND deletes this project's data volumes

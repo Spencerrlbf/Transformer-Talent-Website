@@ -23,10 +23,13 @@ Three statements this ledger keeps apart:
 A second review (`RELEASE_REMEDIATION_REVIEW_2026-10-04.md` in the
 `candidate-unification` checkout, unchanged) found five further defects, R2-01 to
 R2-05. All five are **implemented and locally verified** on this branch (section
-"Second review" below), with the integrated matrix and the local HTTP sweeps rerun
-on the final executable source `75684a5` (the R2 fixes `4aa9845`…`6c9168b` plus the
-independent-review follow-ups). Deployment verification, migration reconciliation
-(RR-09), browser acceptance and release approval remain open.
+"Second review" below). The 2026-10-05 follow-up (section "Pre-release follow-up")
+adds explicit clears across publication (forward migration `20261005090000`), the
+reviewed runner for the pinned catch-up, the declared Node 24 runtime and a local
+browser smoke; the integrated matrix and the local HTTP sweeps were rerun on the
+final executable source `12eadcf`. **Locally verified is not deployment verified**:
+hosted runtime attestation, RR-09 migration completion/accounting, RR-10 disposition
+and release approval remain open.
 
 ## Baseline refreshed on 2026-10-03
 
@@ -567,6 +570,176 @@ All pass; 872 executions in the matrix plus 32 in the pinned reruns. The review'
 769 and the earlier 913-call sweeps are historical figures for earlier commits, not
 evidence for the changed code; the HTTP sweeps on the final source are in RR-14.
 
+## Pre-release follow-up (2026-10-05): clears across publication, the production catch-up path, the runtime, browser smoke
+
+Executable commits `63111d0` (explicit clears, forward migration `20261005090000`),
+`16f34d4` (pinned catch-up runner), `12eadcf` (Node 24); the smoke seed script and
+this documentation follow on top. Every database result below is from the dedicated
+disposable cluster 127.0.0.1:55811 or the disposable local Supabase stack
+(`remediation`, cluster identifiers quoted per run), Node v24.1.0, sanitized
+environment. Baseline copy and original project: not queried, not written.
+
+### 1. Explicit contact clears survive publication
+
+- **Behaviour before**: `person_recruiter_primary` had one NULL. The 2026-09-26 ranking
+  (`person_contact_ranks`) read it as "withdraw the manual preference, use the
+  eligible fallback", so after a clear the live save returned the submitted address,
+  the published drawer/list showed it and Send carried it; only the unpublished
+  reads (R2-03) treated the NULL as a clear. Reproduced red on the pre-change chain:
+  `test-edits.mjs` "live mode: an explicit email and phone clear survives publication"
+  failed at *"the live save reports the clear, not a fallback"* with
+  `'synthetic@example.test'` instead of `null`.
+- **Change** (`63111d0`): forward migration `20261005090000_person_recruiter_explicit_clear.sql`
+  adds `suppressed boolean not null default false` (+ check `chosen_value is null or
+  not suppressed`); redefines `person_contact_ranks` so a suppressed kind gets no rank;
+  patches the certified writer in place (`recruiter_normalize` target row and
+  `recruiter_write` validation, through `person_private.recruiter_primary_suppressed()`
+  so the body stays valid where the resume-fill tables are absent). States: absent row
+  = no decision (ranking); `NULL, suppressed` = explicit clear; `NULL, not suppressed`
+  = automatic (the historical meaning, now explicit); value = chosen. Recruiter saves
+  write `suppressed=true` for an emptied kind; a resume fill preserves the row's flag;
+  `contact.automatic` (library-level, no drawer control) writes `suppressed=false`.
+  `poolEmails()`/`recruiterContactDecisions()` read the flag; the post-cutover audit's
+  `one_primary_email/phone` expect zero primaries for a cleared kind.
+- **Historical NULL rows (ambiguity, not reinterpreted)**: every NULL written so far
+  came from a recruiter saving an empty field, but in live mode that save then showed
+  the recruiter the fallback address, so whether they meant "clear" or accepted the
+  fallback cannot be established from the data. They stay `suppressed=false`
+  (behaviour unchanged) and the migration's NOTICE counts them. **Proposed treatment**
+  for the owner before the sitting: run
+  `select rp.candidate_id, rp.kind, r.edited_at, r.actor_id from person_recruiter_primary rp join person_recruiter_receipts r on r.id=rp.receipt_id where rp.chosen_value is null and not rp.suppressed order by r.edited_at`
+  on the copy (read-only), confirm each with the recruiter who made it, and either
+  re-save the clear through the drawer (writes `suppressed=true` with a new receipt)
+  or leave it automatic. No bulk reinterpretation is proposed. On the disposable
+  fixture the NOTICE reported 5 such rows (all synthetic test saves).
+- **Regression evidence**: `test-edits.mjs` (live mode: clear both kinds → save result
+  NULL/NULL, all contact rows kept with no rank, published contact NULL, Send snapshot
+  `''`, audit `verified`; choose again → that address leads; `automatic` → the
+  submitted address ranks first again): 61 → 64 pass; `test-contact-recipient.mjs`
+  gains `automatic` (17); `test-recruiter.mjs` "clearing all fields is an explicit
+  clear; automatic selection withdraws the preference" (13); server-paths mock serves
+  the decision table (6). Upgrade path: old install → `20260928061000` → `20261003*`
+  → `20261005090000` equals a clean install for `person_contact_ranks`,
+  `recruiter_normalize`, `recruiter_write`, the helper and the table
+  (`test-catalog-parity.mjs` 4/4; `run-upgrade-tests.sh` 25+4+64+17+4+4).
+  Harnesses that run the recruiter writer install the new version
+  (application-edits, transition-cli, upgrade, publish, postcutover-audit, audit,
+  recruiter, recruiter-admission); the rest of the staged suites run older partial
+  chains and are unaffected.
+- **Runtime (browser smoke, below)**: on a *published* person the drawer clear →
+  header, list, compose recipient and `net_` drawer all empty; `person_recruiter_primary`
+  `email NULL,true` / `phone NULL,true`; three contact rows retained with no rank;
+  re-selecting the historical address → rank 1 again.
+- **Limitation**: the drawer has no "automatic" control; the state is reachable from
+  the library only. Published-state semantics for the copy's historical rows are the
+  owner decision above.
+
+### 2. Connection-failure handling in the actual production catch-up path
+
+- **The path, precisely**: the start helper (`start-catchup.mjs`, REST + a read-only
+  directory client) creates the checkpoint; the pages run the **pinned** translator
+  `c4d0e4e` `scripts/person-reconcile.mjs` main — website over REST (`restSite`,
+  bounded `fetch`, errors caught), communications directory over `openComms`'s
+  `pg.Client`; checkpoints are SQL (`person_reconcile_start/page/record_many`:
+  `last_id` advances only inside `record_many`'s transaction). The pinned directory
+  client has no `error` listener: an idle loss is an uncaught exception (process dies,
+  run left `running`, the pinned loop's own `failed`/`reconcile_stopped` path never
+  runs). Reproduced: `test-run-catchup.mjs` "without the helper" (child process:
+  listeners 0, process dies).
+- **Change** (`16f34d4`): `scripts/person-maintenance/run-catchup.mjs` runs the pinned
+  main from the release checkout after the start helper's pin/clean-tree/bundle
+  verification and a configuration contract (reconcile, queue, not dry, resume,
+  selection), and attaches an `error` listener to every `pg.Client` the pinned tree
+  creates (`catchup_comms_connection_lost:<SQLSTATE>` logged; the client stays
+  unusable; the pinned loop fails the run at its next directory read). **What stays
+  pinned**: the translator bundle (rebuilt from the clean pinned tree, hash recorded
+  per run), `reconcilePage`, the external fingerprint, `restSite`, `openComms`, every
+  SQL checkpoint. **Adapter used**: pinned `openComms` (`pg.Client`) + the listener;
+  pinned `restSite` for the website.
+- **Evidence** (`run-catchup-local-tests.sh`, real pinned runner on the local stack,
+  REST website + loopback directory, 6/6): the directory connection terminated between
+  pages → exit 1, `reconcile_stopped`, run `failed` with `reconciliation_pending`,
+  `processed 1 of 4`, exactly one record, listener code `57P01`, no false success;
+  resume with the identical configuration → `source_scan_complete`, 4 of 4 recorded
+  once, `external_stable: true`, queue drained for them. The pinned loop's own
+  sanitized note is `operation_failed:UNKNOWN` (its `safeErrorCode` sees no SQLSTATE on
+  the dead client); the SQLSTATE is in the helper's log line.
+- **Limitation**: the pinned checkout's own GitHub workflow (`person-trial.yml`) still
+  names Node 20 and would run the bare client; the runbook's procedure is the helper
+  from the release checkout (README updated). The local test's website REST is the
+  local stack, not Supabase's hosted PostgREST.
+
+### 3. Supported Node runtime
+
+- **Declared and enforced** (`12eadcf`): `package.json#engines.node = 24.x`, `.nvmrc`
+  24, `.npmrc engine-strict=true`, `setup-node` 24 in all eleven workflows,
+  `scripts/check-node.mjs` run from `scripts/build-worker-lib.mjs` (every harness and
+  worker builds the bundle first) → `node_runtime:unsupported:<version>` on any other
+  major; `test-check-node.mjs` (offline suite now 52) checks the declarations agree.
+- **The Node 20 failure, explained**: on 2026-10-04 one matrix run used the shell's
+  default Node 20.19.2 by mistake. Under Node 20 `scripts/person-directory/test-directory.mjs`
+  (sequential `await test()` registrations after asynchronous module work, one
+  top-level `after(() => pool.end())`) ran its `after` hook after the first test and
+  the remaining 24 cases failed with "Cannot use a pool after calling end on the pool"
+  (with a `MaxListenersExceededWarning` for abort listeners, i.e. the remaining tests
+  were started together). The same file under Node 24.1.0 runs sequentially and the
+  hook runs last. The first test passes and the failures occur before any application
+  code is exercised: an unsupported test environment (node:test lifecycle), not an
+  application defect. A minimal reproduction without the real module graph did not
+  reproduce it, so the root cause is recorded as observed on the real suite, not
+  isolated further. Applicability to hosted runtimes: none established either way;
+  the hosted runtime was never Node-24-verified and is now pinned by `engines`.
+- **Hosted runtime check, prepared, not run**: `scripts/person-release/hosted-runtime-check.sh`
+  (read-only: project `nodeVersion`, the deployment's build-log Node lines, the
+  workers' setup-node version). Note that `engines.node=24.x` changes the hosted
+  runtime on the next deployment (Vercel honours it over the project setting), and the
+  workers move from Node 20 to 24 when the workflow changes land: a release decision,
+  listed under external actions.
+
+### 4. Local browser smoke on the final build
+
+Exact production build of `12eadcf` (`next build` with the disposable environment,
+`next start` on 127.0.0.1:3400), local Supabase stack reset to the full chain (134
+versions incl. the local bootstrap), `PERSON_TARGET_PROJECT_REF=local`, live mode,
+transition support on, provider hosts denied (`api.harvestapi.io`, Resend, Nylas,
+Airtable, OpenAI, LlamaIndex), placeholder provider keys. Synthetic data from
+`scripts/tenancy/smoke-seed.mjs`: TT login `smoke+tt@example.com` (local Auth magic
+link, the app's own sign-in flow), roles #99101 "Senior Backend Engineer" and #99102
+"Staff Platform Engineer", pool person "Jordan Avery" with three positions, two
+education entries, ten skills, two verified addresses and a phone, linked TT
+application for #99101, report-card verdicts for both roles; the person normalized and
+anchored (reconcile + anchors), controller armed, published through the publish CLI
+inside a publication window (projected 1), controller left armed/open.
+
+| Step | Observed (real clicks/typing in the built-in browser; DOM/computed-style read where the pane was too small to see) |
+|---|---|
+| Sign-in | magic link → `/dashboard`, member of Transformer Talent |
+| Candidates list | one row: Jordan Avery, Applied, Contact now, email and phone shown ("click to copy") |
+| Drawer, Fit tab (#86) | "ALSO A MATCH · 1 ROLE — Staff Platform Engineer #99102 suggested — Worth a message", below the applied role's report card |
+| Drawer, Profile tab (#85) | at an 825 px drawer width: `display: grid`, `grid-template-columns: 496.97px 247.03px`; Experience (Northwind Analytics, Harbor Logistics, Lakeside Software) in the left column; the side column reads EDUCATION (State University — Bachelor of Science, Computer Science, 2011-2015; Community College of Travis County) then SKILLS (TypeScript … Mentoring) |
+| Contact clear (published person) | Edit → email, phone, other emails emptied → Save: `PUT /api/dashboard/candidates/v2/app_…/contact` 200; header "+ Add email / + Add phone", the old secondary address not revived; database: `email NULL,suppressed` / `phone NULL,suppressed`, three contact rows retained with no rank, projection present, live receipt effective email/phone NULL |
+| List after reload | "No email — add it in the profile", "No phone — add it in the profile" |
+| Recipient selection | `POST /api/dashboard/email/context` → `candidate.email: null`; `net_` drawer detail contact all null |
+| Choose again | Edit → `javery.old@example.test` + phone → Save 200; header shows both; database: chosen values, `suppressed=false`, ranks 1 (old address) / 2 |
+| Leak test while armed by the smoke | the plain sweep refused its first raw seed (`candidate_mutation_frame`), cleaned its own partial rows, **left the controller untouched** (rev 2 / gen 2) |
+| Final sweeps on this build | after clean resets: disabled run 913 calls PASS; armed run `4apmfef71` 913 calls PASS with the four owned event rows (rev 2→5), cluster `7692871593400872999`; attestation: REST = PG identity, anon 401, correct selection 200, wrong selection 500 `person_target:rest_mismatch` (public 200), `outbound_denied:api.resend.com` (502), `outbound_denied:api.harvestapi.io` (route 200, empty) |
+
+Limitations: the desktop app's browser pane was 280 px wide, so the emulated
+1100 px viewport was scaled ~4× down; layout was verified from the DOM and computed
+styles plus a low-resolution screenshot, not by eye at full size; the compose panel
+requires a connected mailbox (Nylas, denied here), so the recipient was taken from the
+same endpoint the panel calls; the Network list was empty (its fit view needs
+matcher data not seeded) — the `net_` drawer was read through its API. The sign-in
+used the local Auth's magic link with `site_url` set to the smoke server in the
+uncommitted local `supabase/config.toml`. Evidence class: local runtime, synthetic
+data; nothing here is hosted evidence.
+
+### 5. Final verification on `12eadcf`
+
+Integrated matrix (Node v24.1.0, cluster 55811, sequential): see the table in the
+manifest. Additional: `run-catchup-local-tests.sh` 6/6; `person-recruiter` 13+4+6;
+`person-recruiter-admission` 72+5; `person-audit/run-local-tests.sh` 21+68+28+23+10.
+
 ## Disposable environment for the hosted sweep (option 1 executed, option 2 proposed)
 
 The sweep needs Supabase Auth + REST + PostgreSQL. Two ways to get a disposable one:
@@ -658,38 +831,85 @@ clean harnesses other than application-edits do not install the `20261003*` file
 (the upgrade harness's phase 5 does); the `DISABLE TRIGGER` step takes a share-row-
 exclusive lock and belongs in the held phase.
 
-## Remaining external actions (prepared; none performed under the 2026-10-04 instruction)
+## Hosted-preview validation plan (prepared 2026-10-05; NOT executed; needs approval)
 
-1. **Push** the four R2 commits and the documentation commit (`origin` is at
-   `ae70f76`; pushing triggers a preview deployment). Nothing was pushed.
-2. **Correct the branch preview's `OUTBOUND_DENY_HOSTS`** to
-   `api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io` (it was set from
-   the old example); keep that preview unused while it points at the baseline copy, or
-   repoint it per item 3.
-3. **Vercel-hosted attestation** (RR-07/08/14 hosted): either the disposable hosted
-   project (section above: `supabase projects create tt-disposable-tenancy …`, Micro,
-   about $0.0134/hour, schema-only `db push`, the preview's 17 variables repointed,
-   `test-tenancy.mjs` disabled and `--armed`, identity comparison, delete) or the same
-   comparison against production at the sitting after the identity migration is
-   installed there. Requires approval of a paid resource or of the sitting.
-4. **Copy upgrade** (write to `qsqlgibgsxzlimoegcjx`): `20260928061000` (missing there)
-   then the four `20261003*` files, in order; the migration NOTICE reports the witness
-   recovery result. Owner decision; not a read-only step.
-5. **RR-10 disposition** of the 23 experience rows (keep/document or reviewed cleanup).
-6. **RR-09**: approve the rehearsal that closes it (catch-up, anchors, publication,
-   final audit at a declared cutoff) and pick the production sitting; production
-   needs the same four variables/settings. The counts in this ledger are historical
-   observations, not fresh measurements.
-7. **Drawer browser smoke** on real-looking data (#85 Education/Skills, #86 "Also a
-   match"); the disposable database holds synthetic rows only.
-8. **PR review** of this branch (into the parent or `main` per the release decision),
-   with #85/#86 already merged into it.
+Purpose: the one evidence class still missing, the deployed server's own runtime and
+destinations, on a separate disposable target, never the baseline copy or production.
 
-Local artefacts: the dedicated cluster 127.0.0.1:55811 was shut down at the end of
-this task (`pg_ctl stop`; its data directory sits under this session's scratchpad and
-can be deleted); the local Supabase project `remediation` is stopped with its volumes
-(`supabase_db_remediation`, `supabase_storage_remediation`) retained, not deleted
-(`supabase stop --no-backup` in the branch checkout removes them once the owner is
-done); the `.claude/launch.json` entries remain. No other local service was touched
-(another local Supabase project, `replyops-c13-recovery`, was running on this machine
-throughout and was left alone).
+1. **Disposable target**: new Supabase project `tt-disposable-tenancy` in organization
+   "Transformer Talent" (`nanvovpwibjdlhhfmfix`), region `us-east-2`, Micro compute
+   (`supabase projects create … --size micro --db-password <generated, never printed>`).
+   Cost: Micro is billed hourly (about $0.0134/h, ≈$10/month); a two-day window is
+   under $1. Schema only: `supabase db push` of the full chain `001 … 20261005090000`
+   (134 files; the local bootstrap `000` is replaced by the project's own base tables
+   as in production), `resumes` bucket, Auth `site_url` = the preview URL.
+2. **Preview configuration** (branch `fix/person-90-release-remediation`, a fresh
+   deployment after the push): `PERSON_TARGET_PROJECT_REF=<new ref>`;
+   `SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_URL`/keys of the new project;
+   `PERSON_DATABASE_URL` (pooler 6543, user `postgres.<new ref>`) and
+   `PERSON_PUBLISH_DATABASE_URL` (5432) of the new project;
+   `OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io`
+   (correcting the `api.harvest-api.com` value set on 2026-10-03); placeholder
+   `RESEND_API_KEY`, `NYLAS_*`, `HARVEST_API_KEY` (so the routes take their live path
+   into the deny list), `SOURCING_PROVIDER_MODE=live`; no Airtable token, no OpenAI key;
+   `PERSON_WRITE_MODE=live`, `PERSON_TRANSITION_SUPPORT=on`; Turnstile test keys.
+   Variable names only; values set in Vercel, never printed.
+3. **Server identity and runtime** (read-only against the preview):
+   `scripts/person-release/hosted-runtime-check.sh <project> <deployment>` (project
+   `nodeVersion`, build log "Node.js 24.x", workers' setup-node);
+   `person_target_identity()` through the preview's REST (service role) must equal the
+   new project's PostgreSQL `pg_control_system()`; a signed-in dashboard read 200; the
+   same deployment redeployed with `PERSON_TARGET_PROJECT_REF` naming the copy must
+   answer 500 `person_target:rest_mismatch` to the same request (then restored).
+4. **Provider denial on the deployment**: team invite → 502 with
+   `outbound_denied:api.resend.com` in the function log; company search →
+   `outbound_denied:api.harvestapi.io`; both logs read through `vercel logs`.
+5. **Tenancy sweep from a machine with the fixture pointed at the new project**:
+   `node scripts/test-tenancy.mjs --base <preview>` (disabled), then
+   `PINNED_RUNNER_DIR=… node scripts/test-tenancy.mjs --base <preview> --armed`
+   (preflight proves REST = PG on the new project before the first write; owned
+   drain/seal/disarm afterwards). Expected: 913 calls PASS each; the four
+   `tenancy_sweep_*` event rows only.
+6. **Browser smoke on the preview**: `scripts/tenancy/smoke-seed.mjs` against the new
+   project (`PERSON_TARGET_PROJECT_REF=<new ref>`, its 5432 URL), the same steps as the
+   local smoke (sign-in by the preview's magic link, drawer #85/#86, clear, list,
+   recipient, choose again), in a full-width browser.
+7. **Cleanup**: `--cleanup` sweep, delete the smoke login, remove the branch's
+   preview variables for the disposable project (or repoint them), `supabase
+   projects delete <new ref>`; record the project id, the hours billed and the
+   deletion time in the ledger.
+
+What it will not prove: production's own configuration (the same checks are repeated
+at the sitting, after the identity migration is installed there), RR-09 accounting,
+RR-10 disposition.
+
+## Remaining external actions (prepared; none performed under the 2026-10-04/05 instructions)
+
+1. **Push** the branch (`origin` is at `ae70f76`; 10 commits ahead); pushing triggers a
+   preview deployment that will build and run on Node 24 (`engines`).
+2. **Approve the hosted-preview validation** above (disposable project under $1) or
+   defer it to the sitting against production.
+3. **Correct the branch preview's `OUTBOUND_DENY_HOSTS`** to `…,api.harvestapi.io`;
+   keep that preview unused while it points at the baseline copy.
+4. **Copy upgrade** (write to `qsqlgibgsxzlimoegcjx`): `20260928061000` (missing there),
+   the four `20261003*` files, then `20261005090000`, in order; the NOTICEs report the
+   witness recovery and the count of historical NULL decisions.
+5. **Historical NULL decisions**: run the read-only listing query (section 1 above) on
+   the copy and decide per row with the recruiter; no bulk reinterpretation.
+6. **Runtime change decision**: the next deployment and the workers move to Node 24.
+7. **RR-10 disposition** of the 23 experience rows; **RR-09** rehearsal (catch-up via
+   `run-catchup.mjs`, anchors, publication, final audit at a declared cutoff) and the
+   production sitting. Counts in this ledger remain historical observations.
+8. **PR review** of the branch.
+
+Disposable resources, state at the end of the 2026-10-05 work: the dedicated cluster
+127.0.0.1:55811 is **stopped** (`pg_ctl stop`; data directory under this session's
+scratchpad, deletable); the local Supabase project `remediation` is **stopped with its
+volumes retained** (`supabase_db_remediation`, `supabase_storage_remediation`; last
+state: the clean chain plus the armed-sweep's three retained synthetic people, the
+smoke data having been reset away; `supabase stop --no-backup` in the branch checkout
+deletes them); nothing was deleted; the uncommitted local `supabase/config.toml` now
+has `site_url = http://127.0.0.1:3400` for the smoke sign-in; the
+`.claude/launch.json` entries remain. No other local service was touched (another
+local Supabase project, `replyops-c13-recovery`, ran on this machine throughout and
+was left alone).
