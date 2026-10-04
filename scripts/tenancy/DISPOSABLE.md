@@ -18,8 +18,9 @@ curl -X POST "$SUPABASE_URL/storage/v1/bucket" -H "apikey: $SERVICE" -H "Authori
 #    the local anon/service keys, PERSON_DATABASE_URL = PERSON_PUBLISH_DATABASE_URL =
 #    LOCAL_DATABASE_URL = the local PostgreSQL URL, PERSON_TARGET_PROJECT_REF=local,
 #    OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io,api.openai.com,api.cloud.llamaindex.ai,api.typesafe.ai
-#    PERSON_WRITE_MODE=live PERSON_TRANSITION_SUPPORT=on, placeholder NYLAS_*/RESEND_API_KEY so the
-#    email routes run (the deny list refuses the provider), Cloudflare's Turnstile test keys.
+#    PERSON_WRITE_MODE=live PERSON_TRANSITION_SUPPORT=on, placeholder NYLAS_*/RESEND_API_KEY/HARVEST_API_KEY
+#    so the provider routes take their live path (the deny list refuses the provider), Cloudflare's
+#    Turnstile test keys. The Harvest host is api.harvestapi.io, the one the clients call.
 
 # 3. Exact artifact: production build with the NEXT_PUBLIC values, then `next start`.
 # 4. Leak test, disabled and armed (the fixture points at the same local stack):
@@ -27,11 +28,24 @@ node scripts/test-tenancy.mjs --base http://127.0.0.1:3400
 supabase db reset && <recreate the resumes bucket>      # the armed run wants a clean queue
 PINNED_RUNNER_DIR=<c4d0e4e checkout> LOCAL_DATABASE_URL=<local pg> PERSON_TARGET_PROJECT_REF=local \
   node scripts/test-tenancy.mjs --base http://127.0.0.1:3400 --armed
+#    --armed first proves the fixture's own target (REST and PostgreSQL name the selection and
+#    report the same cluster) and that the controller is disabled, before any fixture write;
+#    it arms with a compare-and-set and undoes exactly its own transitions afterwards.
+#    A refusal writes nothing. See scripts/tenancy/armed.mjs.
 # 5. Runtime attestation: person_target_identity() through REST and PostgreSQL must agree;
 #    the same build started with PERSON_TARGET_PROJECT_REF naming another project must
 #    refuse the first signed-in request (person_target:rest_mismatch) and a provider-bound
-#    route must log outbound_denied:<host>.
-supabase stop                                   # disposes of everything
+#    route must log outbound_denied:<host>. A refusal seen for one provider (Resend via the
+#    team-invite route) is evidence for that provider's path only; the per-provider proof for
+#    Harvest, Nylas and Airtable is scripts/person-target/test-provider-denial.mjs plus the
+#    deployment's configured list.
+
+# 6. Stopping and deleting are separate actions (CLI 2.84.2):
+supabase stop                                   # stops the containers; the data volumes REMAIN
+supabase stop --no-backup                       # stops AND deletes this project's data volumes
+#    Before --no-backup, confirm the project identity the CLI will act on is this disposable
+#    stack (`project_id` in supabase/config.toml, and `docker volume ls` names carrying it),
+#    never another local project's volumes.
 ```
 
 What this proves: the exact commit's server and database behaviour (tenancy, armed

@@ -218,15 +218,37 @@ earlier function bodies; do not move publication/review helpers to the end:
 The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md).
 On a fresh install they are no-ops after the chain. On a database that installed
 the earlier bodies of `20260927170000`, `20260928060000` or `20260928070000` (the
-2026-09-28 test copy did), they are the only supported upgrade: they replace the
-contact-fill and Send definitions, complete each existing Send witness's insertion
-proof only where its captured INSERT event reproduces the recorded row hash
-(anything else stays unresolved for the audit, nothing is fabricated), and
-re-validate the identity index without creating one. Never re-run an
-already-applied version file to "refresh" its body. Both paths are verified by
+2026-09-28 test copy did), they are the only supported way to bring those
+definitions to the release: they replace the contact-fill and Send definitions,
+complete each existing Send witness's insertion proof only where its captured
+INSERT event reproduces the recorded row hash (anything else stays unresolved for
+the audit, nothing is fabricated), and re-validate the identity index without
+creating one. Never re-run an already-applied version file to "refresh" its body.
+
+**Older-install prerequisite.** An install taken from the 2026-09-28 artifact
+(`23d7860`, the baseline copy) has 127 migration files and lacks
+`20260928061000_person_resume_contact_fill.sql` altogether: that version was added
+by the prepared parent. Such an install must apply that **missing** version first,
+in order, and only then the four `20261003*` forward files; applying the forward
+files alone leaves the linked resume-fill functions absent. This is the
+installation of a version the database never had, which is different from
+replacing the body of a version it already has (never done). The sequence for the
+copy is therefore:
+
+```
+20260928061000_person_resume_contact_fill.sql      # missing on the copy: install
+20261003090000_person_target_identity.sql
+20261003100000_person_forward_application_contact.sql
+20261003110000_person_forward_network_send.sql
+20261003120000_person_forward_identity_index.sql
+```
+
+An install that already has `20260928061000` (any install from the prepared parent
+or later) skips the first line. Both paths are verified by
 `scripts/person-application-edits/run-local-tests.sh` (clean) and
-`scripts/person-release-upgrade/run-upgrade-tests.sh` (upgrade), on a loopback
-PostgreSQL only.
+`scripts/person-release-upgrade/run-upgrade-tests.sh` (an old install in the copy's
+state, upgraded exactly as above, then compared object by object with a clean
+install), on a loopback PostgreSQL only.
 
 Before applying the chain, build the directory identity index without blocking
 candidate writes. Run this block with `psql -X -v ON_ERROR_STOP=1`, outside a

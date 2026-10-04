@@ -2,9 +2,12 @@
 
 Identifies the exact artifact the evidence in `RELEASE_REMEDIATION.md` refers to.
 Any change to source, dependencies, migrations or configuration invalidates the
-rows that depend on it until re-verified. The head below is the last executable
-change (`8bd8fd3`); the commit that refreshes this manifest and the ledger adds no
-executable file.
+rows that depend on it until re-verified. The executable head is `75684a5`
+(2026-10-04: the R2 fixes `4aa9845`, `52a5d29`, `902cf11`, `6c9168b` and the
+independent-review follow-ups); the commit that refreshes this manifest, the ledger,
+the runbook and `DISPOSABLE.md` on top of it adds no executable file. Evidence classes used below:
+*code-level* (static or offline test), *local runtime* (the artifact's build or a
+database on this machine), *deployed runtime* (none recorded; see "Not executed").
 
 ## Source
 
@@ -13,9 +16,9 @@ executable file.
 | Branch | `fix/person-90-release-remediation` (worktree `pl/remediation`) |
 | Base | `c8fda5bfd50e8c40f22a3083e38c6eea71d0a803` (`feat/person-00-storage-unification`, tree `d43305e1…`, includes `main` `9a3240c`) |
 | Merged in | `origin/fix/drawer-profile-layout` `dad9549`, `origin/feat/drawer-also-a-match` `c042c21` |
-| Head (executable content) | `6df67d8` (armed sweep: anchors with current audit code; previous `132e6a6`, `8bd8fd3`) |
-| Commits on top of base | `47005c2`, `4ecdffb` (UI merges), `3862042` (target isolation), `4f23107` (forward migrations), `924f233` (recovery tests), `0617a92` (docs), `2033980` (ledger/manifest), `315918d` (review fixes: gate cache, worker gates, guard, finalizer), `8bd8fd3` (review hardening: exact stripped set, catalog parity, in-doubt commit) |
-| Diff vs base | 59 files, +2,881 / −53 |
+| Head (executable content) | `75684a5` (review follow-ups); R2 series `4aa9845` (R2-01), `52a5d29` (R2-02, R2-05), `902cf11` (R2-03), `6c9168b` (R2-04). Historical executable heads: `6df67d8`, `132e6a6`, `8bd8fd3` |
+| Commits on top of base | 21 at `75684a5` (incl. the two merged drawer commits `dad9549`, `c042c21`): `47005c2`, `4ecdffb` (UI merges), `3862042` (target isolation), `4f23107` (forward migrations), `924f233` (recovery tests), `0617a92` (docs), `2033980` (ledger/manifest), `315918d` (review fixes), `8bd8fd3` (review hardening), `310c9af` (docs), `132e6a6` (armed mode), `d6a1a3f` (docs), `6df67d8` (anchors with current code), `ae70f76` (docs), `4aa9845`, `52a5d29`, `902cf11`, `6c9168b` (R2 fixes), `75684a5` (review follow-ups), + the documentation commit carrying this manifest |
+| Diff vs base | 75 files, +4,699 / −67 (at `75684a5`) |
 | Excluded testing-branch content | diagnostic route and diagnostic log lines (`5db31f1`, `ce72331`, `8bc18b9`) |
 
 ## Dependencies and worker bundle
@@ -24,14 +27,19 @@ executable file.
 |---|---|
 | `package-lock.json` SHA-256 | `2c4ff8ad43b5cae55f06580afd4b7711f2beaeb2b0900f8c45acee2bd2fa51c5` (identical to `c8fda5b`) |
 | Node | v24.1.0 (`/opt/homebrew/bin/node`) |
-| `scripts/dist/worker-lib.mjs` SHA-256 (built from this tree by `scripts/build-worker-lib.mjs`, esbuild 0.28.2) | `0de4ecff19910f7a10fb28337052b275da5c8f5ac29ba892e9c2e119a5bb5338` |
+| `pg` / `pg-connection-string` (the driver whose option precedence and re-encoding R2-01 is about) | 8.23.0 / 2.14.0 (locked) |
+| `scripts/dist/worker-lib.mjs` SHA-256 (rebuilt from `75684a5` by `scripts/build-worker-lib.mjs`, esbuild 0.28.2) | `860402faf60f0ffdfebb8bfee3a4dd25ac4c3ea9eb50ce304bad58e4cd6cb0a7` (at `6c9168b`: `be152d03…cfb8`; at `6df67d8`: `0de4ecff…5338`) |
 | Catch-up runtime pin | `c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc`; `start-catchup.mjs` rebuilds and hashes its bundle at run time |
 
 ## Migrations
 
-132 files under `supabase/migrations`. The release chain is the 53 files
-`20260926033900` … `20260928090000` listed in the cutover runbook, followed by the
-four remediation files:
+132 tracked files under `supabase/migrations` (unchanged by the R2 commits; the
+local-only `000_local_bootstrap.sql` of the disposable stack is not tracked). The
+release chain is the 53 files `20260926033900` … `20260928090000` listed in the
+cutover runbook, followed by the four remediation files. An install from the copy's
+artifact `23d7860` lacks `20260928061000_person_resume_contact_fill.sql` and must
+install that missing version before these four (runbook, "Older-install
+prerequisite"):
 
 | Version | Purpose | MD5 of file |
 |---|---|---|
@@ -59,36 +67,43 @@ definitions, witness columns/constraints/triggers, identity index and privileges
 | `SUPABASE_URL` / keys | `https://<ref>.supabase.co`; JWT `ref` claim = selection |
 | `PERSON_DATABASE_URL` | shared pooler, user `postgres.<ref>` (6543 for the app/workers) |
 | `PERSON_PUBLISH_DATABASE_URL` | 5432 session/direct endpoint of the same ref |
-| `OUTBOUND_DENY_HOSTS` | rehearsal deployments only; unset in production |
+| `OUTBOUND_DENY_HOSTS` | rehearsal deployments only; unset in production. Value: `api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io` (the branch preview still carries the old `api.harvest-api.com` spelling set on 2026-10-03; not re-read, not changed) |
 | GitHub Actions | repository variable `PERSON_TARGET_PROJECT_REF` consumed by review-queue, refresh-queue, sync-candidates, derivative-worker |
-| Verified destinations in this task | loopback 127.0.0.1:55487 (all database tests); copy `qsqlgibgsxzlimoegcjx` read-only (cluster id `7550817586112808987`); original project: no query, no write |
+| Verified destinations | 2026-10-03: loopback 127.0.0.1:55487; copy `qsqlgibgsxzlimoegcjx` read-only (cluster id `7550817586112808987`). 2026-10-04: new loopback cluster 127.0.0.1:55811 (`7692816301217905049`) for every database test; local Supabase stack `remediation` (127.0.0.1:59321/59322; clusters `7692834777418768423` / `7692835274743853093` for the final runs, earlier `7692826394889285670` / `7692827053218816039`) for the HTTP runs; copy not queried; original project: no query, no write |
 
-## Tests executed on this artifact (2026-10-03, all pass)
+## Tests executed on this artifact (`75684a5`, 2026-10-04, all pass)
 
-| Suite | Command | Result |
-|---|---|---|
-| Type check | `npx tsc --noEmit` | clean |
-| Production build (empty env) | `env -i PATH HOME npx next build` | exit 0 |
-| Target/guard offline | `bash scripts/person-target/run-offline-tests.sh` | 44/44 |
-| Transport | `node --test scripts/person-db-session/test-transport.mjs` | 16/16 |
-| Start-catchup | `node --test scripts/person-maintenance/test-start-catchup*.mjs` | 33/33 |
-| Internal resume access | `bash scripts/person-internal-resume/run-offline-tests.sh` | 13/13 |
-| Forward definitions | `node --test scripts/person-release-upgrade/test-forward-definitions.mjs` | 4/4 |
-| Application edits, clean install incl. forward files | `bash scripts/person-application-edits/run-local-tests.sh 55487` | 61 + 13 |
-| Upgrade path | `bash scripts/person-release-upgrade/run-upgrade-tests.sh 55487` | 25 (old schema) + 4 (after) + 61 + 13 (fresh old install + upgrade) + 4 (static parity) + 3 (catalog parity upgraded == clean) |
-| Transition rehearsal + recovery | `bash scripts/person-transition-cli/run-local-tests.sh 55487` (current and `PINNED_RUNNER_DIR=pl/pinned`) | 8 + 7, twice |
-| Leak test armed-mode orchestration | `bash scripts/tenancy/run-armed-local-tests.sh 55487` | 4/4 |
-| Leak test, disabled controller (disposable local stack, exact build) | `node scripts/test-tenancy.mjs --base http://127.0.0.1:3400` | 913 calls, PASS, nothing left |
-| Leak test, armed controller (same) | `node scripts/test-tenancy.mjs --base http://127.0.0.1:3400 --armed` (pinned runner) | 913 calls, PASS, 3 retained pool people |
-| Runtime attestation (same) | identity RPC REST = PG; wrong selection refused (`person_target:rest_mismatch`); provider call refused (`outbound_denied:api.resend.com`) | all as expected |
-| Maintenance windows | `bash scripts/person-maintenance/run-local-tests.sh 55487` (current and pinned) | 10, twice |
-| Publish/undo/guard | `bash scripts/person-publish/run-local-tests.sh 55487` | 10 + 18 + 4 + 8 |
-| Post-cutover audit | `bash scripts/person-audit/run-postcutover-audit-tests.sh 55487` | 15 + 9 + 13 + 25 + 20 + 19 |
-| Directory outcomes / index | `bash scripts/person-directory-outcomes/run-local-tests.sh 55487` | 6 + 40 + 35 + 12 |
+Local evidence only. Sanitized environment (`env -i PATH HOME LC_ALL`, Node v24.1.0), sequential, cluster 55811 unless noted. An earlier attempt of this matrix under Node 20 (the shell default) was discarded: its results are not evidence.
+
+| Suite | Command | Result | Class |
+|---|---|---|---|
+| Type check | `node node_modules/typescript/bin/tsc --noEmit --incremental false` | clean | code |
+| Production build (empty env) | `node node_modules/next/dist/bin/next build` | exit 0 | code |
+| Target/guard/provider offline | `bash scripts/person-target/run-offline-tests.sh` | 50/50 | code |
+| Transport (CLI adapter + armed adapter) | `node --test scripts/person-db-session/test-transport.mjs scripts/tenancy/test-armed-transport.mjs` | 18/18 | code |
+| Tenancy cleanup safety (real CLI, sealed) | `node --test scripts/tenancy/test-armed-safety.mjs` | 12/12 | code |
+| Start-catchup | `node --test scripts/person-maintenance/test-start-catchup*.mjs` | 34/34 | code |
+| Internal resume access | `bash scripts/person-internal-resume/run-offline-tests.sh` | 13/13 | code |
+| Application edits, clean install incl. forward files | `bash scripts/person-application-edits/run-local-tests.sh 55811` | 63 + 16 | local runtime |
+| Upgrade path (old install + missing version + forward files; catalog parity) | `bash scripts/person-release-upgrade/run-upgrade-tests.sh 55811` | 25 + 4 + 63 + 16 + 4 + 3 | local runtime |
+| Transition rehearsal + recovery | `bash scripts/person-transition-cli/run-local-tests.sh 55811` (current; `PINNED_RUNNER_DIR=pl/pinned`) | 8 + 7; 8 + 7 | local runtime |
+| Leak test armed orchestration (SQL) | `bash scripts/tenancy/run-armed-local-tests.sh 55811` (current; pinned) | 7; 7 | local runtime |
+| Maintenance windows | `bash scripts/person-maintenance/run-local-tests.sh 55811` (current; pinned) | 10; 10 | local runtime |
+| Publish/undo/guard | `bash scripts/person-publish/run-local-tests.sh 55811` | 10 + 18 + 4 + 8 | local runtime |
+| Post-cutover audit | `bash scripts/person-audit/run-postcutover-audit-tests.sh 55811` | 15 + 9 + 13 + 25 + 20 + 19 | local runtime |
+| Directory outcomes / index | `bash scripts/person-directory-outcomes/run-local-tests.sh 55811` | 6 + 40 + 35 + 12 + 237 + 25 + 3 + 20 | local runtime |
+| Leak test, disabled controller (local Supabase stack, this build) | `node scripts/test-tenancy.mjs --base http://127.0.0.1:3400` | run `z7yz2b645`: 913 calls, PASS, nothing left | local runtime |
+| Leak test, armed controller (same, after `supabase db reset`) | `PINNED_RUNNER_DIR=… node scripts/test-tenancy.mjs --base http://127.0.0.1:3400 --armed` | run `z9ftg637a`: preflight proved; 913 calls, PASS; owned drain/seal/disarm rev 2→5; 3 retained pool people | local runtime |
+| Runtime attestation (same build) | identity RPC REST = PG (`7692835274743853093`), anon 401; correct selection 200; wrong selection 500 `person_target:rest_mismatch`, public 200; `outbound_denied:api.resend.com` (502), `outbound_denied:api.harvestapi.io` (route 200, empty) | as expected | local runtime |
+
+Historical results for earlier commits (`6df67d8` and before: the 2026-10-03 matrix,
+the first 913-call sweeps, the review's 769 executions) are recorded in the ledger
+as such and are not evidence for the R2 changes.
 
 Not executed: the same sweep and attestation against the Vercel-hosted deployment
-(its effective configuration is not readable through the API); browser smoke of the
-drawer changes.
+(its effective configuration is not readable through the API; its deny-list value
+predates R2-04); browser smoke of the drawer changes; Nylas and Airtable denial at
+runtime through a server route (code-level only).
 
 ## Retained data exceptions and remaining approvals
 
@@ -99,5 +114,6 @@ drawer changes.
   (retained by G5); 2 source-date holds.
 - The copy's single Send witness is in the old shape until `20261003110000` is
   installed there.
-- Approvals outstanding: push/preview, copy install, RR-10 disposition, rehearsal and
-  production sitting, PR review (see ledger).
+- Approvals outstanding: push (nothing pushed since `ae70f76`), preview deny-list
+  correction, hosted attestation, copy upgrade (`20260928061000` then `20261003*`),
+  RR-10 disposition, rehearsal and production sitting, PR review (see ledger).

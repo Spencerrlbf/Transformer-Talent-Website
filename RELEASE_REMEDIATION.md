@@ -20,6 +20,14 @@ Three statements this ledger keeps apart:
   final audit at a declared cutoff), RR-10 (owner's disposition of 23 rows),
   RR-14 (hosted tenancy run on the exact artifact) remain owner actions.
 
+A second review (`RELEASE_REMEDIATION_REVIEW_2026-10-04.md` in the
+`candidate-unification` checkout, unchanged) found five further defects, R2-01 to
+R2-05. All five are **implemented and locally verified** on this branch (section
+"Second review" below), with the integrated matrix and the local HTTP sweeps rerun
+on the final executable source `75684a5` (the R2 fixes `4aa9845`…`6c9168b` plus the
+independent-review follow-ups). Deployment verification, migration reconciliation
+(RR-09), browser acceptance and release approval remain open.
+
 ## Baseline refreshed on 2026-10-03
 
 | Item | State on 2026-10-03 |
@@ -125,6 +133,8 @@ No workflow was dispatched, no deployment made, nothing pushed.
   person once and its profile equals an uninterrupted control person's. Case 5b
   (COMMIT durable, acknowledgement lost): resume reuses the durable outcome, one
   history row, one result row.
+- **2026-10-04 (R2-05)**: the armed leak-test orchestration had reintroduced a raw
+  `pg.Pool`; it now uses the same hardened adapter (see R2-05 below).
 - **Status: verified.**
 
 ### RR-06 Copy procedures tied to the original project
@@ -177,6 +187,16 @@ No workflow was dispatched, no deployment made, nothing pushed.
      build started with `PERSON_TARGET_PROJECT_REF` naming another project refused
      the same request (500, server log `person_target:rest_mismatch`) while public
      pages still served. The anon role cannot call the identity RPC (401).
+  3b. *Server/database runtime, final source* (2026-10-04, third run, exact commit
+     `75684a5`'s production build on a freshly reset local stack, cluster
+     `7692835274743853093`): `person_target_identity()` through REST (service role)
+     and through PostgreSQL returned that same identifier; anon → 401; signed-in
+     dashboard read under the correct selection → 200; the same build started with
+     `PERSON_TARGET_PROJECT_REF=abcdefghijklmnopqrst` → 500 with server log
+     `person_target:rest_mismatch` (1 occurrence), public page 200. The same
+     sequence had the same outcome on `6c9168b` (cluster `7692827053218816039`);
+     the first run's figures (cluster `7692807888100020262`, commit `6df67d8`) and
+     the `6c9168b` run are historical.
   4. *Not established*: the Vercel-hosted deployment's own effective configuration.
      The branch preview is still configured for the read-only baseline copy and must
      not be signed into; the same identity comparison and gate probe have to be run
@@ -192,16 +212,32 @@ No workflow was dispatched, no deployment made, nothing pushed.
   request leaves; counted; no-op when unset.
 - **Tests / results**: `test-outbound-guard.mjs` 4/4 (Nylas/Resend/Airtable/Harvest
   denied incl. `Request`/`URL` inputs, Supabase/OpenAI pass, reinstall replaces).
-- **Runtime (2026-10-04, exact build on the disposable stack)**: with placeholder
+- **Runtime (2026-10-04, first run, commit `6df67d8`, historical)**: with placeholder
   provider keys and the deny list set, the team-invite route tried to send through
   Resend and the server refused it before the request left the process (route 502
-  `email_failed`, server log `outbound_denied:api.resend.com`); both leak-test runs
-  completed 913 provider-bound and database-bound calls with zero real provider
-  requests possible.
+  `email_failed`, server log `outbound_denied:api.resend.com`). That run's deny list
+  named `api.harvest-api.com` (R2-04): it proved Resend's path only, and no Harvest
+  route was exercised, so the earlier phrase "every provider denied" was over-broad
+  for Harvest.
+- **Runtime (2026-10-04, final source `75684a5`; identical outcome on `6c9168b`
+  earlier the same day)**: deny list with `api.harvestapi.io`, placeholder
+  Harvest/Resend/Nylas/Airtable keys, `SOURCING_PROVIDER_MODE=live`: team invite → 502, log
+  `outbound_denied:api.resend.com`; company search (`/api/dashboard/sourcing/companies`,
+  the real `searchCompanies` client) → 200 `{companies:[]}`, log
+  `outbound_denied:api.harvestapi.io`. Nylas and Airtable were not exercised through
+  a route on the server (no mailbox grant, no apply pipeline in the sweep); their
+  denial is proved at code level by `test-provider-denial.mjs` (real clients, recording
+  transport). Proof is per provider; one provider's refusal is not another's.
 - **Remaining**: the copy still holds one mailbox grant; the testing preview inherits
   a live Harvest key from the project; Supabase Auth SMTP on the copy is a project
   setting outside this repo and was not changed.
-- **Status: implemented; verified offline and at runtime on the exact artifact;
+- **Deployed value**: the branch preview's `OUTBOUND_DENY_HOSTS` was set on 2026-10-03
+  from the then-documented example, i.e. with `api.harvest-api.com`; it was not read
+  back in this task (sensitive values are not retrievable) and remote configuration
+  was not changed under this instruction. It must be corrected to `api.harvestapi.io`
+  before any effectful hosted testing (owner action).
+- **Status: implemented; verified offline and at runtime on the exact artifact
+  (Resend and Harvest at runtime; Nylas and Airtable at code level);
   hosted-deployment attestation outstanding.**
 
 ### RR-09 Copy does not establish complete migration or preservation
@@ -297,23 +333,47 @@ No workflow was dispatched, no deployment made, nothing pushed.
   the local full chain (`scripts/tenancy/run-armed-local-tests.sh`, 4 cases:
   normalized + anchored + armed/open; raw candidate write refused while armed while
   a public accept is admitted; disarm; normalized people are retained evidence).
-- **Hosted sweep done on the disposable local stack (2026-10-04)**, exact commit's
-  production build (`next build && next start`) and the fixture pointing at the same
-  loopback Supabase stack (Auth, REST, Storage, PostgreSQL; full chain `001…20261003*`
-  installed by the CLI), live mode + support on, every provider denied:
+- **Sweep on the disposable local stack, first run (2026-10-04, commit `6df67d8`,
+  historical)**: exact commit's production build and the fixture pointing at the
+  same loopback Supabase stack (Auth, REST, Storage, PostgreSQL; full chain
+  `001…20261003*` installed by the CLI), live mode + support on, provider hosts
+  denied (with the then-wrong Harvest hostname, see RR-08):
   - *controller disabled*: 913 calls, **PASS**, cleanup nothing left;
-  - *controller armed* (`--armed`, pinned `c4d0e4e` runner for the baseline, anchors,
-    armed/open read back through REST during the probes, drained/sealed/disarmed
-    before teardown): 913 calls, **PASS**, cleanup nothing left, 3 normalized pool
-    people retained as evidence (disposable database, disposed with `supabase stop`).
+  - *controller armed* (`--armed`, pinned `c4d0e4e` runner, anchors, armed/open read
+    back through REST during the probes, drained/sealed/disarmed before teardown):
+    913 calls, **PASS**, cleanup nothing left, 3 normalized pool people retained as
+    evidence in the disposable database. (The stack was then stopped with
+    `supabase stop`, which keeps the data volumes; nothing was deleted. An earlier
+    sentence here said "disposed", which was inaccurate: stopping and deleting
+    volumes are separate actions, `supabase stop --no-backup` being the deletion.)
+  These results pre-date the R2 fixes and are evidence for that commit only.
+- **Sweep on the disposable local stack, final executable source `75684a5`
+  (2026-10-04)**, procedure `scripts/tenancy/DISPOSABLE.md` as corrected, stack reset
+  to a clean chain (133 versions incl. the local bootstrap) before each run, deny
+  list with `api.harvestapi.io`:
+  - *controller disabled*: run `z7yz2b645`, 913 calls in 29 s, **PASS**, cleanup
+    `{"orgs":2,"poolPeople":3,"files":2,"users":3}`, nothing left;
+  - *controller armed* (`--armed`, pinned runner): run `z9ftg637a`; preflight proved
+    the fixture target (local, cluster `7692835274743853093`, controller disabled at
+    revision 1) before the first write; reconciled 3, anchored 3; armed with
+    ownership revision 2 / generation 2; 913 calls in 27 s, **PASS**; cleanup
+    `drain, seal, disarm` owned revision 2 → 5, controller disabled; 3 normalized
+    people retained; `transition_events` holds exactly the four rows
+    `tenancy_sweep_{arm,drain,seal,disarm}_z9ftg637a` at revisions 2–5.
+  The same two sweeps on the intermediate source `6c9168b` (runs `y2oeuc9b8` and
+  `y4f6i2a5b`, cluster `7692827053218816039`) had the same results and are
+  historical.
   Labels: the armed run is the armed-state acceptance; the disabled run is reported
-  separately and does not substitute for it.
+  separately and does not substitute for it. Stack stopped afterwards with
+  `supabase stop` (volumes `supabase_db_remediation`, `supabase_storage_remediation`
+  retained, not deleted).
 - **Not done**: browser smoke of the drawer changes; the sweep against the
   Vercel-hosted deployment itself. The baseline copy stays read-only: no fixture,
   controller change or migration was run against it.
 - **Manifest**: `RELEASE_MANIFEST.md`.
-- **Status: implementation complete; hosted verification blocked** (needs push +
-  preview deployment approval).
+- **Status: implementation complete; local HTTP verification complete on the final
+  source; hosted verification blocked** (needs a deployment this instruction does
+  not authorize).
 
 ### RR-15 Retired role-sync stage
 
@@ -323,7 +383,191 @@ No workflow was dispatched, no deployment made, nothing pushed.
 - **Tests / results**: `test-cli-targets.mjs` static resolution + sealed processes.
 - **Status: verified.**
 
-## Disposable environment for the hosted sweep (proposal, not executed)
+## Second review (2026-10-04): R2-01 to R2-05
+
+Source: `RELEASE_REMEDIATION_REVIEW_2026-10-04.md` (reviewed `d6a1a3f`, inspected
+`ae70f76`; unchanged). Each finding was confirmed against the current source with a
+regression that failed on the pre-fix code before the fix was written, then passes.
+Database tests ran on a **new** dedicated disposable PostgreSQL 15.13 cluster
+(127.0.0.1:55811, cluster identifier `7692816301217905049`, created for this task,
+nothing else on it; the 2026-10-03 cluster on 55487 was not reused). Commands ran with
+a sanitized environment (`env -i PATH HOME LC_ALL`): no hosted credentials, no
+hosted connection, no provider call. The baseline copy, the original project, the
+communications database and the `_v2` tables were not touched.
+
+### R2-01 PostgreSQL URL options bypass target validation (P1)
+
+- **Confirmed** with the installed driver (`pg` 8.x, `pg-connection-string`), offline:
+  `new pg.Client({connectionString}).connectionParameters` for
+  `…pooler…?user=postgres.B`, `db.A…?host=db.B…`, `127.0.0.1…?host=db.B…`,
+  `…?port=6543`, `…?%68ost=…`, `…?sslmode=require&sslmode=disable` all differ from
+  the authority; the validator accepted every one and classified the loopback case
+  as local.
+- **Fix** `4aa9845`: `databaseIdentity()` accepts a single `sslmode` only; `host`,
+  `port`, `user`, encoded names, duplicates, empty names and every other option are
+  `person_target:database_options`, raised before the server gate, the worker writer
+  (`withPersonConnection`) or the finalizer construct a client, and
+  `isLoopbackDatabaseUrl()` is false for them (so a loopback authority with a hosted
+  override no longer disables the hosted checks). The publish/anchor adapters already
+  refused these options; they are unchanged.
+- **Regression**: `test-target.mjs` "PostgreSQL query options cannot change the
+  validated destination" (11 override shapes refused; 6 accepted URLs compared with
+  the driver's effective host/port/user; refused overrides shown to move the driver);
+  `test-server-target.mjs` "PostgreSQL URL overrides are refused before any pool"
+  (zero pools, zero requests; loopback-with-override requires a selection and is
+  refused under `local`); `test-cli-targets.mjs` "finalizer refuses PostgreSQL URL
+  overrides before opening anything" (zero connects, zero fetches, with and without
+  REST credentials).
+- **Red → green**: `bash scripts/person-target/run-offline-tests.sh`: before the fix
+  44 pass / 3 fail (the server case showed the sealed pool being constructed with the
+  override URL); after: 47/47 (50/50 after R2-04's suite joined).
+- **Limitation**: code-level and offline; the guard applies wherever the selection is
+  required (legacy mode with no selection is unchanged, as the review scoped it).
+
+### R2-02 Failed tenancy setup can disarm an unrelated controller (P1)
+
+- **Confirmed** by running the real CLI sealed (`pg` replaced by a controller double,
+  `fetch` failing the first fixture POST, controller enabled/open with an operator
+  window): the pre-fix finally block performed `transition_set drain`,
+  `maintenance_close <operator window>`, `transition_set seal`, `transition_set disarm`
+  and printed "controller drained, sealed and disarmed before teardown".
+- **Fix** `52a5d29`: `preflightArmedSweep()` before the first fixture write (REST and
+  PostgreSQL URLs name the selection offline and report the same cluster through
+  `person_target_identity()`; controller disabled, no windows, no unresolved work);
+  `armForSweep()` arms by CAS and hands an ownership record (database identity, run,
+  exact revision/generation read inside the arm's transaction) to the caller the
+  moment the arm commits; `disarmAfterSweep({ownership})` requires that record, CASes
+  every step on the recorded values, closes only windows opened under the sweep's run
+  id, refuses foreign windows / stale state / another database and reports; lost
+  commit acknowledgements are resolved only from the `transition_events` row written
+  under the sweep's unique reason code (`tenancy_sweep_<action>_<run>`), never from
+  `enabled=true`. The CLI skips teardown when the target was never proved and skips
+  raw teardown when the controller could not be safely disarmed (fixtures retained,
+  reported).
+- **Regression**: `scripts/tenancy/test-armed-safety.mjs` (sealed, 12 cases): the real
+  CLI with --armed and with --armed --keep against an enabled controller + window →
+  refused before any fixture write, zero transitions/closes; setup failure while
+  disabled → zero transitions, "did not arm it"; REST ≠ PG identity → refused before
+  any write; hosted URL under `local` → refused offline without the secret in output;
+  in-process: missing/stale/foreign-window/other-database records change nothing;
+  two operators (drain+reopen → same phase, generation+1) → stale, refused; owned
+  happy path (drain, own window closed, seal, disarm with the exact CAS values);
+  unresolved work → drain then controlled stop; lost acknowledgement → resolved from
+  the event, or unresolved and stopped when the controller moved meanwhile.
+  `scripts/tenancy/test-armed.mjs` (database, 7 cases) adds preflight, ownership
+  equality with the control row, `recoverArmOwnership` from the real events table,
+  two-operator refusal by the real SQL CAS (`transition_stale`), and the owned
+  sequence with the four event rows.
+- **Red → green**: sealed suites 0/14 before (every case) → 14/14 after; database
+  suite 7/7 (current and pinned runner).
+- **Limitation**: the sealed CLI cases stop at setup (no probes); the full armed
+  sequence through the CLI is the second HTTP run above (RR-14), which left exactly
+  the sweep's own four event rows.
+
+### R2-03 Shadow-mode reads revive an explicitly cleared email (P2)
+
+- **Confirmed** on the disposable cluster: a legacy person with a verified
+  `candidate_emails` row (`historical@example.test`), reconciled and anchored the
+  supported way, linked by a shadow intake; the real certified
+  `saveRecruiterContact(mode:'shadow', email:null)` returned NULL, the overlay email
+  was NULL and `person_recruiter_primary` held `chosen_value NULL`; the linked
+  detail, list and compose reads (REST answered from those rows, `PERSON_WRITE_MODE=
+  shadow`) all returned `historical@example.test`; with a stale non-NULL scalar they
+  returned the scalar.
+- **Fix** `902cf11`: `poolContacts()` reads `person_recruiter_primary` for the batch
+  (one query per 100 ids): absent row → permitted fallback (overlay, then verified
+  history); row with NULL → email NULL and no history fallback for the other
+  addresses; non-NULL → the overlay's spelling of the chosen address; a failed
+  lookup is `pool_contact_unavailable` (compose null, detail 503, list null). No
+  address is deleted; the published live path is unchanged.
+- **Regression**: `test-edits.mjs` "R2-03: a certified shadow clear stays NULL on
+  linked detail, list and compose" × 2 variants (NULL scalar, stale scalar), each
+  with the control (no decision → history fallback), the clear, a later choice that
+  supersedes it, a second clear, the history row still present, audit `verified`;
+  `test-contact-recipient.mjs` gains `cleared`, `chosen`, `preferences-unavailable`.
+- **Red → green**: `bash scripts/person-application-edits/run-local-tests.sh 55811`:
+  61 pass / 2 fail before → 63/63 + 16/16 after.
+- **Limitation**: shadow mode and unpublished people, as the review scoped it; the
+  Send snapshot and resume-fill paths were not changed and keep their own tests.
+
+### R2-04 The Harvest denial configuration names the wrong hostname (P2)
+
+- **Confirmed**: every Harvest call in the code goes to `api.harvestapi.io`
+  (`lib/server/sourcing/harvest.ts`, `lib/server/applicants.ts`,
+  `scripts/refresh-worker.mjs`); the documented list and `test-outbound-guard.mjs`
+  named `api.harvest-api.com`. Under the old documented list the real
+  `harvestProfile()` reached the recording transport (`GET api.harvestapi.io`).
+- **Fix** `6c9168b`: `api.harvestapi.io` in `scripts/person-target/README.md`,
+  `scripts/tenancy/DISPOSABLE.md`, the cutover runbook and the guard test; new
+  `scripts/person-target/test-provider-denial.mjs` drives the real Harvest (3 clients),
+  Resend, Nylas (2) and Airtable clients with synthetic credentials under the
+  documented list: nothing reaches the transport, counts
+  `{harvestapi 3, resend 1, nylas 2, airtable 1}`, a control request passes, the
+  worker's URL is read from its source. README states the per-provider scope of proof.
+- **Red → green**: offline suite 48 pass / 2 fail with the old documented value →
+  50/50. Runtime (RR-08 above): Resend and Harvest refused inside the final build.
+- **Limitation**: the deployed preview's value was set from the old example and has
+  not been re-read or changed (owner action; remote configuration is out of scope).
+
+### R2-05 Armed tenancy uses an unhardened PostgreSQL pool (P2)
+
+- **Confirmed**: `operatorPool()` returned `new pg.Pool(...)` with no `error`
+  listener; emitting an idle error threw.
+- **Fix** `52a5d29`: `operatorPool()` returns `openDatabase(env,'tt-tenancy-armed')`
+  (the publish/transition CLIs' adapter: pool error listener, checkout-time
+  `statement_timeout`, bounded connection/query waits, broken-client disposal via
+  `person-db-session.mjs`); `ownedTransition` releases an in-doubt client with its
+  error and never reports a step it cannot prove.
+- **Regression**: `scripts/tenancy/test-armed-transport.mjs` (sealed, 2 cases: error
+  listener present and an idle error not uncaught; a checked-out session that loses
+  its backend rejects, is disposed, leaks no listener, and the adapter serves the next
+  checkout); `test-armed.mjs` "transport loss during orchestration" (real
+  `pg_terminate_backend` of the idle operator session and of a checked-out session;
+  no `uncaughtException`; controller untouched).
+- **Red → green**: sealed 0/2 → 2/2; database 7/7.
+- **Limitation**: `pgSite` (reconcile) and the anchor adapter inside `armForSweep`
+  keep their own handling (already covered by their suites).
+
+### Upgrade guidance (older install)
+
+The copy's artifact `23d7860` has 127 migration files and no
+`20260928061000_person_resume_contact_fill.sql`; the runbook now states that an
+older install must install that **missing** version before the four `20261003*`
+forward files, that this is not a replay of an installed version, and that an
+install from the prepared parent skips it. The upgrade harness already performs
+exactly that sequence (`run-upgrade-tests.sh` `upgrade()`), followed by catalog
+parity against a clean install: 25 + 4 + 63 + 16 + 4 + 3 on the final source.
+
+### Integrated verification on the final executable source (`75684a5`, 2026-10-04)
+
+Sequential, sanitized environment (Node v24.1.0), dedicated cluster 55811. Counts
+are test executions as reported by the runners. The same matrix had the same counts
+on `6c9168b` before the review follow-ups; a run under the shell's default Node 20
+was discarded (its node:test semantics differ) and is not evidence.
+
+| Check | Result |
+|---|---|
+| `tsc --noEmit --incremental false` | exit 0 |
+| `next build` (empty environment) | exit 0 |
+| `bash scripts/person-target/run-offline-tests.sh` | 50/50 |
+| `node --test scripts/person-db-session/test-transport.mjs scripts/tenancy/test-armed-transport.mjs` | 18/18 |
+| `node --test scripts/tenancy/test-armed-safety.mjs` | 12/12 (13 cases incl. the deferred-work case) |
+| `node --test scripts/person-maintenance/test-start-catchup*.mjs` | 34/34 |
+| `bash scripts/person-internal-resume/run-offline-tests.sh` | 13/13 |
+| `bash scripts/person-application-edits/run-local-tests.sh 55811` | 63 + 16 |
+| `bash scripts/person-release-upgrade/run-upgrade-tests.sh 55811` | 25 + 4 + 63 + 16 + 4 + 3 |
+| `bash scripts/person-transition-cli/run-local-tests.sh 55811` (current; pinned) | 8 + 7; 8 + 7 |
+| `bash scripts/tenancy/run-armed-local-tests.sh 55811` (current; pinned) | 7; 7 |
+| `bash scripts/person-publish/run-local-tests.sh 55811` | 10 + 18 + 4 + 8 |
+| `bash scripts/person-maintenance/run-local-tests.sh 55811` (current; pinned) | 10; 10 |
+| `bash scripts/person-audit/run-postcutover-audit-tests.sh 55811` | 15 + 9 + 13 + 25 + 20 + 19 |
+| `bash scripts/person-directory-outcomes/run-local-tests.sh 55811` | 6 + 40 + 35 + 12 + 237 + 25 + 3 + 20 |
+
+All pass; 872 executions in the matrix plus 32 in the pinned reruns. The review's
+769 and the earlier 913-call sweeps are historical figures for earlier commits, not
+evidence for the changed code; the HTTP sweeps on the final source are in RR-14.
+
+## Disposable environment for the hosted sweep (option 1 executed, option 2 proposed)
 
 The sweep needs Supabase Auth + REST + PostgreSQL. Two ways to get a disposable one:
 
@@ -351,6 +595,56 @@ The sweep needs Supabase Auth + REST + PostgreSQL. Two ways to get a disposable 
 
 ## Independent review
 
+### Second round (2026-10-04, R2 changes `ae70f76..6c9168b`)
+
+Two read-only reviewers, separate areas (A/B: target parsing and the contact clear;
+C/D: cleanup ownership/CAS and transport), with the installed driver, the sealed
+suites and the dedicated cluster. Neither found a defect in the delivered fixes'
+core claims; their follow-ups and the fixes (`75684a5`, with regressions):
+
+- *A1 (P2)* a database URL with a leading/trailing space or malformed `%xx` passed
+  the validator (WHATWG `URL` trims) while pg re-encodes it and resolves it against
+  `postgres://base`, connecting to host `base` with the whole URL, password included,
+  as the database name → refused (`database_url`), verified with
+  `connectionParameters.host === 'base'`.
+- *A2 (P3)* URL without port/username/database let pg take `PGPORT`/`PGUSER`/
+  `PGDATABASE` from the environment → explicit port, username and database required
+  (`database_port`, `database_role`, `database_url`).
+- *A3 (P3)* `sslmode=disable|allow|no-verify|prefer` accepted on hosted hosts →
+  hosted URLs accept `require`/`verify-ca`/`verify-full` only.
+- *B1 (P2)* the clear was honoured on linked (`app_`) reads only; the pool person's
+  own drawer (`net_`), the Network list and Send's `bestEmail` still ranked the scalar
+  and history and Send would persist the revived address → the decision now lives in
+  `poolEmails()`, the ranking all of those use; regression extended to the `net_`
+  drawer and the Send ranking.
+- *B2 (P3)* a cleared phone was revived from `candidates.phone` → decisions read for
+  both kinds; sealed case added.
+- *B3 (P3, not changed, owner decision)* for a **published** person in live mode the
+  SQL ranking (`person_contact_ranks`, 2026-09-26 design) treats a NULL choice as
+  "withdraw the manual preference, fall back to the eligible ranking", so a clear
+  made while unpublished flips to the fallback address when the person is published.
+  The live save already reports that fallback to the recruiter, so nothing is silent;
+  but the two states disagree and should be decided deliberately (release question,
+  not changed here).
+- *B4 (P3)* a stale non-NULL choice would show if a legacy writer nulled the overlay
+  without touching the decision → the overlay spelling now leads only when the
+  ranking admits it; otherwise the ranking's first address.
+- *C/D (P2)* the reconcile shim's pool (`pgSite`) had no error listener: an idle loss
+  during step 1 of the armed sweep would die uncaught (controller untouched, but the
+  CLI's `finally` would not run) → listener added to the current shim; the armed sweep
+  uses the current shim (superset of the pinned one) with the pinned translator.
+  Reviewer note kept: the pinned checkout's own `pgSite` still has no listener; the
+  production catch-up runs it as the historical runner (owner item).
+- *C (P3)* preflight refused `deferred` work, which the SQL treats as resolved →
+  aligned (double aligned too); the partial-disarm message now names the owned state.
+- Confirmed correct by the reviewers: every finally path of the CLI; revision
+  uniqueness makes same-phase foreign changes detectable; recovery never adopts
+  foreign state; reason codes fit for every run id; lossless text bigints; the
+  hardened adapter's disposal and `end()`; REST reads of `person_recruiter_primary`
+  under service role; failure handling of all three linked consumers.
+
+### First round (2026-10-03)
+
 Two reviewers (read-only, separate areas) examined the integrated changes after
 implementation. Neither found a blocking defect. Their findings and the fixes:
 gate cache keyed on the full key hash; worker scripts gated before their own REST
@@ -364,17 +658,38 @@ clean harnesses other than application-edits do not install the `20261003*` file
 (the upgrade harness's phase 5 does); the `DISABLE TRIGGER` step takes a share-row-
 exclusive lock and belongs in the held phase.
 
-## Remaining owner actions (in order)
+## Remaining external actions (prepared; none performed under the 2026-10-04 instruction)
 
-1. Done: branch pushed; leak test (disabled and armed) and runtime attestation on
-   the exact artifact against the disposable local stack. Still open: the
-   Vercel-hosted deployment's own attestation (disposable hosted project, or at the
-   sitting) and the drawer smoke; decide whether the preview stays pointed at the
-   baseline copy (it must not be signed into while it is).
-2. Decide when the four `20261003*` migrations are installed on the copy (not a
-   read-only step; the migration NOTICE reports the witness recovery result).
-3. Decide the RR-10 disposition (keep/document or reviewed cleanup).
-4. Approve the rehearsal that closes RR-09 (catch-up, anchors, publication, audit) and
-   pick the production sitting; production needs the same four variables/settings.
-5. Review the PRs: this branch (into the parent or main per the release decision),
+1. **Push** the four R2 commits and the documentation commit (`origin` is at
+   `ae70f76`; pushing triggers a preview deployment). Nothing was pushed.
+2. **Correct the branch preview's `OUTBOUND_DENY_HOSTS`** to
+   `api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io` (it was set from
+   the old example); keep that preview unused while it points at the baseline copy, or
+   repoint it per item 3.
+3. **Vercel-hosted attestation** (RR-07/08/14 hosted): either the disposable hosted
+   project (section above: `supabase projects create tt-disposable-tenancy …`, Micro,
+   about $0.0134/hour, schema-only `db push`, the preview's 17 variables repointed,
+   `test-tenancy.mjs` disabled and `--armed`, identity comparison, delete) or the same
+   comparison against production at the sitting after the identity migration is
+   installed there. Requires approval of a paid resource or of the sitting.
+4. **Copy upgrade** (write to `qsqlgibgsxzlimoegcjx`): `20260928061000` (missing there)
+   then the four `20261003*` files, in order; the migration NOTICE reports the witness
+   recovery result. Owner decision; not a read-only step.
+5. **RR-10 disposition** of the 23 experience rows (keep/document or reviewed cleanup).
+6. **RR-09**: approve the rehearsal that closes it (catch-up, anchors, publication,
+   final audit at a declared cutoff) and pick the production sitting; production
+   needs the same four variables/settings. The counts in this ledger are historical
+   observations, not fresh measurements.
+7. **Drawer browser smoke** on real-looking data (#85 Education/Skills, #86 "Also a
+   match"); the disposable database holds synthetic rows only.
+8. **PR review** of this branch (into the parent or `main` per the release decision),
    with #85/#86 already merged into it.
+
+Local artefacts: the dedicated cluster 127.0.0.1:55811 was shut down at the end of
+this task (`pg_ctl stop`; its data directory sits under this session's scratchpad and
+can be deleted); the local Supabase project `remediation` is stopped with its volumes
+(`supabase_db_remediation`, `supabase_storage_remediation`) retained, not deleted
+(`supabase stop --no-backup` in the branch checkout removes them once the owner is
+done); the `.claude/launch.json` entries remain. No other local service was touched
+(another local Supabase project, `replyops-c13-recovery`, was running on this machine
+throughout and was left alone).
