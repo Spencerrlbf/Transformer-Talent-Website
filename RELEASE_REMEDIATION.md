@@ -9,28 +9,22 @@ resume endpoint). Status words: **implemented**, **verified** (evidence on the f
 source in this branch), **blocked** (needs an action outside this branch's
 authorization), **obsolete** (shown no longer applicable).
 
-Three statements this ledger keeps apart:
+Current local closure is **`79af7eb`**, based on `a9d14b1` / executable
+`90ebc0b`. It fixes the remaining historical-clear upgrade defect (F2), replaces
+F5's global refusal with a narrowly derived, hash-bound historical verifier, and
+removes the capped decision scan. Section 8 records fresh evidence and its limits.
+The earlier claim that F1–F6 were all closed on `0ffa133` / `90ebc0b` was too broad:
+F2 missed published-then-shadow clears and F5 still refused legitimate clears.
 
-- **Implementation complete** for RR-01 through RR-08 and RR-11 through RR-15.
-- **Verification complete** on the loopback disposable PostgreSQL and in sealed
-  offline tests for RR-01, RR-02, RR-03, RR-04, RR-05, RR-06, RR-11, RR-12, RR-13,
-  RR-15; RR-07/RR-08 are verified in code and offline tests but their deployment
-  evidence needs a deployment this branch is not authorized to make.
-- **Release approved: no.** RR-09 (completed reconciliation, publication and
-  final audit at a declared cutoff), RR-10 (owner's disposition of 23 rows),
-  RR-14 (hosted tenancy run on the exact artifact) remain owner actions.
-
-A second review (`RELEASE_REMEDIATION_REVIEW_2026-10-04.md` in the
-`candidate-unification` checkout, unchanged) found five further defects, R2-01 to
-R2-05. All five are **implemented and locally verified** on this branch (section
-"Second review" below). The 2026-10-05 follow-up (section "Pre-release follow-up")
-adds explicit clears across publication (forward migrations `20261005090000` and
-`20261005100000`), the reviewed runner for the pinned catch-up, the declared Node 24
-runtime and a local browser smoke; the follow-up review's F1–F6 are corrected in
-`0ffa133`, the final executable source, on which the integrated matrix and the local
-HTTP sweeps were rerun. **Locally verified is not deployment verified**:
-hosted runtime attestation, RR-09 migration completion/accounting, RR-10 disposition
-and release approval remain open.
+- **Local implementation and verification:** the scoped F2/F5/capped-scan work is
+  complete on `79af7eb`; prior RR/R2 evidence below remains tied to its stated source.
+- **Hosted verification:** not performed in this pass. No push, hosted database or
+  environment change, main merge, deployment, workflow dispatch, candidate messages
+  or paid provider work.
+- **Release approved: no.** Hosted artifact attestation/tenancy (RR-07/08/14),
+  declared-cutoff migration accounting/publication/audit (RR-09), RR-10 disposition
+  and owner release approval remain open. Local fixture completion is not migration
+  completion.
 
 ## Baseline refreshed on 2026-10-03
 
@@ -602,11 +596,11 @@ environment. Baseline copy and original project: not queried, not written.
   `contact.automatic` (library-level, no drawer control) writes `suppressed=false`.
   `poolEmails()`/`recruiterContactDecisions()` read the flag; the post-cutover audit's
   `one_primary_email/phone` expect zero primaries for a cleared kind.
-- **Historical NULL rows (ambiguity, not reinterpreted)**: every NULL written so far
-  came from a recruiter saving an empty field, but in live mode that save then showed
-  the recruiter the fallback address, so whether they meant "clear" or accepted the
-  fallback cannot be established from the data. They stay `suppressed=false`
-  (behaviour unchanged) and the migration's NOTICE counts them. **Proposed treatment**
+- **Historical live NULL rows (ambiguity, not reinterpreted)**: in the old live
+  mode, an empty field could return an eligible fallback, so intent cannot be
+  inferred for every such row. The `79af7eb` forward correction first preserves
+  provable completed shadow clears, including people with an older publication.
+  Remaining ambiguous rows stay automatic. **Proposed treatment**
   for the owner before the sitting: run
   `select rp.candidate_id, rp.kind, r.edited_at, r.actor_id from person_recruiter_primary rp join person_recruiter_receipts r on r.id=rp.receipt_id where rp.chosen_value is null and not rp.suppressed order by r.edited_at`
   on the copy (read-only), confirm each with the recruiter who made it, and either
@@ -795,21 +789,14 @@ and the local stack (clusters quoted), Node v24.1.0.
   executed after shadow and live clears in the edits suite (`sent`, `email ''`,
   `contact` without the cleared kind, `already_sent` on repeat, stale snapshot →
   `contact_changed`), and in upgrade cases A and C.
-- **F5 (P2) pinned verifier rejects legitimate suppressed contacts.** Two parts.
-  (a) Current translator: `readNew()` loads `person_recruiter_primary` so
-  `checkStored`'s one-primary rule recognises a clear; a cleared person pending in the
-  queue is reconciled by the current translator without an integrity complaint
-  (edits suite). (b) Pinned translator: it cannot verify such a person (its rule
-  predates clears) and would fail `post_save_integrity:one_primary_*` before any
-  checkpoint; `run-catchup.mjs` now reads the queue first and refuses the run with the
-  candidate ids (`catchup_run:suppressed_pending`) instead of failing mid-page
-  (`test-run-catchup.mjs`). **Owner decision**: a queue containing cleared people
-  (any recruiter edit after the historical catch-up re-queues the person) cannot be
-  completed by the pinned translator; options are (1) run those people — or the
-  final catch-up — with the current translator under a reviewed exception to the
-  `c4d0e4e` pin, or (2) re-save their decisions before the sitting. The review's
-  acceptance "valid clears pass and checkpoint once" is met by the current
-  translator, not by the pinned one.
+- **F5 (P2) pinned verifier rejects legitimate suppressed contacts — prior
+  workaround superseded.** `90ebc0b` refused a queue containing a clear and scanned
+  only a capped first page of global decisions. It did not meet the acceptance
+  criterion. The current-translator test also allowed `review`, which is not proof
+  of verified/drained clears. `79af7eb` replaces that workaround with a separately
+  identified historical runtime; see section 8 for real verified outcomes,
+  checkpoint failures, races and the source-review boundary. Do not re-save a
+  recruiter's choice to make a migration verifier pass.
 - **F6 (P2) runtime declaration not enforced at the real entry points.** `checkNode()`
   is the first statement of `run-catchup`, `start-catchup`, the finalizer, publish,
   transition, anchors and the leak test; every harness runs `node scripts/check-node.mjs`
@@ -836,6 +823,100 @@ with the four owned event rows; attestation unchanged (REST = PG
 `rest_mismatch`, `outbound_denied:api.resend.com`, `outbound_denied:api.harvestapi.io`);
 browser: phone-only clear on an unpublished person through the drawer (F3; scalar
 phone still stored, no surface shows it) and the section-4 flows unchanged.
+
+### 8. Local closure of F2/F5 and capped-scan review (`79af7eb`, 2026-10-04)
+
+Scope: local implementation, synthetic local databases, tests, review and commits.
+The baseline copy and original project were not queried or written. Existing
+installed migration files and the historical pinned tracked tree are unchanged.
+
+**F2 — current receipt evidence, including after publication.** New forward version
+`20261005110000_person_historical_shadow_clears.sql` repairs the classification left
+by `20261005090000`. A current NULL choice becomes suppressed only when its own
+completed shadow receipt records explicit requested/effective JSON NULL and no
+explicit automatic selection. An old clear cannot override a later chosen value.
+Receipts, legacy fields, candidate IDs and projection rows are preserved. A stale
+publication still refuses live reads/Send until certified republishing. The
+migration uses `NOWAIT` table locks and restores exact trigger modes; contention
+refuses atomically instead of waiting in a save/migration lock cycle.
+
+The regression runs the real certified old-schema writer: publish, then shadow
+clear email, phone or both; upgrade; inspect linked detail, recipient, `net_` drawer
+and ranking; replay the old receipt; republish; run real checked Send. The old chain
+failed the suppression assertion, the correction passes. A superseded-clear control,
+ambiguous live-NULL control, immutable receipt/projection checks, two-connection
+lock refusal, idempotence and disabled/replica/always trigger restoration also pass.
+
+**F5 — compatible historical verification, with exact artifact approval.**
+`run-catchup.mjs` derives an isolated runtime from the clean
+`c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc` checkout. The translator bundle,
+reconcile loop, backfill/engine and checkpoint semantics remain byte-identical.
+Only contact evidence loading and the suppression rule in the historical verifier
+change. Unsuppressed contacts retain the old eligibility rule, including an eligible
+fallback after a selected address bounces. Explicit clears require every rank to be
+NULL; contact history remains intact.
+
+New `20261005120000_person_catchup_contact_snapshot.sql` is a read-only,
+service-role-only STABLE/SECURITY INVOKER scalar RPC. Contacts, decisions, summary,
+revision and per-person counts come from one statement snapshot. It accepts at most
+500 IDs, checks at most 10,001 contact rows to enforce a 10,000-row limit, and refuses
+a conservative 8 MiB serialized budget before aggregation. It never truncates
+proof. Missing, malformed, duplicate or incomplete evidence stops verification.
+There is no global suppression scan. Hosted use requires both the compatibility ID
+and the exact reviewed composite SHA256 before imports/transport. The complete
+input/output manifest is `docs/person-catchup-compatibility-manifest.json`:
+`0d30436b535ffc015624b7f8f0153c6cf769908ed6e6a31597f8e71659407250`.
+
+**Actual outcomes, kept separate.** On a fresh local Supabase stack, the wrapper's
+interrupted run resumed with exactly seven verified/count-once people: four
+synthetic directory people plus email-only, phone-only and combined clears. A
+certified scalar clear racing after the snapshot became pending at the revision/
+capture comparison; a new bounded run verified it and drained its queue entry. A
+certified clear of curated legacy contact also became pending, but its new run
+remained `review` with `same_snapshot_mutation`. That review stays queued and does
+not count as verified. The historical cursor advances for pending/review outcomes;
+same-run resume cannot revisit an already-visited ID. Start a new bounded queue run
+and retain source conflicts for disposition. This is unchanged historical policy.
+
+The real PostgREST table response capped 1,500 contacts at 1,000; the scalar RPC
+returned all 1,500 and the wrapper verified a target beyond 1,002 unrelated global
+suppression decisions. Missing/partial snapshots and actual suppressed rank-1/rank-2
+corruption recorded no person result and advanced no checkpoint; valid retries
+verified. Row/byte overflow refused without removing evidence; a 10,000-row
+near-budget case passed below the bound and refused after crossing it.
+
+Fresh verification (Node v24.1.0, sanitized environment; no skipped tests):
+
+| Evidence | Result |
+|---|---|
+| Upgrade: old install, actual historical clears, full edits/recipient tests, clean-install parity | 132/132 (`25 + 6 + 4 + 8 + 64 + 17 + 4 + 4`) |
+| Target/provider/runtime/input + derived-verifier offline matrix | 64/64 |
+| Start helper and transport regressions | 52/52 |
+| Actual REST website + PostgreSQL directory catch-up | 14/14, fresh stack |
+| Production build and TypeScript | both exit 0; build ID `2Bg1PIpILfNk5vLzVzxcn` |
+| Local identity and new RPC privilege probe | REST = PostgreSQL; anonymous snapshot call 401 |
+| Final built-app tenancy sweeps | disabled 913 PASS (`d9ll8b3c9`); armed 913 PASS (`dfssp6368`), exact owned four events and final disabled revision 5 |
+
+The first disabled sweep reported 38 `email_off` responses because the local
+synthetic setup lacked `NYLAS_CLIENT_ID`. That failed run remains recorded; adding
+the synthetic client ID and restarting the unchanged build produced the passing
+913-call run above, with provider blocking retained. A separate ad hoc privilege
+probe initially used the wrong RPC parameter and returned 404; the corrected
+`p_candidate_ids` request returned service-role 200 and anonymous 401.
+
+Final armed-run identity: REST = PostgreSQL cluster `7692936694211489829`.
+Preflight found disabled revision 1; arm owned revision 2/generation 2; cleanup
+performed only its own drain/seal/disarm through revision 5. A subsequent read-only
+check found exactly its four event rows, disabled controller, zero Auth users and
+three retained normalized synthetic people. Ordinary fixture rows were removed;
+the three immutable normalized people remain in the stopped disposable volume.
+
+The worker bundle hash remains `29b7c96ab054fca3e5d9b0afbe209c7430b03646a8b440fbeb8fab0309ad3480`;
+application source and dependency lockfile are unchanged by this closure. The
+historical translator bundle remains `c04e8c18657ffc03bac75f03a34b6772b8d8d878958635ff03b9ca0717f197a5`.
+Earlier 892-test and browser figures above are historical evidence, not newly run
+counts. This pass does not attest a hosted deployment, decide ambiguous historical
+live NULLs, dispose of RR-10 rows, or complete RR-09 against real data.
 
 ## Disposable environment for the hosted sweep (option 1 executed, option 2 proposed)
 
@@ -864,6 +945,18 @@ The sweep needs Supabase Auth + REST + PostgreSQL. Two ways to get a disposable 
    as Spencer; I will not create a paid resource without the word).
 
 ## Independent review
+
+### Local closure review (`a9d14b1..79af7eb`, 2026-10-04)
+
+Independent reviewers inspected F2's receipt-based correction/upgrade tests and
+F5's derived runtime/snapshot/wrapper separately. A separate design review checked
+revision races, cursor advancement and historical source-conflict semantics.
+Findings incorporated before closure: migration lock refusal; preserving the
+ordinary selected-then-bounced fallback; complete snapshot validation; bounded
+row/byte aggregation; qualified correlated SQL aliases; and approval bound to
+artifact bytes. Final rereads reported no remaining code findings within scope.
+Reviewers used source inspection and sealed probes; fresh database/build evidence
+is recorded separately in section 8, not attributed to their review.
 
 ### Second round (2026-10-04, R2 changes `ae70f76..6c9168b`)
 
@@ -936,19 +1029,22 @@ destinations, on a separate disposable target, never the baseline copy or produc
 1. **Disposable target**: new Supabase project `tt-disposable-tenancy` in organization
    "Transformer Talent" (`nanvovpwibjdlhhfmfix`), region `us-east-2`, Micro compute
    (`supabase projects create … --size micro --db-password <generated, never printed>`).
-   Cost: Micro is billed hourly (about $0.0134/h, ≈$10/month); a two-day window is
-   under $1. Schema only: `supabase db push` of the full chain `001 … 20261005090000`
-   (134 files; the local bootstrap `000` is replaced by the project's own base tables
-   as in production), `resumes` bucket, Auth `site_url` = the preview URL.
+   Cost estimate retained from the earlier plan: about $0.0134/h for Micro;
+   verify current pricing and the approved budget before creating any resource.
+   Schema only: `supabase db push` of the full chain `001 … 20261005120000`
+   (136 tracked migration files; the local bootstrap `000` is replaced by the
+   project's own base tables as in production), `resumes` bucket,
+   Auth `site_url` = the preview URL.
 2. **Preview configuration** (branch `fix/person-90-release-remediation`, a fresh
    deployment after the push): `PERSON_TARGET_PROJECT_REF=<new ref>`;
    `SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_URL`/keys of the new project;
    `PERSON_DATABASE_URL` (pooler 6543, user `postgres.<new ref>`) and
    `PERSON_PUBLISH_DATABASE_URL` (5432) of the new project;
    `OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io`
-   (correcting the `api.harvest-api.com` value set on 2026-10-03); placeholder
-   `RESEND_API_KEY`, `NYLAS_*`, `HARVEST_API_KEY` (so the routes take their live path
-   into the deny list), `SOURCING_PROVIDER_MODE=live`; no Airtable token, no OpenAI key;
+   (correcting the `api.harvest-api.com` value set on 2026-10-03); synthetic placeholder
+   `RESEND_API_KEY`, `NYLAS_API_KEY`, `NYLAS_CLIENT_ID`, `HARVEST_API_KEY` (so the routes
+   take their live path into the deny list), `SOURCING_PROVIDER_MODE=live`;
+   no Airtable token, no OpenAI key;
    `PERSON_WRITE_MODE=live`, `PERSON_TRANSITION_SUPPORT=on`; Turnstile test keys.
    Variable names only; values set in Vercel, never printed.
 3. **Server identity and runtime** (read-only against the preview):
@@ -982,23 +1078,27 @@ RR-10 disposition.
 
 ## Remaining external actions (prepared; none performed under the 2026-10-04/05 instructions)
 
-1. **Push** the branch (`origin` is at `ae70f76`; 10 commits ahead); pushing triggers a
+1. **Push** the reviewed branch (`origin` was left at `ae70f76`); pushing triggers a
    preview deployment that will build and run on Node 24 (`engines`).
 2. **Approve the hosted-preview validation** above (disposable project under $1) or
    defer it to the sitting against production.
 3. **Correct the branch preview's `OUTBOUND_DENY_HOSTS`** to `…,api.harvestapi.io`;
    keep that preview unused while it points at the baseline copy.
 4. **Copy upgrade** (write to `qsqlgibgsxzlimoegcjx`): `20260928061000` (missing there),
-   the four `20261003*` files, then `20261005090000` and `20261005100000`, in order;
+   the four `20261003*` files, then `20261005090000`, `20261005100000`,
+   `20261005110000` and `20261005120000`, in order;
    the NOTICEs report the witness recovery and the classification of historical NULL
-   decisions (clears kept / published rows left automatic).
-5. **Historical NULL decisions of published people** (left automatic by the upgrade):
+   decisions, including the new receipt-based correction. Apply after recovery/load
+   and drain checks; NOWAIT refusal requires settling conflicting activity first.
+5. **Remaining ambiguous historical live NULL decisions** (after receipt-based correction):
    run the read-only listing query (section 1 above) on the copy and decide per row
    with the recruiter; no bulk reinterpretation.
-5b. **Cleared people in the catch-up queue (F5)**: decide between running them (or
-   the final catch-up) with the current translator under a reviewed exception to the
-   `c4d0e4e` pin, or re-saving their decisions before the sitting; the pinned runner
-   refuses such a queue with the ids.
+5b. **Accept the reviewed compatibility artifact for hosted catch-up (F5)**:
+   `c4d0e4e-explicit-contact-clear-v1`, composite SHA256
+   `0d30436b535ffc015624b7f8f0153c6cf769908ed6e6a31597f8e71659407250`.
+   Preserve the same accepted artifact on resume. Source-history conflicts remain
+   review outcomes requiring disposition; changing valid clear decisions is not a
+   migration workaround.
 6. **Runtime change decision**: the next deployment and the workers move to Node 24.
 7. **RR-10 disposition** of the 23 experience rows; **RR-09** rehearsal (catch-up via
    `run-catchup.mjs`, anchors, publication, final audit at a declared cutoff) and the
@@ -1016,3 +1116,12 @@ has `site_url = http://127.0.0.1:3400` for the smoke sign-in; the
 `.claude/launch.json` entries remain. No other local service was touched (another
 local Supabase project, `replyops-c13-recovery`, ran on this machine throughout and
 was left alone).
+
+Resource disposition after the local closure (`79af7eb`): app on 3451, dedicated
+PG15 cluster55821 and isolated Supabase project `candidate-closure-90ebc0b` are
+verified stopped. The cluster data directory and Docker volumes
+`supabase_db_candidate-closure-90ebc0b` / `supabase_storage_candidate-closure-90ebc0b`
+are retained. The final stack retains three normalized synthetic people, zero Auth
+users and the sweep's four owned controller events; controller disabled. The
+previous build output and all other local projects were preserved. No push,
+hosted configuration/database change or deployment occurred in this closure.

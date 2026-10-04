@@ -1,0 +1,32 @@
+{
+  "pin": "c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc",
+  "compatibility_id": "c4d0e4e-explicit-contact-clear-v1",
+  "snapshot_sql_sha256": "b863803a57191122db842b63fe8dbdba3575a838f8beb4af3187f253fed8fb17",
+  "files": {
+    "scripts/person-trial.mjs": {
+      "input_sha256": "73b97b65f2376e6058bc1bad2d852cdaf845d0b04927e6e5e5db64a1710f370a",
+      "output_sha256": "249dabfe4e58af8f29af1811534ad90b36cd811ccbb751f3f2f7765c5aeb1c3b"
+    },
+    "scripts/person-reconcile.mjs": {
+      "input_sha256": "5e16277ac44425a78ce034c62029b806f11446c8e41c09b68362acf973edaf71",
+      "output_sha256": "5e16277ac44425a78ce034c62029b806f11446c8e41c09b68362acf973edaf71"
+    },
+    "scripts/person-backfill.mjs": {
+      "input_sha256": "1f421869964b9ebe4ed2d9dcc671991661f0309bddaf69cb79b35db2b4652133",
+      "output_sha256": "1f421869964b9ebe4ed2d9dcc671991661f0309bddaf69cb79b35db2b4652133"
+    },
+    "scripts/person-backfill/engine.mjs": {
+      "input_sha256": "30a0ff0dc183608a4cd1d4b93c8e2bc3f414edc6e0112841f4c8a2f35254cab1",
+      "output_sha256": "30a0ff0dc183608a4cd1d4b93c8e2bc3f414edc6e0112841f4c8a2f35254cab1"
+    },
+    "scripts/dist/worker-lib.mjs": {
+      "input_sha256": "c04e8c18657ffc03bac75f03a34b6772b8d8d878958635ff03b9ca0717f197a5",
+      "output_sha256": "c04e8c18657ffc03bac75f03a34b6772b8d8d878958635ff03b9ca0717f197a5"
+    },
+    "scripts/contact-compat-snapshot.mjs": {
+      "input_sha256": null,
+      "output_sha256": "72fb0f45988ce9d5412d644c32a57983685c430c1edf54603ff70b730530ff5f"
+    }
+  },
+  "artifact_identity": "0d30436b535ffc015624b7f8f0153c6cf769908ed6e6a31597f8e71659407250"
+}
