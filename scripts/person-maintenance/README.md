@@ -77,8 +77,33 @@ individual queries retain the stated bounds. Existing run IDs and failed
 DB-capacity checks are refused before fingerprint/start. Output contains run status
 and hashes only; errors are sanitized and acquired resources are closed on failure.
 
-After a successful start, open that run's window and use the actual pinned CLI with
-the identical configuration plus `resume:true`. Inspect durable state after an
+After a successful start, open that run's window and run the pinned catch-up with
+the identical configuration plus `resume:true` through the reviewed runner helper:
+
+```sh
+PINNED_RUNNER_DIR=<clean c4d0e4e checkout> PERSON_TARGET_PROJECT_REF=<ref> \
+  SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… COMMS_DATABASE_URL=… \
+  BACKFILL_CONFIG='{"run-id":"RUN_ID","reconcile":true,"scope":"queue","dry-run":false,"resume":true,…}' \
+  node scripts/person-maintenance/run-catchup.mjs
+```
+
+`run-catchup.mjs` verifies the pinned checkout exactly as the start helper does
+(HEAD = pin, clean tree, bundle rebuilt and hashed), checks the configuration
+contract and the website selection, then imports and runs the **pinned**
+`scripts/person-reconcile.mjs` main: the translator, the external fingerprint, the
+page loop and every SQL checkpoint are the pinned code, unchanged. The website is
+reached over REST (`restSite`, `fetch`, bounded and caught); the directory over the
+pinned `openComms` `pg.Client`, to which the helper attaches the one thing the pinned
+client lacks: an `error` listener. Without it an idle directory connection dropped by
+the server is an uncaught exception (process dies, run left `running`, the pinned
+loop's failure path never runs). With it the loss is logged as
+`catchup_comms_connection_lost:<SQLSTATE>`, the client stays unusable, and the pinned
+loop fails the run in its own controlled way (`failed`, `reconcile_stopped`, exit 1)
+at its next directory read; `last_id` advances only inside
+`person_reconcile_record_many`, so nothing is recorded twice and the same
+configuration resumes the run. `scripts/person-maintenance/run-catchup-local-tests.sh`
+proves this on the disposable local stack with the real pinned runner (6 cases:
+the bare client crash, the listener, the lost-between-pages run, the resume). Inspect durable state after an
 ambiguous start: absent means diagnose and start again after gates pass; a matching
 running checkpoint means continue that run after opening its window, even if the
 start response was lost. Failed/paused checkpoints need diagnosis and matching
