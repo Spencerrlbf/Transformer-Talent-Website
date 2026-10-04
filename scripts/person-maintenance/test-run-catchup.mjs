@@ -191,6 +191,37 @@ test('the actual run: the directory connection is lost between pages → control
  console.log(JSON.stringify({evidence:'loss_pass',exit:r.code,checkpoints_before_loss:checkpoints,processed:row.processed,status:row.status,error_code:row.notes.error_code,listener:lost?JSON.parse(lost).code:null,runner_stopped:(r.out.split('\n').find(l=>l.includes('catchup_runner_stopped'))??'').slice(0,200)}));
 });
 
+test('late inputs against the real pinned tree are refused before any transport: aliases, arguments, a dry-run override',async()=>{
+ const before=await runRow();
+ for(const [label,extra,argv] of [['alias BACKFILL_RESUME=false',{BACKFILL_RESUME:'false'},[]],['alias BACKFILL_RUN_ID',{BACKFILL_RUN_ID:'other-run'},[]],['CLI --dry-run=true',{},['--dry-run=true']],['CLI --commit=…',{},['--commit=0000000000000000000000000000000000000000']]]){
+  const r=await new Promise((resolve)=>{const child=spawn(process.execPath,[runnerScript,...argv],{env:{...runnerEnv,...extra},stdio:['ignore','pipe','pipe']});let out='',err='';child.stdout.on('data',(c)=>out+=c);child.stderr.on('data',(c)=>err+=c);child.on('close',(code)=>resolve({code,out,err}));});
+  assert.equal(r.code,1,label);
+  assert.match(r.err,/catchup_run:(aliases|arguments)/,label);
+  assert.doesNotMatch(r.out,/catchup_runner|reconcile_start/,`${label}: nothing started`);
+ }
+ assert.deepEqual(await runRow(),before,'the failed run was not touched');
+});
+
+test('a person with an explicitly cleared contact pending in the queue: the pinned translator cannot verify them; the runner refuses with their id before the run',async()=>{
+ // a queued legacy person with a suppressed email decision (what a recruiter clear
+ // followed by a legacy change produces after 20261005090000)
+ const cid=randomUUID(),receipt=randomUUID();
+ await site.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,source,created_at) values($1,'Synthetic Cleared',$2::text,'https://www.linkedin.com/in/'||$2::text,'cleared@example.test','leaktest','2025-01-01')",[cid,`cleared-${cid.slice(0,8)}`]);
+ await site.query("insert into person_recruiter_receipts(id,candidate_id,actor_id,input_hash,edited_at,requested_contact,document,mode) values($1,$2,$3,'synthetic',clock_timestamp(),'{\"email\":null}'::jsonb,'{}'::jsonb,'shadow')",[receipt,cid,randomUUID()]);
+ await site.query("insert into person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) values($1,'email',null,$2,true)",[cid,receipt]);
+ assert.equal((await site.query('select count(*)::int n from person_reconcile_pending where candidate_id=$1',[cid])).rows[0].n,1);
+ const r=await runRunner({});
+ assert.equal(r.code,1,r.out+r.err);
+ assert.match(r.out,/"phase":"catchup_runner_refused"/);
+ assert.match(r.out,new RegExp(`"catchup_run:suppressed_pending".*${cid}`));
+ assert.doesNotMatch(r.out,/"phase":"catchup_runner"|reconcile_start|reconcile_checkpoint/,'no page was processed');
+ // out of the queue (the owner's resolution: the current translator or a re-save), the runner proceeds again
+ await site.query('delete from person_recruiter_primary where candidate_id=$1',[cid]);
+ await site.query('delete from person_recruiter_receipts where id=$1',[receipt]);
+ await site.query('delete from person_change_queue where candidate_id=$1',[cid]);
+ await site.query('delete from candidates where id=$1',[cid]);
+});
+
 test('resume with the identical configuration completes the run; committed work is preserved, every person recorded once',async()=>{
  const r=await runRunner({});
  assert.equal(r.code,0,`runner exit\n${r.out}\n${r.err}`);

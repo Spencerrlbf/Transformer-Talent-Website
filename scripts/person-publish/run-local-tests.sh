@@ -3,6 +3,7 @@
 #   node scripts/build-worker-lib.mjs
 #   PSQL=/opt/homebrew/opt/postgresql@15/bin/psql bash scripts/person-publish/run-local-tests.sh <port>
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 DB="${PERSON_PUBLISH_TEST_DB:-person_publish_test}"
@@ -16,6 +17,7 @@ for migration in 072_person_tables 20260926025355_person_writer_corrections 2026
 done
 bash scripts/person-audit/install-local.sh "$PORT" $DB
 q -d $DB -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
+q -d $DB -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 q -d $DB -f scripts/person-derivatives/local-embeddings.sql
 q -d $DB -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish/test-publish.mjs

@@ -284,7 +284,11 @@ async function sendRow(cid, job, extra = {}) {
   const c = (await pool.query('select * from candidates where id=$1', [cid])).rows[0] ?? {};
   const t = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
   const canonical=(await (await import('./dist/contact.mjs')).publishedPoolContactsOnConnection(pool,[cid])).get(cid);
-  const email=canonical?canonical.contact.email:t(c.contact?.email)??t(c.email),phone=canonical?canonical.contact.phone:t(c.contact?.phone)??t(c.phone);
+  // The caller's snapshot as the server builds it: the recruiter's decision first
+  // (20261005090000), then the overlay, then the scalar.
+  const dec=Object.fromEntries((await pool.query("select kind,chosen_value,coalesce((to_jsonb(p)->>'suppressed')::boolean,false) suppressed from person_recruiter_primary p where candidate_id=$1",[cid])).rows.map(d=>[d.kind,d]));
+  const pick=(kind,overlay,scalar)=>dec[kind]?(dec[kind].chosen_value===null&&dec[kind].suppressed?null:(t(overlay)??dec[kind].chosen_value??null)):(t(overlay)??t(scalar));
+  const email=canonical?canonical.contact.email:pick('email',c.contact?.email,c.email),phone=canonical?canonical.contact.phone:pick('phone',c.contact?.phone,c.phone);
   return { organization_id: TT, name: c.full_name || 'Candidate', email: email??'', linkedin_url: c.linkedin_url ?? null, linkedin_username: c.linkedin_username ?? null,
     role_ids: [job], role_titles: [`Synthetic Role (#${job})`], status: 'processed', source: 'transformer_talent', candidate_id: cid,
     parsed_profile: { current_title: t(c.current_title), current_company: t(c.current_company), location: t(c.location) }, harvest_profile: null, screening: null,
@@ -712,6 +716,35 @@ for (const variant of [{ name: 'NULL scalar', scalarEmail: null }, { name: 'stal
       assert.deepEqual(await linkedReads(id), { detail: null, detailOthers: [], list: null, compose: null });
       assert.equal((await pool.query("select count(*)::int n from candidate_emails where candidate_id=$1 and email_address='historical@example.test'", [cid])).rows[0].n, 1, 'no address was deleted to satisfy the reads');
       assert.equal((await plan(cid)).status, 'verified');
+      // The real checked Send admits the blank snapshot (the RPC resolves the same
+      // decision, 20261005100000) and records no email; a stale snapshot is refused.
+      const sent = await send(await sendRow(cid, variant.scalarEmail ? '9711' : '9710'));
+      assert.equal(sent.status, 'sent', JSON.stringify(sent));
+      assert.equal((await row('website_applications', sent.applicationId)).email, '');
+      assert.deepEqual(await send({ ...(await sendRow(cid, '9712')), email: 'historical@example.test', contact: { email: 'historical@example.test', phone: null } }), { status: 'contact_changed' });
+      // A later legacy change queues the cleared person again; the current translator
+      // processes them without an integrity complaint (an explicit clear has no primary).
+      // The raw legacy write itself is what the audit then reports, not the clear.
+      await pool.query("update person_private.transition_control set enabled=false where singleton");
+      try { await pool.query("update candidates set notes='legacy note after the clear' where id=$1", [cid]); }
+      finally { await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"); }
+      assert.equal((await pool.query('select count(*)::int n from person_reconcile_pending where candidate_id=$1', [cid])).rows[0].n, 1, 'pending again');
+      {
+        // (the queue catch-up runs with the controller disabled, as before cutover, or
+        // inside a held catch-up window; disabled here)
+        const { pgSite } = await import('../person-trial.mjs'), { reconcilePage } = await import('../person-reconcile.mjs'), lib = await import('../dist/worker-lib.mjs');
+        const site = await pgSite(process.env.LOCAL_DATABASE_URL), run = `cleared-${cid.slice(0, 8)}`;
+        await pool.query("update person_private.transition_control set enabled=false where singleton");
+        try {
+          await site.rpc('person_reconcile_start', { p_run: run, p_commit: 'c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc', p_limit: 1000, p_batch: 100, p_resume: false, p_scope: 'queue', p_external_hash: '1'.repeat(32) });
+          let page; while ((page = await site.rpc('person_reconcile_page', { p_run: run, p_size: 100 }))?.length) await reconcilePage({ site, lib, config: { run, dry: false }, page });
+        } finally { await site.end?.(); await pool.query("update person_private.transition_control set enabled=true,phase='open' where singleton"); }
+        const rec = (await pool.query('select status,checks from person_reconcile_people where run_id=$1 and candidate_id=$2', [run, cid])).rows[0];
+        assert.ok(rec, 'the cleared person was processed and recorded');
+        assert.ok(['verified', 'review'].includes(rec.status), JSON.stringify(rec));
+        assert.doesNotMatch(JSON.stringify(rec.checks), /one_primary/, 'no integrity complaint about the missing primary');
+      }
+      { const audit = await plan(cid); assert.doesNotMatch(JSON.stringify(audit), /one_primary/, JSON.stringify(audit.checks?.integrity?.failed ?? audit)); }
     } finally { globalThis.fetch = priorFetch; process.env.PERSON_WRITE_MODE = priorMode; }
   });
 }
@@ -744,6 +777,10 @@ test('live mode: an explicit email and phone clear survives publication; choosin
   assert.ok(after.every((r) => r.rank === null), `no email/phone carries a rank while cleared: ${JSON.stringify(after)}`);
   assert.deepEqual(await published(), { email: null, phone: null, github: null, otherEmails: [] });
   assert.equal((await sendRow(cid, '990')).email, '', 'Send\'s canonical snapshot carries no email');
+  const sentLive = await send(await sendRow(cid, '990'));
+  assert.equal(sentLive.status, 'sent', JSON.stringify(sentLive));
+  assert.equal((await row('website_applications', sentLive.applicationId)).email, '');
+  assert.equal((await row('website_applications', sentLive.applicationId)).contact?.phone ?? null, null);
   { const audit = await plan(cid); assert.equal(audit.status, 'verified', JSON.stringify(audit)); }
   // Choosing again lifts the clear for that kind only.
   const again = await save({ email: 'recruiter-again@example.test', phone: null, github: null, otherEmails: [] });

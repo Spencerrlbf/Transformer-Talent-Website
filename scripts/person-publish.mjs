@@ -30,6 +30,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {checkNode} from './check-node.mjs';
 import {openDatabase,parseOptions,capacityGate,pinnedCommit,safeReason,log,withRunLock} from './person-publish/lib.mjs';
 
 export const SPEC={
@@ -140,6 +141,7 @@ async function runPublishLocked({pool,lib,options,now,onProgress,hooks}){
  }
 }
 export async function main(argv=process.argv.slice(2)){
+ checkNode();
  const options=parseOptions(argv,SPEC);
  const pool=await openDatabase(process.env,'tt-person-publish');
  try{

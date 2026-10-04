@@ -15,10 +15,10 @@ export function checkNode(version = process.version, { engines } = {}) {
   const major = Number(version.replace(/^v/, "").split(".")[0]);
   const declared = engines ?? JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8")).engines?.node;
   if (declared !== `${SUPPORTED_MAJOR}.x`) throw Error(`node_runtime:engines_mismatch:${declared}`);
-  if (major !== SUPPORTED_MAJOR) throw Error(`node_runtime:unsupported:${version} (supported: ${SUPPORTED_MAJOR}.x)`);
+  if (major !== SUPPORTED_MAJOR) throw Error(`node_runtime:unsupported:${version}`);
   return { version, major };
 }
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try { console.log(JSON.stringify({ node: checkNode().version, supported: `${SUPPORTED_MAJOR}.x` })); }
-  catch (error) { console.error(error.message); process.exit(1); }
+  catch (error) { console.error(`${error.message} (supported: ${SUPPORTED_MAJOR}.x)`); process.exit(1); }
 }

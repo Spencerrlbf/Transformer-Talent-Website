@@ -128,6 +128,15 @@ export async function recruiterContactDecisions(
   return out;
 }
 
+/** An unpublished person's phone under the recruiter's decision: cleared → none,
+ * chosen → that value, otherwise the overlay and then the scalar. Every surface that
+ * shows or sends an unpublished phone (Network list, net_ drawer, Send, linked reads)
+ * resolves it here; a failed decision lookup reads as cleared (see above). */
+export function poolPhone(decision: RecruiterDecisions | undefined, overlay: unknown, scalar: unknown): string | null {
+  if (decision && "phone" in decision) return decision.phone === null ? null : str(overlay) ?? decision.phone ?? null;
+  return str(overlay) ?? str(scalar);
+}
+
 /** candidateId -> usable emails, best first. knownEmail (candidates.email) leads.
  * For an unpublished person the recruiter's explicit decision comes first: a clear
  * yields no emails at all (neither the scalar nor the verification history may
@@ -137,7 +146,7 @@ export async function poolEmails(
   candidateIds: string[],
   knownEmails: Map<string, string | null>,
   published?: Map<string, ResolvedPoolContact>,
-  options: { requireComplete?: boolean } = {}
+  options: { requireComplete?: boolean; decisions?: Map<string, RecruiterDecisions> } = {}
 ): Promise<Map<string, RankedEmail[]>> {
   const normalized = published ?? await publishedPoolContacts(candidateIds);
   const legacyIds = candidateIds.filter(id => !normalized.has(id));
@@ -166,7 +175,7 @@ export async function poolEmails(
     byCand.set(r.candidate_id, list);
   }
 
-  const decisions = legacyIds.length ? await recruiterContactDecisions(legacyIds, options) : new Map<string, RecruiterDecisions>();
+  const decisions = options.decisions ?? (legacyIds.length ? await recruiterContactDecisions(legacyIds, options) : new Map<string, RecruiterDecisions>());
   const out = new Map<string, RankedEmail[]>();
   for (const id of legacyIds) {
     const decision = decisions.get(id);
@@ -349,7 +358,9 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
   }
   const published = await publishedPoolProfiles(ids);
   for (const [id, snapshot] of published) pool.set(id, snapshot.profile as PoolRow);
-  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])), published);
+  const legacyIds = ids.filter((id) => !published.has(id));
+  const decisions = legacyIds.length ? await recruiterContactDecisions(legacyIds) : new Map<string, RecruiterDecisions>();
+  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])), published, { decisions });
 
   const people: NetworkPerson[] = [];
   for (const r of rows) {
@@ -384,7 +395,7 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
       linkedinUrl: str(p.linkedin_url),
       email: emails[0]?.email ?? null,
       emails,
-      phone: published.has(r.candidate_id) ? published.get(r.candidate_id)!.contact.phone ?? null : str(p.contact?.phone) ?? str(p.phone),
+      phone: published.has(r.candidate_id) ? published.get(r.candidate_id)!.contact.phone ?? null : poolPhone(decisions.get(r.candidate_id), p.contact?.phone, p.phone),
       years: p.calculated_experience_years ?? p.total_experience_years ?? null,
       latestMatchAt: r.latest_match_at,
       matches,
@@ -440,10 +451,11 @@ export async function sendNetworkCandidate(
   const published = await publishedPoolProfiles([candidateId]);
   const canonical = published.get(candidateId);
   if (canonical) cand = canonical.profile as PoolRow;
-  const bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : str(cand.contact?.phone) ?? str(cand.phone);
-  let bestEmail: string | null;
+  let bestEmail: string | null, bestPhone: string | null;
   try {
-    bestEmail = (await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published, { requireComplete: checkedSend })).get(candidateId)?.[0]?.email ?? null;
+    const decisions = published.has(candidateId) ? new Map<string, RecruiterDecisions>() : await recruiterContactDecisions([candidateId], { requireComplete: checkedSend });
+    bestEmail = (await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published, { requireComplete: checkedSend, decisions })).get(candidateId)?.[0]?.email ?? null;
+    bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : poolPhone(decisions.get(candidateId), cand.contact?.phone, cand.phone);
   } catch { return { ok: false, error: "temporarily_unavailable" }; }
 
   // One send per (person, target job) — pipelines never grow duplicates.

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Resets only the caller-owned loopback person_directory_outcomes_test fixture database.
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2

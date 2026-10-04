@@ -5,6 +5,7 @@
 # the old Send, then apply 061000 and the forward migrations and prove the result
 # matches a clean install. Resets only person_directory_worker_test.
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
@@ -123,7 +124,13 @@ q -d $DB -f scripts/person-trial/local-schema.sql
 }
 upgrade(){
  q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
- for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear; do
+ for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index; do
+  q -d $DB -1 -f "supabase/migrations/$migration.sql"
+ done
+}
+# The 2026-10-05 forward files (explicit clears; Send honours decisions).
+upgrade_clears(){
+ for migration in 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions; do
   q -d $DB -1 -f "supabase/migrations/$migration.sql"
  done
 }
@@ -136,12 +143,19 @@ mkdir -p scripts/person-release-upgrade/dist
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scripts/person-release-upgrade/dist/state.json node --test --test-concurrency=1 scripts/person-release-upgrade/test-upgrade-before.mjs
 # Phase 2: the release upgrade, exactly as an operator applies it to an older install.
 upgrade
-# Phase 3: preserved witnesses and converged definitions.
+# Phase 2b: historical recruiter decisions as the pre-2026-10-05 writer left them,
+# created BEFORE the clears migration (unpublished shadow clears, a published live NULL,
+# a phone-only clear), then the two 2026-10-05 forward files.
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scripts/person-release-upgrade/dist/state.json node --test --test-concurrency=1 scripts/person-release-upgrade/test-upgrade-clears-before.mjs
+upgrade_clears
+# Phase 3: preserved witnesses and converged definitions; preserved clears.
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scripts/person-release-upgrade/dist/state.json node --test --test-concurrency=1 scripts/person-release-upgrade/test-upgrade-after.mjs
+LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" UPGRADE_STATE=scripts/person-release-upgrade/dist/state.json node --test --test-concurrency=1 scripts/person-release-upgrade/test-upgrade-clears-after.mjs
 # Phase 4: the same upgrade on a fresh older install, then the complete clean-install
 # edits suite (Send races, witness audit, resume fills) must pass on the upgraded schema.
 install_chain old
 upgrade
+upgrade_clears
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-application-edits/test-edits.mjs
 node --test scripts/person-application-edits/test-contact-recipient.mjs
 # Phase 5: a clean install of the release chain in a second database; its catalog must
@@ -150,7 +164,7 @@ node --test scripts/person-release-upgrade/test-forward-definitions.mjs
 CLEAN=person_release_clean_test
 DB_SAVED=$DB; DB=$CLEAN
 install_chain clean
-for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear; do
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions; do
  q -d $DB -1 -f "supabase/migrations/$migration.sql"
 done
 DB=$DB_SAVED

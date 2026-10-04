@@ -4,6 +4,7 @@
 #   node scripts/build-worker-lib.mjs
 #   PSQL=/opt/homebrew/opt/postgresql@15/bin/psql bash scripts/person-audit/run-postcutover-audit-tests.sh <port>
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 DB=person_postcutover_test
@@ -19,6 +20,7 @@ done
 q -d $DB -f scripts/person-derivatives/local-embeddings.sql
 q -d $DB -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 q -d $DB -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
+q -d $DB -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 if [[ "${AUDIT_FENCES_ONLY:-0}" != 1 ]]; then
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-audit/test-postcutover-audit.mjs
 fi

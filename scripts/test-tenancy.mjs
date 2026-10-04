@@ -23,9 +23,11 @@
 // seeding and teardown stay disabled, the probes run armed, and cleanup undoes only
 // the controller changes this run made. Never point this at a database you must keep
 // unchanged: it writes.
+import { checkNode } from "./check-node.mjs";
 import { preflightArmedSweep, armForSweep, disarmAfterSweep, recoverArmOwnership, controllerViaRest } from "./tenancy/armed.mjs";
 import { newRun, setup, teardown, leftovers, svc } from "./tenancy/fixture.mjs";
 
+try { checkNode(); } catch (e) { console.error(e.message); process.exit(1); } // the supported runtime, before any fixture write
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const opt = (n) => {

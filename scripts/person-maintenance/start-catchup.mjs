@@ -6,12 +6,14 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {checkNode} from '../check-node.mjs';
 import pg from 'pg';
 import {selectedTarget,checkRestUrl,checkServiceKey,databaseIdentity,verifyRuntimeIdentity,isTargetError} from '../person-target.mjs';
 export const PIN='c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc';
 const CODES=new Set(['directory','session_connection_required','deadline','not_pinned','dirty_runtime','bundle_build','config','credentials','capacity','existing_run','response','target']);
 export function reasonOf(error){
  if(isTargetError(error))return error.message;
+ if(/^node_runtime:/.test(error?.message??''))return error.message;
  const code=error?.message?.replace(/^catchup_start:/,'');
  return CODES.has(code)?`catchup_start:${code}`:`operation_failed:${/^[0-9A-Z]{5}$/.test(error?.code??'')?error.code:'unknown'}`;
 }
@@ -51,6 +53,7 @@ export async function openReadOnlyDirectory(url,{Client=pg.Client}={}){
 const load=(root,f)=>import(pathToFileURL(path.join(root,'scripts',f)).href);
 /** Dependencies can be replaced only by offline fault-injection tests. */
 export async function main(argv=process.argv.slice(2),{env=process.env,verify=verifyPinnedRuntime,importPinned=load,openDirectory=openReadOnlyDirectory,now=()=>performance.now(),out=x=>console.log(JSON.stringify(x))}={}){
+ checkNode();
  const started=now();
  if(argv.length)throw Error('catchup_start:config');
  const runtime=await verify(env.PINNED_RUNNER_DIR);

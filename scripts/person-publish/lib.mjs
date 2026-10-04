@@ -115,7 +115,7 @@ export function capacityGate(pool,{maxBytes,now=Date.now}){
 }
 export function safeReason(error){
  const message=error?.message??'';
- if(/^(publish_|person_|audit_|legacy_|invalid_)[a-z_:0-9-]+$/.test(message))return message;
+ if(/^(publish_|person_|audit_|legacy_|invalid_)[a-z_:0-9-]+$/.test(message)||/^node_runtime:[a-z_]+:v[0-9.]+$/.test(message))return message;
  return `operation_failed:${/^[0-9A-Z]{5}$/.test(error?.code??'')?error.code:'unknown'}`;
 }
 export const log=(record)=>console.log(JSON.stringify(record));

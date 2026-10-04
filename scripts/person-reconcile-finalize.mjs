@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {checkNode} from './check-node.mjs';
 import {checkLinkedWorkdir,checkDatabaseUrl,checkRestUrl,checkServiceKey,selectedTarget,verifyRuntimeIdentity,IDENTITY_SQL,isTargetError} from './person-target.mjs';
 
 export const RUN=/^[a-zA-Z0-9_-]{1,100}$/;
@@ -42,11 +43,12 @@ commit;`;
 }
 export function safeReason(error){
  const message=error?.message??'';
- if(/^(finalize_|person_)[a-z_:0-9-]+$/.test(message))return message;
+ if(/^(finalize_|person_)[a-z_:0-9-]+$/.test(message)||/^node_runtime:[a-z_]+:v[0-9.]+$/.test(message))return message;
  return `operation_failed:${/^[0-9A-Z]{5}$/.test(error?.code??'')?error.code:'unknown'}`;
 }
 /** Dependencies are replaceable only by offline tests. */
 export async function main(argv=process.argv.slice(2),{env=process.env,readFile=fs.readFileSync,exec=execFileSync,connect,fetchFn=globalThis.fetch,out=x=>process.stdout.write(x)}={}){
+ checkNode();
  const {run,workdir}=parseArgs(argv);
  const target=selectedTarget(env);
  if(workdir){

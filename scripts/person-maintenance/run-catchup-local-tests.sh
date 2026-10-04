@@ -6,6 +6,7 @@
 #   SUPABASE_URL=http://127.0.0.1:<api> SUPABASE_SERVICE_ROLE_KEY=… WEBSITE_DATABASE_URL=<stack pg> \
 #   PINNED_RUNNER_DIR=<c4d0e4e checkout> bash scripts/person-maintenance/run-catchup-local-tests.sh <comms pg port>
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port for the synthetic directory database required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2

@@ -17,14 +17,20 @@
 -- post-cutover audit's expected ranks) sees nothing for it; nothing is deleted from
 -- candidate_contacts or the verification tables.
 --
--- Existing rows: every NULL written so far came from a recruiter saving an empty
--- field, but in live mode the save then showed the recruiter the fallback address,
--- so whether they meant "clear" or accepted the fallback cannot be established from
--- the data. They are left as `suppressed=false` (their behaviour is unchanged) and
--- listed by the query at the end for the owner's review. New recruiter saves write
--- `suppressed=true` for a cleared kind; a resume fill re-writing an existing row
--- preserves the row's flag; a save that explicitly asks for automatic selection
--- (`requested_contact.automatic`, library-level) writes `suppressed=false`.
+-- Existing NULL rows are classified by what the readers showed for them BEFORE this
+-- migration, so the upgrade changes no effective behaviour:
+--   * person not published: every reader (shadow writer's result, linked reads, pool
+--     drawer, Network list, Send) resolved the NULL as a clear, and the receipt
+--     recorded and returned the requested NULL -> `suppressed=true` (proven clear);
+--   * person published: the ranking resolved the NULL as the eligible fallback and the
+--     live save showed the recruiter that fallback -> `suppressed=false` (automatic),
+--     the genuinely ambiguous population, counted by the NOTICE and listed for the
+--     owner's per-row review (RELEASE_REMEDIATION.md). Nothing is restored by the
+--     upgrade: an address shown today stays shown, an address hidden today stays hidden.
+-- New recruiter saves write `suppressed=true` for a cleared kind; a resume fill
+-- re-writing an existing row preserves the row's flag; a save that explicitly asks for
+-- automatic selection (`requested_contact.automatic`, library-level) writes
+-- `suppressed=false`.
 --
 -- Additive: one column, one constraint, the ranking function's eligibility, and the
 -- certified writer's target/validation patched in place (same technique as
@@ -35,6 +41,18 @@ do $$begin
   alter table public.person_recruiter_primary add constraint person_recruiter_primary_suppressed_null check (chosen_value is null or not suppressed);
  end if;
 end$$;
+
+-- Historical NULL decisions of unpublished people were clears for every reader: keep
+-- them clears. The recruiter guard triggers refuse raw writes while the controller
+-- requires normalization; this is a one-time schema-level reclassification with no
+-- semantic change for the audit (the epoch trigger ignores `suppressed`), so the
+-- user triggers are suspended for exactly this statement.
+alter table public.person_recruiter_primary disable trigger user;
+update public.person_recruiter_primary rp set suppressed=true
+ where rp.chosen_value is null and not rp.suppressed
+  and not exists(select 1 from public.person_projection_state p where p.candidate_id=rp.candidate_id)
+  and exists(select 1 from public.person_recruiter_receipts r where r.id=rp.receipt_id and r.requested_contact->>rp.kind is null);
+alter table public.person_recruiter_primary enable trigger user;
 
 -- Ranking: a suppressed kind is ineligible for a rank. Otherwise identical to 20260926065300.
 create or replace function public.person_contact_ranks(p_candidate uuid)
@@ -83,6 +101,18 @@ begin
 end$$;
 revoke all on function person_private.recruiter_primary_suppressed(uuid,text,jsonb,jsonb,jsonb) from public,anon,authenticated;
 
+-- Stored ranks of the people reclassified above follow the new rule now (a rerank
+-- otherwise happens only on their next certified write, which would leave the old
+-- rank-1 address visible until then). Same one-time, trigger-suspended statement as
+-- the reclassification; the post-cutover audit recomputes expected ranks with
+-- person_contact_ranks() and must find them equal.
+alter table public.candidate_contacts disable trigger user;
+update public.candidate_contacts cc set rank=r.new_rank
+ from (select p.candidate_id,x.id,x.new_rank from (select distinct candidate_id from public.person_recruiter_primary where suppressed) p
+       cross join lateral public.person_contact_ranks(p.candidate_id) x) r
+ where r.id=cc.id and cc.rank is distinct from r.new_rank;
+alter table public.candidate_contacts enable trigger user;
+
 -- Certified writer (where installed): the target row carries the flag, because
 -- recruiter_write compares the returned row with the target column for column, and
 -- the validation checks it. Patched in place like 20260928061000 does.
@@ -107,8 +137,10 @@ do $$declare d text;n text;r text;begin
  end if;
 end$$;
 
--- Historical NULL decisions (owner review; see RELEASE_REMEDIATION.md). Reported only.
-do $$declare n int;begin
- select count(*) into n from public.person_recruiter_primary where chosen_value is null and not suppressed;
- raise notice 'person_recruiter_explicit_clear: % historical NULL decision row(s) left as automatic (not suppressed)', n;
+-- Report: proven clears kept, ambiguous published rows left automatic (owner review;
+-- see RELEASE_REMEDIATION.md).
+do $$declare kept int;auto int;begin
+ select count(*) into kept from public.person_recruiter_primary where chosen_value is null and suppressed;
+ select count(*) into auto from public.person_recruiter_primary where chosen_value is null and not suppressed;
+ raise notice 'person_recruiter_explicit_clear: % NULL decision row(s) are clears (suppressed), % left automatic (published people; owner review)', kept, auto;
 end$$;

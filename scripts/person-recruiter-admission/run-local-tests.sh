@@ -1,6 +1,7 @@
 #!/bin/bash
 # Resets only the caller-owned loopback person_recruiter_admission_test fixture database.
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
@@ -93,6 +94,7 @@ if test -f supabase/migrations/20260928000000_person_recruiter_admission.sql; th
  q -d $DB -1 -f supabase/migrations/20260928000000_person_recruiter_admission.sql
 fi
 q -d $DB -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
+q -d $DB -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 node scripts/build-worker-lib.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-recruiter-admission/test-admission.mjs
 

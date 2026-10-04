@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 q(){ "$PSQL" -h 127.0.0.1 -p "$PORT" -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
@@ -13,6 +14,7 @@ if test -f supabase/migrations/20260926065300_person_recruiter_contacts.sql;then
  q -d person_audit_test -1 -f supabase/migrations/20260926065300_person_recruiter_contacts.sql
 fi
 q -d person_audit_test -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
+q -d person_audit_test -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 q -d person_audit_test -f scripts/person-derivatives/local-embeddings.sql
 q -d person_audit_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 q -d person_audit_test -1 -f supabase/migrations/20260926054500_person_refresh_intake.sql

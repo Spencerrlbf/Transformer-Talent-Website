@@ -21,7 +21,7 @@ import { signResumeUrl } from "./applicants";
 import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
-import { poolEmails } from "./network";
+import { poolEmails, poolPhone, recruiterContactDecisions, type RecruiterDecisions } from "./network";
 import { publishedPoolProfiles } from "./person/profile-view";
 import { poolContacts } from "./person/pool-contact";
 import { saveRecruiterContact } from "./person/recruiter";
@@ -1531,7 +1531,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     const published = await publishedPoolProfiles([id]);
     const canonical = published.get(id);
     if (canonical) p = canonical.profile as typeof p;
-    const [enrRes, vRes, emailMap] = await Promise.all([
+    const [enrRes, vRes, decisions] = await Promise.all([
       canonical ? Promise.resolve(null) : sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
           `&raw_payload=not.is.null&select=raw_payload,created_at&order=created_at.desc&limit=1`
@@ -1540,8 +1540,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published),
+      published.has(id) ? new Map<string, RecruiterDecisions>() : recruiterContactDecisions([id]),
     ]);
+    const emailMap = await poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published, { decisions });
     const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
@@ -1637,7 +1638,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
           .filter((e) => e.toLowerCase() !== (primary || "").toLowerCase());
         return {
           email: primary,
-          phone: str(p.contact?.phone) ?? str(p.phone),
+          phone: canonical ? canonical.contact.phone ?? null : poolPhone(decisions.get(id), p.contact?.phone, p.phone),
           github: str(p.contact?.github),
           otherEmails: curated ?? fallback,
         };

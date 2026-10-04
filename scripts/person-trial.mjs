@@ -692,6 +692,9 @@ export async function readNew(site, ids, { globalCounts = true } = {}) {
    ()=>selectIn(site,"candidate_contacts","candidate_id",ids,{order:"candidate_id.asc,kind.asc,value_normalized.asc"}),
    ()=>selectIn(site,"candidate_contact_summary","candidate_id",ids,{order:"candidate_id.asc"})
   ],4,fn=>fn());
+  // The recruiter's explicit decisions (20261005090000): a suppressed kind legitimately
+  // has no primary; the integrity check needs them to tell that from corruption.
+  const recruiterPrimary = await selectIn(site,"person_recruiter_primary","candidate_id",ids,{order:"candidate_id.asc,kind.asc"}).catch(()=>[]);
   const conflictParts=[];for(let i=0;i<ids.length;i+=40)conflictParts.push(ids.slice(i,i+40));
   const [conflictRows,companies,schools,skills,writerCompanies,writerSchools]=await mapBounded([
    async()=>(await mapBounded(conflictParts,4,part=>site.select("identity_conflicts",{filters:[["candidate_ids","ov",part]],order:"id.asc"}))).flat(),
@@ -713,6 +716,7 @@ export async function readNew(site, ids, { globalCounts = true } = {}) {
     educations: groupBy(educations, "candidate_id"),
     cskills: groupBy(cskills, "candidate_id"),
     contacts: groupBy(contacts, "candidate_id"),
+    recruiterPrimary: groupBy(recruiterPrimary, "candidate_id"),
     summary: new Map(summary.map((s) => [s.candidate_id, s])),
     conflicts,
     companyById: new Map(companies.map((c) => [c.id, c])),

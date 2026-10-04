@@ -9,7 +9,7 @@
 // the pool drawer, the Network list and Send.
 import { publishedPoolProfiles } from "./profile-view";
 import { sbRest } from "../supabase";
-import { poolEmails, recruiterContactDecisions } from "../network";
+import { poolEmails, poolPhone, recruiterContactDecisions } from "../network";
 
 export type PoolContact = { email: string | null; phone: string | null; github: string | null; otherEmails: string[] };
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -33,14 +33,13 @@ export async function poolContacts(ids: string[]): Promise<Map<string, PoolConta
     ]);
     for (const p of rows) {
       const ranked = emails.get(p.id) ?? [];
-      const phoneCleared = decisions.get(p.id)?.phone === null && "phone" in (decisions.get(p.id) ?? {});
       // The overlay spelling leads only when the ranking admits that address.
       const overlay = str(p.contact?.email);
       const primary = overlay && ranked.some((e) => e.email.toLowerCase() === overlay.toLowerCase()) ? overlay : ranked[0]?.email ?? null;
       out.set(p.id, {
         email: primary,
-        // A cleared phone stays cleared; otherwise the overlay, then the scalar.
-        phone: phoneCleared ? null : str(p.contact?.phone) ?? str(p.phone),
+        // The recruiter's phone decision, then the overlay, then the scalar.
+        phone: poolPhone(decisions.get(p.id), p.contact?.phone, p.phone),
         github: str(p.contact?.github),
         otherEmails: Array.isArray(p.contact?.otherEmails) ? p.contact!.otherEmails! :
           ranked.map((e) => e.email).filter((e) => e.toLowerCase() !== (primary ?? "").toLowerCase()),
