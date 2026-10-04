@@ -32,14 +32,15 @@ globalThis.fetch = async (input, init = {}) => {
   if (u.pathname.endsWith('/person_recruiter_primary')) {
     assert.equal(u.searchParams.get('candidate_id'), `in.("${PERSON}")`);
     if (poolResponse === 'preferences-unavailable') return Response.json({}, { status: 503 });
-    if (poolResponse === 'cleared') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: null }, { candidate_id: PERSON, kind: 'phone', chosen_value: null }]);
-    if (poolResponse === 'chosen') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: 'chosen@example.test' }]);
+    if (poolResponse === 'cleared') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: null, suppressed: true }, { candidate_id: PERSON, kind: 'phone', chosen_value: null, suppressed: true }]);
+    if (poolResponse === 'automatic') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: null, suppressed: false }]);
+    if (poolResponse === 'chosen') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: 'chosen@example.test', suppressed: false }]);
     return Response.json([]);
   }
   if (['candidate_emails', 'candidate_emails_v2'].includes(u.pathname.split('/').at(-1))) {
     assert.equal(u.searchParams.get('candidate_id'), `in.("${PERSON}")`);
     if (poolResponse === 'verification-unavailable') return Response.json({}, { status: 503 });
-    return Response.json(['verified', 'cleared', 'chosen', 'preferences-unavailable'].includes(poolResponse) && u.pathname.endsWith('/candidate_emails')
+    return Response.json(['verified', 'cleared', 'automatic', 'chosen', 'preferences-unavailable'].includes(poolResponse) && u.pathname.endsWith('/candidate_emails')
       ? [{ candidate_id: PERSON, email: 'verified@example.test', email_type: 'personal', is_primary: true, quality: 'good', result: 'ok' },
         { candidate_id: PERSON, email: 'secondary@example.test', email_type: 'personal', is_primary: false, quality: 'good', result: 'ok' },
         { candidate_id: PERSON, email: 'invalid@example.test', email_type: 'personal', is_primary: false, quality: 'bad', result: 'invalid' }]
@@ -108,4 +109,10 @@ test('an explicit recruiter choice is shown in the overlay\'s spelling with its 
   assert.equal(detail.contact.email, 'Chosen@example.test');
   assert.deepEqual(detail.contact.otherEmails, ['kept@example.test']);
   assert.equal((await candidateContact(TT, `app_${APP}`)).email, 'Chosen@example.test');
+});
+test('a historical NULL decision without the flag (automatic selection) keeps the verified fallback', async () => {
+  poolResponse = 'automatic';
+  const detail = await unifiedCandidateDetail(TT, `app_${APP}`);
+  assert.equal(detail.contact.email, 'verified@example.test');
+  assert.equal((await candidateContact(TT, `app_${APP}`)).email, 'verified@example.test');
 });

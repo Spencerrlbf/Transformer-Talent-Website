@@ -12,6 +12,7 @@ done
 if test -f supabase/migrations/20260926065300_person_recruiter_contacts.sql;then
  q -d person_audit_test -1 -f supabase/migrations/20260926065300_person_recruiter_contacts.sql
 fi
+q -d person_audit_test -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
 q -d person_audit_test -f scripts/person-derivatives/local-embeddings.sql
 q -d person_audit_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 q -d person_audit_test -1 -f supabase/migrations/20260926054500_person_refresh_intake.sql

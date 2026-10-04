@@ -715,3 +715,47 @@ for (const variant of [{ name: 'NULL scalar', scalarEmail: null }, { name: 'stal
     } finally { globalThis.fetch = priorFetch; process.env.PERSON_WRITE_MODE = priorMode; }
   });
 }
+
+// ---- Explicit clears across publication (live mode) -----------------------------------
+// A recruiter's clear must hold for a PUBLISHED person too: the ranking gives a
+// suppressed kind no rank, so the published drawer/list, Send's canonical contact and
+// the save's own result show nothing for it, until the recruiter chooses again or
+// asks for automatic selection. Nothing is deleted from candidate_contacts.
+test('live mode: an explicit email and phone clear survives publication; choosing again and automatic selection still work', async () => {
+  const { id, cid } = await processed();
+  const lib = await import('./dist/contact.mjs');
+  const published = async () => (await lib.publishedPoolContactsOnConnection(pool, [cid])).get(cid)?.contact ?? null;
+  const ranks = async () => (await pool.query("select c.kind,c.value_normalized,c.rank from candidate_contacts c where c.candidate_id=$1 and c.kind in ('email','phone') order by c.kind,c.value_normalized", [cid])).rows;
+  // (reads the flag through to_jsonb so the pre-migration run fails on behaviour, not on the column)
+  const decisions = async () => (await pool.query("select kind,chosen_value,coalesce((to_jsonb(p)->>'suppressed')::boolean,false) suppressed from person_recruiter_primary p where candidate_id=$1 order by kind", [cid])).rows;
+  const save = (contact) => recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'live', contact });
+  // The intake left the submitted address and phone as eligible contacts.
+  assert.ok((await ranks()).some((r) => r.kind === 'email' && Number(r.rank) === 1), 'an eligible email exists before the clear');
+  const chosen = await save({ email: 'recruiter-chosen@example.test', phone: '+12025550177', github: null, otherEmails: [] });
+  assert.equal(chosen.contact.email, 'recruiter-chosen@example.test'); assert.equal(chosen.contact.phone, '+12025550177');
+  assert.deepEqual(await decisions(), [{ kind: 'email', chosen_value: 'recruiter-chosen@example.test', suppressed: false }, { kind: 'phone', chosen_value: '+12025550177', suppressed: false }]);
+  // Explicit clear of both kinds.
+  const cleared = await save({ email: null, phone: null, github: null, otherEmails: [] });
+  assert.equal(cleared.contact.email, null, 'the live save reports the clear, not a fallback');
+  assert.equal(cleared.contact.phone, null);
+  assert.deepEqual(await decisions(), [{ kind: 'email', chosen_value: null, suppressed: true }, { kind: 'phone', chosen_value: null, suppressed: true }]);
+  const after = await ranks();
+  assert.ok(after.length >= 2, 'history kept');
+  assert.ok(after.every((r) => r.rank === null), `no email/phone carries a rank while cleared: ${JSON.stringify(after)}`);
+  assert.deepEqual(await published(), { email: null, phone: null, github: null, otherEmails: [] });
+  assert.equal((await sendRow(cid, '990')).email, '', 'Send\'s canonical snapshot carries no email');
+  { const audit = await plan(cid); assert.equal(audit.status, 'verified', JSON.stringify(audit)); }
+  // Choosing again lifts the clear for that kind only.
+  const again = await save({ email: 'recruiter-again@example.test', phone: null, github: null, otherEmails: [] });
+  assert.equal(again.contact.email, 'recruiter-again@example.test'); assert.equal(again.contact.phone, null);
+  assert.deepEqual((await published()).email, 'recruiter-again@example.test'); assert.equal((await published()).phone, null);
+  assert.deepEqual(await decisions(), [{ kind: 'email', chosen_value: 'recruiter-again@example.test', suppressed: false }, { kind: 'phone', chosen_value: null, suppressed: true }]);
+  // Automatic selection (library-level): the ranking chooses the submitted address again.
+  const auto = await save({ email: null, phone: null, github: null, otherEmails: [], automatic: ['email', 'phone'] });
+  assert.deepEqual(await decisions(), [{ kind: 'email', chosen_value: null, suppressed: false }, { kind: 'phone', chosen_value: null, suppressed: false }]);
+  assert.equal(auto.contact.email, 'synthetic@example.test', 'automatic: the eligible submitted address ranks first again');
+  assert.equal((await published()).email, 'synthetic@example.test');
+  assert.ok((await ranks()).some((r) => r.kind === 'phone' && r.rank !== null));
+  assert.equal((await plan(cid)).status, 'verified');
+  void id;
+});

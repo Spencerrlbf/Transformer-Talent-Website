@@ -180,7 +180,7 @@ await test("concurrent identical requests produce one edit and one source", asyn
     1,
   );
 });
-await test("clearing all fields withdraws historical manual preference without deleting contacts", async () => {
+await test("clearing all fields is an explicit clear; automatic selection withdraws the preference without deleting contacts", async () => {
   await fixture(4, { contact: { email: "old-4@example.test" } });
   const d = lib.fromDirectory(
     {
@@ -207,9 +207,15 @@ await test("clearing all fields withdraws historical manual preference without d
   await use((c) => lib.savePersonOnConnection(c, d, { mode: "live" }));
   await save(input(4, 5, { email: "manual-4@example.test" }));
   assert.equal(await chosen(4), "manual-4@example.test");
+  // An empty save is an EXPLICIT CLEAR (20261005090000): no primary, even though the
+  // directory address is eligible; nothing is deleted.
   const clear = await save(input(4, 6));
-  assert.equal(clear.contact.email, "directory-4@example.test");
-  assert.equal(await chosen(4), "directory-4@example.test");
+  assert.equal(clear.contact.email, null);
+  assert.equal(await chosen(4), null);
+  assert.deepEqual(
+    (await pool.query("select chosen_value,suppressed from person_recruiter_primary where candidate_id=$1 and kind='email'", [id(4)])).rows,
+    [{ chosen_value: null, suppressed: true }],
+  );
   assert.equal(
     (
       await pool.query(
@@ -219,8 +225,18 @@ await test("clearing all fields withdraws historical manual preference without d
     ).rows[0].n,
     3,
   );
+  // A later source save does not revive it either.
   await use((c) => lib.savePersonOnConnection(c, d, { mode: "live" }));
+  assert.equal(await chosen(4), null);
+  // Withdrawing the preference (automatic selection) lets the ranking choose the
+  // directory address again: the historical "NULL" meaning, now stored explicitly.
+  const auto = await save(input(4, 60, { automatic: ["email", "phone"] }));
+  assert.equal(auto.contact.email, "directory-4@example.test");
   assert.equal(await chosen(4), "directory-4@example.test");
+  assert.deepEqual(
+    (await pool.query("select chosen_value,suppressed from person_recruiter_primary where candidate_id=$1 and kind='email'", [id(4)])).rows,
+    [{ chosen_value: null, suppressed: false }],
+  );
 });
 await test("negative evidence cannot be made usable by a manual primary choice", async () => {
   await fixture(5);

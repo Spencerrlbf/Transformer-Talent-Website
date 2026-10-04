@@ -111,7 +111,7 @@ q -d $DB -1 -f supabase/migrations/20260928070000_person_network_send.sql
 q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 # Release forward migrations: no-ops on a fresh chain, upgrades on an older install.
-for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index; do
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear; do
  q -d $DB -1 -f "supabase/migrations/$migration.sql"
 done
 node scripts/build-worker-lib.mjs

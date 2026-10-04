@@ -123,7 +123,7 @@ q -d $DB -f scripts/person-trial/local-schema.sql
 }
 upgrade(){
  q -d $DB -1 -f supabase/migrations/20260928061000_person_resume_contact_fill.sql
- for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index; do
+ for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear; do
   q -d $DB -1 -f "supabase/migrations/$migration.sql"
  done
 }
@@ -150,7 +150,7 @@ node --test scripts/person-release-upgrade/test-forward-definitions.mjs
 CLEAN=person_release_clean_test
 DB_SAVED=$DB; DB=$CLEAN
 install_chain clean
-for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index; do
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear; do
  q -d $DB -1 -f "supabase/migrations/$migration.sql"
 done
 DB=$DB_SAVED

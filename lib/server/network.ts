@@ -100,10 +100,10 @@ function emailScore(r: EmailRow): number {
 export type RecruiterDecisions = { email?: string | null; phone?: string | null };
 /** The recruiter's explicit contact decisions for unpublished people
  * (person_recruiter_primary): a present kind = decided; value null = an explicit
- * clear; an absent kind = no decision, the historical fallback applies. A failed
- * lookup is never "no decision": with `requireComplete` it is a failed read; without
- * it every requested person reads as cleared, so a lookup failure can only hide an
- * address, never revive one. */
+ * clear (`suppressed`); an absent kind = no decision or automatic selection, the
+ * ranking applies. A failed lookup is never "no decision": with `requireComplete` it
+ * is a failed read; without it every requested person reads as cleared, so a lookup
+ * failure can only hide an address, never revive one. */
 export async function recruiterContactDecisions(
   candidateIds: string[],
   options: { requireComplete?: boolean } = {}
@@ -111,15 +111,18 @@ export async function recruiterContactDecisions(
   const out = new Map<string, RecruiterDecisions>();
   for (let i = 0; i < candidateIds.length; i += 100) {
     const chunk = candidateIds.slice(i, i + 100);
-    const res = await sbRest(`person_recruiter_primary?candidate_id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=candidate_id,kind,chosen_value`);
+    const res = await sbRest(`person_recruiter_primary?candidate_id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=candidate_id,kind,chosen_value,suppressed`);
     if (!res.ok) {
       if (options.requireComplete) throw Error("pool_contact_unavailable");
       for (const id of chunk) out.set(id, { email: null, phone: null });
       continue;
     }
-    for (const r of (await res.json()) as { candidate_id: string; kind: string; chosen_value: string | null }[]) {
+    for (const r of (await res.json()) as { candidate_id: string; kind: string; chosen_value: string | null; suppressed: boolean | null }[]) {
       if (r.kind !== "email" && r.kind !== "phone") continue;
-      out.set(r.candidate_id, { ...(out.get(r.candidate_id) ?? {}), [r.kind]: str(r.chosen_value) });
+      const chosen = str(r.chosen_value);
+      // NULL without the flag is the historical "automatic" row: no decision to apply.
+      if (chosen === null && !r.suppressed) continue;
+      out.set(r.candidate_id, { ...(out.get(r.candidate_id) ?? {}), [r.kind]: chosen });
     }
   }
   return out;

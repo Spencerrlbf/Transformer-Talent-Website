@@ -12,7 +12,9 @@ const one=async(pool,sql,args=[])=>(await pool.query(sql,args)).rows[0].v;
 const both=(sql,args)=>Promise.all([one(upgraded,sql,args),one(clean,sql,args)]);
 
 test('function definitions are identical',async()=>{
- for(const fn of ['public.person_network_send(jsonb,text)','person_private.postcutover_snapshot(uuid)','public.person_application_contact_fill(uuid,text,jsonb)','public.person_target_identity()','person_private.application_source_guard()']){
+ for(const fn of ['public.person_network_send(jsonb,text)','person_private.postcutover_snapshot(uuid)','public.person_application_contact_fill(uuid,text,jsonb)','public.person_target_identity()','person_private.application_source_guard()',
+  // 20261005090000: ranking, the patched certified writer and its helper
+  'public.person_contact_ranks(uuid)','person_private.recruiter_normalize(uuid)','person_private.recruiter_write(uuid,text,jsonb,jsonb)','person_private.recruiter_primary_suppressed(uuid,text,jsonb,jsonb,jsonb)']){
   const [a,b]=await both('select pg_get_functiondef($1::regprocedure) v',[fn]);
   assert.equal(a,b,fn);
  }
@@ -37,4 +39,12 @@ test('identity index and privileges are identical',async()=>{
   assert.deepEqual(c,d,fn);
   for(const role of ['anon','authenticated']){const [e,f]=await both("select has_function_privilege($1,$2::regprocedure,'execute') v",[role,fn]);assert.equal(e,false,`${role} ${fn}`);assert.equal(f,false);}
  }
+});
+test('recruiter decision table: the suppressed column and its constraint are identical',async()=>{
+ const cols="select jsonb_agg(jsonb_build_object('c',column_name,'t',data_type,'n',is_nullable,'d',column_default) order by column_name) v from information_schema.columns where table_schema='public' and table_name='person_recruiter_primary'";
+ const [a,b]=await both(cols);assert.deepEqual(a,b);
+ assert.ok(a.some(c=>c.c==='suppressed'&&c.n==='NO'&&c.d==='false'));
+ const cons="select jsonb_agg(jsonb_build_object('n',conname,'d',pg_get_constraintdef(oid)) order by conname) v from pg_constraint where conrelid='public.person_recruiter_primary'::regclass";
+ const [c,d]=await both(cons);assert.deepEqual(c,d);
+ assert.ok(c.some(x=>x.n==='person_recruiter_primary_suppressed_null'));
 });

@@ -886,16 +886,19 @@ export function checkStored(tally, id, inp, docs, t, lib) {
   if (phonesMissing) tally.bad("phones_present", id);
 
   const eligible = (c) => c.status === "active" && !c.never_primary;
-  const primaryOk = (rows, check) => {
+  // An explicit recruiter clear (person_recruiter_primary.suppressed, 20261005090000)
+  // means that kind has no primary on purpose; usable rows then carry no rank.
+  const suppressed = (kind) => (t.recruiterPrimary?.get(id) ?? []).some((r) => r.kind === kind && r.chosen_value == null && r.suppressed === true);
+  const primaryOk = (rows, check, kind) => {
     tally.run(check);
     const ranked1 = rows.filter((c) => Number(c.rank) === 1);
     const usable = rows.filter(eligible).length;
-    const ok = usable ? ranked1.length === 1 && eligible(ranked1[0]) : ranked1.length === 0;
+    const ok = usable && !suppressed(kind) ? ranked1.length === 1 && eligible(ranked1[0]) : ranked1.length === 0;
     if (!ok) tally.bad(check, id);
-    return { usable, primary: ranked1.length };
+    return { usable, primary: ranked1.length, ...(suppressed(kind) ? { cleared: true } : {}) };
   };
-  const pe = primaryOk(emails, "one_primary_email");
-  const pp = primaryOk(phones, "one_primary_phone");
+  const pe = primaryOk(emails, "one_primary_email", "email");
+  const pp = primaryOk(phones, "one_primary_phone", "phone");
 
   tally.run("dead_never_primary");
   if (contacts.some((c) => c.rank !== null && c.rank !== undefined && (c.status !== "active" || c.never_primary))) tally.bad("dead_never_primary", id);

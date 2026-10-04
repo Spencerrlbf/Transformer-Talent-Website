@@ -18,6 +18,7 @@ for migration in 072_person_tables 20260926025355_person_writer_corrections 2026
 done
 q -d $DB -f scripts/person-derivatives/local-embeddings.sql
 q -d $DB -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
+q -d $DB -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
 if [[ "${AUDIT_FENCES_ONLY:-0}" != 1 ]]; then
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-audit/test-postcutover-audit.mjs
 fi
