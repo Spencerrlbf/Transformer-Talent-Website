@@ -98,29 +98,46 @@ export function checkServiceKey(key,target=selectedTarget(),{requireClaim=false}
 // value win. The validated identity must be the destination pg uses, so only one
 // `sslmode`, at most once, is accepted; every other option is refused.
 const DATABASE_OPTIONS=new Set(['sslmode']);
-function checkDatabaseOptions(u){
+// TLS modes a hosted destination may ask for. `disable`, `allow` and `no-verify`
+// would let the connection be read or redirected on the path; `prefer` is an alias
+// today but changes meaning in the next pg major.
+const HOSTED_SSLMODES=new Set(['require','verify-ca','verify-full']);
+function checkDatabaseOptions(u,hosted){
  const keys=[...u.searchParams.keys()];
  if(keys.some(k=>!DATABASE_OPTIONS.has(k)))throw fail('database_options');
  for(const k of DATABASE_OPTIONS)if(u.searchParams.getAll(k).length>1)throw fail('database_options');
+ const mode=u.searchParams.get('sslmode');
+ if(hosted&&mode!==null&&!HOSTED_SSLMODES.has(mode))throw fail('database_options');
 }
 /** Parse a PostgreSQL URL into its identity signals without exposing the password.
- * The result describes the destination pg connects to: option overrides are refused. */
+ * The result describes the destination pg connects to: option overrides are refused,
+ * and every part pg could otherwise take from the environment (PGPORT, PGUSER,
+ * PGDATABASE) must be explicit. A string pg would re-encode before parsing
+ * (whitespace, malformed percent sequences) is refused outright: pg then resolves it
+ * against its internal base and connects to host `base`. */
 export function databaseIdentity(url){
+ if(typeof url!=='string'||/\s/.test(url)||/%(?![0-9a-f]{2})/i.test(url))throw fail('database_url');
  const u=parseUrl(url,'database_url');
  if(!['postgres:','postgresql:'].includes(u.protocol)||u.hash)throw fail('database_url');
- checkDatabaseOptions(u);
+ if(!/^\/[^/]+$/.test(u.pathname))throw fail('database_url');
  const host=u.hostname.replace(/^\[|\]$/g,'');
- const port=u.port||'5432';
  const username=decodeURIComponent(u.username||'');
- if(LOOPBACK.has(u.hostname)||LOOPBACK.has(host))return {kind:'local',ref:LOCAL_TARGET,host,port,role:username};
- let m=/^db\.([a-z]{20})\.supabase\.co$/.exec(host);
- if(m)return {kind:'direct',ref:m[1],host,port,role:username};
- if(/^[a-z0-9-]+\.pooler\.supabase\.com$/.test(host)){
-  m=/^(.+)\.([a-z]{20})$/.exec(username);
-  if(!m)throw fail('pooler_username');
-  return {kind:'pooler',ref:m[2],host,port,role:m[1]};
+ let kind,ref,role=username;
+ if(LOOPBACK.has(u.hostname)||LOOPBACK.has(host)){kind='local';ref=LOCAL_TARGET;}
+ else{
+  let m=/^db\.([a-z]{20})\.supabase\.co$/.exec(host);
+  if(m){kind='direct';ref=m[1];}
+  else if(/^[a-z0-9-]+\.pooler\.supabase\.com$/.test(host)){
+   m=/^(.+)\.([a-z]{20})$/.exec(username);
+   if(!m)throw fail('pooler_username');
+   kind='pooler';ref=m[2];role=m[1];
+  }
+  else throw fail('database_host');
  }
- throw fail('database_host');
+ checkDatabaseOptions(u,kind!=='local');
+ if(!u.port)throw fail('database_port');
+ if(!username)throw fail('database_role');
+ return {kind,ref,host,port:u.port,role};
 }
 /** `ports` restricts the transport (publish/anchor CLIs need the 5432 session
  * endpoints; the application writer needs the 6543 transaction pooler). */

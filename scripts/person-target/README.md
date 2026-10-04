@@ -36,12 +36,13 @@ fixture (loopback PostgreSQL, loopback or `.invalid` REST) needs no selection.
 | pooler PostgreSQL | `*.pooler.supabase.com` **and** username `<role>.<ref>` (the host is shared by every project in the region) | same |
 | CLI workdir | `<workdir>/supabase/.temp/project-ref` | `person-reconcile-finalize.mjs --workdir` |
 | transport | publish/anchor/finalize CLIs additionally require port 5432 session endpoints | CLIs |
-| PostgreSQL options | only `sslmode`, at most once; `host`, `port`, `user`, encoded names and every other option are refused because pg applies them *after* the authority (a loopback authority with `?host=db.<ref>.supabase.co` connects to the hosted database) | `databaseIdentity`, every consumer |
+| PostgreSQL options | only `sslmode`, at most once (`require`/`verify-ca`/`verify-full` on a hosted host); `host`, `port`, `user`, encoded names and every other option are refused because pg applies them *after* the authority (a loopback authority with `?host=db.<ref>.supabase.co` connects to the hosted database) | `databaseIdentity`, every consumer |
+| PostgreSQL string shape | explicit port, username and database (pg would otherwise take `PGPORT`/`PGUSER`/`PGDATABASE`); no whitespace or malformed `%xx` (pg re-encodes such a string and resolves it against its internal `postgres://base`, connecting to host `base`) | `databaseIdentity` |
 
 Every check runs before a connection, queue claim, write or provider call. Failures
 are `person_target:<code>` (`missing`, `invalid`, `rest_mismatch`, `key_mismatch`,
 `key_unverifiable`, `database_mismatch`, `database_host`, `database_port`,
-`database_options`, `pooler_username`, `workdir_mismatch`, `identity_rest`,
+`database_options`, `database_role`, `pooler_username`, `workdir_mismatch`, `identity_rest`,
 `identity_database`, `identity_mismatch`) and never contain the configured values.
 `test-target.mjs` compares every accepted URL with the installed driver's
 `connectionParameters` (host, port, user) without connecting.

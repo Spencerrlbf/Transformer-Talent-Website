@@ -97,7 +97,39 @@ function emailScore(r: EmailRow): number {
   return (goodOk ? 0 : 10) + (r.email_type === "personal" ? 0 : 2) + (r.is_primary ? 0 : 1);
 }
 
-/** candidateId -> usable emails, best first. knownEmail (candidates.email) leads. */
+export type RecruiterDecisions = { email?: string | null; phone?: string | null };
+/** The recruiter's explicit contact decisions for unpublished people
+ * (person_recruiter_primary): a present kind = decided; value null = an explicit
+ * clear; an absent kind = no decision, the historical fallback applies. A failed
+ * lookup is never "no decision": with `requireComplete` it is a failed read; without
+ * it every requested person reads as cleared, so a lookup failure can only hide an
+ * address, never revive one. */
+export async function recruiterContactDecisions(
+  candidateIds: string[],
+  options: { requireComplete?: boolean } = {}
+): Promise<Map<string, RecruiterDecisions>> {
+  const out = new Map<string, RecruiterDecisions>();
+  for (let i = 0; i < candidateIds.length; i += 100) {
+    const chunk = candidateIds.slice(i, i + 100);
+    const res = await sbRest(`person_recruiter_primary?candidate_id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=candidate_id,kind,chosen_value`);
+    if (!res.ok) {
+      if (options.requireComplete) throw Error("pool_contact_unavailable");
+      for (const id of chunk) out.set(id, { email: null, phone: null });
+      continue;
+    }
+    for (const r of (await res.json()) as { candidate_id: string; kind: string; chosen_value: string | null }[]) {
+      if (r.kind !== "email" && r.kind !== "phone") continue;
+      out.set(r.candidate_id, { ...(out.get(r.candidate_id) ?? {}), [r.kind]: str(r.chosen_value) });
+    }
+  }
+  return out;
+}
+
+/** candidateId -> usable emails, best first. knownEmail (candidates.email) leads.
+ * For an unpublished person the recruiter's explicit decision comes first: a clear
+ * yields no emails at all (neither the scalar nor the verification history may
+ * revive it); a chosen address leads. Every surface that shows or sends a pool
+ * person's email (drawer, list, linked reads, Send) ranks through here. */
 export async function poolEmails(
   candidateIds: string[],
   knownEmails: Map<string, string | null>,
@@ -131,11 +163,14 @@ export async function poolEmails(
     byCand.set(r.candidate_id, list);
   }
 
+  const decisions = legacyIds.length ? await recruiterContactDecisions(legacyIds, options) : new Map<string, RecruiterDecisions>();
   const out = new Map<string, RankedEmail[]>();
   for (const id of legacyIds) {
+    const decision = decisions.get(id);
+    if (decision && "email" in decision && decision.email === null) continue; // explicit clear
     const seenEmails = new Set<string>();
     const ranked: RankedEmail[] = [];
-    const known = str(knownEmails.get(id) ?? null);
+    const known = str(knownEmails.get(id) ?? null) ?? decision?.email ?? null;
     if (known) {
       seenEmails.add(known.toLowerCase());
       ranked.push({ email: known, verified: true });

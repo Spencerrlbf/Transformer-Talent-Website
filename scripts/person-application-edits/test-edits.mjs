@@ -657,10 +657,19 @@ async function shadowLinkedPerson({ scalarEmail = null } = {}) {
   assert.equal((await row('candidates', cid)).email, scalarEmail);
   return { id, cid };
 }
+const row$ = (cid) => row('candidates', cid);
 const recruiter = await import('../dist/worker-lib.mjs');
 const clear = { email: null, phone: null, github: null, otherEmails: [] };
-const linkedReads = async (id) => {
+const linkedReads = async (id, cid = null) => {
   const lib = await import('./dist/contact.mjs');
+  if (cid) {
+    // The pool person's own surfaces rank through the same helper Send uses for its
+    // snapshot (poolEmails) and the net_ drawer: a clear must hold there too.
+    const row = await row$(cid);
+    const ranked = (await lib.poolEmails([cid], new Map([[cid, row.contact?.email ?? row.email]]))).get(cid) ?? [];
+    const net = await lib.unifiedCandidateDetail(TT, `net_${cid}`);
+    return { ...(await linkedReads(id)), ranked: ranked.map((e) => e.email), net: net.contact.email };
+  }
   const detail = await lib.unifiedCandidateDetail(TT, `app_${id}`);
   let list = null;
   for (let page = 1; page <= 20 && !list; page++) {
@@ -680,8 +689,10 @@ for (const variant of [{ name: 'NULL scalar', scalarEmail: null }, { name: 'stal
     try {
       // Control: with no recruiter decision the verified history is a legitimate fallback.
       assert.equal((await pool.query('select count(*)::int n from person_recruiter_primary where candidate_id=$1', [cid])).rows[0].n, 0);
-      const before = await linkedReads(id);
+      const before = await linkedReads(id, cid);
       assert.equal(before.compose, variant.scalarEmail ?? 'historical@example.test');
+      assert.equal(before.net, variant.scalarEmail ?? 'historical@example.test');
+      assert.ok(before.ranked.includes('historical@example.test'));
       // The real certified save: an explicit clear.
       const saved = await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: clear });
       assert.equal(saved.contact.email, null, 'the save reports the clear');
@@ -689,12 +700,13 @@ for (const variant of [{ name: 'NULL scalar', scalarEmail: null }, { name: 'stal
       assert.equal(c.contact.email, null);
       assert.deepEqual((await pool.query("select chosen_value from person_recruiter_primary where candidate_id=$1 and kind='email'", [cid])).rows, [{ chosen_value: null }], 'the recruiter decision is an explicit NULL');
       assert.equal((await pool.query("select count(*)::int n from candidate_emails where candidate_id=$1 and email_address='historical@example.test'", [cid])).rows[0].n, 1, 'history preserved');
-      // Every linked read must honour the clear.
-      assert.deepEqual(await linkedReads(id), { detail: null, detailOthers: [], list: null, compose: null });
+      // Every linked read must honour the clear, and so must the pool person's own ranking and drawer.
+      assert.deepEqual(await linkedReads(id, cid), { detail: null, detailOthers: [], list: null, compose: null, ranked: [], net: null });
       // A later legitimate choice supersedes the clear.
       await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: { ...clear, email: 'later@example.test' } });
-      const after = await linkedReads(id);
+      const after = await linkedReads(id, cid);
       assert.equal(after.detail, 'later@example.test'); assert.equal(after.list, 'later@example.test'); assert.equal(after.compose, 'later@example.test');
+      assert.equal(after.ranked[0], 'later@example.test'); assert.equal(after.net, 'later@example.test');
       // ...and clearing again returns to NULL, with the history still stored.
       await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: clear });
       assert.deepEqual(await linkedReads(id), { detail: null, detailOthers: [], list: null, compose: null });

@@ -158,6 +158,9 @@ test('owned happy path: drain, own window closed, seal, disarm, each CAS on the 
  // already disabled: a second call with the final record is a no-op
  const again=await armed.disarmAfterSweep({ownership:d.ownership},env);
  assert.equal(again.skipped,true);assert.equal(sim.actions.length,4);
+ // deferred (parked) work is resolved for the controller: the owned sequence completes
+ reset({control:{enabled:true,phase:'open',revision:'10',generation:'6'},unresolved:[{family:'application',status:'deferred',expired:false,n:2}]});
+ assert.deepEqual((await armed.disarmAfterSweep({ownership:owned()},env)).steps,['drain','seal','disarm']);
  // unresolved TT work: drain happens (allowed), seal is refused, nothing forced
  reset({control:{enabled:true,phase:'open',revision:'10',generation:'6'},unresolved:[{family:'application',status:'uncertain',expired:false,n:1}]});
  await assert.rejects(armed.disarmAfterSweep({ownership:owned()},env),e=>e.message.startsWith('tenancy_armed_drain:')&&e.steps.join()==='drain');

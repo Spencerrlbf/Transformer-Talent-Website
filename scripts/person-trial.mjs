@@ -246,6 +246,9 @@ export async function pgSite(url) {
   const { default: pg } = await import("pg");
   // A pool, so the parallel saves (applyDocs) really run side by side, as they do over REST.
   const db = new pg.Pool({ connectionString: url, application_name: "tt-person-trial-local", max: 4 });
+  // An idle client the server drops emits on the pool; without a listener that is an
+  // uncaught exception in whatever step holds this site. Log the code only.
+  db.on("error", (error) => console.error(`person_trial_pool_idle_error:${/^[0-9A-Z]{5}$/.test(error?.code ?? "") ? error.code : "operation_failed"}`));
   await db.query("select 1");
   const where = (filters, params) => (filters.length ? ` where ${filters.map((f) => sqlFilter(f, params)).join(" and ")}` : "");
   const u = new URL(url);

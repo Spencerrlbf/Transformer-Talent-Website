@@ -21,7 +21,7 @@ function transitionSet(action, revision, generation, reason) {
   else if (action === "reopen" && c.enabled && ["held", "draining"].includes(c.phase)) { phase = "open"; gen += 1n; }
   else if (action === "disarm" && c.enabled && c.phase === "held") { phase = "open"; enabled = false; gen += 1n; }
   else throw Object.assign(Error("transition_state"), { code: "P0001" });
-  if (action !== "drain" && current.unresolved.length) throw Object.assign(Error("transition_unresolved"), { code: "P0001" });
+  if (action !== "drain" && current.unresolved.some((u) => u.status !== "deferred")) throw Object.assign(Error("transition_unresolved"), { code: "P0001" });
   const rev = (BigInt(c.revision) + 1n).toString();
   current.control = { enabled, phase, revision: rev, generation: gen.toString() };
   current.events.push({ action, reason_code: reason, revision: rev, generation: gen.toString() });

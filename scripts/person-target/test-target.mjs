@@ -124,6 +124,24 @@ test('PostgreSQL query options cannot change the validated destination (R2-01)',
  assert.equal(isLoopbackDatabaseUrl(loopbackOverride),false);
  rejects(()=>checkDatabaseUrl(loopbackOverride,{ref:'local',local:true}),'database_options');
  rejects(()=>checkDatabaseUrl(`postgresql://postgres@127.0.0.1:55487/x?port=5432`,{ref:'local',local:true}),'database_options');
+ // Review follow-ups: a string pg re-encodes resolves against its internal base and
+ // connects to host `base` (leading space, malformed %); parts pg would take from
+ // PGPORT/PGUSER/PGDATABASE must be explicit; hosted TLS may not be weakened.
+ for(const url of [` ${direct}`,`${direct} `,`${direct.replace('db.','db.%ZZ')}`,direct.replace('postgres:pw@','pw@').replace('postgresql://','postgresql://%41%4'),` postgresql://postgres@127.0.0.1:55487/x`])
+  rejects(()=>databaseIdentity(url),'database_url');
+ assert.equal(isLoopbackDatabaseUrl(' postgresql://postgres@127.0.0.1:55487/x'),false);
+ rejects(()=>databaseIdentity(`postgres://postgres.${COPY}:pw@aws-0-us-east-2.pooler.supabase.com/postgres`),'database_port');
+ rejects(()=>databaseIdentity('postgresql://postgres@127.0.0.1/x'),'database_port');
+ rejects(()=>databaseIdentity(`postgresql://db.${COPY}.supabase.co:5432/postgres`),'database_role');
+ rejects(()=>databaseIdentity(`postgresql://postgres:pw@db.${COPY}.supabase.co:5432`),'database_url');
+ rejects(()=>databaseIdentity(`postgresql://postgres:pw@db.${COPY}.supabase.co:5432/`),'database_url');
+ for(const mode of ['disable','allow','no-verify','prefer',''])rejects(()=>databaseIdentity(`${direct}?sslmode=${mode}`),'database_options');
+ assert.equal(databaseIdentity('postgresql://postgres@127.0.0.1:55487/x?sslmode=disable').kind,'local');
+ {
+  const {default:pg}=await import('pg');
+  const p=new pg.Client({connectionString:` ${direct}`}).connectionParameters;
+  assert.equal(p.host,'base','pg resolves a re-encoded string against its internal base');
+ }
  // The one supported option, once, keeps working.
  assert.equal(databaseIdentity(`${direct}?sslmode=verify-full`).ref,COPY);
  assert.equal(checkDatabaseUrl(`${pooler}?sslmode=require`,target,{ports:['5432']}).kind,'pooler');

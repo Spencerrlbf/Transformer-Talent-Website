@@ -511,7 +511,8 @@ try {
       }
     } catch (e) {
       controllerRetained = true;
-      findings.push({ kind: "CRASH", actor: "-", what: "disarm after probes", detail: `${e.message}${e.steps?.length ? ` after ${e.steps.join(", ")}` : ""}; controller left as found, raw teardown skipped` });
+      const state = e.steps?.length ? `controller left in the state this run's ${e.steps.join(", ")} produced (owned by run ${run.id}; an operator must finish or reopen it)` : "controller left as found";
+      findings.push({ kind: "CRASH", actor: "-", what: "disarm after probes", detail: `${e.message}; ${state}; raw teardown skipped` });
     }
   }
   if (ARMED && !preflight) {

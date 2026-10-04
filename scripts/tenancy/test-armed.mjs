@@ -94,6 +94,15 @@ test('transport loss during orchestration: an idle or checked-out session killed
     client.release();
     assert.equal((await db.query('select 1 v')).rows[0].v, 1);
     await db.end();
+    // the reconcile shim's pool (pgSite) sits idle between RPC pages during step 1:
+    // an idle loss there must not be uncaught either (review of R2-05)
+    const { pgSite } = await import('../person-trial.mjs');
+    const site = await pgSite(url);
+    const killedSite = (await pool.query("select count(pg_terminate_backend(pid))::int n from pg_stat_activity where application_name='tt-person-trial-local' and pid<>pg_backend_pid()")).rows[0].n;
+    assert.ok(killedSite >= 1);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal((await site.select('candidates', { filters: [], order: 'created_at', limit: 1 })).length, 1, 'a fresh session serves the shim after the idle loss');
+    await site.end?.();
     await new Promise((r) => setTimeout(r, 100));
     assert.deepEqual(uncaught, []);
   } finally { process.off('uncaughtException', onUncaught); }

@@ -43,7 +43,10 @@ async function runner() {
   // otherwise the current code: both are the supported normalization path.
   const pinned = process.env.PINNED_RUNNER_DIR;
   const from = (rel) => (pinned ? import(pathToFileURL(`${pinned}/scripts/${rel}`).href) : import(`../${rel}`));
-  const { pgSite } = await from("person-trial.mjs");
+  // The translator (reconcilePage + its worker library) is the pinned one; the
+  // PostgreSQL access shim is always the current pgSite, a superset of the pinned one
+  // (optional `limit`) whose pool handles idle-connection errors (review R2-05).
+  const { pgSite } = await import("../person-trial.mjs");
   const { reconcilePage } = await from("person-reconcile.mjs");
   const lib = await from("dist/worker-lib.mjs");
   // Anchors are prepared by the current audit code (the pinned translator predates them).
@@ -102,7 +105,8 @@ export async function preflightArmedSweep(env = process.env, { svc } = {}) {
     const status = await transitionStatus(db);
     if (status.enabled) throw fail("tenancy_armed_precondition", "controller_enabled");
     if (status.windows.length) throw fail("tenancy_armed_precondition", "maintenance_windows");
-    if (status.unresolved.length) throw fail("tenancy_armed_precondition", "unresolved_work");
+    // Deferred (parked) work counts as resolved for the controller, as for seal/disarm.
+    if (status.unresolved.some((u) => u.status !== "deferred")) throw fail("tenancy_armed_precondition", "unresolved_work");
     const c = await control(db);
     return { ...target, controller: publicState(c) };
   } finally {

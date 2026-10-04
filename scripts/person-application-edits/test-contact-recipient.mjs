@@ -31,10 +31,9 @@ globalThis.fetch = async (input, init = {}) => {
   }
   if (u.pathname.endsWith('/person_recruiter_primary')) {
     assert.equal(u.searchParams.get('candidate_id'), `in.("${PERSON}")`);
-    assert.equal(u.searchParams.get('kind'), 'eq.email');
     if (poolResponse === 'preferences-unavailable') return Response.json({}, { status: 503 });
-    if (poolResponse === 'cleared') return Response.json([{ candidate_id: PERSON, chosen_value: null }]);
-    if (poolResponse === 'chosen') return Response.json([{ candidate_id: PERSON, chosen_value: 'chosen@example.test' }]);
+    if (poolResponse === 'cleared') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: null }, { candidate_id: PERSON, kind: 'phone', chosen_value: null }]);
+    if (poolResponse === 'chosen') return Response.json([{ candidate_id: PERSON, kind: 'email', chosen_value: 'chosen@example.test' }]);
     return Response.json([]);
   }
   if (['candidate_emails', 'candidate_emails_v2'].includes(u.pathname.split('/').at(-1))) {
@@ -53,7 +52,7 @@ globalThis.fetch = async (input, init = {}) => {
   if (poolResponse === 'network-error') throw Error('synthetic transport failure');
   if (poolResponse === 'unavailable') return Response.json({}, { status: 503 });
   if (poolResponse === 'missing') return Response.json([]);
-  return Response.json([{ id: PERSON, email: poolResponse === 'cleared' ? 'stale-scalar@example.test' : null, phone: null,
+  return Response.json([{ id: PERSON, email: poolResponse === 'cleared' ? 'stale-scalar@example.test' : null, phone: poolResponse === 'cleared' ? '+12025550100' : null,
     contact: { email: poolResponse === 'current' ? 'pool@example.test' : poolResponse === 'chosen' ? 'Chosen@example.test' : null, otherEmails: poolResponse === 'chosen' ? ['kept@example.test'] : undefined } }]);
 };
 const { candidateContact, unifiedCandidateDetail, listUnifiedCandidates, readDetail } = await import('./dist/contact.mjs');
@@ -98,6 +97,7 @@ test('an explicit recruiter clear stays NULL on detail, list and compose despite
   poolResponse = 'cleared';
   const detail = await unifiedCandidateDetail(TT, `app_${APP}`);
   assert.equal(detail.contact.email, null);
+  assert.equal(detail.contact.phone, null, 'a cleared phone is not revived from the scalar');
   assert.deepEqual(detail.contact.otherEmails, []);
   assert.deepEqual(await candidateContact(TT, `app_${APP}`), { name: 'Synthetic', email: null });
   assert.equal((await listUnifiedCandidates({ orgId: TT })).items[0].contact.email, null);
