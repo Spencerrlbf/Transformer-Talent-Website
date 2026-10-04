@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       # Resumes are read with pdf-parse here (no LlamaParse key in Actions).
       - run: npm ci --no-audit --no-fund
       - run: node scripts/build-worker-lib.mjs

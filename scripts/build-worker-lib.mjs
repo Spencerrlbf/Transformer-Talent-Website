@@ -5,6 +5,11 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { checkNode } from "./check-node.mjs";
+
+// Every harness and worker builds this bundle first: refuse an unsupported runtime
+// here so no suite or worker runs on a Node major the release evidence does not cover.
+checkNode();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 execFileSync(
