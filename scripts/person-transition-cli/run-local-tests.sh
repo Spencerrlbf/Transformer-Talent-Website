@@ -109,6 +109,10 @@ q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; then
  q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 fi
+# Release forward migrations (the armed sweep proves its target with person_target_identity()).
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index; do
+ q -d $DB -1 -f "supabase/migrations/$migration.sql"
+done
 node scripts/build-worker-lib.mjs
 # TRANSITION_SUITE=armed runs only the leak test's armed-mode orchestration on the fresh chain
 # (scripts/tenancy/run-armed-local-tests.sh); the default runs the rehearsal and recovery cases.

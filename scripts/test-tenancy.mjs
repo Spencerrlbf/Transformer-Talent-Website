@@ -19,9 +19,11 @@
 // SUPABASE_ANON_KEY. Response bodies are scanned in memory and never printed.
 // --armed additionally needs PERSON_TARGET_PROJECT_REF and PERSON_PUBLISH_DATABASE_URL
 // (5432) and puts the controller through its operator sequence around the probes
-// (scripts/tenancy/armed.mjs): seeding and teardown stay disabled, the probes run
-// armed. Never point this at a database you must keep unchanged: it writes.
-import { armForSweep, disarmAfterSweep, controllerViaRest } from "./tenancy/armed.mjs";
+// (scripts/tenancy/armed.mjs): the fixture target is proved before the first write,
+// seeding and teardown stay disabled, the probes run armed, and cleanup undoes only
+// the controller changes this run made. Never point this at a database you must keep
+// unchanged: it writes.
+import { preflightArmedSweep, armForSweep, disarmAfterSweep, recoverArmOwnership, controllerViaRest } from "./tenancy/armed.mjs";
 import { newRun, setup, teardown, leftovers, svc } from "./tenancy/fixture.mjs";
 
 const args = process.argv.slice(2);
@@ -319,13 +321,23 @@ let W = null;
 const started = Date.now();
 const ARMED = flag("--armed");
 let controller = null; // what the deployment's database reports during the probes
+let preflight = null; // armed mode: the proved fixture target and the controller state before any write
+let ownership = null; // armed mode: the exact controller revision/generation THIS sweep produced
+let controllerRetained = false; // armed mode: cleanup could not safely disarm; raw teardown is skipped
 try {
   console.log(`run ${run.id} against ${BASE}`);
+  if (ARMED) {
+    // Before the first fixture write: REST and PostgreSQL must name the selected
+    // project and report the same cluster, and the controller must be disabled with
+    // nothing unresolved. A refusal here writes nothing and cleans nothing up.
+    preflight = await preflightArmedSweep(process.env, { svc });
+    console.log(`fixture target proved (${preflight.local ? "local" : preflight.target}, cluster ${preflight.system_identifier}); controller disabled at revision ${preflight.controller.revision}`);
+  }
   W = await setup(run);
   const { A, B, TT } = W;
   if (ARMED) {
-    const armed = await armForSweep({ runId: run.id, candidateIds: [TT.sent.id, TT.unsent.id, TT.second.id] });
-    console.log(`controller armed for the probes (reconciled ${armed.reconciled}, anchored ${armed.anchored}, ${armed.pinned ? "pinned" : "current"} runner)`);
+    const armed = await armForSweep({ runId: run.id, candidateIds: [TT.sent.id, TT.unsent.id, TT.second.id], preflight, onOwnership: (o) => { ownership = o; } });
+    console.log(`controller armed for the probes (reconciled ${armed.reconciled}, anchored ${armed.anchored}, ${armed.pinned ? "pinned" : "current"} runner, revision ${ownership.revision}, generation ${ownership.generation})`);
   }
   controller = await controllerViaRest(svc).catch(() => null);
   if (ARMED && !(controller?.enabled && controller?.phase === "open")) throw Error(`controller not armed/open during probes: ${JSON.stringify(controller)}`);
@@ -486,10 +498,28 @@ try {
   findings.push({ kind: "CRASH", actor: "-", what: "test run", detail: e.message });
 } finally {
   if (ARMED) {
-    try { const d = await disarmAfterSweep(); console.log(`controller ${d.skipped ? "was not armed" : "drained, sealed and disarmed"} before teardown`); }
-    catch (e) { findings.push({ kind: "CRASH", actor: "-", what: "disarm after probes", detail: e.message }); }
+    // Undo exactly what this sweep did, nothing else. Without an ownership record
+    // the controller is not ours (preflight or setup failed before the arm, or the
+    // arm's acknowledgement was lost: then only the durable event it wrote counts).
+    try {
+      if (!ownership && preflight) ownership = await recoverArmOwnership({ runId: run.id, database: preflight.system_identifier });
+      if (!ownership) {
+        console.log("controller untouched: this sweep did not arm it");
+      } else {
+        const d = await disarmAfterSweep({ ownership });
+        console.log(`controller ${d.skipped ? "already disabled" : `${d.steps.join(", ")}: disabled`} (owned revision ${ownership.revision} -> ${d.ownership.revision}) before teardown`);
+      }
+    } catch (e) {
+      controllerRetained = true;
+      findings.push({ kind: "CRASH", actor: "-", what: "disarm after probes", detail: `${e.message}${e.steps?.length ? ` after ${e.steps.join(", ")}` : ""}; controller left as found, raw teardown skipped` });
+    }
   }
-  if (!flag("--keep")) {
+  if (ARMED && !preflight) {
+    // Nothing was written: the fixture target was never proved, so no teardown either.
+    console.log("cleanup skipped: fixture target not proved; nothing was written");
+  } else if (controllerRetained) {
+    console.log(`cleanup skipped: the controller could not be safely disarmed; run ${run.id} fixtures are retained. Remove later with: node scripts/test-tenancy.mjs --cleanup`);
+  } else if (!flag("--keep")) {
     const td = await teardown({ runId: run.id, keys: collectKeys(W) });
     let left = await leftovers(run.id);
     if (ARMED && W?.TT) {
