@@ -159,15 +159,23 @@ No workflow was dispatched, no deployment made, nothing pushed.
   The workers with their own REST helpers (`review-queue.mjs`, `refresh-worker.mjs`,
   `sync-directory.mjs`) call the gate before any request: sealed process tests show
   zero requests under a mixed configuration.
-- **Deployment evidence (read-only, 2026-10-03)**: the testing preview branch has
-  15 branch-scoped variables; `PERSON_WRITE_MODE=live`, `PERSON_TRANSITION_SUPPORT=on`
-  are readable; sensitive values are not retrievable through Vercel's API (as the
-  review found). The preview also inherits project-level `HARVEST_API_KEY`,
-  `TYPESAFE_API_KEY` and `TURNSTILE_SECRET_KEY`. Runtime destination proof on an
-  exact deployment therefore comes from deploying this branch with
-  `PERSON_TARGET_PROJECT_REF` set: the gate itself refuses a mixed configuration.
-- **Status: implemented; verified offline; deployment attestation blocked** (no
-  push/deploy authorized in this task).
+- **Evidence, kept apart** (2026-10-04):
+  1. *Browser bundle*: the branch preview
+     (`transformer-talent-website-1e0ofstyx.vercel.app`, commit `310c9af`) compiles
+     only `qsqlgibgsxzlimoegcjx.supabase.co` into its `/dashboard` bundle. This proves
+     the browser Auth target and nothing about the server.
+  2. *Configuration validation*: 17 branch-scoped variables exist (names listed;
+     sensitive values are not retrievable through Vercel's API); the gate's rules are
+     proven offline (44 cases) and the same module validated the copy's own file
+     values as all naming one project.
+  3. *Server/database runtime*: **not yet established.** It requires a request
+     through `sbRest`/`withPersonConnection` on the deployed server against a
+     database whose cluster identity is then compared (`person_target_identity()`),
+     which is what the disposable-environment sweep below provides. The preview is
+     currently configured for the read-only baseline copy and must not be signed
+     into; it will be repointed at the disposable project.
+- **Status: implemented; configuration validated; runtime attestation pending
+  the disposable environment** (see "Disposable environment").
 
 ### RR-08 Copied grants and inherited provider credentials
 
@@ -268,9 +276,18 @@ No workflow was dispatched, no deployment made, nothing pushed.
   transition rehearsal 8 + recovery 7 (current and pinned), maintenance 10 (current
   and pinned), publish 10 + 18 + 4 + 8, post-cutover audit 15 + 9 + 13 + 25 + 20 + 19,
   directory outcomes 6 + 40 + 35 + 12.
-- **Not done**: hosted `scripts/test-tenancy.mjs --base <preview>` (creates users/
-  orgs/data; needs a deployed preview of this exact branch with a disposable fixture
-  database selected separately); browser smoke of the drawer changes on that preview.
+- **Sweep adaptation done**: `scripts/test-tenancy.mjs --armed` (RR-14): seeding and
+  teardown stay in the disabled state; the fixture's three pool people are
+  reconciled and anchored and the controller armed before the probes; the probes
+  run armed (reported from the database through REST); drain, close, seal, disarm
+  before teardown; coverage labelled in the output. The orchestration is proven on
+  the local full chain (`scripts/tenancy/run-armed-local-tests.sh`, 4 cases:
+  normalized + anchored + armed/open; raw candidate write refused while armed while
+  a public accept is admitted; disarm; normalized people are retained evidence).
+- **Not done**: the HTTP sweep itself (disabled and armed) against a disposable
+  database with the preview and the fixture pointing at it; browser smoke of the
+  drawer changes. Both need the disposable environment below. The baseline copy
+  stays read-only: no fixture or controller change was run against it.
 - **Manifest**: `RELEASE_MANIFEST.md`.
 - **Status: implementation complete; hosted verification blocked** (needs push +
   preview deployment approval).
@@ -282,6 +299,30 @@ No workflow was dispatched, no deployment made, nothing pushed.
   selection when set.
 - **Tests / results**: `test-cli-targets.mjs` static resolution + sealed processes.
 - **Status: verified.**
+
+## Disposable environment for the hosted sweep (proposal, not executed)
+
+The sweep needs Supabase Auth + REST + PostgreSQL. Two ways to get a disposable one:
+
+1. **Local Supabase stack (zero cost)**: `supabase start` in the branch checkout,
+   `supabase db reset` to install `001…20261003*`, `next build && next start` with
+   loopback URLs, `PERSON_TARGET_PROJECT_REF=local`, `OUTBOUND_DENY_HOSTS`, no provider
+   keys; run `test-tenancy.mjs --base http://127.0.0.1:3000` disabled and `--armed`.
+   Blocked on 2026-10-04: Docker Desktop's engine did not come up on this Mac (its
+   window was not inspected, access declined) and it was quit again.
+2. **New Supabase project (recommended if Docker stays down)**: in organization
+   "Transformer Talent" (`nanvovpwibjdlhhfmfix`), region `us-east-2`, Micro compute:
+   `supabase projects create tt-disposable-tenancy --org-id nanvovpwibjdlhhfmfix --region us-east-2 --size micro --db-password <generated, never printed>`.
+   Cost: Micro compute is billed hourly (about $0.0134/hour, $10/month equivalent);
+   two days of testing is under $1; delete with `supabase projects delete <ref>` when
+   done. Then: install `001…20261003*` with `supabase db push` (schema only, no
+   data), repoint the branch preview's 17 variables at it (REST URL/keys, pooler
+   URLs, `PERSON_TARGET_PROJECT_REF=<new ref>`, `OUTBOUND_DENY_HOSTS`, no live
+   provider keys), redeploy, run `test-tenancy.mjs --base <preview>` disabled and
+   `--armed` with the fixture pointed at the same project, compare
+   `person_target_identity()` through REST and PostgreSQL, record the results, delete
+   the project. Requested action: approve the project creation (the CLI is signed in
+   as Spencer; I will not create a paid resource without the word).
 
 ## Independent review
 
@@ -300,12 +341,12 @@ exclusive lock and belongs in the held phase.
 
 ## Remaining owner actions (in order)
 
-1. Approve pushing `fix/person-90-release-remediation` and its preview deployment;
-   set `PERSON_TARGET_PROJECT_REF=qsqlgibgsxzlimoegcjx` and `OUTBOUND_DENY_HOSTS` on
-   that branch's Vercel environment (the gate then attests the destination).
-2. Approve installing `20261003090000`–`20261003120000` on the copy (migration
-   NOTICE reports the witness recovery result), then run the hosted tenancy test and
-   the drawer smoke on that preview.
+1. Done 2026-10-03: branch pushed, preview built with branch variables. Still to
+   decide: the disposable environment (Docker on this Mac, or approve the new
+   Supabase project above) so the hosted sweep, the runtime attestation and the
+   drawer smoke can run without touching the baseline copy.
+2. Decide when the four `20261003*` migrations are installed on the copy (not a
+   read-only step; the migration NOTICE reports the witness recovery result).
 3. Decide the RR-10 disposition (keep/document or reviewed cleanup).
 4. Approve the rehearsal that closes RR-09 (catch-up, anchors, publication, audit) and
    pick the production sitting; production needs the same four variables/settings.
