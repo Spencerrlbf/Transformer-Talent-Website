@@ -214,13 +214,16 @@ earlier function bodies; do not move publication/review helpers to the end:
 20261003110000_person_forward_network_send.sql
 20261003120000_person_forward_identity_index.sql
 20261005090000_person_recruiter_explicit_clear.sql
+20261005100000_person_send_decisions.sql
 ```
 
 The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md);
-`20261005090000` (explicit recruiter clears across publication) follows them and is
-additive: a column with a default, a constraint, the ranking function and an in-place
-patch of the certified writer; its NOTICE counts the historical NULL decisions left
-as automatic (owner review, see the ledger).
+`20261005090000` (explicit recruiter clears across publication) and `20261005100000`
+(the checked Send applies the same decisions) follow them and are additive: a column
+with a default, a constraint, the ranking function, in-place patches of the certified
+writer and of the Send RPC, and a one-time classification of historical NULL
+decisions (unpublished people's clears kept and reranked; published people's left
+automatic and counted by the NOTICE for owner review, see the ledger).
 On a fresh install they are no-ops after the chain. On a database that installed
 the earlier bodies of `20260927170000`, `20260928060000` or `20260928070000` (the
 2026-09-28 test copy did), they are the only supported way to bring those
@@ -247,6 +250,7 @@ copy is therefore:
 20261003110000_person_forward_network_send.sql
 20261003120000_person_forward_identity_index.sql
 20261005090000_person_recruiter_explicit_clear.sql
+20261005100000_person_send_decisions.sql
 ```
 
 An install that already has `20260928061000` (any install from the prepared parent
@@ -440,8 +444,12 @@ Inspect durable state after every unsuccessful or ambiguous start:
 - A finalized run stays closed. An active or expired maintenance window is retained
   until its owner is stopped/settled and its exact work ID is explicitly closed.
 
-Once the window is open, run the bounded pinned queue catch-up, then its finalizer
-inside that same window, inspect its exact outcome, and close the window. The
+Once the window is open, run the bounded pinned queue catch-up through the reviewed
+runner (`scripts/person-maintenance/run-catchup.mjs`, see
+`scripts/person-maintenance/README.md`: it verifies the pin, refuses late inputs and a
+queue holding explicitly cleared contacts, and handles the directory connection's
+transport failures), then its finalizer inside that same window, inspect its exact
+outcome, and close the window. The
 starter (`scripts/person-maintenance/start-catchup.mjs`) and the finalizer
 (`scripts/person-reconcile-finalize.mjs`) both take the destination from
 `PERSON_TARGET_PROJECT_REF`; the starter records the REST cluster identity

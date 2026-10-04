@@ -102,8 +102,27 @@ loop fails the run in its own controlled way (`failed`, `reconcile_stopped`, exi
 at its next directory read; `last_id` advances only inside
 `person_reconcile_record_many`, so nothing is recorded twice and the same
 configuration resumes the run. `scripts/person-maintenance/run-catchup-local-tests.sh`
-proves this on the disposable local stack with the real pinned runner (6 cases:
-the bare client crash, the listener, the lost-between-pages run, the resume). Inspect durable state after an
+proves this on the disposable local stack with the real pinned runner (8 cases:
+the bare client crash, the listener, the lost-between-pages run, the resume, late
+inputs refused, a cleared person pending refused).
+
+The runner also refuses, before anything else, CLI arguments and `BACKFILL_*` aliases
+(the pinned parser would prefer them over the checked JSON), a pinned tree carrying an
+`.env`/`.env.*` file (the pinned loader fills missing variables from it after
+validation), and re-checks the pinned-visible environment and the pinned parser's
+effective options after importing the pinned modules. It runs under Node 24 only
+(`scripts/check-node.mjs`).
+
+**Explicitly cleared contacts in the queue.** Since `20261005090000` a recruiter's
+clear leaves a kind without a primary on purpose. The pinned translator's integrity
+rule (one primary wherever an eligible contact exists) predates this and would fail
+such a person with `post_save_integrity:one_primary_*` before any checkpoint; the
+runner therefore reads the queue first and refuses with the candidate ids
+(`catchup_run:suppressed_pending`). Any recruiter edit after the historical catch-up
+re-queues the person, so a non-empty list is expected before the sitting. The owner
+decides: run those people (or the final catch-up) with the current translator under a
+reviewed exception to the pin (its `readNew()` loads the decisions and its rule knows
+a clear), or re-save their decisions first. Inspect durable state after an
 ambiguous start: absent means diagnose and start again after gates pass; a matching
 running checkpoint means continue that run after opening its window, even if the
 start response was lost. Failed/paused checkpoints need diagnosis and matching

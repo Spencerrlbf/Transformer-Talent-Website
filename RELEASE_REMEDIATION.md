@@ -24,10 +24,11 @@ A second review (`RELEASE_REMEDIATION_REVIEW_2026-10-04.md` in the
 `candidate-unification` checkout, unchanged) found five further defects, R2-01 to
 R2-05. All five are **implemented and locally verified** on this branch (section
 "Second review" below). The 2026-10-05 follow-up (section "Pre-release follow-up")
-adds explicit clears across publication (forward migration `20261005090000`), the
-reviewed runner for the pinned catch-up, the declared Node 24 runtime and a local
-browser smoke; the integrated matrix and the local HTTP sweeps were rerun on the
-final executable source `12eadcf`. **Locally verified is not deployment verified**:
+adds explicit clears across publication (forward migrations `20261005090000` and
+`20261005100000`), the reviewed runner for the pinned catch-up, the declared Node 24
+runtime and a local browser smoke; the follow-up review's F1–F6 are corrected in
+`0ffa133`, the final executable source, on which the integrated matrix and the local
+HTTP sweeps were rerun. **Locally verified is not deployment verified**:
 hosted runtime attestation, RR-09 migration completion/accounting, RR-10 disposition
 and release approval remain open.
 
@@ -734,11 +735,107 @@ used the local Auth's magic link with `site_url` set to the smoke server in the
 uncommitted local `supabase/config.toml`. Evidence class: local runtime, synthetic
 data; nothing here is hosted evidence.
 
-### 5. Final verification on `12eadcf`
+### 5. Verification on `12eadcf` (superseded by section 7)
 
-Integrated matrix (Node v24.1.0, cluster 55811, sequential): see the table in the
-manifest. Additional: `run-catchup-local-tests.sh` 6/6; `person-recruiter` 13+4+6;
-`person-recruiter-admission` 72+5; `person-audit/run-local-tests.sh` 21+68+28+23+10.
+Integrated matrix (Node v24.1.0, cluster 55811, sequential) 879 + 32; `run-catchup-local-tests.sh`
+6/6; `person-recruiter` 13+4+6; `person-recruiter-admission` 72+5;
+`person-audit/run-local-tests.sh` 21+68+28+23+10. Historical: the F1–F6 changes
+(`0ffa133`) came after; see section 7 and the manifest for the final figures.
+
+### 6. Follow-up review (2026-10-04, `RELEASE_FOLLOWUP_REVIEW_2026-10-04.md`): F1–F6
+
+Reviewed executable head `12eadcf`; the review file is in this session's uploads and is
+unchanged. All six corrected in `0ffa133`; each regression ran red on the prior source
+(the review's own reproductions) and green after. Database evidence on cluster 55811
+and the local stack (clusters quoted), Node v24.1.0.
+
+- **F1 (P1) catch-up wrapper validated different settings from those executed.**
+  `run-catchup.mjs` now refuses CLI arguments (`catchup_run:arguments`) and
+  `BACKFILL_*` aliases (`catchup_run:aliases`) before anything else; refuses a pinned
+  tree carrying `.env`/`.env.*` (`catchup_run:pinned_env_file`, since the pinned
+  loader fills *missing* variables such as `LOCAL_DATABASE_URL`, which would switch
+  `openSite()` from the validated REST destination to PostgreSQL); snapshots the eight
+  pinned-visible variables, re-reads them after importing the pinned modules
+  (`catchup_run:environment_changed`), parses the pinned `options([], env)` and
+  compares run, commit (= pin), dry, resume, limit, batch and bounds with the
+  validated JSON (`catchup_run:options_mismatch`); prints the effective options it
+  will consume. Evidence: `test-run-catchup-inputs.mjs` (sealed: inputs, env-file
+  tree, ordering before verification) and `test-run-catchup.mjs` "late inputs against
+  the real pinned tree" (aliases, `--dry-run=true`, `--commit=…` → exit 1 before any
+  transport; the run row untouched).
+- **F2 (P1) upgrade revived historical unpublished clears.** `20261005090000` now
+  classifies existing NULL decisions by what every reader showed before the upgrade:
+  unpublished person → `suppressed=true` (proven clear: the receipt recorded and
+  returned the requested NULL and all readers resolved it as a clear), with stored
+  ranks recomputed for those people; published person → `suppressed=false`
+  (automatic; the ranking showed the fallback and the live save showed the recruiter
+  that fallback), counted by the NOTICE for per-row owner review. Nothing is restored
+  or hidden by the upgrade itself. The recruiter guard triggers and the epoch trigger
+  are suspended for exactly these statements (the epoch trigger ignores `suppressed`
+  and `rank` is not an epoch column). Evidence: `test-upgrade-clears-before/after.mjs`
+  in the upgrade harness — historical rows created on the pre-migration schema
+  (A: unpublished shadow clear + history + stale scalar; B: published live NULL;
+  C: unpublished phone-only clear + stale scalar phone), upgraded, then A has no email
+  on linked detail/compose/`net_`/ranking and the real checked Send admits a blank
+  snapshot (stale one refused); B keeps the fallback; C has no phone and keeps its
+  email. NOTICE on the harness: "3 … are clears (suppressed), 1 left automatic".
+- **F3 (P2) unpublished phone clears bypassed by readers and Send.** `poolPhone()`
+  (decision → overlay → scalar; failed lookup reads as cleared) is used by the Network
+  list, the `net_` drawer, Send's `bestPhone` and the linked reads; `poolEmails()`
+  accepts pre-fetched decisions so each surface reads them once. Evidence: upgrade
+  case C; edits suite; browser: an unpublished person's phone cleared in the real
+  drawer with the scalar still `+1512555…` → linked detail, list, `net_` drawer and
+  compose show no phone while the email stays.
+- **F4 (P2) checked Send disagreed with the suppression-aware caller.** Forward
+  migration `20261005100000_person_send_decisions.sql` patches `person_network_send`'s
+  unpublished branch in place to apply the same semantics (cleared → none, chosen →
+  leads, else overlay/scalar/history); the published branch, the locked stale-snapshot
+  comparison, the witness and the insertion are unchanged; a clean install and an
+  upgraded install converge (catalog parity). Evidence: the real `person_network_send`
+  executed after shadow and live clears in the edits suite (`sent`, `email ''`,
+  `contact` without the cleared kind, `already_sent` on repeat, stale snapshot →
+  `contact_changed`), and in upgrade cases A and C.
+- **F5 (P2) pinned verifier rejects legitimate suppressed contacts.** Two parts.
+  (a) Current translator: `readNew()` loads `person_recruiter_primary` so
+  `checkStored`'s one-primary rule recognises a clear; a cleared person pending in the
+  queue is reconciled by the current translator without an integrity complaint
+  (edits suite). (b) Pinned translator: it cannot verify such a person (its rule
+  predates clears) and would fail `post_save_integrity:one_primary_*` before any
+  checkpoint; `run-catchup.mjs` now reads the queue first and refuses the run with the
+  candidate ids (`catchup_run:suppressed_pending`) instead of failing mid-page
+  (`test-run-catchup.mjs`). **Owner decision**: a queue containing cleared people
+  (any recruiter edit after the historical catch-up re-queues the person) cannot be
+  completed by the pinned translator; options are (1) run those people — or the
+  final catch-up — with the current translator under a reviewed exception to the
+  `c4d0e4e` pin, or (2) re-save their decisions before the sitting. The review's
+  acceptance "valid clears pass and checkpoint once" is met by the current
+  translator, not by the pinned one.
+- **F6 (P2) runtime declaration not enforced at the real entry points.** `checkNode()`
+  is the first statement of `run-catchup`, `start-catchup`, the finalizer, publish,
+  transition, anchors and the leak test; every harness runs `node scripts/check-node.mjs`
+  before any fixture DDL (`test-check-node.mjs` checks order ignoring comments); the
+  CLI sanitizers pass `node_runtime:unsupported:<version>` through. Evidence:
+  `test-run-catchup-inputs.mjs` spawns the seven entry points and the offline harness
+  under the actual Node 20.19.2 interpreter (each stops with the code and no phase
+  output) and the runner under Node 24 (proceeds to its own input check).
+
+### 7. Final verification on `90ebc0b`
+
+Integrated matrix (Node v24.1.0, cluster 55811, sequential): **892 executions**, all
+pass (`tsc`, `next build`, offline 57, transport 18, tenancy safety 12, catch-up
+helper offline 34, internal resume 13, application edits 64 + 17, upgrade
+25 + 4 + 4 + 4 + 64 + 17 + 4 + 4, transition 8 + 7, armed SQL 7, publish 10 + 18 + 4 + 8,
+maintenance 10, post-cutover audit 15 + 9 + 13 + 25 + 20 + 19, directory
+6 + 40 + 35 + 12 + 237 + 25 + 3 + 20); pinned-runner reruns 8 + 7, 7, 10; stage
+harnesses recruiter 13 + 4 + 6, recruiter-admission 72 + 5, audit
+21 + 68 + 28 + 23 + 10. On the local stack (build of `0ffa133`; `90ebc0b` differs only
+by a no-op guard clause in `20261005100000`, identical function body on the release
+chain): catch-up suite 8/8; disabled sweep 913 PASS; armed sweep `a1xbyb042` 913 PASS
+with the four owned event rows; attestation unchanged (REST = PG
+`7692913108189810727`, anon 401, correct selection 200, wrong selection 500
+`rest_mismatch`, `outbound_denied:api.resend.com`, `outbound_denied:api.harvestapi.io`);
+browser: phone-only clear on an unpublished person through the drawer (F3; scalar
+phone still stored, no surface shows it) and the section-4 flows unchanged.
 
 ## Disposable environment for the hosted sweep (option 1 executed, option 2 proposed)
 
@@ -892,22 +989,28 @@ RR-10 disposition.
 3. **Correct the branch preview's `OUTBOUND_DENY_HOSTS`** to `…,api.harvestapi.io`;
    keep that preview unused while it points at the baseline copy.
 4. **Copy upgrade** (write to `qsqlgibgsxzlimoegcjx`): `20260928061000` (missing there),
-   the four `20261003*` files, then `20261005090000`, in order; the NOTICEs report the
-   witness recovery and the count of historical NULL decisions.
-5. **Historical NULL decisions**: run the read-only listing query (section 1 above) on
-   the copy and decide per row with the recruiter; no bulk reinterpretation.
+   the four `20261003*` files, then `20261005090000` and `20261005100000`, in order;
+   the NOTICEs report the witness recovery and the classification of historical NULL
+   decisions (clears kept / published rows left automatic).
+5. **Historical NULL decisions of published people** (left automatic by the upgrade):
+   run the read-only listing query (section 1 above) on the copy and decide per row
+   with the recruiter; no bulk reinterpretation.
+5b. **Cleared people in the catch-up queue (F5)**: decide between running them (or
+   the final catch-up) with the current translator under a reviewed exception to the
+   `c4d0e4e` pin, or re-saving their decisions before the sitting; the pinned runner
+   refuses such a queue with the ids.
 6. **Runtime change decision**: the next deployment and the workers move to Node 24.
 7. **RR-10 disposition** of the 23 experience rows; **RR-09** rehearsal (catch-up via
    `run-catchup.mjs`, anchors, publication, final audit at a declared cutoff) and the
    production sitting. Counts in this ledger remain historical observations.
 8. **PR review** of the branch.
 
-Disposable resources, state at the end of the 2026-10-05 work: the dedicated cluster
-127.0.0.1:55811 is **stopped** (`pg_ctl stop`; data directory under this session's
+Disposable resources, state at the end of the 2026-10-05 work (after the F1–F6 round):
+the dedicated cluster 127.0.0.1:55811 is **stopped** (`pg_ctl stop`; data directory under this session's
 scratchpad, deletable); the local Supabase project `remediation` is **stopped with its
 volumes retained** (`supabase_db_remediation`, `supabase_storage_remediation`; last
-state: the clean chain plus the armed-sweep's three retained synthetic people, the
-smoke data having been reset away; `supabase stop --no-backup` in the branch checkout
+state: the clean 135-version chain plus the final armed sweep's three retained
+synthetic people, earlier smoke and catch-up fixtures having been reset away; `supabase stop --no-backup` in the branch checkout
 deletes them); nothing was deleted; the uncommitted local `supabase/config.toml` now
 has `site_url = http://127.0.0.1:3400` for the smoke sign-in; the
 `.claude/launch.json` entries remain. No other local service was touched (another
