@@ -17,7 +17,7 @@ curl -X POST "$SUPABASE_URL/storage/v1/bucket" -H "apikey: $SERVICE" -H "Authori
 # 2. Environment file (mode 600): SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL = the local API URL,
 #    the local anon/service keys, PERSON_DATABASE_URL = PERSON_PUBLISH_DATABASE_URL =
 #    LOCAL_DATABASE_URL = the local PostgreSQL URL, PERSON_TARGET_PROJECT_REF=local,
-#    OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvest-api.com,api.openai.com,api.cloud.llamaindex.ai,api.typesafe.ai
+#    OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io,api.openai.com,api.cloud.llamaindex.ai,api.typesafe.ai
 #    PERSON_WRITE_MODE=live PERSON_TRANSITION_SUPPORT=on, placeholder NYLAS_*/RESEND_API_KEY so the
 #    email routes run (the deny list refuses the provider), Cloudflare's Turnstile test keys.
 

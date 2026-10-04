@@ -24,15 +24,15 @@ test('unset: nothing is installed and every request reaches the transport',async
  assert.deepEqual(reached,['api.us.nylas.com']);assert.deepEqual(deniedRequests(),{});
 });
 test('set: provider hosts are denied before the request leaves; others pass; counts are kept',async()=>{
- const hosts=installOutboundGuard({OUTBOUND_DENY_HOSTS:'api.us.nylas.com,api.resend.com,.airtable.com,api.harvest-api.com'});
+ const hosts=installOutboundGuard({OUTBOUND_DENY_HOSTS:'api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io'});
  assert.equal(hosts.length,4);
  reached.length=0;
- for(const url of ['https://api.us.nylas.com/v3/grants/g1','https://api.resend.com/emails','https://api.airtable.com/v0/base/Candidates','https://api.harvest-api.com/linkedin/profile']){
+ for(const url of ['https://api.us.nylas.com/v3/grants/g1','https://api.resend.com/emails','https://api.airtable.com/v0/base/Candidates','https://api.harvestapi.io/linkedin/profile']){
   const error=await fetch(url,{method:'DELETE'}).catch(e=>e);
   assert.ok(isOutboundDenied(error),url);assert.match(error.message,/^outbound_denied:/);
  }
  assert.deepEqual(reached,[]);
- assert.deepEqual(deniedRequests(),{'api.us.nylas.com':1,'api.resend.com':1,'api.airtable.com':1,'api.harvest-api.com':1});
+ assert.deepEqual(deniedRequests(),{'api.us.nylas.com':1,'api.resend.com':1,'api.airtable.com':1,'api.harvestapi.io':1});
  // Request objects and URL objects are recognized too.
  await assert.rejects(fetch(new Request('https://api.resend.com/emails')),/outbound_denied:api.resend.com/);
  await assert.rejects(fetch(new URL('https://api.us.nylas.com/v3/x')),/outbound_denied:api.us.nylas.com/);

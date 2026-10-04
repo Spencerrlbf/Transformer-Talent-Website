@@ -62,7 +62,7 @@ PostgreSQL client (direct) can be proved to reach the **same physical database**
 
 ## Denied provider transports (disposable deployments)
 
-`OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvest-api.com`
+`OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io`
 installs a `fetch` guard (`lib/server/outbound-guard.ts`, from `instrumentation.ts`
 on the server and from the worker bundle on import). Requests to a listed host (exact
 or `.suffix`) fail with `outbound_denied:<host>` before leaving the process and are
@@ -71,6 +71,17 @@ the selected Supabase project stay reachable unless listed. Scope: the guard cov
 `fetch` (every provider client in `lib/server` and the workers uses it); it does not
 intercept raw `node:net`/`node:https` sockets, which nothing in the release uses for
 providers. Trailing-dot hostnames are matched like their plain form.
+
+The hostnames are the ones the clients build, not nicknames: Harvest is
+`api.harvestapi.io` (`lib/server/sourcing/harvest.ts`, `lib/server/applicants.ts`,
+`scripts/refresh-worker.mjs`); an earlier example named `api.harvest-api.com`, which
+nothing calls, so following it left the real endpoint reachable (review R2-04).
+`test-provider-denial.mjs` drives the real Harvest, Resend, Nylas and Airtable clients
+with synthetic credentials against a recording transport under the documented list:
+every request is refused in-process and counted. A runtime refusal observed for one
+provider (for example `outbound_denied:api.resend.com` on a deployment) proves that
+provider's path only; the per-provider proof for the others is this test plus the
+deployment's configured list, which must be read, not assumed.
 
 The role utilities (`sync-org-roles.mjs`, `embed-roles.mjs`) accept only a hosted
 `https://<ref>.supabase.co` URL; they have no loopback mode. The workers that build
@@ -96,5 +107,6 @@ bash scripts/person-target/run-offline-tests.sh   # no database, no network
 `test-target.mjs` (selection and signals), `test-cli-targets.mjs` (sealed child
 processes: role utilities and the finalizer stop before any socket),
 `test-server-target.mjs` (mixed REST/PostgreSQL configurations refused before any
-pool or request), `test-outbound-guard.mjs` (denied hosts counted, others pass).
+pool or request), `test-outbound-guard.mjs` (denied hosts counted, others pass),
+`test-provider-denial.mjs` (the real provider clients under the documented list).
 `scripts/person-maintenance/test-start-catchup.mjs` covers the catch-up starter.

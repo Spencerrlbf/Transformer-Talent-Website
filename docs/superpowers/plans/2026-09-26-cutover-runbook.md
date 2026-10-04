@@ -302,7 +302,7 @@ Supply secrets through server-only configuration, never chat or committed files:
   defaults to the website project any more.
 - `OUTBOUND_DENY_HOSTS` (rehearsal deployments only): comma-separated provider
   hosts the process must never reach, for example
-  `api.us.nylas.com,api.resend.com,.airtable.com,api.harvest-api.com`. A copied
+  `api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io`. A copied
   database carries real mailbox grants and Airtable ids; this denies the request
   before it leaves. Leave it unset in production.
 - `PERSON_DATABASE_URL`: website app/worker PostgreSQL URL, transaction pooler
