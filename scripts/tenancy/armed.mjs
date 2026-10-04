@@ -33,7 +33,9 @@ async function runner() {
   const { pgSite } = await from("person-trial.mjs");
   const { reconcilePage } = await from("person-reconcile.mjs");
   const lib = await from("dist/worker-lib.mjs");
-  return { pgSite, reconcilePage, lib, pinned: !!pinned };
+  // Anchors are prepared by the current audit code (the pinned translator predates them).
+  const current = await import("../dist/worker-lib.mjs");
+  return { pgSite, reconcilePage, lib, current, pinned: !!pinned };
 }
 
 export function operatorPool(env = process.env) {
@@ -72,7 +74,7 @@ export async function armForSweep({ runId, candidateIds }, env = process.env) {
     // 2. Anchors (the audit's immutable before-images) for the same people.
     const anchors = await openAnchorDatabase(env);
     try {
-      const result = await prepareAnchors({ site: anchors, prepare: r.lib.prepareLegacyAuditAnchor, options: { save: true, limit: 100000, batch: 50, after: null, maxSeconds: 600, maxBytes: 1e12 }, onProgress: () => {} });
+      const result = await prepareAnchors({ site: anchors, prepare: r.current.prepareLegacyAuditAnchor, options: { save: true, limit: 100000, batch: 50, after: null, maxSeconds: 600, maxBytes: 1e12 }, onProgress: () => {} });
       report.anchored = result.created ?? 0;
     } finally {
       await anchors.end();
