@@ -28,7 +28,6 @@
 import { pathToFileURL } from "node:url";
 import { openDatabase } from "../person-publish/lib.mjs";
 import { transitionStatus, waitDrained } from "../person-transition.mjs";
-import { openAnchorDatabase } from "../person-audit/database.mjs";
 import { prepareAnchors } from "../person-audit-anchors.mjs";
 import { checkTargetEnvironment, verifyRuntimeIdentity, IDENTITY_SQL } from "../person-target.mjs";
 
@@ -74,6 +73,29 @@ export function sweepReason(action, runId) {
 const control = async (db) => (await db.query(CONTROL_SQL)).rows[0];
 const phaseOf = (c) => (c.enabled ? c.phase : "disabled");
 const publicState = (c) => ({ enabled: c.enabled, phase: c.phase, revision: c.revision, generation: c.generation });
+const sameControl = (a, b) => a.revision === b.revision && a.generation === b.generation && a.enabled === b.enabled && a.phase === b.phase;
+
+/** Each preparation call belongs to the observed disabled controller. A later
+ * operator's maintenance window must never grant permission to this fixture. */
+export function fixtureRpc(db, expected) {
+  const allowed = new Set(["person_backfill_metrics", "person_reconcile_start", "person_backfill_save_many", "person_reconcile_record_many", "person_reconcile_checkpoint", "person_backfill_status", "person_audit_anchor_inputs", "person_audit_anchor_commit"]);
+  return async (fn, args) => {
+    const keys = Object.keys(args);
+    if (!allowed.has(fn) || keys.some((key) => !/^p_[a-z_]+$/.test(key))) throw fail("tenancy_armed_rpc");
+    const client = await db.connect(); let broken;
+    try {
+      await client.query("begin isolation level read committed");
+      await client.query("set local statement_timeout='15s';set local lock_timeout='2s'");
+      await client.query("select person_private.transition_lock()");
+      const current = await control(client);
+      if (current.enabled || !sameControl(current, expected)) throw fail("tenancy_armed_precondition", "controller_changed");
+      const result = (await client.query(`select public.${fn}(${keys.map((key, i) => `${key}=>$${i + 1}`).join(",")}) result`, keys.map((key) => args[key] !== null && typeof args[key] === "object" ? JSON.stringify(args[key]) : args[key]))).rows[0].result;
+      await client.query("commit"); return result;
+    } catch (error) {
+      await client.query("rollback").catch((e) => { broken = e; }); throw error;
+    } finally { client.release(broken); }
+  };
+}
 
 /** The database this sweep is about to write to, proved through both of the
  * fixture's clients: the PostgreSQL URL and the REST URL must name the selected
@@ -163,7 +185,12 @@ export async function recoverFromEvents(db, ownership, action) {
  * any later step can fail, so the caller can always undo exactly what it did. */
 export async function armForSweep({ runId, candidateIds, preflight, onOwnership }, env = process.env) {
   if (!RUN.test(runId)) throw fail("tenancy_armed_run");
-  if (!Array.isArray(candidateIds) || !candidateIds.length) throw fail("tenancy_armed_people");
+  if (!Array.isArray(candidateIds) || !candidateIds.length || candidateIds.length > 100 ||
+      candidateIds.some((id) => !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id)) ||
+      new Set(candidateIds).size !== candidateIds.length) throw fail("tenancy_armed_people");
+  candidateIds = [...candidateIds].sort();
+  const maxBytes = Number(env.TENANCY_MAX_DB_BYTES ?? 34000000000);
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1000000 || maxBytes > 45000000000) throw fail("tenancy_armed_capacity");
   sweepReason("arm", runId);
   const db = await operatorPool(env);
   const report = { controller: null, reconciled: 0, anchored: 0, pinned: false, ownership: null };
@@ -172,32 +199,44 @@ export async function armForSweep({ runId, candidateIds, preflight, onOwnership 
     if (preflight && String(preflight.system_identifier) !== String(identity)) throw fail("tenancy_armed_precondition", "database_changed");
     let c = await control(db);
     if (c.enabled) throw fail("tenancy_armed_precondition", "controller_enabled");
+    const initial = c;
+    if (preflight && !sameControl(c, preflight.controller)) throw fail("tenancy_armed_precondition", "controller_changed");
+    const owned = (await db.query("select id from candidates where id=any($1::uuid[]) and source='leaktest' and directory_contact_id is null and starts_with(linkedin_username,$2) order by id", [candidateIds, `zzlk${runId}`])).rows.map((r) => r.id);
+    if (JSON.stringify(owned) !== JSON.stringify(candidateIds)) throw fail("tenancy_armed_people", "not_owned");
     // 1. Baseline reconciliation of exactly the fixture people (queue scope covers the
     //    captured inserts; a 'leaktest' source is a legacy import like any other).
     const r = await runner();
     report.pinned = r.pinned;
     const url = env.LOCAL_DATABASE_URL ?? env.PERSON_PUBLISH_DATABASE_URL;
-    const site = await r.pgSite(url);
+    const site = { ...await r.pgSite(url), rpc: fixtureRpc(db, initial) };
     try {
       const run = `tenancy-${runId}`;
-      await site.rpc("person_reconcile_start", { p_run: run, p_commit: PIN, p_limit: 1000, p_batch: 100, p_resume: false, p_scope: "queue", p_external_hash: "1".repeat(32) });
-      let page;
-      while ((page = await site.rpc("person_reconcile_page", { p_run: run, p_size: 100 }))?.length) {
-        await r.reconcilePage({ site, lib: r.lib, config: { run, dry: false }, page });
-      }
+      const metrics = await site.rpc("person_backfill_metrics", {});
+      if (!Number.isFinite(Number(metrics.database_bytes)) || Number(metrics.database_bytes) >= maxBytes || !Number.isFinite(Number(metrics.blocked_sessions)) || Number(metrics.blocked_sessions) > 5) throw fail("tenancy_armed_capacity");
+      await site.rpc("person_reconcile_start", { p_run: run, p_commit: PIN, p_limit: candidateIds.length, p_batch: candidateIds.length, p_resume: false, p_scope: "queue", p_external_hash: "1".repeat(32) });
+      // The public queue pager spans the whole database. Read only the supplied
+      // fixture IDs, with the same source-version witness as that pager.
+      const page = (await db.query("select c.id,coalesce(q.version,(select max(e.id) from person_change_events e where e.candidate_id=c.id),0) captured_version from candidates c left join person_change_queue q on q.candidate_id=c.id where c.id=any($1::uuid[]) order by c.id", [candidateIds])).rows;
+      if (JSON.stringify(page.map((p) => p.id)) !== JSON.stringify(candidateIds)) throw fail("tenancy_armed_people", "coverage");
+      await r.reconcilePage({ site, lib: r.lib, config: { run, dry: false }, page });
       const verified = (await db.query("select count(*)::int n from person_reconcile_people where run_id=$1 and status='verified' and candidate_id=any($2::uuid[])", [run, candidateIds])).rows[0].n;
       if (verified !== candidateIds.length) throw fail("tenancy_armed_reconcile", `${verified}/${candidateIds.length}`);
       report.reconciled = verified;
+      await site.rpc("person_backfill_status", { p_run: run, p_status: "paused", p_notes: { fixture_only: true, fixture_ids: candidateIds, source_scan_complete: false } });
     } finally {
       await site.end?.();
     }
     // 2. Anchors (the audit's immutable before-images) for the same people.
-    const anchors = await openAnchorDatabase(env);
-    try {
-      const result = await prepareAnchors({ site: anchors, prepare: r.current.prepareLegacyAuditAnchor, options: { save: true, limit: 100000, batch: 50, after: null, maxSeconds: 600, maxBytes: 1e12 }, onProgress: () => {} });
+    {
+      const call = fixtureRpc(db, initial);
+      const scoped = { rpc: async (fn, args) => {
+        if (fn === "person_audit_anchor_page") return candidateIds.filter((id) => !args.p_after || id > args.p_after).slice(0, args.p_limit);
+        const ids = fn === "person_audit_anchor_inputs" ? args.p_ids : fn === "person_audit_anchor_commit" ? args.p_items.map((x) => x.candidate_id) : [];
+        if (ids.some((id) => !candidateIds.includes(id))) throw fail("tenancy_armed_people", "anchor_scope");
+        return call(fn, args);
+      } };
+      const result = await prepareAnchors({ site: scoped, prepare: r.current.prepareLegacyAuditAnchor, options: { save: true, limit: candidateIds.length, batch: 50, after: null, maxSeconds: 600, maxBytes }, onProgress: () => {} });
       report.anchored = result.created ?? 0;
-    } finally {
-      await anchors.end();
     }
     const missing = (await db.query("select count(*)::int n from unnest($1::uuid[]) id where not exists(select 1 from person_audit_anchors a where a.candidate_id=id)", [candidateIds])).rows[0].n;
     if (missing) throw fail("tenancy_armed_anchors", String(missing));
@@ -205,6 +244,7 @@ export async function armForSweep({ runId, candidateIds, preflight, onOwnership 
     //    somebody enabled meanwhile fails the CAS and nothing is changed.
     c = await control(db);
     if (c.enabled) throw fail("tenancy_armed_precondition", "controller_enabled");
+    if (!sameControl(c, initial)) throw fail("tenancy_armed_precondition", "controller_changed");
     const ownership = await ownedTransition(db, { database: identity, run: runId, revision: c.revision, generation: c.generation, phase: "disabled" }, "arm");
     report.ownership = ownership;
     onOwnership?.(ownership);

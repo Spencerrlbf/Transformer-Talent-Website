@@ -58,3 +58,13 @@ What this proves: the exact commit's server and database behaviour (tenancy, arm
 controller, gate, deny list). What it does not prove: the Vercel-hosted deployment's own
 configuration, which needs the same identity comparison and gate probe against the
 deployment that will serve traffic.
+
+Armed fixture safety: `armForSweep` accepts at most 100 distinct owned `leaktest`
+people whose username carries the current run marker and has no directory link.
+Reconciliation and anchor creation use those exact IDs. Every preparation RPC
+checks the original disabled controller revision while holding its controller
+lock in the same transaction. It never completes a whole-database source scan.
+`TENANCY_MAX_DB_BYTES` defaults to 34,000,000,000 bytes; an explicit, already
+approved copy-specific ceiling may be supplied, up to 45,000,000,000 bytes.
+The isolated full-schema regression `scripts/tenancy/test-scope.mjs` uses the
+loopback database `person_tenancy_scope_test` and retains its synthetic evidence.

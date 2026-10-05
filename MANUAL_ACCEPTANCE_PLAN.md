@@ -6,7 +6,7 @@ Branch: `fix/person-90-release-remediation`.
 Application/migration fixes: `79af7eb`; release evidence: `adae577`.
 The URL, test accounts, fixture links and final deployed commit will be supplied
 after the selected environment passes the checks below. The existing hosted
-preview is older than these fixes. The hosted/local environment choice is pending.
+preview is older than these fixes. The approved environment is the existing hosted `tt-test-copy` (`qsqlgibgsxzlimoegcjx`).
 
 This plan checks the behavior you see in the browser. Codex separately checks
 database upgrades, catch-up, recovery, exact accounting and tenant isolation.
@@ -15,9 +15,10 @@ has completed.
 
 ## What Codex must prepare before handing this to you
 
-- [ ] Create or start a separate disposable test database; record its identity.
-  The original project and `tt-test-copy` baseline are excluded.
-- [ ] Install and verify the required schema through `20261005120000`, including
+- [x] Confirm the approved hosted copy and record its identity. Production is excluded.
+  Copy cluster: `7550817586112808987`; the previous baseline-only restriction was
+  superseded by Spencer's October 5 setup approval.
+- [x] Install and verify the required schema through `20261005120000`, including
   the prerequisite legacy schema. The current bootstrap and smoke seed are
   explicitly local-only; they must not simply be pointed at a hosted database.
 - [ ] Deploy/build this branch with Node 24 and the new target's browser, REST,
@@ -34,9 +35,8 @@ has completed.
   a small synthetic PDF, the deployed commit, and a READY confirmation. Credentials
   and sign-in tokens stay out of this document and out of Git.
 
-If you choose a local preview, it works on this Mac while its services are running;
-it does not establish Vercel runtime readiness. A hosted preview also requires the
-approved temporary Supabase project and its operating window.
+The test application will run on Vercel against the existing Supabase copy.
+No additional Supabase project or operating charge was created for this setup.
 
 ## Test data Codex will supply
 
@@ -78,7 +78,7 @@ paste it into an issue or commit. All screenshots should show synthetic data onl
 
 | ID | What you manually do | Acceptance criteria |
 |---|---|---|
-| M01 — Correct environment and login | Open the supplied READY URL, sign in as the TT test recruiter, and open **Network**. Check the fixture names against the handoff. | The dashboard loads, the account is TT, and Jordan, Casey and Taylor are available. The supplied URL and build match the handoff. If you see real candidates or the wrong company, stop and report it. |
+| M01 — Correct environment and login | Open the supplied READY URL, sign in as the TT test recruiter, and open **Network**. Check the fixture names against the handoff. | The dashboard loads, the account is TT, and Jordan, Casey and Taylor are available. The supplied URL and build match the handoff. The copy contains existing candidates too: edit only the named synthetic fixtures. Stop if the URL or signed-in company differs from the handoff. |
 | M02 — Profile drawer | Open Jordan. Select **Profile**. Read About, Experience, Education and Skills. Resize the browser once, then reopen the drawer. | The prepared profile is present and readable. All three employers and both education entries appear in the correct chronology; skills and text do not overlap or become inaccessible. Closing/reopening does not lose profile content. |
 | M03 — Fit and suggested role | Open Jordan's linked TT application from the supplied link. Select **Fit**. Find **Also a match**, then use **View job** on Staff Platform Engineer #99102. | The existing role and its report card are shown; #99102 appears as a suggestion with the correct title/review. **View job** opens #99102. Merely viewing a suggestion creates no application or Pipeline entry. |
 | M04 — Choose a primary email | In Jordan's contact area, use **Make primary** beside `javery.old@example.test`. Close the drawer, reload, and open Jordan from both Network and the linked TT application. | The selected address is the primary in both places after reload. The other valid address remains available as an alternative; it is not silently deleted or displayed as the primary. The phone is unchanged. |
@@ -96,7 +96,7 @@ paste it into an issue or commit. All screenshots should show synthetic data onl
 | M16 — Final persistence check | Sign out of the TT test account and sign back in using the supplied test-login method. Revisit Jordan, Casey and Taylor, plus the two client Pipelines. | Jordan remains cleared, Casey retains M08's values, Taylor remains sent once, and the clients retain only their own expected applications. No duplicate person or application appears after a new session. |
 
 **If a menu, fixture or sign-in method described here is missing, mark that case
-BLOCKED and tell Codex. Do not improvise using a real person or the baseline copy.**
+BLOCKED and tell Codex. Do not improvise using a real person or a different database.**
 
 ## Results sheet
 
@@ -136,5 +136,23 @@ Record "manual testing accepted" only for the tested build. Main merge and
 production migration/cutover remain a separate release decision.
 
 After testing, tell Codex whether to retain the fixtures for fixes or retire the
-disposable environment. Keep the test report before cleanup. A paid environment
-must remain within its approved operating window and budget.
+synthetic fixtures. Keep the test report before cleanup; this existing copy is not
+a new disposable project and must not be deleted as part of fixture cleanup.
+
+## Setup recovery record — October 5
+
+The nine reviewed upgrades were applied to the copy with candidate IDs and
+publication counts unchanged: 423,052 candidates and 2,008 published profiles.
+Three September 29 application attempts remain **parked for review**, with zero
+recovered or completed. Their two owned Harvest ledgers, three selected enrichment
+rows, input snapshots and allowance history are preserved in a restricted audit.
+They are excluded from automatic retry. The normal queue summary does not fully
+represent this quarantine; always include these three in outstanding accounting.
+
+The armed test now restricts reconciliation and anchors to its exact owned
+fixture IDs. Its regression kept an unrelated pending person and an unrelated
+verified/unanchored person unchanged. Preparation also refuses a controller change
+before an anchor commit and cannot borrow another operator's maintenance window.
+The normal DB-size gate is 34 GB; the documented copy-specific 45 GB ceiling is
+passed explicitly for this existing 38.8 GB copy. This is no change to production
+capacity approval or historical catch-up accounting.
