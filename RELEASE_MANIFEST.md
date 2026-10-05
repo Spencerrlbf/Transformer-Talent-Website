@@ -1,26 +1,51 @@
 # Release manifest: candidate storage remediation branch
 
-Executable content: **`79af7eb1f233edb6cb6369f50971eea2f0528769`**.
-The documentation commit carrying this manifest changes no executable content.
-This is a local verification record, not release approval. Changes to source,
+Tested hosted source: **`13f1b308f4e6a43b03cda752a001897c3295dbce`**.
+Application/migration source includes **`79af7eb1f233edb6cb6369f50971eea2f0528769`**;
+`13f1b30` additionally scopes armed operator preparation to owned fixtures.
+The handoff documentation/PDF update changes no executable content.
+This records local and hosted testing evidence, not release approval. Changes to source,
 dependencies, migrations or configuration invalidate the evidence that depends on
 those changes until re-verified. The detailed history is in `RELEASE_REMEDIATION.md`.
 
 Evidence classes: **code** (static/offline), **local runtime** (this machine's
-synthetic databases and production build), **deployed runtime** (not established).
+synthetic databases and production build), **deployed runtime** (October 5 hosted
+copy; see [HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md)).
 Earlier results are labelled historical and are not included in the fresh totals.
 
-## Source and dependencies
+## Current hosted testing state — October 5
+
+**READY for manual testing** at
+[the fixed preview](https://transformer-talent-website-87oyi44go.vercel.app/dashboard/network?job=99101),
+Vercel `dpl_42j5rpFpCzfCPbWtHYobAw6Tvo7C`, Node 24.x, source `13f1b30`.
+The existing approved `tt-test-copy` is upgraded through `20261005120000`, selected
+consistently by browser, REST, storage and PG, and left armed/open revision 17 /
+generation 13. Production remains untouched. No new Supabase project was created.
+
+Hosted disabled and armed sweeps each passed **913 calls** on this artifact.
+Server clear/restore/validation probes, copy receipt readback, wrong-target hosted
+canary refusal and Resend in-process denial passed. Branch configuration/aliases
+were restored after the negative canary. Prior limitations saying the copy was
+untouched, the branch unpushed or hosted attestation absent are historical below.
+
+The exact setup accounting, recovery limits and runtime evidence are in
+[HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md). Spencer's 16 cases and criteria
+are in [MANUAL_ACCEPTANCE_PLAN.md](MANUAL_ACCEPTANCE_PLAN.md), all still Not run.
+Three old application attempts are parked for review (zero recovered/completed).
+RR-09 full migration accounting, RR-10 disposition and production release approval
+remain outstanding. Fixture completion is not full migration completion.
+
+## Source and dependencies at the earlier local closure
 
 | Item | Value |
 |---|---|
 | Branch / checkout | `fix/person-90-release-remediation`, `pl/remediation` |
 | Base | `c8fda5bfd50e8c40f22a3083e38c6eea71d0a803` (`feat/person-00-storage-unification`, includes `main` `9a3240c`) |
-| Executable head | `79af7eb1f233edb6cb6369f50971eea2f0528769`: receipt-based historical-clear correction, bounded contact snapshot, compatible historical catch-up verification and regression tests |
+| Earlier local executable head | `79af7eb1f233edb6cb6369f50971eea2f0528769`: receipt-based historical-clear correction, bounded contact snapshot, compatible historical catch-up verification and regression tests |
 | Previous executable / documentation heads | `90ebc0b` / `a9d14b1` |
 | Commits after base at executable head | 31, including the two merged drawer commits `dad9549`, `c042c21` |
 | Diff vs base at executable head | 116 files, +7,369 / -115 |
-| Last pushed head | Stored origin tracking ref `ae70f76`; no push or remote refresh in this closure |
+| Pushed tested artifact | `13f1b308f4e6a43b03cda752a001897c3295dbce`; subsequent handoff-only commits do not change the fixed tested URL |
 | Excluded testing-branch content | diagnostic route/log commits `5db31f1`, `ce72331`, `8bc18b9` |
 | Lockfile SHA256 | `2c4ff8ad43b5cae55f06580afd4b7711f2beaeb2b0900f8c45acee2bd2fa51c5` (unchanged) |
 | Current worker SHA256 | `29b7c96ab054fca3e5d9b0afbe209c7430b03646a8b440fbeb8fab0309ad3480` (unchanged application source) |
@@ -31,8 +56,8 @@ Earlier results are labelled historical and are not included in the fresh totals
 
 Application source and dependency lockfile did not change in this closure. The
 historical pinned checkout's tracked tree is unchanged; the existing runner may
-rebuild its ignored translator bundle. Hosted Node/runtime/configuration has not
-been attested.
+rebuild its ignored translator bundle. Hosted Node/runtime/configuration was subsequently attested on October 5, as
+recorded above; these earlier local measurements remain tied to `79af7eb`.
 
 ## Catch-up artifact
 
@@ -95,7 +120,7 @@ Upgrade fixtures retain the copy's older Send body from `23d7860`:
 function, column, constraint, trigger and privilege parity, including both new
 forward migrations.
 
-## Effective configuration and destinations
+## Earlier local configuration and destinations (superseded for hosted testing)
 
 | Setting | Rule |
 |---|---|
@@ -108,11 +133,10 @@ forward migrations.
 | Fresh local destinations | Dedicated PG15 cluster `127.0.0.1:55821`; isolated Supabase project `candidate-closure-90ebc0b` on API59421/PG59422; app `127.0.0.1:3451` |
 | Hosted destinations | Neither baseline copy nor original project queried or written in this closure; preview configuration not re-read or changed |
 
-The preview reportedly still points at the baseline copy and has the earlier
-Harvest-host typo. That is historical configuration evidence, not a fresh check.
-Keep the preview unused until its isolated target and deny list are corrected and
-attested. Repository GitHub Actions target variables and hosted Node 24 runtime
-also require verification at release.
+The earlier preview restriction and Harvest-host typo were corrected by the
+approved October 5 hosted setup. Use the fixed tested URL above. Repository GitHub
+Actions target variables and production runtime/configuration still require
+verification at release; hosted preview success does not establish them.
 
 ## Fresh verification of `79af7eb` (2026-10-04)
 
@@ -159,30 +183,33 @@ evidence in the ledger. They were not rerun wholesale or added to the fresh 262
 count. This closure's independent reviewers inspected source/sealed probes; the
 local database and HTTP results are recorded separately.
 
-Not established here: hosted deployment identity/configuration/Node runtime,
-hosted tenancy or browser smoke, runtime Nylas/Airtable route denial, real-data
-catch-up/publication/audit at a declared cutoff, or disposition of legacy debris
-and genuinely ambiguous historical live NULL decisions.
+The earlier local closure did not establish hosted identity/configuration/runtime,
+tenancy or browser smoke. Those preview checks were subsequently completed on
+October 5 as recorded above. Runtime Nylas/Airtable route denial, full source
+catch-up/publication/audit at a declared cutoff, disposition of legacy debris and
+genuinely ambiguous historical live NULL decisions remain outside that evidence.
 
 ## Remaining release gates
 
-1. Approval to push (triggers a preview build), correct preview configuration and
-   validate a separately approved disposable hosted target or the release sitting.
-2. Approved copy upgrade: missing `20260928061000`, then all eight forward files
-   above; recovery, integrity, disk/load and drain gates first.
-3. Acceptance of this exact catch-up compatibility artifact for hosted use; use
+1. Spencer's manual acceptance on the fixed tested deployment: all 16 cases are
+   prepared and still Not run. Hosted setup, branch push, copy upgrades and the
+   automated preview checks have completed under his approval.
+2. Acceptance of this exact catch-up compatibility artifact for hosted historical
+   catch-up; use
    the same accepted bytes on resume. No source-conflict policy override.
-4. Per-row owner review of historical live NULL decisions still ambiguous after
+3. Per-row owner review of historical live NULL decisions still ambiguous after
    the receipt correction; RR-10 disposition of 23 experience rows / three absent
    owners; RR-09 catch-up, publication and final audit at a declared cutoff.
-5. Hosted Node 24/runtime checks, PR review and explicit release approval before
+4. Disposition of the three copy application attempts parked for review, with
+   zero recovered/completed; they are not removed from outstanding accounting.
+5. Production recovery/schema/configuration/runtime checks, PR review and explicit release approval before
    main merge, deployment/projection cutover or restrictive write guards.
 
 Prior copy counts (2,000 publication outcomes, one audit-blocked; 421,044 without
 projection state; 2,271 under the partition; 5,488 identity conflicts; two source-date
-holds) are the earlier review's observations, not current measurements. The copy's
-witness/schema state has not been rechecked in this closure. The baseline copy and
-original project remain outside the local test work.
+holds) are the earlier review's observations, not current migration measurements.
+The October 5 hosted report records schema and exact setup additions; it does not
+refresh full-population migration accounting. The original project remains untouched.
 
 ## Local resource disposition
 

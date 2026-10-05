@@ -9,22 +9,35 @@ resume endpoint). Status words: **implemented**, **verified** (evidence on the f
 source in this branch), **blocked** (needs an action outside this branch's
 authorization), **obsolete** (shown no longer applicable).
 
-Current local closure is **`79af7eb`**, based on `a9d14b1` / executable
-`90ebc0b`. It fixes the remaining historical-clear upgrade defect (F2), replaces
-F5's global refusal with a narrowly derived, hash-bound historical verifier, and
-removes the capped decision scan. Section 8 records fresh evidence and its limits.
-The earlier claim that F1–F6 were all closed on `0ffa133` / `90ebc0b` was too broad:
-F2 missed published-then-shadow clears and F5 still refused legitimate clears.
+**Current status — October 5: READY for hosted manual testing, not released.**
+The tested source is `13f1b308f4e6a43b03cda752a001897c3295dbce`, deployed to
+[the fixed preview](https://transformer-talent-website-87oyi44go.vercel.app/dashboard/network?job=99101)
+against the approved existing `tt-test-copy`. See
+[HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md) for exact runtime/recovery
+accounting and [MANUAL_ACCEPTANCE_PLAN.md](MANUAL_ACCEPTANCE_PLAN.md) for the 16
+manual cases, criteria and unfilled results sheet.
 
-- **Local implementation and verification:** the scoped F2/F5/capped-scan work is
-  complete on `79af7eb`; prior RR/R2 evidence below remains tied to its stated source.
-- **Hosted verification:** not performed in this pass. No push, hosted database or
-  environment change, main merge, deployment, workflow dispatch, candidate messages
-  or paid provider work.
-- **Release approved: no.** Hosted artifact attestation/tenancy (RR-07/08/14),
-  declared-cutoff migration accounting/publication/audit (RR-09), RR-10 disposition
-  and owner release approval remain open. Local fixture completion is not migration
-  completion.
+- **Implementation:** `79af7eb` closed the receipt-based historical-clear upgrade
+  gap, introduced the bounded compatible historical verifier, and removed the
+  capped decision scan. `13f1b30` confines armed rehearsal preparation to owned IDs
+  and refuses controller races before writes. Prior evidence below remains tied
+  to its stated source.
+- **Hosted setup:** branch pushed/deployed on Node 24; copy recovered to a safe
+  review state, nine upgrades applied, branch-only target/provider settings fixed.
+  Both disabled and armed tenancy sweeps passed 913 calls. Hosted contact probes,
+  target refusal and provider denial are evidenced in the hosted report.
+- **Recovery:** three old application attempts remain parked for review, with zero
+  recovered/completed. The copy is available and armed/open for manual testing.
+- **Release approved: no.** Manual acceptance, full declared-cutoff migration
+  accounting/publication/audit (RR-09), RR-10 disposition, production configuration
+  checks, PR review and Spencer's release approval remain open. No main merge,
+  production write/deploy, paid enrichment or real candidate message occurred.
+
+The earlier statement that F1–F6 were all closed on `0ffa133` / `90ebc0b` was too
+broad: F2 missed published-then-shadow clears and F5 still refused legitimate clears.
+Section 8 records the subsequent local corrections. Dated sections below are
+historical observations; the October 5 hosted report supersedes their unpushed,
+copy-untouched and unverified-hosting statements.
 
 ## Baseline refreshed on 2026-10-03
 
@@ -1021,10 +1034,12 @@ clean harnesses other than application-edits do not install the `20261003*` file
 (the upgrade harness's phase 5 does); the `DISABLE TRIGGER` step takes a share-row-
 exclusive lock and belongs in the held phase.
 
-## Hosted-preview validation plan (prepared 2026-10-05; NOT executed; needs approval)
+## Historical new-project proposal (superseded; do not execute)
 
-Purpose: the one evidence class still missing, the deployed server's own runtime and
-destinations, on a separate disposable target, never the baseline copy or production.
+This unexecuted proposal is retained as history. Spencer subsequently authorized
+using the existing copy; the hosted setup in HOSTED_TEST_READINESS.md replaces this
+procedure. In particular, the local bootstrap/smoke seed must never be pointed at
+a hosted database and this proposal does not authorize deleting the existing copy.
 
 1. **Disposable target**: new Supabase project `tt-disposable-tenancy` in organization
    "Transformer Talent" (`nanvovpwibjdlhhfmfix`), region `us-east-2`, Micro compute
@@ -1076,7 +1091,7 @@ What it will not prove: production's own configuration (the same checks are repe
 at the sitting, after the identity migration is installed there), RR-09 accounting,
 RR-10 disposition.
 
-## Remaining external actions (prepared; none performed under the 2026-10-04/05 instructions)
+## Historical external-action list (before hosted setup; see current report)
 
 1. **Push** the reviewed branch (`origin` was left at `ae70f76`); pushing triggers a
    preview deployment that will build and run on Node 24 (`engines`).
@@ -1125,3 +1140,23 @@ are retained. The final stack retains three normalized synthetic people, zero Au
 users and the sweep's four owned controller events; controller disabled. The
 previous build output and all other local projects were preserved. No push,
 hosted configuration/database change or deployment occurred in this closure.
+
+## 9. October 5 hosted manual-testing handoff
+
+The approved existing copy was upgraded, the branch pushed and the fixed Node 24
+preview attested. The complete current record is
+[HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md). The prior new-project proposal
+was not used. Nine forward upgrades preserved the pre-fixture population; fixture
+additions and publication counts are reconciled exactly in the report. Three
+uncertain application attempts remain parked for review, zero recovered/completed.
+
+Disabled and armed hosted sweeps each passed 913 calls on `13f1b30`; current-runner
+fixture reconciliation was limited to exact owned IDs, not the general catch-up
+queue. Hosted contact receipts, wrong-target refusal and Resend denial were checked.
+The correct branch settings/aliases are restored. Manual fixtures and private
+sign-in access are ready; Riley is the reserved unpublished person, Casey a retained
+setup probe. No main merge, production cutover or RR-09 completion is claimed.
+
+The local PG15 cluster55821 and isolated local Supabase stack are stopped with data
+retained. The hosted preview and existing copy remain available for Spencer's tests.
+Use MANUAL_ACCEPTANCE_PLAN.md in order; its results remain Not run until performed.
