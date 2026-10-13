@@ -201,3 +201,19 @@ Codex executed all sixteen cases against the fixed hosted build `13f1b30`: **15 
 ## Owner verification — October 12, 2026
 
 Spencer confirmed in Chrome that Riley’s supplied resume displays correctly and still works after refresh, both selected contact values are correct, and the profile retains the three employers, two education entries and Skills. M15 is now PASS based on those direct confirmations. Combined results: **16 PASS, 0 FAIL, 0 BLOCKED**. The October 7 screenshots retain the original blank in-app-browser observation; no new Chrome screenshot was supplied. Other cases were not rerun today. This closes the defined browser testing stage, without authorizing a main merge or production migration/cutover.
+
+## Current artifact — October 13, 2026
+
+The deployed source is now `68a77db` on preview
+`https://transformer-talent-website-3bd5n2xmy.vercel.app` (database: the same copy,
+labelled `qsqlgibgsxzlimoegcjx`). Changes since the tested `13f1b30`: the project-label
+identity proof (server gate, operator tools, sweep), the finalizer CLI path and catch-up
+resume proofs, and complete contact reads behind the editable drawer (a failed secondary
+read now answers "temporarily unavailable" instead of an editable blank). Browser cases
+M01–M16 are not repeated: their behaviour is unchanged, and the drawer read path is
+covered by the database-backed regression suite. Both tenancy sweeps passed on this
+artifact (913 calls each). The controller is operated by the rehearsal (ledger section
+14); the fixed October 5 URL still serves `13f1b30` and is no longer the current build.
+Fixture note: on October 13 a verification script recorded explicit email and phone
+clears on Jordan Avery and they were withdrawn the same day (ledger section 12); Jordan's
+contacts display again.

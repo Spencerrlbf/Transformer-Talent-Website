@@ -2,7 +2,7 @@
 
 > **October 12 update:** All 16 browser cases now pass (15 Codex checks plus Spencer’s Chrome resolution of M15); see `output/browser-acceptance/2026-10-07/REPORT.md`. Older “Not run” and “ready for manual testing” labels below describe the October 5 handoff. Production migration and release remain incomplete. A fresh read-only inspection found both production and test copy ACTIVE_HEALTHY, with 61 migration versions recorded on the copy but absent from production’s history in the September 26 onward range. Production also lacks the transition-control and publication-run tables. These differences require schema verification and the reviewed full upgrade chain; they are not permission to blindly replay migrations. Complete production preparation/release and retire the paid test copy before starting AI candidate implementation.
 
-Tested hosted source: **`13f1b308f4e6a43b03cda752a001897c3295dbce`**.
+Tested hosted source (October 5 handoff): **`13f1b308f4e6a43b03cda752a001897c3295dbce`**; current artifact: see the section below.
 Application/migration source includes **`79af7eb1f233edb6cb6369f50971eea2f0528769`**;
 `13f1b30` additionally scopes armed operator preparation to owned fixtures.
 The handoff documentation/PDF update changes no executable content.
@@ -14,6 +14,19 @@ Evidence classes: **code** (static/offline), **local runtime** (this machine's
 synthetic databases and production build), **deployed runtime** (October 5 hosted
 copy; see [HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md)).
 Earlier results are labelled historical and are not included in the fresh totals.
+
+## Current artifact — October 13, 2026
+
+| Item | Value |
+|---|---|
+| Executable source | **`68a77db0dd8c045b1ae67f2fc084903a11c990ea`** (last code change `331b64a`, complete contact reads behind the editable drawer; later commits are documentation only) |
+| Preview deployment | `transformer-talent-website-3bd5n2xmy.vercel.app`, `dpl_BcedVHnrtxUSwSzmTXusCmENnFnn`, git source, branch `fix/person-90-release-remediation`, READY |
+| Database | existing copy `qsqlgibgsxzlimoegcjx`, labelled `qsqlgibgsxzlimoegcjx` (`20261013090000`), 158 recorded versions through `20261013090000` |
+| Disabled-controller tenancy sweep | run `2ed5h7f3e`: **913 calls PASS** in 328 s; cleanup `{"orgs":2,"poolPeople":3,"files":2,"users":3}`, nothing left |
+| Armed-controller tenancy sweep | run `2lehn2a98`: fixture target proved by label; armed at revision 21 / generation 16; **913 calls PASS** in 286 s; own drain, seal, disarm (revision 21 → 24); three normalized synthetic people retained; cleanup nothing left |
+| Controller coordination | the manual-test arming (revision 17, generation 13) was drained, sealed and disarmed through the transition CLI with expected phases and reason codes (`final_preview_sweeps_*`) before the sweeps; the three deferred application attempts (synthetic, 2026-09-29, no receipts) stay deferred |
+| Manual acceptance | 16/16 (October 7 and 12), not repeated; unaffected by the October 13 changes except the drawer read path, which is covered by the database-backed regression suite |
+| Rehearsal | section 14 of RELEASE_REMEDIATION.md (in progress at the time of this edit) |
 
 ## Current hosted testing state — October 5
 
