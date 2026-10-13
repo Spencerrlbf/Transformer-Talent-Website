@@ -1529,7 +1529,12 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     }[];
     if (!p) return null;
 
-    const published = await publishedPoolProfiles([id]);
+    // The drawer's contact block is EDITABLE: a save writes back whatever it shows, so
+    // every read behind it must be complete. A failed published-view read, decision
+    // lookup or verification-history read is "unavailable" (the route answers 503 and
+    // nothing is editable), never a blank that a later save would turn into an
+    // explicit clear.
+    const published = await publishedPoolProfiles([id]).catch(() => { throw Error("pool_contact_unavailable"); });
     const canonical = published.get(id);
     if (canonical) p = canonical.profile as typeof p;
     const [enrRes, vRes, decisions] = await Promise.all([
@@ -1541,9 +1546,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      published.has(id) ? new Map<string, RecruiterDecisions>() : recruiterContactDecisions([id]),
+      published.has(id) ? new Map<string, RecruiterDecisions>() : recruiterContactDecisions([id], { requireComplete: true }),
     ]);
-    const emailMap = await poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published, { decisions });
+    const emailMap = await poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published, { decisions, requireComplete: true });
     const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
@@ -1902,6 +1907,8 @@ export async function saveRecruiterContactMapped(
     // The target gate refused the session (unselected, unlabelled or foreign-labelled
     // database): the write path is unavailable, and the refusal is logged by its code.
     if (isTargetError(error)) { console.error(`person_contact_target_refused:${reason}`); return { error: "temporarily_unavailable" }; }
+    // Only an application code or a SQLSTATE is logged; driver text can carry private data.
+    console.error(`person_contact_save_failed:${/^[A-Za-z_:0-9-]{1,80}$/.test(reason) ? reason : /^[0-9A-Z]{5}$/.test((error as { code?: string })?.code ?? "") ? `pg_${(error as { code?: string }).code}` : "unknown"}`);
     return { error: "save_failed" };
   }
 }

@@ -1376,11 +1376,16 @@ session lingered); the copy's own database still reports `qsqlgibgsxzlimoegcjx`.
 
 ### Side effect on a fixture, and its correction
 
-The drawer returns `contact.email`/`contact.phone` as null when no explicit recruiter
-choice exists; the verification script read those nulls as "current values" and sent
-them back, so its two `PUT …/contact` calls at 16:52 UTC recorded **explicit email and
-phone clears** on the synthetic Jordan Avery fixture (receipts and two `suppressed=true`
-decisions, live mode). At 17:02 UTC the clears were withdrawn with the library's
+The verification script's drawer read (`GET …/candidates/v2/net_<Jordan>`, 200) returned
+`contact.email` and `contact.phone` as null although the fixture's candidate row holds an
+email and a phone; the script treated those nulls as "current values" and sent them back,
+so its two `PUT …/contact` calls at 16:52 UTC recorded **explicit email and phone clears**
+on the synthetic Jordan Avery fixture (receipts and two `suppressed=true` decisions, live
+mode). Why the read returned nulls is **not established by evidence**: the response body
+was not kept, and the unpublished `net_` detail path at that commit tolerated a failed
+secondary lookup (decision or verification-history read) by returning blanks, so either an
+incomplete read or the drawer's representation of "no explicit choice" is consistent with
+what was observed. Section 13 closes the incomplete-read path regardless. At 17:02 UTC the clears were withdrawn with the library's
 `automatic` option (`saveRecruiterContact` run locally against the copy with the branch
 configuration, same actor id): the latest decisions are now `NULL, suppressed=false`
 (automatic ranking), the preview shows Jordan's email and phone again, and the three
@@ -1392,3 +1397,33 @@ Remaining: production is unlabelled (release step); `HOSTED_TEST_READINESS.md` a
 `MANUAL_ACCEPTANCE_PLAN.md` still cite the cluster identifier as the copy's identity and
 carry another session's uncommitted edits (untouched); the manual plan's fixed URL still
 serves `13f1b30`.
+
+## 13. October 13: complete contact reads behind the editable drawer
+
+Confirmed defect (Spencer's review of the Jordan incident): the unpublished `net_` detail
+path in `lib/server/candidates-unified.ts` called `recruiterContactDecisions` and
+`poolEmails` without `requireComplete`, so a failed decision lookup or
+verification-history read produced an editable contact block with blanks, which an
+unrelated save (GitHub, another email) would write back as explicit clears.
+
+Fix: the published-view read, the decision lookup and the email ranking behind the `net_`
+drawer now all require complete results; any failure is `pool_contact_unavailable`, which
+the detail route answers as 503 `temporarily_unavailable` with no contact block. A generic
+contact-save failure is logged by its application code or SQLSTATE only.
+
+Regression coverage (`scripts/person-application-edits/test-edits.mjs`, database-backed,
+66/66 with the recipient suite 17/17):
+
+- unpublished person (shadow mode): a failed `person_recruiter_primary`, `candidate_emails`
+  or both → library rejects `pool_contact_unavailable`, route 503 with no `contact`, no
+  decision row written; a GitHub edit from a complete read preserves the untouched email
+  and phone (choices, never a clear); an `otherEmails` edit preserves them too; a genuine
+  explicit clear stays cleared through complete reads and through a later GitHub edit made
+  from the cleared drawer; history kept; the library's automatic selection shows the
+  effective contact again;
+- published person (live mode): the drawer equals the published contact, the same failed
+  secondary reads change nothing, a GitHub edit preserves email and phone, and the drawer
+  and published view agree.
+
+The Jordan incident's wording in section 12 was corrected: the cause of the null read is
+not proven; this fix removes the incomplete-read path either way.

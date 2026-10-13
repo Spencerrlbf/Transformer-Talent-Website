@@ -633,12 +633,12 @@ const ACTOR = randomUUID();
 // an earlier import, and in one variant a stale scalar), normalized and anchored the
 // supported way (reconcile + anchors, as the catch-up does), then linked by a shadow
 // intake. The history therefore pre-dates the anchor, as it does for every real person.
-async function shadowLinkedPerson({ scalarEmail = null } = {}) {
+async function shadowLinkedPerson({ scalarEmail = null, phone = null } = {}) {
   const username = `synthetic-clear-${randomUUID()}`, cid = randomUUID();
   const url = process.env.LOCAL_DATABASE_URL;
   await pool.query("update person_private.transition_control set enabled=false where singleton");
   try {
-    await pool.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,current_title,current_company,source,created_at) values($1,'Resolved Synthetic',$2::text,'https://www.linkedin.com/in/'||$2::text,$3::text,'Engineer','Example Corp','future','2025-01-01')", [cid, username, scalarEmail]);
+    await pool.query("insert into candidates(id,full_name,linkedin_username,linkedin_url,email,phone,current_title,current_company,source,created_at) values($1,'Resolved Synthetic',$2::text,'https://www.linkedin.com/in/'||$2::text,$3::text,$4::text,'Engineer','Example Corp','future','2025-01-01')", [cid, username, scalarEmail, phone]);
     await pool.query("insert into candidate_emails(candidate_id,email_address,email_type,quality,result) values($1,'historical@example.test','personal','good','ok')", [cid]);
     const { pgSite } = await import('../person-trial.mjs'), { reconcilePage } = await import('../person-reconcile.mjs');
     const { openAnchorDatabase } = await import('../person-audit/database.mjs'), { prepareAnchors } = await import('../person-audit-anchors.mjs');
@@ -795,4 +795,96 @@ test('live mode: an explicit email and phone clear survives publication; choosin
   assert.ok((await ranks()).some((r) => r.kind === 'phone' && r.rank !== null));
   assert.equal((await plan(cid)).status, 'verified');
   void id;
+});
+
+// ---- Complete contact reads behind the EDITABLE drawer -------------------------------
+// The net_ drawer writes back whatever it shows. A failed decision lookup or
+// verification-history read must therefore be "unavailable" (503, nothing editable),
+// never an editable blank that an unrelated save (GitHub, another email) turns into an
+// explicit clear. Genuine clears stay cleared, automatic selection shows the effective
+// contact, and a published person's drawer reads the published view the same way.
+const failingRest = (tables) => { const base = restFromDatabase(); return async (input, init = {}) => {
+  const table = new URL(String(input)).pathname.split('/').at(-1);
+  if (tables.includes(table)) return Response.json({ message: 'synthetic outage' }, { status: 500 });
+  return base(input, init);
+}; };
+const drawer = async (lib, cid) => (await lib.unifiedCandidateDetail(TT, `net_${cid}`)).contact;
+const routeRead = async (lib, cid) => { const r = await lib.readDetail({ headers: new Headers({ authorization: 'Bearer synthetic' }) }, { params: Promise.resolve({ key: `net_${cid}` }) }); return { status: r.status, body: await r.json() }; };
+const routeSave = async (lib, cid, contact) => { const r = await lib.saveContact({ headers: new Headers({ authorization: 'Bearer synthetic', 'idempotency-key': randomUUID() }), json: async () => contact }, { params: Promise.resolve({ key: `net_${cid}` }) }); return { status: r.status, body: await r.json() }; };
+const decisionRows = async (cid) => (await pool.query("select kind,chosen_value,coalesce((to_jsonb(p)->>'suppressed')::boolean,false) suppressed from person_recruiter_primary p where candidate_id=$1 order by kind", [cid])).rows;
+
+test('unpublished net_ drawer: incomplete contact reads are unavailable and cannot lead to a save; untouched email/phone survive a GitHub edit; clears stay cleared; automatic shows the effective contact', async () => {
+  // A legacy phone on the row from the start (the person is normalized and anchored with it).
+  const { cid } = await shadowLinkedPerson({ scalarEmail: null, phone: '+12025550123' });
+  const lib = await import('./dist/contact.mjs');
+  const priorFetch = globalThis.fetch, priorMode = process.env.PERSON_WRITE_MODE;
+  process.env.PERSON_WRITE_MODE = 'shadow';
+  try {
+    // Automatic selection: the effective contact (verified history + legacy phone), no decision rows.
+    globalThis.fetch = restFromDatabase();
+    assert.deepEqual(await decisionRows(cid), []);
+    const complete = await drawer(lib, cid);
+    assert.equal(complete.email, 'historical@example.test'); assert.equal(complete.phone, '+12025550123'); assert.equal(complete.github, null);
+    // Failed secondary reads: unavailable, not blank. The route answers 503 with no contact, so
+    // there is nothing a client could send back; the decision table stays untouched.
+    for (const tables of [['person_recruiter_primary'], ['candidate_emails'], ['person_recruiter_primary', 'candidate_emails']]) {
+      globalThis.fetch = failingRest(tables);
+      await assert.rejects(lib.unifiedCandidateDetail(TT, `net_${cid}`), /pool_contact_unavailable/, tables.join());
+      const r = await routeRead(lib, cid);
+      assert.equal(r.status, 503, tables.join()); assert.deepEqual(r.body, { error: 'temporarily_unavailable' });
+      assert.equal('contact' in r.body, false, 'no editable contact block');
+    }
+    assert.deepEqual(await decisionRows(cid), [], 'nothing was written by the failed reads');
+    // The GitHub edit a client makes from a COMPLETE read preserves the untouched email and phone.
+    globalThis.fetch = restFromDatabase();
+    const edited = await routeSave(lib, cid, { ...complete, github: 'octocat' });
+    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+    const afterEdit = await drawer(lib, cid);
+    assert.equal(afterEdit.email, 'historical@example.test'); assert.equal(afterEdit.phone, '+12025550123'); assert.equal(afterEdit.github, 'octocat');
+    assert.ok((await decisionRows(cid)).every((d) => d.suppressed === false && d.chosen_value !== null), 'the edit recorded choices, never a clear');
+    // Another-email edit (otherEmails) preserves them too.
+    const other = await routeSave(lib, cid, { ...afterEdit, otherEmails: ['second@example.test'] });
+    assert.equal(other.status, 200, JSON.stringify(other.body));
+    const afterOther = await drawer(lib, cid);
+    assert.equal(afterOther.email, 'historical@example.test'); assert.equal(afterOther.phone, '+12025550123'); assert.deepEqual(afterOther.otherEmails, ['second@example.test']);
+    // A GENUINE explicit clear stays cleared through complete reads, and an edit made from
+    // the cleared drawer keeps it cleared (the client sends what it sees: null).
+    const cleared = await routeSave(lib, cid, { email: null, phone: null, github: 'octocat', otherEmails: [] });
+    assert.equal(cleared.status, 200, JSON.stringify(cleared.body));
+    assert.deepEqual((await drawer(lib, cid)), { email: null, phone: null, github: 'octocat', otherEmails: [] });
+    assert.deepEqual(await decisionRows(cid), [{ kind: 'email', chosen_value: null, suppressed: true }, { kind: 'phone', chosen_value: null, suppressed: true }]);
+    const editCleared = await routeSave(lib, cid, { ...(await drawer(lib, cid)), github: 'octocat-2' });
+    assert.equal(editCleared.status, 200);
+    assert.deepEqual((await drawer(lib, cid)), { email: null, phone: null, github: 'octocat-2', otherEmails: [] }, 'still cleared');
+    assert.equal((await pool.query("select count(*)::int n from candidate_emails where candidate_id=$1 and email_address='historical@example.test'", [cid])).rows[0].n, 1, 'history kept');
+    // Automatic selection (library-level): the effective contact shows again.
+    await recruiter.saveRecruiterContact({ organizationId: TT, candidateId: cid, actorId: ACTOR, requestId: randomUUID(), mode: 'shadow', contact: { email: null, phone: null, github: 'octocat-2', otherEmails: [], automatic: ['email', 'phone'] } });
+    const auto = await drawer(lib, cid);
+    assert.equal(auto.email, 'historical@example.test'); assert.equal(auto.phone, '+12025550123');
+    assert.deepEqual(await decisionRows(cid), [{ kind: 'email', chosen_value: null, suppressed: false }, { kind: 'phone', chosen_value: null, suppressed: false }]);
+  } finally { globalThis.fetch = priorFetch; process.env.PERSON_WRITE_MODE = priorMode; }
+});
+
+test('published net_ drawer (live mode) reads the published view: the same failed secondary reads never produce blanks, and a GitHub edit preserves email and phone', async () => {
+  const { cid } = await processed();
+  const lib = await import('./dist/contact.mjs');
+  const priorFetch = globalThis.fetch, priorMode = process.env.PERSON_WRITE_MODE, priorUrl = process.env.PERSON_DATABASE_URL;
+  process.env.PERSON_WRITE_MODE = 'live'; process.env.PERSON_DATABASE_URL ??= process.env.LOCAL_DATABASE_URL;
+  try {
+    const canonical = (await lib.publishedPoolContactsOnConnection(pool, [cid])).get(cid)?.contact;
+    assert.ok(canonical?.email, 'the live intake published the person with an email');
+    globalThis.fetch = restFromDatabase();
+    const complete = await drawer(lib, cid);
+    assert.deepEqual(complete, canonical, 'the drawer shows the published contact');
+    for (const tables of [['person_recruiter_primary'], ['candidate_emails']]) {
+      globalThis.fetch = failingRest(tables);
+      assert.deepEqual(await drawer(lib, cid), canonical, `${tables}: the published view does not depend on the failed table`);
+    }
+    globalThis.fetch = restFromDatabase();
+    const edited = await routeSave(lib, cid, { ...complete, github: 'octocat' });
+    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+    const after = await drawer(lib, cid);
+    assert.equal(after.email, canonical.email); assert.equal(after.phone, canonical.phone); assert.equal(after.github, 'octocat');
+    assert.deepEqual(after, (await lib.publishedPoolContactsOnConnection(pool, [cid])).get(cid)?.contact, 'drawer and published view agree');
+  } finally { globalThis.fetch = priorFetch; process.env.PERSON_WRITE_MODE = priorMode; if (priorUrl === undefined) delete process.env.PERSON_DATABASE_URL; else process.env.PERSON_DATABASE_URL = priorUrl; }
 });
