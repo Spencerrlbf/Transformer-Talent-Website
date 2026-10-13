@@ -26,7 +26,7 @@ Earlier results are labelled historical and are not included in the fresh totals
 | Armed-controller tenancy sweep | run `2lehn2a98`: fixture target proved by label; armed at revision 21 / generation 16; **913 calls PASS** in 286 s; own drain, seal, disarm (revision 21 → 24); three normalized synthetic people retained; cleanup nothing left |
 | Controller coordination | the manual-test arming (revision 17, generation 13) was drained, sealed and disarmed through the transition CLI with expected phases and reason codes (`final_preview_sweeps_*`) before the sweeps; the three deferred application attempts (synthetic, 2026-09-29, no receipts) stay deferred |
 | Manual acceptance | 16/16 (October 7 and 12), not repeated; unaffected by the October 13 changes except the drawer read path, which is covered by the database-backed regression suite |
-| Rehearsal | section 14 of RELEASE_REMEDIATION.md (in progress at the time of this edit) |
+| Rehearsal | section 14 of RELEASE_REMEDIATION.md: catch-up exposed and fixed the pager plan (`20261013100000`), two armed-sweep leftovers block the pinned queue scan on the copy, publication measured at 0.91 people/s single stream, audit startup exceeded 10 min; RR-09 remains open |
 
 ## Current hosted testing state — October 5
 

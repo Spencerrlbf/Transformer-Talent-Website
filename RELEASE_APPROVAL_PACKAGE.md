@@ -148,7 +148,14 @@ node scripts/person-postcutover-audit.mjs --run-id=<AUDIT> --record --scope=all 
 
 ## 4. Rehearsal results on the copy (summary; details §14)
 
-_(filled in from §14 when the rehearsal completes)_
+- Final-artifact tenancy verification: disabled and armed sweeps 913 calls PASS each, controller coordinated through the transition CLI.
+- Catch-up: the first run exposed a pager plan defect (statement timeout after 2,000 people; fixed by forward `20261013100000`, installed on the copy); the second run exposed two unreconcilable synthetic people left by the armed sweep's teardown (copy-only; blocks the pinned queue scan; follow-up filed). 142 genuine legacy changes verified; the 1,859 published people are `same_snapshot_mutation` reviews by the pinned rule and are the auditor's to attribute.
+- Anchors: complete; 422,788 of 423,062, the 274 held people excepted.
+- Publication: **0.91 people/s** single stream (one publish window per run, one window at a time) → ≈ 5.4 days for 423,062 people. Not completed.
+- Post-cutover audit: startup fingerprint over the directory provenance did not finish within 10 minutes on the copy; per-person rate unmeasured. Not completed.
+- Accounting: 2,135 pending = 1,859 + 274 + 2 with **zero unexplained differences**; counts table in §14.
+
+**RR-09 is not closed.** The production sitting cannot be approved on duration grounds until publication and audit have a plan that fits the maintenance budget (several resumable 720-minute windows over days, or a reviewed faster path), and the sweep-leftover defect is fixed or the armed sweep is kept away from production until after cutover.
 
 ## 5. Remaining exceptions and dispositions
 
@@ -167,7 +174,10 @@ _(filled in from §14 when the rehearsal completes)_
   receipts, no Harvest ledger rows, not linked; **they do not exist in production**
   (no controller tables there). Disposition: leave deferred on the copy; nothing to replay.
 - **Production disk/PITR**: owner dashboard check (3.2, 3.3).
-- **Publication duration**: see §14 measured rate and the parallel-run plan.
+- **Publication duration**: 0.91 people/s single stream (§14); a publication window is bound to one run and only one window may be open, so there is no parallel-run plan today. Decision needed: multi-day windows or a reviewed faster publication path.
+- **Post-cutover audit startup**: the directory-provenance fingerprint exceeded 10 minutes on the copy (62,208 linked contacts); a 15 s statement timeout stopped one attempt. The auditor needs a measured plan before the sitting.
+- **Armed sweep leftovers**: two synthetic people on the copy are unreconcilable after the sweep's teardown and stop the pinned queue scan; follow-up task filed. Do not run the armed sweep against production before the pinned catch-up has completed.
+- **Queue pager**: forward `20261013100000` (installed on the copy, in the production manifest) is required for any queue catch-up past a few thousand people.
 
 ## 6. Retirement of the paid copy (after production verification)
 

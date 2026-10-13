@@ -1427,3 +1427,115 @@ Regression coverage (`scripts/person-application-edits/test-edits.mjs`, database
 
 The Jordan incident's wording in section 12 was corrected: the cause of the null read is
 not proven; this fix removes the incomplete-read path either way.
+
+## 14. October 13 final-artifact verification and copy rehearsal (RR-09)
+
+Authorized by Spencer on 2026-10-13 ("Complete the remaining candidate-storage release
+preparation end to end … This authorizes local/branch fixes, preview deployment and the
+existing test-copy rehearsal"). Production was read only; the copy was written only through
+the operator CLIs and the sanctioned fixture paths described below.
+
+### Final artifact and tenancy verification
+
+- Application source `68a77db` (last code change `331b64a`, section 13), deployed by Vercel's
+  git integration as `transformer-talent-website-3bd5n2xmy.vercel.app`
+  (`dpl_BcedVHnrtxUSwSzmTXusCmENnFnn`). Later commits add one forward migration
+  (`20261013100000`, below) and documentation; the application code is unchanged.
+- Controller coordination through the transition CLI, with expected phases and reason codes:
+  the manual-test arming (revision 17, generation 13) was drained, drain-waited, sealed
+  (revision 19) and disarmed (revision 20, generation 15, `final_preview_sweeps_*`).
+- Disabled sweep run `2ed5h7f3e`: 913 calls PASS in 328 s, cleanup nothing left.
+- Armed sweep run `2lehn2a98`: fixture target proved by label, armed at revision 21 /
+  generation 16, 913 calls PASS in 286 s, own drain, seal, disarm (revision 24, generation
+  18), three normalized synthetic people retained, cleanup nothing left.
+- Documentation reconciled: the October 12 session's notes (HOSTED_TEST_READINESS.md,
+  MANUAL_ACCEPTANCE_PLAN.md, RELEASE_MANIFEST.md) were committed unchanged from its working
+  tree; its `packageManager` addition to `package.json` is left uncommitted for review
+  (it would switch Vercel's installer to pnpm without a lockfile). The manifest and manual
+  plan identify the current SHA, deployment, label and the completed 16/16 acceptance.
+
+### Rehearsal state before the run (read-only inspection)
+
+Active runs/checkpoints: no running catch-up (the September runs are `review_required` or
+`paused`; the three `tenancy-*` fixture runs `paused`); publication runs `rehearsal-publish-
+canary` (5) and `manual-mamuvg2pz3` (2) complete, `rehearsal-publish-full` paused after 2,000
+people (1,986 projected, 13 unchanged, 1 audit_blocked) in 2,374 s; no post-cutover audit run
+has ever been recorded on the copy; 423,062 candidates, 422,785 anchors, 2,012 projection
+states, 2,277 pending; controller armed/open revision 17 with three deferred application
+attempts; 5,488 open identity conflicts over 9,352 people (unchanged since October 2).
+
+### Catch-up (pinned translator, reviewed compatibility artifact, held windows)
+
+Sequence: arm (revision 25) → drain → seal (held, revision 27) → `start-catchup.mjs`
+(fingerprint over 62,208 directory-linked people ≈ 6 min; identity label recorded) →
+`maintenance_open('catchup', run, 240)` → `run-catchup.mjs` → close → anchors window.
+
+| Run | Result | Finding |
+|---|---|---|
+| `rehearsal-catchup-20261013` | 2,000 processed in 9 min (142 verified, 1,858 review `same_snapshot_mutation`), then `operation_failed:57014` | the queue pager (`person_reconcile_page`, 20260926042200) probed the pending view per candidate past the cursor; in a sparse region one page exceeded PostgREST's 8 s statement timeout. The 2026-09-28 rehearsal failed the same way after 274 people. Fixed by forward `20261013100000_person_reconcile_page_plan.sql` (same results; ids gathered once per page); verified by the catch-up suite 14/14 on a fresh local stack, the upgrade/parity harness 136/136 and the forward-definition tests; installed and recorded on the copy (159 versions). |
+| `rehearsal-catchup-20261013b` (after the pager fix) | 1,900 processed in 8 min, all review (published people), then `post_save_integrity:jobs_accounted` | the page contained an unpublished person the armed sweep retained (`fc347915…`, run `2lehn2a98`; the same holds for `355deede…`, run `frnum168f` of 2026-10-05): the sweep's teardown deletes the fixture organization's `candidate_enrichments` rows, which leaves the retained normalized person with a source the translator can no longer account for. The pinned loop stops the whole run on a post-save integrity failure by design. |
+
+Attempts to clear the two sweep leftovers, all unsuccessful: the current translator for
+exactly those ids (as the sweep does for its own fixtures) → `jobs_accounted`; restoring the
+deleted synthetic enrichment rows from their captured before-images (the capture trigger
+keeps the full row; controller disabled) → still `jobs_accounted`; a source hold cannot be
+placed by an operator (holds are written only by the audited writers, with proof frames).
+They are **copy-only synthetic residue** (`source='leaktest'`, usernames `zzlk…`), recorded
+here as an exception. Consequence for production: **do not run the armed sweep against
+production before the pinned catch-up has completed**, or amend the sweep's teardown to keep
+(or anchor-delete) the enrichment rows of retained people; filed as a follow-up.
+
+Queue composition after these runs: 2,135 pending = 1,859 published people whose only change
+is the publication's own captured event (the pinned rule records them `same_snapshot_mutation`
+review; the post-cutover auditor, not the reconciler, attributes publication events) + 274
+source-review holds from the 2026-09-27 stable scan + the 2 sweep leftovers. 142 genuine
+legacy changes were verified and left the queue.
+
+### Anchors
+
+`person-audit-anchors.mjs --save --limit=5000 --batch=20 --max-bytes=45000000000` inside an
+anchors window: scan complete, 274 scanned, 0 created, 274 `review` (the held people cannot
+be anchored until their holds are resolved). Coverage 422,788 of 423,062 (unanchored = the
+274 held). The CLI's default 34 GB ceiling refused the 38.8 GB copy (`audit_capacity`); the
+explicit copy ceiling was used.
+
+### Publication and post-cutover audit (throughput measurements)
+
+Publication (`rehearsal-publish-20261013`, armed/open, publish window 720 min, `--batch-size=500
+--limit=500 --review=skip`): 500 people in 549 s (**0.91 people/s**): 487 `unchanged`, 12
+`review_skipped`, 1 `audit_blocked`, 0 `projected`; database size unchanged (38.80 GB). A
+publication window is bound to one run id and only one maintenance window may be open, so
+publication is a single stream: 423,062 people ≈ 129 h ≈ **5.4 days of wall time** at this rate
+(the 2026-09-28 run measured 0.84 people/s while projecting). The release plan must either
+schedule publication over several days of 720-minute windows (resumable, `--resume`) or add a
+reviewed server-side or parallel publication path before the sitting; neither exists today.
+
+Post-cutover audit (`person-postcutover-audit.mjs --record --scope=all`): `--batch-size=20
+--limit=200` stopped after 17 s with `operation_failed:57014` before any person (statement
+timeout on a startup statement); `--batch-size=5 --limit=20 --max-seconds=600` paused after
+600 s with **0 people processed** (the startup fingerprint over the directory provenance of
+62,208 linked contacts did not finish within the budget); a `--batch-size=1` run is recorded
+below. The auditor's per-person rate on the copy therefore remains **unmeasured**; the audit at
+a declared cutoff could not be completed in this session.
+
+### Exact accounting at the end of the session (2026-10-13 ≈ 20:45 UTC)
+
+| Measure | Count | Explanation |
+|---|---|---|
+| Candidates | 423,062 | 423,059 + the armed sweep's 3 retained synthetic people |
+| Anchors | 422,788 | 423,062 − 274 held people (cannot be anchored while held) |
+| Pending in the reconcile queue | 2,135 | 1,859 published people (publication-captured events, `same_snapshot_mutation` review by the pinned rule) + 274 source-review holds (2026-09-27) + 2 armed-sweep leftovers (unreconcilable, copy-only) |
+| Verified in this session's catch-ups | 142 | genuine legacy changes, run `rehearsal-catchup-20261013` |
+| Review records written this session | 1,858 + 1,900 | the same published people, recorded by runs a and b |
+| Published (projection states) | 2,012 | unchanged by this session's 500-person batch (487 unchanged) |
+| Deferred application attempts | 3 | synthetic, 2026-09-29, no receipts; not in production |
+| Open identity conflicts | 5,488 | over 9,352 people, unchanged since October 2 (disposition pending with the owner) |
+| Unexplained differences | **0** | every pending person is in one of the three classes above |
+| Controller | armed/open, revision 29, generation 22 | the handoff state; the three `rehearsal_20261013_*` reason codes and windows are in `transition_events`/`maintenance_events` |
+| Copy history | 159 versions through `20261013100000` | both October 13 forwards recorded with exact file bytes |
+
+What this rehearsal did **not** complete: the queue catch-up to `source_scan_complete` (blocked
+by the two sweep leftovers; the pinned translator stops the run), full publication (5.4 days at
+the measured rate), the post-publication catch-up and the final audit at a declared cutoff.
+RR-09 therefore remains open; the measured rates and the two defects found (pager plan, sweep
+leftovers) are the output of this rehearsal.
