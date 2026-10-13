@@ -11,7 +11,7 @@
   "20260926042200",
   "20260926050355"
  ],
- "to_install_count": 62,
+ "to_install_count": 63,
  "to_install": [
   {
    "version": "20260926033900",
@@ -507,6 +507,14 @@
    "md5": "a281577cf4f57241a8ab6fd6157031e0",
    "sha256": "7f9cf6cd62461f97dfc65e7dbab668b3a7250815fcbbe884d56162d08845c150",
    "bytes": 4261,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261013100000",
+   "file": "20261013100000_person_reconcile_page_plan.sql",
+   "md5": "d81f9f99bcb1d437afe091699ff0dde2",
+   "sha256": "be95653d5533e5c0620535b200973d42da198c0140ec524fe253c1f17346c227",
+   "bytes": 2933,
    "installed_on_production_2026_10_13": false
   }
  ]

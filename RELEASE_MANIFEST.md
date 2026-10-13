@@ -100,9 +100,9 @@ migration workaround.
 
 ## Migrations
 
-**137 tracked migration files**. Disposable bootstrap `000_local_bootstrap.sql` is
+**138 tracked migration files**. Disposable bootstrap `000_local_bootstrap.sql` is
 local only. The release chain in the cutover runbook (`20260926033900` through
-`20260928090000`) is followed by all nine forward files below, in order; after the
+`20260928090000`) is followed by all ten forward files below, in order; after the
 last one the operator labels the database (`select person_private.target_label('<ref>')`,
 runbook "Project label") before any process selects it. An older
 install from the copy's `23d7860` artifact first needs the missing
@@ -120,6 +120,7 @@ versions were not edited.
 | `20261005110000_person_historical_shadow_clears.sql` | Correct current receipt-proven shadow clears, including after publication; preserve superseding decisions and exact trigger modes | `e4270cf400a81fbf02cc39de23f398c8` |
 | `20261005120000_person_catchup_contact_snapshot.sql` | Complete, bounded, same-statement contact evidence for compatible historical verification | `e1dd9b33a2d606366d113a232bf7fc39` |
 | `20261013090000_person_target_label.sql` | Database-held project label (`person_private.target_identity`, operator-written once, immutable, no API grants) returned by `person_target_identity()`; the identifier alone cannot separate a physical clone from its source | `a281577cf4f57241a8ab6fd6157031e0` |
+| `20261013100000_person_reconcile_page_plan.sql` | Planner-stable reconcile queue paging (same results; the per-candidate pending-view probe exceeded PostgREST's 8 s timeout in sparse regions and stopped the copy's queue catch-ups) | `d81f9f99bcb1d437afe091699ff0dde2` |
 
 The receipt correction uses NOWAIT table locks. Apply after recovery, load and
 drain gates; contention refuses atomically and requires settling the conflicting

@@ -47,6 +47,15 @@ test('target label: the identity function keeps its grants and the label is oper
  assert.doesNotMatch(code,/current_setting\('app\./);
  assert.doesNotMatch(code,/[a-z]{20}\.supabase/);
 });
+test('reconcile page: the forward keeps the signature, grants and the non-queue query; the queue scope gathers ids once',()=>{
+ const chain=read('20260926042200_person_reconcile.sql'), forward=read('20261013100000_person_reconcile_page_plan.sql');
+ assert.match(forward,/create or replace function public\.person_reconcile_page\(p_run text,p_size integer\)\nreturns jsonb language plpgsql stable set search_path='' as \$\$/);
+ assert.doesNotMatch(forward.split('\n').filter(l=>!l.startsWith('--')).join('\n'),/grant|revoke/i,'grants untouched');
+ // the validation and the non-queue scopes are verbatim from the chain
+ for(const frag of ["if r.status<>'running' or r.notes->>'kind'<>'reconcile' or p_size not between 1 and 500 or p_size>(r.notes->>'batch')::integer then raise exception 'Invalid reconciliation page';end if;",
+  "coalesce(q.version,(select max(e.id) from public.person_change_events e where e.candidate_id=c.id),0) captured_version","and (r.notes->>'scope'<>'directory' or c.directory_contact_id is not null)"])assert.ok(chain.includes(frag)&&forward.includes(frag),frag.slice(0,40));
+ assert.match(forward,/with ids as materialized/);assert.match(forward,/not p\.counted/);assert.match(forward,/limit n\n/);
+});
 test('forward files are the only new versions and sort after the chain',()=>{
  const files=fs.readdirSync(dir).filter(f=>/^2026\d{10}_/.test(f)).sort();
  const last=files.at(-1);
@@ -60,6 +69,7 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261005110000_person_historical_shadow_clears.sql',
   '20261005120000_person_catchup_contact_snapshot.sql',
   '20261013090000_person_target_label.sql',
+  '20261013100000_person_reconcile_page_plan.sql',
  ]);
- assert.equal(last,'20261013090000_person_target_label.sql');
+ assert.equal(last,'20261013100000_person_reconcile_page_plan.sql');
 });

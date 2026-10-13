@@ -12,7 +12,7 @@ and `HOSTED_TEST_READINESS.md`.
 |---|---|
 | Executable source | `68a77db0dd8c045b1ae67f2fc084903a11c990ea` (last code change `331b64a`; later commits are documentation) |
 | Preview verified | `transformer-talent-website-3bd5n2xmy.vercel.app` (`dpl_BcedVHnrtxUSwSzmTXusCmENnFnn`), both tenancy sweeps 913 calls PASS, manual cases 16/16 on the October 5 artifact and unaffected since |
-| Migrations | 137 tracked files; production installs **62** versions (manifest below); the project label is a separate operator statement |
+| Migrations | 138 tracked files; production installs **63** versions (manifest below); the project label is a separate operator statement |
 | Runtime | Node 24.x (`engines`, `.nvmrc`, workflows) |
 | Database | production `kmuihequfurvjxpnugxf` upgraded in place; the copy `qsqlgibgsxzlimoegcjx` is retired afterwards |
 
@@ -35,8 +35,8 @@ and `HOSTED_TEST_READINESS.md`.
 
 ### 3.1 Ordered, checksummed manifest
 
-`scripts/person-release/production-upgrade-manifest.json`: 62 versions from
-`20260926033900_person_atomic_projection.sql` to `20261013090000_person_target_label.sql`
+`scripts/person-release/production-upgrade-manifest.json`: 63 versions from
+`20260926033900_person_atomic_projection.sql` to `20261013100000_person_reconcile_page_plan.sql`
 with MD5 and SHA256, generated from `68a77db`'s tree, marking the three in-window versions
 production already records (`20260926040300`, `20260926042200`, `20260926050355`) as
 installed. `scripts/person-release/apply-upgrade.sh` applies the manifest on the 5432

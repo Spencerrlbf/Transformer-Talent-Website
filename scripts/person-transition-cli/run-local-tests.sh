@@ -111,7 +111,7 @@ if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; t
  q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 fi
 # Release forward migrations (the armed sweep proves its target with person_target_identity()).
-for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions 20261013090000_person_target_label; do
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions 20261013090000_person_target_label 20261013100000_person_reconcile_page_plan; do
  q -d $DB -1 -f "supabase/migrations/$migration.sql"
 done
 # The operator's explicit label for this loopback fixture (the suites select `local`).

@@ -16,6 +16,7 @@ fi
 q -d person_audit_test -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
 q -d person_audit_test -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 q -d person_audit_test -1 -f supabase/migrations/20261013090000_person_target_label.sql
+q -d person_audit_test -1 -f supabase/migrations/20261013100000_person_reconcile_page_plan.sql
 q -d person_audit_test -f scripts/person-derivatives/local-embeddings.sql
 q -d person_audit_test -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 q -d person_audit_test -1 -f supabase/migrations/20260926054500_person_refresh_intake.sql

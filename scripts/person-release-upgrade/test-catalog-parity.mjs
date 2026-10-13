@@ -17,7 +17,7 @@ test('function definitions are identical',async()=>{
   'public.person_contact_ranks(uuid)','person_private.recruiter_normalize(uuid)','person_private.recruiter_write(uuid,text,jsonb,jsonb)','person_private.recruiter_primary_suppressed(uuid,text,jsonb,jsonb,jsonb)',
   'public.person_catchup_contact_snapshot(uuid[])',
   // 20261013090000: the label writer, its immutability trigger function and the identity
-  'person_private.target_label(text)','person_private.target_identity_immutable()']){
+  'person_private.target_label(text)','person_private.target_identity_immutable()','public.person_reconcile_page(text,integer)']){
   const [a,b]=await both('select pg_get_functiondef($1::regprocedure) v',[fn]);
   assert.equal(a,b,fn);
  }
