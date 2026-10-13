@@ -1,5 +1,7 @@
 # Hosted manual testing readiness — October 5, 2026
 
+> **October 12 update:** All 16 browser cases now pass (15 Codex checks plus Spencer’s Chrome resolution of M15); see `output/browser-acceptance/2026-10-07/REPORT.md`. Older “Not run” and “ready for manual testing” labels below describe the October 5 handoff. Production migration and release remain incomplete. A fresh read-only inspection found both production and test copy ACTIVE_HEALTHY, with 61 migration versions recorded on the copy but absent from production’s history in the September 26 onward range. Production also lacks the transition-control and publication-run tables. These differences require schema verification and the reviewed full upgrade chain; they are not permission to blindly replay migrations. Complete production preparation/release and retire the paid test copy before starting AI candidate implementation.
+
 **READY for Spencer's manual testing. Production is not released.**
 
 Use the [prepared Network](https://transformer-talent-website-87oyi44go.vercel.app/dashboard/network?job=99101)

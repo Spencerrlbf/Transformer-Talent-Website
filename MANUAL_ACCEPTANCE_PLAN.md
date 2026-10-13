@@ -134,7 +134,7 @@ BLOCKED and tell Codex. Do not improvise using a real person or a different data
 | M12 | Not run | |
 | M13 | Not run | |
 | M14 | Not run | |
-| M15 | Not run | |
+| M15 | PASS — Spencer, October 12 | PDF readable in Chrome before/after refresh; contacts and full profile preserved. |
 | M16 | Not run | |
 
 ## Acceptance and next step
@@ -193,3 +193,11 @@ people + three manual people + Casey setup probe. There are 2,011 published prof
 = 2,008 prior rows + Jordan, Taylor and Casey. Riley is unpublished. The three old
 failed application attempts remain parked for review, with **zero recovered**.
 See [HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md) for the evidence and release boundaries.
+
+## Codex browser execution — October 7, 2026
+
+Codex executed all sixteen cases against the fixed hosted build `13f1b30`: **15 PASS, 1 BLOCKED (M15 PDF readability)**. The PDF upload and persistence succeeded, but the embedded viewer was blank in the in-app browser. This is not completed manual acceptance. See the [browser report](output/browser-acceptance/2026-10-07/REPORT.md) and [46-screenshot gallery](output/browser-acceptance/2026-10-07/gallery.html). Spencer's results sheet above remains separate. The synthetic fixtures now retain the final test state: Jordan contacts cleared; Riley contacts restored and resume attached; Taylor sent to Client A and Jordan sent to Client B exactly once. Riley was published by the expected first live save.
+
+## Owner verification — October 12, 2026
+
+Spencer confirmed in Chrome that Riley’s supplied resume displays correctly and still works after refresh, both selected contact values are correct, and the profile retains the three employers, two education entries and Skills. M15 is now PASS based on those direct confirmations. Combined results: **16 PASS, 0 FAIL, 0 BLOCKED**. The October 7 screenshots retain the original blank in-app-browser observation; no new Chrome screenshot was supplied. Other cases were not rerun today. This closes the defined browser testing stage, without authorizing a main merge or production migration/cutover.
