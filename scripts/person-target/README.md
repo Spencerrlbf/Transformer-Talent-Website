@@ -81,7 +81,11 @@ physical clone and keeps the identifier (on 2026-10-13 production
   first operation on a PostgreSQL session in `withPersonConnection`; a failed proof is
   not cached); the shared operator pool opener (`openDatabase`, every CLI and the
   sweep, whenever a selection is set); `start-catchup.mjs` (REST, recorded with the
-  run); `person-reconcile-finalize.mjs` (REST and PostgreSQL); the sweep's
+  run) and `run-catchup.mjs` (every resume proves the REST destination's label before
+  any preparation or pinned import; the pinned translator is unchanged);
+  `person-reconcile-finalize.mjs` on both of its paths (PostgreSQL: REST + session;
+  `--workdir`: the identity read through the same linked Supabase CLI, `--output json`,
+  before the finish file is sent, plus REST when configured); the sweep's
   `verifySweepTarget`/`preflightArmedSweep`, `armForSweep` (`database_changed`),
   `recoverArmOwnership` and `disarmAfterSweep` (`tenancy_armed_ownership:database`
   when the ownership record names the other clone).

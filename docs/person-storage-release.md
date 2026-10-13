@@ -141,10 +141,13 @@ PERSON_TARGET_PROJECT_REF=<ref> PERSON_PUBLISH_DATABASE_URL=<5432 session url> \
 PERSON_TARGET_PROJECT_REF=<ref> node scripts/person-reconcile-finalize.mjs --run-id=<run-id> --workdir=<workdir linked to <ref>>
 ```
 
-With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` also set, the PostgreSQL path
-first proves that REST and PostgreSQL reach the same cluster and that the database
-holds the selected project's label (`public.person_target_identity()`, migrations
-`20261003090000` and `20261013090000`; see "Project label" above).
+Both paths first prove that the destination holds the selected project's label and
+cluster identity (`public.person_target_identity()`, migrations `20261003090000` and
+`20261013090000`; see "Project label" above): the PostgreSQL path on its session, the
+`--workdir` path through the same linked CLI before the finish file is sent. With
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` also set, REST must report the same
+identity. A catch-up resume (`scripts/person-maintenance/run-catchup.mjs`) proves the
+REST destination's label the same way before any preparation.
 
 This executes `SET LOCAL statement_timeout='8s'` before the finish statement.
 Finish rejects an unbounded caller and briefly gates normalized/capture commits

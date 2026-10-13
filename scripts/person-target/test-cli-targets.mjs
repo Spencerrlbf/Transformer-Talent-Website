@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {main as finalize,parseArgs,finalizeSql,safeReason} from '../person-reconcile-finalize.mjs';
+import {main as finalize,parseArgs,finalizeSql,parseCliIdentity,safeReason} from '../person-reconcile-finalize.mjs';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const TARGET='abcdefghijklmnopqrst',OTHER='tsrqponmlkjihgfedcba';
@@ -107,15 +107,66 @@ test('finalizer refuses PostgreSQL URL overrides before opening anything',async(
  }
  assert.equal(connects,0);assert.equal(fetches,0);
 });
-test('finalizer with a linked workdir requires that workdir to be linked to the selection',async()=>{
- let execs=0;
- const deps={env:{PERSON_TARGET_PROJECT_REF:TARGET},readFile:()=>`${OTHER}\n`,exec:()=>{execs++;return '';}};
+// The CLI (--workdir) path: `exec` is the Supabase CLI. It answers the identity file
+// with `label` and records which files it was given; the finish file must never be
+// sent before the identity proved the linked database.
+function fakeCli(label=TARGET,identity='7000000000000000001',{envelope=false}={}){
+ const calls=[];
+ const exec=(cli,args)=>{
+  const file=args[args.indexOf('-f')+1];const sql=fs.readFileSync(file,'utf8');
+  calls.push({args:args.filter(a=>!a.startsWith('/')),kind:sql.includes('person_target_identity')?'identity':sql.includes('person_reconcile_finish')?'finish':'other'});
+  if(calls.at(-1).kind!=='identity')return 'finish output';
+  const rows=JSON.stringify([{identity:{system_identifier:identity,project_ref:label,database:'postgres'}}]);
+  return envelope?`Untrusted data below\n<untrusted>\n${rows}\n</untrusted>\n`:rows;
+ };
+ return {exec,calls,kinds:()=>calls.map(c=>c.kind)};
+}
+test('finalizer with a linked workdir requires that workdir to be linked to the selection, then proves the linked database\'s label before the finish file',async()=>{
+ const cli=fakeCli();
+ const deps={env:{PERSON_TARGET_PROJECT_REF:TARGET},readFile:()=>`${OTHER}\n`,exec:cli.exec};
  await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],deps),/person_target:workdir_mismatch/);
  await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...deps,readFile:()=>{throw Error('ENOENT');}}),/person_target:workdir_mismatch/);
  await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...deps,env:{PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:session(TARGET)},readFile:()=>TARGET}),/finalize_one_destination/);
- assert.equal(execs,0);
+ assert.deepEqual(cli.calls,[]);
  const ok=await finalize(['--run-id=run-1','--workdir=/nonexistent'],{...deps,readFile:()=>`${TARGET}\n`,out:()=>{}});
- assert.deepEqual(ok,{run:'run-1',target:TARGET,via:'cli'});assert.equal(execs,1);
+ assert.deepEqual(ok,{run:'run-1',target:TARGET,via:'cli',system_identifier:'7000000000000000001',project_ref:TARGET});
+ assert.deepEqual(cli.kinds(),['identity','finish']);
+ assert.deepEqual(cli.calls[0].args,['db','query','--linked','--workdir','--output','json','--agent','no','-f']);
+ assert.deepEqual(cli.calls[1].args,['db','query','--linked','--workdir','-f']);
+});
+test('finalizer CLI path: an unlabelled or foreign-labelled linked database, or one whose identity cannot be read, never receives the finish file',async()=>{
+ const base={env:{PERSON_TARGET_PROJECT_REF:TARGET},readFile:()=>`${TARGET}\n`,out:()=>{}};
+ for(const [cli,code] of [[fakeCli(null),'identity_unlabelled'],[fakeCli(OTHER),'identity_label_mismatch'],[fakeCli('Prod'),'identity_unlabelled'],[{exec:()=>'',calls:[],kinds:()=>['identity']},'identity_database'],[{exec:()=>{throw Error('secret-sentinel');},calls:[],kinds:()=>['identity']},'identity_database']]){
+  await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,exec:cli.exec}),new RegExp(`person_target:${code}$`),code);
+  assert.ok(!cli.kinds().includes('finish'),`${code}: no finish`);
+ }
+ // the agent envelope around the JSON is tolerated; the correct label proceeds
+ const cli=fakeCli(TARGET,'7000000000000000001',{envelope:true});
+ assert.equal((await finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,exec:cli.exec})).via,'cli');assert.deepEqual(cli.kinds(),['identity','finish']);
+});
+test('finalizer CLI path with REST: the other clone (same cluster identifier, other label) is refused; REST and CLI must agree on the label',async()=>{
+ const env={PERSON_TARGET_PROJECT_REF:TARGET,SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)};
+ const rest=(label)=>async()=>({ok:true,json:async()=>({system_identifier:'7000000000000000001',project_ref:label})});
+ const base={env,readFile:()=>`${TARGET}\n`,out:()=>{}};
+ let cli=fakeCli(OTHER);
+ await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,exec:cli.exec,fetchFn:rest(TARGET)}),/person_target:identity_label_mismatch/);
+ assert.deepEqual(cli.kinds(),['identity']);
+ cli=fakeCli(TARGET);
+ await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,exec:cli.exec,fetchFn:rest(OTHER)}),/person_target:identity_label_mismatch/);
+ assert.deepEqual(cli.kinds(),['identity']);
+ cli=fakeCli(TARGET);
+ await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,exec:cli.exec,fetchFn:rest(null)}),/person_target:identity_unlabelled/);
+ cli=fakeCli(TARGET);
+ await assert.rejects(finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,env:{...env,SUPABASE_URL:`https://${OTHER}.supabase.co`},exec:cli.exec,fetchFn:rest(TARGET)}),/person_target:rest_mismatch/);
+ assert.deepEqual(cli.kinds(),[],'offline refusal before any CLI call');
+ cli=fakeCli(TARGET);
+ assert.equal((await finalize(['--run-id=run-1','--workdir=/nonexistent'],{...base,exec:cli.exec,fetchFn:rest(TARGET)})).project_ref,TARGET);
+ assert.deepEqual(cli.kinds(),['identity','finish']);
+});
+test('parseCliIdentity reads only a JSON row carrying identity',()=>{
+ assert.deepEqual(parseCliIdentity('[{"identity":{"system_identifier":"1","project_ref":"abcdefghijklmnopqrst"}}]'),{system_identifier:'1',project_ref:'abcdefghijklmnopqrst'});
+ assert.deepEqual(parseCliIdentity('warning\n[{"identity":"{\\"system_identifier\\":\\"1\\"}"}]\n'),{system_identifier:'1'});
+ assert.equal(parseCliIdentity(''),null);assert.equal(parseCliIdentity('[]'),null);assert.equal(parseCliIdentity('[{"other":1}]'),null);assert.equal(parseCliIdentity('not json ['),null);assert.equal(parseCliIdentity(undefined),null);
 });
 test('finalizer proves REST and PostgreSQL identity agree before finishing',async()=>{
  const f=fakeClient();const out=[];

@@ -41,8 +41,31 @@ test('main refuses inputs before verifying or preparing anything',async()=>{
  // a verified tree with an env file: refused before the transport listener and any import
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tt-pinned-'));
  try{fs.writeFileSync(path.join(dir,'.env.scripts'),'LOCAL_DATABASE_URL=x\n');
-  await assert.rejects(main({env,argv:[],verify:()=>({root:dir,bundleHash:'x'}),out:()=>{}}),/catchup_run:pinned_env_file/);
+  await assert.rejects(main({env,argv:[],verify:()=>({root:dir,bundleHash:'x'}),fetchFn:restIdentity('local'),out:()=>{}}),/catchup_run:pinned_env_file/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+// 20261013090000: a resume reaches the website through REST only, so the REST
+// destination's database-held label is proved before any preparation or pinned import.
+const restIdentity=(label,identifier='7000000000000000001',status=200)=>async(url,init)=>{
+ assert.match(String(url),/\/rest\/v1\/rpc\/person_target_identity$/);assert.equal(init.method,'POST');
+ assert.ok(init.headers.apikey&&init.headers.Authorization,'validated credentials');
+ return {ok:status===200,status,json:async()=>({system_identifier:identifier,project_ref:label})};
+};
+test('resume refuses an unlabelled, foreign-labelled or cloned destination before verifying the pinned tree; the correct label proceeds',async()=>{
+ let verified=0;const verify=()=>{verified++;return {root:'/nonexistent-pinned',bundleHash:'x'};};
+ for(const [fetchFn,code] of [[restIdentity(null),'identity_unlabelled'],[restIdentity(undefined),'identity_unlabelled'],[restIdentity('abcdefghijklmnopqrst'),'identity_label_mismatch'],[restIdentity('Local'),'identity_unlabelled'],[restIdentity('local','7000000000000000001',500),'identity_rest'],[async()=>{throw Error('ECONNREFUSED');},'identity_rest']]){
+  await assert.rejects(main({env,argv:[],verify,fetchFn,out:()=>{}}),new RegExp(`person_target:${code}$`),code);
+ }
+ assert.equal(verified,0,'no pinned verification, bundle build, listener or import before the destination is proved');
+ // the same cluster identifier with the selected label is the right database: the run
+ // proceeds past the identity proof to the pinned tree (absent here)
+ await assert.rejects(main({env,argv:[],verify,fetchFn:restIdentity('local'),out:()=>{}}),e=>!/person_target:/.test(e.message));
+ assert.equal(verified,1);
+ // a hosted selection: the label must be that project's ref, not another project's
+ const hosted={...env,PERSON_CATCHUP_COMPATIBILITY_ID:'c4d0e4e-explicit-contact-clear-v1',PERSON_TARGET_PROJECT_REF:'abcdefghijklmnopqrst',SUPABASE_URL:'https://abcdefghijklmnopqrst.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic',COMMS_DATABASE_URL:'postgresql://postgres.tsrqponmlkjihgfedcba:x@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require'};
+ await assert.rejects(main({env:hosted,argv:[],verify,fetchFn:restIdentity('tsrqponmlkjihgfedcba'),out:()=>{}}),/person_target:identity_label_mismatch$/);
+ await assert.rejects(main({env:hosted,argv:[],verify,fetchFn:restIdentity('local'),out:()=>{}}),/person_target:identity_label_mismatch$/);
+ assert.equal(verified,1);
 });
 const NODE20=`${os.homedir()}/.nvm/versions/node/v20.19.2/bin/node`;
 const spawn=(node,script,extra={})=>spawnSync(node,[script],{cwd:root,encoding:'utf8',timeout:60000,env:{PATH:process.env.PATH,HOME:process.env.HOME,...env,...extra}});

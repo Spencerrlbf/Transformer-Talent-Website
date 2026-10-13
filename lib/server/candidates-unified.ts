@@ -25,6 +25,7 @@ import { poolEmails, poolPhone, recruiterContactDecisions, type RecruiterDecisio
 import { publishedPoolProfiles } from "./person/profile-view";
 import { poolContacts } from "./person/pool-contact";
 import { saveRecruiterContact } from "./person/recruiter";
+import { isTargetError } from "./person/target";
 import { personWriteMode } from "./person/intake";
 import { TT_ORG_ID } from "./person/normalize";
 import { poolDisplayPositions, poolEducation } from "./pool/profile";
@@ -1898,6 +1899,9 @@ export async function saveRecruiterContactMapped(
     if (reason === "person_recruiter_unavailable") return { error: "temporarily_unavailable" };
     if (reason === "person_not_found") return { error: "not_found" };
     if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
+    // The target gate refused the session (unselected, unlabelled or foreign-labelled
+    // database): the write path is unavailable, and the refusal is logged by its code.
+    if (isTargetError(error)) { console.error(`person_contact_target_refused:${reason}`); return { error: "temporarily_unavailable" }; }
     return { error: "save_failed" };
   }
 }

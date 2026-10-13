@@ -11,7 +11,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {PIN,verifyPinnedRuntime,reasonOf as startReason} from './start-catchup.mjs';
-import {selectedTarget,checkRestUrl,checkServiceKey,databaseIdentity,isTargetError} from '../person-target.mjs';
+import {selectedTarget,checkRestUrl,checkServiceKey,databaseIdentity,isTargetError,verifyRuntimeIdentity} from '../person-target.mjs';
 import {checkNode} from '../check-node.mjs';
 import {prepareCompatibilityRuntime,checkCompatibilityApproval,checkArtifactApproval} from './contact-compat-runtime.mjs';
 
@@ -89,11 +89,23 @@ export function checkConfig(env){
  return {run:raw['run-id'],target:target.ref};
 }
 
-export async function main({env=process.env,argv=process.argv.slice(2),verify=verifyPinnedRuntime,out=(x)=>console.log(JSON.stringify(x))}={}){
+/** The REST destination's runtime identity, read with the validated credentials. */
+export const restIdentityReader=(env,fetchFn=globalThis.fetch)=>async()=>{
+ const res=await fetchFn(`${env.SUPABASE_URL.replace(/\/+$/,'')}/rest/v1/rpc/person_target_identity`,{method:'POST',headers:{apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:`Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
+ if(!res.ok)throw Error(`HTTP_${res.status}`);
+ return res.json();
+};
+export async function main({env=process.env,argv=process.argv.slice(2),verify=verifyPinnedRuntime,fetchFn=globalThis.fetch,out=(x)=>console.log(JSON.stringify(x))}={}){
  checkNode();
  checkInputs(env,argv);
  const {run,target}=checkConfig(env);
  checkCompatibilityApproval(env,target);
+ // A resume reaches the website only through REST (the pinned restSite). Before any
+ // preparation, pinned import or page read, that destination must hold the selected
+ // project's label (20261013090000): a resume against an unlabelled database, another
+ // project's database, or the other clone of a project (same cluster identifier,
+ // different label) is refused here, exactly as the start was.
+ const identity=await verifyRuntimeIdentity({readRest:restIdentityReader(env,fetchFn),ref:target});
  const before=envSnapshot(env);
  const pinned=verify(env.PINNED_RUNNER_DIR);
  checkPinnedTree(pinned.root);
@@ -121,7 +133,7 @@ export async function main({env=process.env,argv=process.argv.slice(2),verify=ve
    const raw=JSON.parse(env.BACKFILL_CONFIG);
    const effective=options([],process.env);
    if(effective.run!==raw['run-id']||effective.commit!==PIN||effective.dry!==false||effective.resume!==true||effective.limit!==raw.limit||effective.batch!==raw['batch-size']||(raw['max-seconds']!==undefined&&effective.maxSeconds!==raw['max-seconds'])||(raw['max-db-bytes']!==undefined&&effective.maxBytes!==raw['max-db-bytes']))throw Error('catchup_run:options_mismatch');
-   out({phase:'catchup_runner',run,target,commit:PIN,bundle_sha256:runtime.bundleHash,runner:'derived_pinned',compatibility:runtime.manifest,website_adapter:'restSite (REST, fetch)',directory_adapter:'openComms (pg.Client) + transport listener',listener_installed:listener.installed,node:process.version,
+   out({phase:'catchup_runner',run,target,identity:identity.key,commit:PIN,bundle_sha256:runtime.bundleHash,runner:'derived_pinned',compatibility:runtime.manifest,website_adapter:'restSite (REST, fetch)',directory_adapter:'openComms (pg.Client) + transport listener',listener_installed:listener.installed,node:process.version,
     effective:{run:effective.run,scope:raw.scope,dry:effective.dry,resume:effective.resume,limit:effective.limit,batch:effective.batch,max_seconds:effective.maxSeconds,max_db_bytes:effective.maxBytes}});
    await pinnedMain();
   }finally{if(saved===undefined)delete process.env.GITHUB_SHA;else process.env.GITHUB_SHA=saved;}

@@ -178,3 +178,9 @@ append-only history and disarm. The cross-family suite
 migration) passed 504/504. A test proves the service role cannot reach the helpers
 (it fails when the pre-review grants are restored). Untested: concurrent close or
 `transition_set` against an in-flight frame, and expiry in the middle of one RPC. No production database or hosted preview was used.
+
+Every resume through `run-catchup.mjs` first proves the REST destination's
+`person_target_identity()` label against `PERSON_TARGET_PROJECT_REF` (20261013090000):
+an unlabelled database, another project's database or the other clone of the project
+(same cluster identifier, different label) is refused before any preparation, pinned
+import or page read. The pinned translator is not changed.
