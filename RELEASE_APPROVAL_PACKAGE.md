@@ -1,0 +1,191 @@
+# Candidate-storage release: approval package (prepared 2026-10-13)
+
+Prepared from branch `fix/person-90-release-remediation` for Spencer's approval. Nothing in
+this document has been executed against production. Every production step below is a
+proposal awaiting the explicit approval requested at the end. Evidence citations point at
+`RELEASE_REMEDIATION.md` (the ledger), `RELEASE_MANIFEST.md`, `MANUAL_ACCEPTANCE_PLAN.md`
+and `HOSTED_TEST_READINESS.md`.
+
+## 1. Artifact under approval
+
+| Item | Value |
+|---|---|
+| Executable source | `68a77db0dd8c045b1ae67f2fc084903a11c990ea` (last code change `331b64a`; later commits are documentation) |
+| Preview verified | `transformer-talent-website-3bd5n2xmy.vercel.app` (`dpl_BcedVHnrtxUSwSzmTXusCmENnFnn`), both tenancy sweeps 913 calls PASS, manual cases 16/16 on the October 5 artifact and unaffected since |
+| Migrations | 137 tracked files; production installs **62** versions (manifest below); the project label is a separate operator statement |
+| Runtime | Node 24.x (`engines`, `.nvmrc`, workflows) |
+| Database | production `kmuihequfurvjxpnugxf` upgraded in place; the copy `qsqlgibgsxzlimoegcjx` is retired afterwards |
+
+## 2. What was completed (October 13)
+
+- Read-only production/copy comparison (ledger §10): production holds 96 versions through
+  `20260926050355`; the copy 158. `supabase db push` is unusable on either (legacy numeric
+  files are recorded under timestamp versions).
+- Project-held identity label (§11, §12): production and the copy share the PostgreSQL
+  system identifier; the server gate, operator tools, catch-up start and resume, finalizer
+  (both paths) and the sweep's preparation, ownership recovery and cleanup now require the
+  database-held label; verified on the copy and on preview deployments including a
+  runtime wrong-label canary.
+- Complete contact reads behind the editable drawer (§13), with regression coverage.
+- Final-artifact verification (§14): controller coordinated through the transition CLI,
+  disabled and armed sweeps PASS on `68a77db`.
+- Copy rehearsal (§14): see the counts table there; summary in section 4 below.
+
+## 3. Production upgrade package
+
+### 3.1 Ordered, checksummed manifest
+
+`scripts/person-release/production-upgrade-manifest.json`: 62 versions from
+`20260926033900_person_atomic_projection.sql` to `20261013090000_person_target_label.sql`
+with MD5 and SHA256, generated from `68a77db`'s tree, marking the three in-window versions
+production already records (`20260926040300`, `20260926042200`, `20260926050355`) as
+installed. `scripts/person-release/apply-upgrade.sh` applies the manifest on the 5432
+session endpoint: verifies each file's SHA256, skips any version already in
+`supabase_migrations.schema_migrations`, applies the rest in order each in its own
+transaction, records each with the exact file bytes as its statement and verifies the
+recorded hash, stops at the first error, reloads PostgREST, and prints the label statement
+for the operator. Dry-run against the copy: 62 skipped, 0 applied, wrong-ref URL refused
+offline. The copy's own history records the nine forward files with exactly these file
+bytes (9/9 match), so the manifest reproduces the rehearsed installation.
+
+### 3.2 Capacity (read-only, 2026-10-13 19:0x UTC)
+
+| Measure | Production | Copy (after chain, anchors, 2,000 publications) |
+|---|---|---|
+| Database size | 33,938,869,395 bytes (33.94 GB; 33.77 GB at 12:51 UTC) | 38,800,075,923 bytes |
+| Candidates | 431,978 | 423,059 |
+| WAL directory | 1,073,742,191 bytes, 65 segments, `max_wal_size` 4096 MB | same settings |
+| Public tables | 32 GB | |
+| Daily physical backups | 8 listed, latest 2026-10-13 07:53 UTC (CLI) | |
+
+Growth drivers measured on the copy: `person_audit_anchors` 5.92 GB (avg 12,491 bytes ×
+422,785 anchors), `person_reconcile_people` 1.36 GB, `person_backfill_people` 0.73 GB,
+`person_signals` 0.24 GB, `person_projection_history` avg 3,272 bytes per publication.
+Scaled to production's 431,978 people: anchors ≈ 5.4 GB, reconcile/backfill bookkeeping ≈
+2.1 GB, full publication history ≈ 1.4 GB, other ≈ 0.4 GB → **≈ 43.3 GB after cutover**
+(+9.4 GB, +28 %), plus WAL churn during publication. Proposed production ceilings:
+`TENANCY_MAX_DB_BYTES` and the catch-up/publish/audit `--max-db-bytes` = **48,000,000,000**
+(the default 34 GB is already within 0.2 % of today's size and would refuse). **Owner check
+before approval**: the project's provisioned disk size and free space in the dashboard
+(Database → Disk); the Management API did not expose it to the CLI token. The upgrade must
+not start unless provisioned disk ≥ 60 GB or disk autoscaling is confirmed on.
+
+### 3.3 Backups, recovery, rollback, live writes, Storage objects
+
+1. **Backups**: daily physical backups exist (latest 2026-10-13 07:53 UTC). Immediately
+   before the sitting: confirm PITR status in the dashboard (unknown to the CLI; the copy had
+   PITR disabled) and trigger/await a fresh physical backup. The migrations are forward-only;
+   schema rollback is a restore.
+2. **Storage objects are not in database backups**: production holds 55 objects, 8.3 MB
+   (`resumes` 53 / 5.4 MB, `company-assets` 1, `recruiter-photos` 1). Run
+   `scripts/person-release/export-storage-objects.sh <private dir>` (read-only, lists and
+   downloads every object with a manifest) before the sitting and keep the directory private
+   until retirement of the copy is complete.
+3. **Rollback conditions and procedure** (any of): a migration file fails (the script stops;
+   the failed file's transaction is rolled back; already-applied files are additive and leave
+   legacy mode unchanged → no restore needed, fix and resume); the application gate refuses
+   production after labelling (`identity_*`): stop the rollout, keep legacy mode (unset
+   `PERSON_TARGET_PROJECT_REF`/`PERSON_WRITE_MODE`), investigate; publication produces
+   `drift`/`audit_blocked` beyond the rehearsal's rate or the final audit reports
+   `review_required` above the agreed count: `scripts/person-publish-undo.mjs --run-id=<run>
+   --apply` restores the published rows from their before-images (rehearsed), the controller
+   is disarmed, legacy readers continue; data corruption suspected: restore from the fresh
+   backup/PITR to a new project and relabel deliberately (runbook "Project label").
+4. **Live-write coordination**: production runs legacy mode with no selection today, so the
+   schema install is additive and safe with the app running. Sequence: install (app still
+   legacy) → label → deploy the application with the selection in legacy mode (gate proves
+   identity; no behaviour change) → arm the controller → held catch-up window → anchors →
+   publication windows (≤ 720 min each; other admitted writers keep running) →
+   post-publication catch-up → final audit → enable live mode / transition support for
+   app and workers. During held windows recruiter edits and application processing are
+   refused with "temporarily unavailable" (seconds to minutes per window); public
+   application submissions stay accepted and queued.
+
+### 3.4 Configuration to set at release (names only)
+
+- Vercel production environment: add `PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf`,
+  `PERSON_DATABASE_URL` (transaction pooler 6543, `postgres.kmuihequfurvjxpnugxf`),
+  `PERSON_WRITE_MODE` and `PERSON_TRANSITION_SUPPORT` (legacy/off until the cutover step),
+  no `OUTBOUND_DENY_HOSTS`. Today production has none of the `PERSON_*` variables.
+- GitHub Actions: repository variable `PERSON_TARGET_PROJECT_REF`, secret
+  `PERSON_DATABASE_URL`, variables `PERSON_WRITE_MODE`/`PERSON_TRANSITION_SUPPORT` as the
+  cutover step requires (workflows `derivative-worker`, `review-queue`, `refresh-queue`,
+  `sync-candidates` read them; none exist today). Workers run Node 24.
+- Operator machine: `PERSON_PUBLISH_DATABASE_URL` (5432 session), `COMMS_DATABASE_URL`
+  (5432 session of the communications project), `PINNED_RUNNER_DIR` = clean `c4d0e4e`,
+  `PERSON_CATCHUP_COMPATIBILITY_ID=c4d0e4e-explicit-contact-clear-v1`,
+  `PERSON_CATCHUP_ARTIFACT_SHA256=0d30436b535ffc015624b7f8f0153c6cf769908ed6e6a31597f8e71659407250`.
+
+### 3.5 Release commands (production; each requires the approval below)
+
+```sh
+# 0. owner: dashboard disk/PITR check; fresh backup; storage export (read-only)
+bash scripts/person-release/export-storage-objects.sh <private dir>
+# 1. schema (app still legacy)
+PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf UPGRADE_DATABASE_URL='<5432 session url>' bash scripts/person-release/apply-upgrade.sh --dry-run
+PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf UPGRADE_DATABASE_URL='<5432 session url>' bash scripts/person-release/apply-upgrade.sh
+psql '<5432 session url>' -c "select person_private.target_label('kmuihequfurvjxpnugxf')"
+psql '<5432 session url>' -c "select public.person_target_identity()"
+# 2. application in legacy mode with the selection (Vercel production env), then verify REST+PG identity through one signed-in request
+# 3. operator sequence (runbook "Reconciliation and final accounting", "Cutover runbook scripts"), as rehearsed on the copy (§14)
+node scripts/person-transition.mjs --arm --expect-phase=disabled --reason=release_arm
+node scripts/person-transition.mjs --drain --expect-phase=open --reason=release_drain && node scripts/person-transition.mjs --wait-drained
+node scripts/person-transition.mjs --seal --expect-phase=draining --reason=release_seal
+node scripts/person-maintenance/start-catchup.mjs                                   # BACKFILL_CONFIG queue scan, new run id
+node scripts/person-transition.mjs --open-window=catchup --run=<RUN> --minutes=240 --expect-phase=held --reason=release_catchup
+node scripts/person-maintenance/run-catchup.mjs                                     # resume:true, same config; repeat until source_scan_complete
+node scripts/person-transition.mjs --close-window=<WORK> --reason=release_catchup_done
+node scripts/person-transition.mjs --open-window=anchors --run=<ANCHORS> --minutes=120 --expect-phase=held --reason=release_anchors
+node scripts/person-audit-anchors.mjs --save --limit=<n> --batch=20
+node scripts/person-transition.mjs --close-window=<WORK> --reason=release_anchors_done
+node scripts/person-transition.mjs --reopen --expect-phase=held --reason=release_reopen
+node scripts/person-transition.mjs --open-window=publish --run=<PUB> --minutes=720 --expect-phase=open --reason=release_publish
+node scripts/person-publish.mjs --run-id=<PUB> --mode=publish --review=skip --batch-size=500 --limit=<n> --max-seconds=43000 --max-db-bytes=48000000000  # resume per window
+# post-publication catch-up (held window), final audit at the declared cutoff:
+node scripts/person-postcutover-audit.mjs --run-id=<AUDIT> --record --scope=all --batch-size=20 --limit=<n> --max-db-bytes=48000000000
+# 4. cutover: PERSON_WRITE_MODE=live, PERSON_TRANSITION_SUPPORT=on for app and workers; main merge of PR #2 after the remediation PR
+```
+
+## 4. Rehearsal results on the copy (summary; details §14)
+
+_(filled in from §14 when the rehearsal completes)_
+
+## 5. Remaining exceptions and dispositions
+
+- **RR-10, 23 orphan experience rows (3 owner ids)** present on production and the copy:
+  pre-migration debris from the 2026-08-22 re-import; facts preserved under living owners;
+  invisible to the product. **Recommendation: retain as a documented exception**; no
+  destructive cleanup bundled with the release (ledger RR-10).
+- **Ambiguous historical contact decisions**: production has no `person_recruiter_primary`
+  rows (the table is created by the chain), so **no historical decision needs disposition
+  in production**. On the copy, 3 automatic rows (NULL, not suppressed) remain: 2 are the
+  2026-10-13 withdrawal of the Jordan Avery test clears, 1 is a 2026-09-29 live phone row on a
+  real published person written during the recovery exercise; both are copy-only test
+  artefacts and are retired with the copy.
+- **Three deferred application attempts** (`transition_work`, family `application`,
+  2026-09-29, expired leases): synthetic failed applications from the recovery exercise, no
+  receipts, no Harvest ledger rows, not linked; **they do not exist in production**
+  (no controller tables there). Disposition: leave deferred on the copy; nothing to replay.
+- **Production disk/PITR**: owner dashboard check (3.2, 3.3).
+- **Publication duration**: see §14 measured rate and the parallel-run plan.
+
+## 6. Retirement of the paid copy (after production verification)
+
+1. Export evidence: ledger sections 10–14, run/result tables (`backfill_runs`,
+   `person_reconcile_people` summaries, `person_publish_runs/results`,
+   `person_postcutover_audit_runs/results`, `transition_events`, `maintenance_events`) as
+   CSV into the repository's evidence folder; keep `.env.rehearsal` private until deletion.
+2. Remove dependencies: the branch preview's copy-scoped variables (Vercel, branch
+   `fix/person-90-release-remediation`), the Turnstile hostname, synthetic provider keys,
+   `.env.rehearsal`, launch entries; stop referencing the fixed October 5 URL.
+3. Delete the project in the dashboard (irreversible; billing stops from that point).
+
+## 7. Approval requested
+
+Approve, in writing: (a) the production schema install with
+`scripts/person-release/apply-upgrade.sh` and the label statement; (b) the production
+configuration changes in 3.4; (c) the operator sequence in 3.5 with the ceilings in 3.2;
+(d) the main merge of the parent PR after the remediation PR review; (e) retirement of the
+copy per section 6 after production verification. Expected downtime: none for public pages;
+recruiter contact edits and application processing refused during held windows (minutes per
+window). Cost: the copy's hourly compute until deletion; no new paid services.

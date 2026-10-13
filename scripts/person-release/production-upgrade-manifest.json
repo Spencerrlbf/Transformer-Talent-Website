@@ -1,0 +1,513 @@
+{
+ "generated": "2026-10-13",
+ "source_branch": "fix/person-90-release-remediation",
+ "source_commit": "68a77db0dd8c045b1ae67f2fc084903a11c990ea",
+ "production_project_ref": "kmuihequfurvjxpnugxf",
+ "production_history_versions": 96,
+ "window_start": "20260926033900",
+ "rule": "Apply in version order with psql -v ON_ERROR_STOP=1 -1 -f on the 5432 session endpoint; skip a version already present in supabase_migrations.schema_migrations; after each successful file insert (version, name, statements=[file content]) into supabase_migrations.schema_migrations; never supabase db push (the numeric legacy files 001-072 are recorded under timestamp versions). The project label is a separate explicit operator statement after the last file.",
+ "already_installed_in_window": [
+  "20260926040300",
+  "20260926042200",
+  "20260926050355"
+ ],
+ "to_install_count": 62,
+ "to_install": [
+  {
+   "version": "20260926033900",
+   "file": "20260926033900_person_atomic_projection.sql",
+   "md5": "bae87f003291cab1e703b129086722f4",
+   "sha256": "c5535dbd4d07894bbcc340a8b72c074cc01f748db764a45dbd2414ffd533856a",
+   "bytes": 1447,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926044800",
+   "file": "20260926044800_person_application_intake.sql",
+   "md5": "a65a921e283c13a623a1d02865f2b8f1",
+   "sha256": "573bc7a9adfd70362dd1ce756a5a122e28f14b30c6e91568b39f764c4a23c7fc",
+   "bytes": 1006,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926054500",
+   "file": "20260926054500_person_refresh_intake.sql",
+   "md5": "ea3d8b06942cf4506080edf0a5c5b398",
+   "sha256": "224b7ba45ff6cd962ea0752d2bd34105424c91bf15e7b13ba1e116fe8aa87147",
+   "bytes": 1432,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926061600",
+   "file": "20260926061600_person_directory_intake.sql",
+   "md5": "fee5842af448bfa339cf4da9aef07f66",
+   "sha256": "24a374588b16061361d65111afe4b3bdc62074e98bd6a32994965b93ec021a06",
+   "bytes": 5129,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926065300",
+   "file": "20260926065300_person_recruiter_contacts.sql",
+   "md5": "ce858a9d7c99cf7bc0d2328e7fa033ef",
+   "sha256": "6e087a421c57a602eb2f6d6300ed9eec607aebc38a7412e6fa7a278539d66d05",
+   "bytes": 3423,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926072840",
+   "file": "20260926072840_person_derivative_jobs.sql",
+   "md5": "4e34b26690ee674dd6020e3998e55866",
+   "sha256": "7da9e1168b95cebcdf67646b037ef5ac96f4ff00610b634b6a3e99f10065df20",
+   "bytes": 1238,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926074407",
+   "file": "20260926074407_person_audit_evidence.sql",
+   "md5": "aab26350de7f700c1122e7af0bd79b38",
+   "sha256": "8d1653286fcfb22222a4ff8f6e5166a29f337fcd400261118b60ea65215c33c1",
+   "bytes": 12662,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926080238",
+   "file": "20260926080238_person_audit_anchor_preparation.sql",
+   "md5": "7d4b1fed68befd88ff0a3e16f76d1c1b",
+   "sha256": "9c97295bafc0527518bfdbe8dc1fca7f8485734ef93dd320f5ea139cfa62719e",
+   "bytes": 12113,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926082012",
+   "file": "20260926082012_person_audit_writer_guards.sql",
+   "md5": "9abfdc77e48c46c11c22028567aecc19",
+   "sha256": "e285a530acd52278f826988cb020c6e85881ab50f9180ddcd38f5838c7430858",
+   "bytes": 3875,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926172608",
+   "file": "20260926172608_person_postcutover_snapshots.sql",
+   "md5": "2d0e6e8066c2a023781b9eff17a98499",
+   "sha256": "c9d2b8e29c6d05478235a347b62d013ee81b581277efa6f9419236eb5e1720ed",
+   "bytes": 30823,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926183000",
+   "file": "20260926183000_person_publish_runbook.sql",
+   "md5": "eb930b6ec0843887e2a77160a4f2d466",
+   "sha256": "22a0875eeec4bd7d93b869c52caf11d4c8110ba2fa649cece6fea603d925d162",
+   "bytes": 5928,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926201342",
+   "file": "20260926201342_person_publish_review_guards.sql",
+   "md5": "286dde3b3069b563fb403105199a6939",
+   "sha256": "e96f442b70f2ae7fdb6a8b1a1601aba8dcba1e0d7a1a73c0e252c7004f20b141",
+   "bytes": 9856,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926213000",
+   "file": "20260926213000_person_postcutover_audit.sql",
+   "md5": "349bff5fce3422bd9b084c9d26193ee1",
+   "sha256": "f27bb4e426240f02d3febc2cdb3541b44d213e5a81cccf49a7e7c2003bda3308",
+   "bytes": 29343,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926233000",
+   "file": "20260926233000_person_audit_reference_ownership.sql",
+   "md5": "7fa51f526e020a808ab004eb235c6f18",
+   "sha256": "de021656695b9d53b7a4df69db61f0db7a90cb85cb653c7387c9628b042a5b47",
+   "bytes": 21535,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260926235140",
+   "file": "20260926235140_person_transition_foundation.sql",
+   "md5": "15bf85b8dc2c1b7c1db4a0e47314923a",
+   "sha256": "97a00c509f893963f20eaf1bccebae11079e0854c6c2cf9e2164cd1a40c50853",
+   "bytes": 15853,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927001258",
+   "file": "20260927001258_person_application_work.sql",
+   "md5": "d26d91c9cfcdf216b21a3855bc074fe9",
+   "sha256": "406a19db7cb5dcd758d54b441d564ab12b50a6de63618f10e8bfe2c2033b747b",
+   "bytes": 7632,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927004931",
+   "file": "20260927004931_person_application_queue.sql",
+   "md5": "c9dbca41512c7945ce7340c5c0ed69cc",
+   "sha256": "9d2dc7a3201cf7f539a2afab8544231e9bfe5dc272c8b4ef87c63b19891d1ee0",
+   "bytes": 28326,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927013100",
+   "file": "20260927013100_person_application_finalization.sql",
+   "md5": "21b96f9b2ffaf166bbdd435e4ab7adc0",
+   "sha256": "d3d191641b6da8a07c410fc3f77d83de68c77d470fe979d45fa0a08538fd96aa",
+   "bytes": 16792,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927020700",
+   "file": "20260927020700_person_application_ownership.sql",
+   "md5": "19ecb2000c07110e641c8f004988621e",
+   "sha256": "a9d2114d547f7dee553b1e9c941c662cb5f51e273d1366642f7dc8a53cb197c5",
+   "bytes": 20227,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927023000",
+   "file": "20260927023000_person_normalization_fence.sql",
+   "md5": "1e3fd606305eed2230b9c73278623321",
+   "sha256": "3e3e4723ce81a6bbe8f895cad1607ba958691e860de3aa3e3ecf2317600b3387",
+   "bytes": 9393,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927025000",
+   "file": "20260927025000_person_application_proof.sql",
+   "md5": "f7ffa86b1c4eb03e6f4fd840b992be09",
+   "sha256": "ae2ecfa469d3b54c68efc29cf77ace1f785c61f64849034e7f9fb984505bd5f0",
+   "bytes": 28997,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927035000",
+   "file": "20260927035000_person_application_projection.sql",
+   "md5": "dd9f6d8a36d9a760830e0a8129e3e711",
+   "sha256": "40d00ea4a6b59ff4398b9e47b05043e7b33fc5931cfbcacb037b1c5dd10cc475",
+   "bytes": 15743,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927052000",
+   "file": "20260927052000_person_intake_mutations.sql",
+   "md5": "b68d4a2052d33cb35e6a6b16d45fc94f",
+   "sha256": "358318748c4e50d4130095dd95dc58a6eeb90d2831f83f7dd84fe5f480f5b124",
+   "bytes": 20981,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927060000",
+   "file": "20260927060000_person_intake_ready.sql",
+   "md5": "4004e84178fc59e3fc7cfe18b94bc796",
+   "sha256": "92c3cdf0da79692c8b10a3dc9ccbd9b2748e34723d4b68dfd951906b7b041d18",
+   "bytes": 22426,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927065000",
+   "file": "20260927065000_person_tenant_binding.sql",
+   "md5": "fe130c57e24acd4bc61176c57e66c7a7",
+   "sha256": "089424faf85aa565ce8092610cc8100312ac3c4f260bf385561cd38ffe9c9f6d",
+   "bytes": 7207,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927070000",
+   "file": "20260927070000_person_application_completion.sql",
+   "md5": "b12dd24fcfc4d1225d2fcedd1189448c",
+   "sha256": "7db1e9fce23eb2700b5eb45142079b6572a1b3eed48297347468d7c421a86bdf",
+   "bytes": 27576,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927080000",
+   "file": "20260927080000_person_application_acceptance.sql",
+   "md5": "6303f1e4d87b12a26b37a89ceb3d7909",
+   "sha256": "1e4be511f54c14f7aa471fd81ff2749eaf1932e5ede3fb45f41af5cc5c774967",
+   "bytes": 24861,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927090000",
+   "file": "20260927090000_person_application_enrichment.sql",
+   "md5": "91f10f92073b38f3094b3efa36d97c60",
+   "sha256": "c8824abeb0e4b8138640c96d13fb709ad793fa274de266ec62b8354fa4b569cd",
+   "bytes": 21959,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927100000",
+   "file": "20260927100000_person_legacy_source_fence.sql",
+   "md5": "0a74c568c46532bf87741cd811b632c4",
+   "sha256": "59b5a4b82e4a4954ef615954382ca4811606a788bb0dd5a31ccbbe05693de3b4",
+   "bytes": 2727,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927110000",
+   "file": "20260927110000_person_conflict_evidence.sql",
+   "md5": "d7a1218f501d7c8b307ffda9f7d29694",
+   "sha256": "d7b00cd2c3ba82047708cecb306ce6face17af3c97075644a5921b0df47f724c",
+   "bytes": 7096,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927120000",
+   "file": "20260927120000_person_lookup_mutations.sql",
+   "md5": "ddb5ac9f924f642aac8e8d00e8d9090d",
+   "sha256": "38efdb9ebf9c2d14affa3292cc12d768343c56a671916950e2e7df522585fd80",
+   "bytes": 19294,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927130000",
+   "file": "20260927130000_person_directory_input.sql",
+   "md5": "e591f074eabdcca50fff1f53f759a228",
+   "sha256": "861bc317b068b03eb1e482332ff601f3621469dea9d35d617faa03f02e7f7417",
+   "bytes": 22470,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927140000",
+   "file": "20260927140000_person_directory_execution.sql",
+   "md5": "ce5b6aafd2710027aac27baad6e846ce",
+   "sha256": "3decb3ed1c474f401e88e52ee632bf85aa68de4e028324317a1d95c2a2a159aa",
+   "bytes": 43849,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927150000",
+   "file": "20260927150000_person_directory_publication.sql",
+   "md5": "3124635a71e48ec21b65ecceb63f5379",
+   "sha256": "1d7518ec5f52eeee8cd4fd4f71d0c08d9e806a398147c45549744df6806cccc4",
+   "bytes": 59194,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927160000",
+   "file": "20260927160000_person_directory_creation.sql",
+   "md5": "7e716b0165d83e41717c6b637caab0d4",
+   "sha256": "16d8881a767a4a90048d5fd5c822229c179559f328dc98aab04201539025cafe",
+   "bytes": 66753,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927170000",
+   "file": "20260927170000_person_directory_outcomes.sql",
+   "md5": "80297eeca02ff5caff89985269423cfe",
+   "sha256": "b6e7831bbacc493172710f3e7148ddcf2712c220edcef5b50b795e48fe06f3ed",
+   "bytes": 15888,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927180000",
+   "file": "20260927180000_person_directory_suppression.sql",
+   "md5": "0d2a29226024e8e7ec617dc76799611f",
+   "sha256": "20094e66e3e2b726f9cd7e0a6d25579ca33712c691b8356305da2a3b2cdc2a06",
+   "bytes": 11466,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927190000",
+   "file": "20260927190000_person_directory_readmission.sql",
+   "md5": "e1c5dfa955407e024e9fe47413423d34",
+   "sha256": "496c4d8328db3821e93bcaaf82e8962c6a0ca7936f615c3d42277673b2d4dfcf",
+   "bytes": 20722,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927200000",
+   "file": "20260927200000_person_directory_current.sql",
+   "md5": "596d10215bfdcf3ea039f5928a3b40ef",
+   "sha256": "3ae2bfb88903a294682fcd55b76c4476f1bb1e41a43fb7e911efdd7a47023a4f",
+   "bytes": 2879,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927210000",
+   "file": "20260927210000_person_refresh_lifecycle.sql",
+   "md5": "e6f2bcecf3959cfddf5f4bd9685ecb34",
+   "sha256": "069daac5b53e5f38cb924b3fe1d95e2fca407c5c8005e1dec7a99dbd5f6430f8",
+   "bytes": 44478,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927220000",
+   "file": "20260927220000_person_refresh_save.sql",
+   "md5": "b1a1e9699a04ee09573c905fb304ed7e",
+   "sha256": "f1cbde629b3692f118e0c08346a302edec415ef6f51adc85b4ab98335d1f28bb",
+   "bytes": 55860,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260927230000",
+   "file": "20260927230000_person_refresh_worker.sql",
+   "md5": "76ecb03704783d590e5c9b6bb5677332",
+   "sha256": "2252e189724099aa0c185eb30a2575a76f55ad340a7f13935bda51c6b11843de",
+   "bytes": 12605,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928000000",
+   "file": "20260928000000_person_recruiter_admission.sql",
+   "md5": "e33fcd6ad8802fa14a6ceba44d5d084e",
+   "sha256": "c0b0c449c8bb0159ca25b906584cb23cd5df48984dbf4fe153748a87fb297bb3",
+   "bytes": 60399,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928010000",
+   "file": "20260928010000_person_derivative_journal.sql",
+   "md5": "c1bb9bc1bf6262f38c8efd2a42bf80eb",
+   "sha256": "378e16282550d11fdbbb511435f0d1d6bfee03551ff619a1c88eeb445bb89b5a",
+   "bytes": 16425,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928020000",
+   "file": "20260928020000_person_derivative_lifecycle.sql",
+   "md5": "d64ea488384514d9d25675e0dfcea5d9",
+   "sha256": "b628aeec813eb076a0fbb31f5d042171f5d7824d4a1f8d961f9c1e8e2132f9d6",
+   "bytes": 45129,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928030000",
+   "file": "20260928030000_person_maintenance_window.sql",
+   "md5": "55965679053387bf34b3cf88b2d8160b",
+   "sha256": "cb3856f3fbf544fa2d02683dcf0e48b40d42bd649d881e88e533262eec0b31a9",
+   "bytes": 25872,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928040000",
+   "file": "20260928040000_person_application_edits.sql",
+   "md5": "361eddfd9e015b1cfcd87129a305e0c6",
+   "sha256": "5dbeb6f520be75e2df5b06ca3e9c7115702d022322cfaae45005ec2e9e74b4f6",
+   "bytes": 15161,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928050000",
+   "file": "20260928050000_person_publish_admission.sql",
+   "md5": "53d8a45282ac91ed49653027bf0f9bf7",
+   "sha256": "3eff1459511c8979afd10bb73166e0c46fb0a13993dbf96ac2b1a2e14b46f991",
+   "bytes": 25835,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928060000",
+   "file": "20260928060000_person_application_contact.sql",
+   "md5": "9936ed8ab2b60a168bdda5255fa25abe",
+   "sha256": "0d8e5fc0df43e09b2667e850082243354dd294b662ec646fa9c9ca7ed08963f5",
+   "bytes": 7998,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928061000",
+   "file": "20260928061000_person_resume_contact_fill.sql",
+   "md5": "2c1d45b38241439abe9bddd2577397e4",
+   "sha256": "5beaa55132c0a6e2808e900af68c89faa50cfd28d74afc2659de446e2e7b02fd",
+   "bytes": 19063,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928070000",
+   "file": "20260928070000_person_network_send.sql",
+   "md5": "0dc316acd66a722294eab7661be2a5b3",
+   "sha256": "c10ee0ff8380bdcbb78cec16182ca46221b2d439bda26691a8a9ce51d636bab8",
+   "bytes": 13273,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928080000",
+   "file": "20260928080000_person_derivative_publish.sql",
+   "md5": "a910dbcbf5cdeea06b29b0974fba1422",
+   "sha256": "8fda7d868615cd933f89b96f66716a03c037b93222482f184cd0fbe753e089d3",
+   "bytes": 13252,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20260928090000",
+   "file": "20260928090000_person_maintenance_deferred.sql",
+   "md5": "3370c24eb6231550f5225eeca26f2bd2",
+   "sha256": "603a1f61e6e52484a3c1d5178968f284af19622fae047d4d363234dfa8fab310",
+   "bytes": 942,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261003090000",
+   "file": "20261003090000_person_target_identity.sql",
+   "md5": "f8e1a230eb081172bc05e84e28cc0335",
+   "sha256": "6778a003fc5b912bd506891a944894ad7f4daa83b10309e1019b7fd3d95532db",
+   "bytes": 1022,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261003100000",
+   "file": "20261003100000_person_forward_application_contact.sql",
+   "md5": "dd3a0c37536ce9b4860f03e2d20bdeab",
+   "sha256": "5225bf10b25a08d70e6d8fbf4c8188a73878b5b26d610b7abd02044bc5692e50",
+   "bytes": 4091,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261003110000",
+   "file": "20261003110000_person_forward_network_send.sql",
+   "md5": "dda7e083bc64ea6686eb4bb65616fc1b",
+   "sha256": "abb2298bdff812f417a3da8e431a1f48f86613412d3e564cc70969e40cc3fb04",
+   "bytes": 14671,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261003120000",
+   "file": "20261003120000_person_forward_identity_index.sql",
+   "md5": "d63ff3b6a035ef6b6840291e8ab54e62",
+   "sha256": "eb31b8c4dcdf472899f1fb083204e1525ff52c0a53786caa978148033c1fc944",
+   "bytes": 1212,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261005090000",
+   "file": "20261005090000_person_recruiter_explicit_clear.sql",
+   "md5": "03381096b2593c378d2febd8bda1819c",
+   "sha256": "5f0f3a14c20113d3a4b8781c0bfbdef7a9898dcf494e4de3b1fbcb363862db02",
+   "bytes": 10260,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261005100000",
+   "file": "20261005100000_person_send_decisions.sql",
+   "md5": "86e72e9e509d0cb2383da6b0785c34bc",
+   "sha256": "99772b897eda3bc93353a1ab3bb9a6f3890a8e9e8ca4c26e5381f7220629853f",
+   "bytes": 4380,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261005110000",
+   "file": "20261005110000_person_historical_shadow_clears.sql",
+   "md5": "e4270cf400a81fbf02cc39de23f398c8",
+   "sha256": "0c2681f4e55bea9395dc485345844ec539982c04ef9d5bc17b15ca0e8629af67",
+   "bytes": 3198,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261005120000",
+   "file": "20261005120000_person_catchup_contact_snapshot.sql",
+   "md5": "e1dd9b33a2d606366d113a232bf7fc39",
+   "sha256": "b863803a57191122db842b63fe8dbdba3575a838f8beb4af3187f253fed8fb17",
+   "bytes": 3423,
+   "installed_on_production_2026_10_13": false
+  },
+  {
+   "version": "20261013090000",
+   "file": "20261013090000_person_target_label.sql",
+   "md5": "a281577cf4f57241a8ab6fd6157031e0",
+   "sha256": "7f9cf6cd62461f97dfc65e7dbab668b3a7250815fcbbe884d56162d08845c150",
+   "bytes": 4261,
+   "installed_on_production_2026_10_13": false
+  }
+ ]
+}
