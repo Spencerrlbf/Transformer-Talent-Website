@@ -1,5 +1,7 @@
 # Release manifest: candidate storage remediation branch
 
+> **October 12 update:** All 16 browser cases now pass (15 Codex checks plus Spencer’s Chrome resolution of M15); see `output/browser-acceptance/2026-10-07/REPORT.md`. Older “Not run” and “ready for manual testing” labels below describe the October 5 handoff. Production migration and release remain incomplete. A fresh read-only inspection found both production and test copy ACTIVE_HEALTHY, with 61 migration versions recorded on the copy but absent from production’s history in the September 26 onward range. Production also lacks the transition-control and publication-run tables. These differences require schema verification and the reviewed full upgrade chain; they are not permission to blindly replay migrations. Complete production preparation/release and retire the paid test copy before starting AI candidate implementation.
+
 Tested hosted source: **`13f1b308f4e6a43b03cda752a001897c3295dbce`**.
 Application/migration source includes **`79af7eb1f233edb6cb6369f50971eea2f0528769`**;
 `13f1b30` additionally scopes armed operator preparation to owned fixtures.
