@@ -1307,3 +1307,88 @@ the copy's identity remain true but are not distinctive; those files carry anoth
 uncommitted edits and were not touched. The local stack was reset and re-seeded only with the
 catch-up suite's fixtures (the earlier smoke-seed data is gone; `smoke-seed.mjs` recreates
 it); it is stopped with volumes retained, labelled `local`. Cluster 55811 is stopped.
+
+## 12. October 13 follow-up: finalizer CLI path, catch-up resumes, preview verification of the label
+
+Authorized by Spencer on 2026-10-13 ("close the two remaining identity-check gaps …
+push the remediation branch for preview verification … test-copy preview verification
+only"). Production migration, main merge and production deployment remain separate.
+
+### Gaps closed (`0b5ca3a`)
+
+- `person-reconcile-finalize.mjs --workdir`: the identity is read through the same linked
+  Supabase CLI (`db query --linked --output json --agent no -f identity.sql`), parsed by
+  `parseCliIdentity`, and proved with `verifyRuntimeIdentity` (REST too when configured)
+  before the finish file is sent; the offline REST URL/key checks now run on both paths.
+- `run-catchup.mjs`: every resume proves the REST destination's label (validated
+  credentials, `restIdentityReader`) after the input/config/compatibility checks and
+  before pinned verification, bundle derivation, transport listener or any import. The
+  pinned translator is unchanged; the run output records the identity key.
+- `saveRecruiterContactMapped`: a target refusal from the PostgreSQL session is logged as
+  `person_contact_target_refused:<code>` and answered `temporarily_unavailable` (503)
+  instead of a generic `save_failed`.
+
+Regression tests: finalizer CLI path with unlabelled, foreign, clone (same identifier,
+other label), unreadable and envelope-wrapped identities, REST/CLI disagreement, offline
+refusal before any CLI call, correct label → identity then finish; `parseCliIdentity`
+cases; catch-up resume with unlabelled, foreign, cloned, 500 and unreachable REST
+identities refused before `verify` is called, the correct label proceeding, and a hosted
+selection refusing another project's label. Offline suite 71/71, sealed sweep/transport/
+starter/forward 58/58, `tsc --noEmit` 0 errors after `next build` (exit 0) regenerated
+`.next/types`; worker bundle rebuilt (`scripts/dist/worker-lib.mjs`, ignored artifact,
+SHA256 `b2c0a1092939650e155295a75f3aecde080dbb6fddeae4d911a3af067ce2bd38`).
+
+### Preview verification on the copy (deployment of `0b5ca3a`)
+
+Pushed `0b5ca3a`; Vercel's git integration built preview
+`transformer-talent-website-1cjzu323b.vercel.app` (`dpl_8Mtx3rvUYDTVgQnkoFBkGse6Lb3F`,
+source git, ref `fix/person-90-release-remediation`, commit `0b5ca3a316b0…`, READY, branch
+preview variables). Signed in as the synthetic TT recruiter (copy Auth admin magic link
+verified by token hash; no email, no redirect):
+
+| Path | Call | Result |
+|---|---|---|
+| public | `GET /` | 200 |
+| REST gate + REST | `GET /api/dashboard/me`, `GET /api/dashboard/network?job=99101` | 200, org `transformer-talent`; 200, 4 people |
+| PostgreSQL gate + reads | `GET /api/dashboard/candidates/v2/net_<Jordan>` | 200 |
+| PostgreSQL gate + writes | `PUT …/contact` twice (live mode) | 200, 200 (the writes themselves are discussed below) |
+
+Wrong-label canary (a runtime label rejection, not a URL mismatch; the copy was not
+relabelled): a scratch database `person_canary_label` was created from `template0` in
+the copy's cluster (the copy's `postgres` role has CREATEDB; `template1` has a collation
+version mismatch there), given `person_private` plus `20261003090000` and
+`20261013090000`, and labelled with the fictional ref `abcdefghijklmnopqrst`; both
+poolers reach it by database name. Canary deployment
+`transformer-talent-website-muu8vj93s.vercel.app` (CLI, same commit, meta
+`canary=person-label-explicit-env`) received the branch's preview variables explicitly
+plus `PERSON_DATABASE_URL` pointing at that database; every offline URL/key check names
+the copy. Results with the same recruiter token: `GET /` 200; `GET /api/dashboard/me`
+200 (REST gate passed: the copy's label); `GET /api/dashboard/network?job=99101` **502
+`load_failed`** with runtime log `network list failed
+person_target:identity_label_mismatch`; `PUT …/contact` **503 `temporarily_unavailable`**
+with runtime log `person_contact_target_refused:person_target:identity_label_mismatch`;
+`GET …/candidates/v2/net_<Jordan>` 500. Nothing was written: the session is refused
+before the operation. A first canary attempt deployed without git metadata and without
+explicit variables received the project's default Preview environment (no `PERSON_*`
+variables); it was removed within minutes and never called. Afterwards the canary
+deployment was removed and the scratch database dropped (`with (force)`, a pooled
+session lingered); the copy's own database still reports `qsqlgibgsxzlimoegcjx`.
+
+### Side effect on a fixture, and its correction
+
+The drawer returns `contact.email`/`contact.phone` as null when no explicit recruiter
+choice exists; the verification script read those nulls as "current values" and sent
+them back, so its two `PUT …/contact` calls at 16:52 UTC recorded **explicit email and
+phone clears** on the synthetic Jordan Avery fixture (receipts and two `suppressed=true`
+decisions, live mode). At 17:02 UTC the clears were withdrawn with the library's
+`automatic` option (`saveRecruiterContact` run locally against the copy with the branch
+configuration, same actor id): the latest decisions are now `NULL, suppressed=false`
+(automatic ranking), the preview shows Jordan's email and phone again, and the three
+receipts remain as immutable evidence of the test. No other person was written. The
+manual-plan fixtures are otherwise as the October 5 handoff left them; the controller
+stayed armed/open (revision 17).
+
+Remaining: production is unlabelled (release step); `HOSTED_TEST_READINESS.md` and
+`MANUAL_ACCEPTANCE_PLAN.md` still cite the cluster identifier as the copy's identity and
+carry another session's uncommitted edits (untouched); the manual plan's fixed URL still
+serves `13f1b30`.

@@ -153,8 +153,12 @@ recovery and cleanup all require the label to equal the selection; unlabelled an
 foreign-labelled databases are refused before any write and nothing relabels. Evidence,
 commands and counts: `RELEASE_REMEDIATION.md` section 11. The copy was labelled
 `qsqlgibgsxzlimoegcjx`; production is not labelled (its migration is a release step).
-The hosted preview still runs `13f1b30`, so the deployed application gate has not yet
-exercised the label.
+On 2026-10-13 the pushed `0b5ca3a` (finalizer CLI path and catch-up resumes also
+proved) was verified on preview `transformer-talent-website-1cjzu323b.vercel.app`: REST and
+PostgreSQL application paths pass with the copy's label, and a same-commit canary whose
+PostgreSQL URL reached a fictional-labelled database in the copy's cluster was refused at
+run time (`person_target:identity_label_mismatch`, 502/503) while its REST gate passed.
+Ledger section 12. The manual plan's fixed URL still serves `13f1b30`.
 
 ## Fresh verification of `79af7eb` (2026-10-04)
 
