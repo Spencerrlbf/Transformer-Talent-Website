@@ -3,7 +3,7 @@
 // never the communications database. Logs carry ids, counts and statuses only.
 import pg from 'pg';
 import {checkout} from '../person-db-session.mjs';
-import {checkDatabaseUrl,selectedTarget} from '../person-target.mjs';
+import {checkDatabaseUrl,selectedTarget,hasSelectedTarget,verifyDatabaseIdentity} from '../person-target.mjs';
 import {execFileSync} from 'node:child_process';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,6 +54,11 @@ export async function openDatabase(env=process.env,applicationName,overrides={})
   on:(...args)=>pool.on(...args),
  };
  try{await db.query('select 1');}catch(e){await pool.end();throw e;}
+ // Runtime identity (20261013090000): with a selection, the database behind this
+ // handle must hold that project's label; unlabelled or foreign-labelled databases are
+ // refused before the handle is handed out. A loopback fixture without a selection
+ // has nothing hosted to protect and is not checked (same rule as the server gate).
+ if(hasSelectedTarget(env)){try{await verifyDatabaseIdentity(db,selectedTarget(env).ref);}catch(e){await pool.end();throw e;}}
  return db;
 }
 /** Serialize publish and undo for the same run across independent processes.

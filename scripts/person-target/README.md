@@ -43,7 +43,8 @@ Every check runs before a connection, queue claim, write or provider call. Failu
 are `person_target:<code>` (`missing`, `invalid`, `rest_mismatch`, `key_mismatch`,
 `key_unverifiable`, `database_mismatch`, `database_host`, `database_port`,
 `database_options`, `database_role`, `pooler_username`, `workdir_mismatch`, `identity_rest`,
-`identity_database`, `identity_mismatch`) and never contain the configured values.
+`identity_database`, `identity_mismatch`, `identity_unlabelled`, `identity_label_mismatch`,
+`identity_target`) and never contain the configured values.
 `test-target.mjs` compares every accepted URL with the installed driver's
 `connectionParameters` (host, port, user) without connecting.
 
@@ -51,15 +52,49 @@ are `person_target:<code>` (`missing`, `invalid`, `rest_mismatch`, `key_mismatch
 
 Migration `20261003090000_person_target_identity.sql` installs
 `public.person_target_identity()` (service_role only, read-only). It returns the
-cluster's `pg_control_system()` identifier. A restored copy is a different cluster
-even though every row and organization id was copied, so a REST client (RPC) and a
-PostgreSQL client (direct) can be proved to reach the **same physical database**:
+cluster's `pg_control_system()` identifier and, since
+`20261013090000_person_target_label.sql`, the **database-held project label**.
 
-- `start-catchup.mjs` requires the REST identity and records it with the run;
-- `person-reconcile-finalize.mjs` compares the REST and PostgreSQL identities before
-  finishing a run (`person_target:identity_mismatch` stops it);
-- an operator can run the same comparison by hand to attest a deployment's
-  configuration without printing any secret.
+The identifier alone is not enough: a copy restored from a project's backup is a
+physical clone and keeps the identifier (on 2026-10-13 production
+`kmuihequfurvjxpnugxf` and the copy `qsqlgibgsxzlimoegcjx` both reported
+`7550817586112808987`). The label is what separates them:
+
+- `person_private.target_identity` holds one row (`project_ref`, `labelled_at`,
+  `labelled_by`). An operator writes it **once**, with an explicit value, on the
+  session endpoint: `select person_private.target_label('<project ref>')` (`'local'`
+  for a loopback fixture). The function inserts when no label exists, returns the row
+  when the same label exists, and refuses any other value (`target_label_exists`).
+  Update, delete and truncate are refused (`target_identity_immutable`). The table and
+  the function have no grants for `anon`, `authenticated` or `service_role` and are
+  not reachable through PostgREST; the migration itself never writes a label.
+- `verifyRuntimeIdentity({readRest, readDatabase, ref})` requires every payload to
+  carry the identifier and a label, requires both clients to agree on both, and
+  requires the label to equal the selected `ref`. Codes: `identity_unlabelled` (a
+  database nobody labelled), `identity_label_mismatch` (another project's label, or
+  the two clients report different labels), `identity_mismatch` (different clusters),
+  `identity_rest` / `identity_database` (unreadable), `identity_target` (no valid
+  selection given). It never relabels. The identity a process records is the key
+  `<label>:<identifier>` (`identityKey`).
+- Where it runs: the server gate (`assertServerIdentity`: once per client kind per
+  configuration per process, before the first REST request in `sbRest` and before the
+  first operation on a PostgreSQL session in `withPersonConnection`; a failed proof is
+  not cached); the shared operator pool opener (`openDatabase`, every CLI and the
+  sweep, whenever a selection is set); `start-catchup.mjs` (REST, recorded with the
+  run); `person-reconcile-finalize.mjs` (REST and PostgreSQL); the sweep's
+  `verifySweepTarget`/`preflightArmedSweep`, `armForSweep` (`database_changed`),
+  `recoverArmOwnership` and `disarmAfterSweep` (`tenancy_armed_ownership:database`
+  when the ownership record names the other clone).
+- Legacy mode with no selection and sealed loopback fixtures without a selection are
+  not label-checked (the same rule as the offline gate); every hosted use has a
+  selection and is.
+
+Tests: `test-target.mjs` (library), `test-server-target.mjs` (both server clients,
+sealed), `test-cli-targets.mjs` (finalizer), `../person-maintenance/test-start-catchup.mjs`,
+`../tenancy/test-armed-safety.mjs` (the real sweep CLI against the controller double:
+same cluster + different labels, unlabelled, foreign label; cleanup and recovery on the
+other clone) and `run-identity-tests.sh <port>` (three databases in one PostgreSQL
+cluster, so the identifier is identical and only the label differs).
 
 ## Denied provider transports (disposable deployments)
 

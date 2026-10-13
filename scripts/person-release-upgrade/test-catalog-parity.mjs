@@ -15,7 +15,9 @@ test('function definitions are identical',async()=>{
  for(const fn of ['public.person_network_send(jsonb,text)','person_private.postcutover_snapshot(uuid)','public.person_application_contact_fill(uuid,text,jsonb)','public.person_target_identity()','person_private.application_source_guard()',
   // 20261005090000: ranking, the patched certified writer and its helper
   'public.person_contact_ranks(uuid)','person_private.recruiter_normalize(uuid)','person_private.recruiter_write(uuid,text,jsonb,jsonb)','person_private.recruiter_primary_suppressed(uuid,text,jsonb,jsonb,jsonb)',
-  'public.person_catchup_contact_snapshot(uuid[])']){
+  'public.person_catchup_contact_snapshot(uuid[])',
+  // 20261013090000: the label writer, its immutability trigger function and the identity
+  'person_private.target_label(text)','person_private.target_identity_immutable()']){
   const [a,b]=await both('select pg_get_functiondef($1::regprocedure) v',[fn]);
   assert.equal(a,b,fn);
  }

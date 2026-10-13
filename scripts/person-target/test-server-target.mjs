@@ -14,9 +14,23 @@ const pooler=(ref,port=6543)=>`postgres://postgres.${ref}:secret-sentinel@aws-0-
 const require=createRequire(fileURLToPath(import.meta.url));
 const pgPath=require.resolve('pg');
 const pools=[];
+// The server imports `pg` dynamically (ESM), which bypasses require.cache: this recorder
+// only observes pools created through the CJS path and never connects. The PostgreSQL
+// half of the runtime identity proof therefore runs against real loopback databases in
+// test-server-identity-db.mjs (run-identity-tests.sh), not here.
 require.cache[pgPath]={id:pgPath,filename:pgPath,loaded:true,exports:{default:{Pool:class{constructor(config){this.config=config;pools.push(this);}on(){}async connect(){throw Error('sealed_pg_connect');}}}}};
 const fetched=[];
-globalThis.fetch=async(url)=>{fetched.push(new URL(String(url)).hostname);throw Error('sealed_fetch');};
+// `restIdentity` set: the identity RPC answers with it (a function may return a Response);
+// every other request, and the RPC when unset, is sealed.
+let restIdentity=null;
+globalThis.fetch=async(url)=>{
+ const u=new URL(String(url));fetched.push(u.hostname);
+ if(u.pathname.endsWith('/rest/v1/rpc/person_target_identity')&&restIdentity){
+  if(typeof restIdentity==='function')return restIdentity();
+  return new Response(JSON.stringify(restIdentity),{status:200,headers:{'content-type':'application/json'}});
+ }
+ throw Error('sealed_fetch');
+};
 const lib=await import('./dist/server.mjs');
 
 function withEnv(values,fn){
@@ -100,10 +114,44 @@ test('missing selection with support on: no REST request and no pool',async()=>{
   assert.equal(pools.length,before);assert.equal(fetched.length,beforeFetch);
  });
 });
-test('a consistent live configuration proceeds to the (sealed) clients',async()=>{
+const CLUSTER='7550817586112808987';
+test('a consistent live configuration proceeds to the (sealed) clients once the destination proves the selected label',async()=>{
  await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  restIdentity={system_identifier:CLUSTER,project_ref:TARGET};
+  try{
+   const before=fetched.length;
+   await assert.rejects(lib.sbRest('organizations?select=id'),/sealed_fetch/);
+   assert.deepEqual(fetched.slice(before),[`${TARGET}.supabase.co`,`${TARGET}.supabase.co`],'identity RPC, then the request');
+   // the proof is cached per configuration: the next request goes straight through
+   await assert.rejects(lib.sbRest('organizations?select=id'),/sealed_fetch/);
+   assert.equal(fetched.length,before+3);
+  }finally{restIdentity=null;}
+ });
+});
+// 20261013090000: the runtime half of the gate. The REST destination and the PostgreSQL
+// session must each report the SELECTED project's database-held label; a clone of the
+// project (same cluster identifier) with another label, or a database never labelled,
+// is refused before the request or the operation.
+test('REST: a destination labelled for another project, or unlabelled, or without the identity function is refused; no request follows',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  for(const [identity,code] of [[{system_identifier:CLUSTER,project_ref:OTHER},'identity_label_mismatch'],[{system_identifier:CLUSTER},'identity_unlabelled'],[{system_identifier:CLUSTER,project_ref:null},'identity_unlabelled'],[()=>new Response('{}',{status:404}),'identity_rest'],[()=>{throw Error('sealed_fetch');},'identity_rest']]){
+   restIdentity=identity;lib.resetServerTargetCache();
+   try{
+    const before=fetched.length;
+    await rejectsTarget(lib.sbRest('organizations?select=id'),code);
+    assert.equal(fetched.length,before+1,'only the identity RPC was sent');
+    // a failed proof is not cached: the next call proves again (and fails again)
+    await rejectsTarget(lib.sbRest('organizations?select=id'),code);
+    assert.equal(fetched.length,before+2);
+   }finally{restIdentity=null;}
+  }
+ });
+});
+test('legacy mode without a selection performs no identity proof',async()=>{
+ await withEnv({PERSON_WRITE_MODE:'legacy',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)},async()=>{
+  const before=fetched.length;
   await assert.rejects(lib.sbRest('organizations?select=id'),/sealed_fetch/);
-  assert.equal(fetched.at(-1),`${TARGET}.supabase.co`);
+  assert.equal(fetched.length,before+1,'the request itself, no identity RPC');
  });
 });
 // R2-01: query options that move pg's effective destination are refused by the

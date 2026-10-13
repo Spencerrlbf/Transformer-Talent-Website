@@ -46,7 +46,7 @@ class FakeClient extends EventEmitter {
       if (this.tx) { const restore = JSON.parse(this.tx.snapshot); current.control = restore.control; current.events = restore.events; current.windows = restore.windows; log("rollback"); }
       this.tx = null; return { rows: [] };
     }
-    if (sql.includes("person_target_identity()")) return { rows: [{ identity: { system_identifier: current.identity } }] };
+    if (sql.includes("person_target_identity()")) return { rows: [{ identity: { system_identifier: current.identity, project_ref: current.project_ref } }] };
     if (sql.includes("from person_private.transition_control where singleton")) return { rows: [{ ...current.control }] };
     if (sql.includes("person_transition_status()")) return { rows: [{ s: status() }] };
     if (sql.includes("maintenance_events e on e.work_id")) return { rows: current.windows.map((w) => ({ ...w })) };
@@ -82,6 +82,7 @@ function install({ state, logFile = process.env.SIM_LOG, onQuery } = {}) {
   const sim = state ?? JSON.parse(process.env.SIM_STATE ?? "{}");
   current = sim; hooks = { logFile, onQuery };
   sim.identity ??= "7000000000000000001";
+  if (!("project_ref" in sim)) sim.project_ref = "local"; // the database-held label; null = never labelled
   sim.control ??= { enabled: false, phase: "open", revision: "1", generation: "1" };
   sim.windows ??= [];
   sim.events ??= [];

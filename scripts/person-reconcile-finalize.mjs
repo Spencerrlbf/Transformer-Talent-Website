@@ -84,14 +84,14 @@ export async function main(argv=process.argv.slice(2),{env=process.env,readFile=
    if(!res.ok)throw Error(`HTTP_${res.status}`);
    return res.json();
   }:undefined;
-  const identity=await verifyRuntimeIdentity({readRest,readDatabase});
+  const identity=await verifyRuntimeIdentity({readRest,readDatabase,ref:target.ref});
   // Multi-statement text: pg returns one result per statement. Take the finish SELECT
   // by content, never by position; anything else is a changed script, not a success.
   const results=await client.query(finalizeSql(run));
   const result=Array.isArray(results)?results.find(r=>r?.rows?.[0]&&Object.hasOwn(r.rows[0],'person_reconcile_finish')):null;
   if(!result)throw Error('finalize_result');
   const finish=result.rows[0];
-  out(JSON.stringify({phase:'reconcile_finalized',run,target:target.ref,system_identifier:identity.system_identifier,result:finish})+'\n');
+  out(JSON.stringify({phase:'reconcile_finalized',run,target:target.ref,system_identifier:identity.system_identifier,project_ref:identity.project_ref,result:finish})+'\n');
   return {run,target:target.ref,via:'postgres',result:finish};
  }finally{await client.end().catch(()=>{});}
 }

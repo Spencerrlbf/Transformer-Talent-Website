@@ -10,7 +10,9 @@ exact production build of this branch. Nothing here can reach a hosted project:
 supabase init                                   # once; config.toml stays uncommitted
 cp scripts/tenancy/local-bootstrap.sql supabase/migrations/000_local_bootstrap.sql   # local only, never commit
 supabase start -x studio,imgproxy,mailpit,logflare,vector,supavisor,edge-runtime,realtime,postgres-meta
-# -> installs 000 (base tables that predate the repo's migrations) and 001 … 20261005* in order
+# -> installs 000 (base tables that predate the repo's migrations) and 001 … 20261013* in order
+psql "$LOCAL_PG_URL" -c "select person_private.target_label('local')"   # the operator's explicit label (20261013090000);
+#    without it every selection-based tool and the server gate refuse the database (identity_unlabelled)
 curl -X POST "$SUPABASE_URL/storage/v1/bucket" -H "apikey: $SERVICE" -H "Authorization: Bearer $SERVICE" \
   -H 'Content-Type: application/json' -d '{"id":"resumes","name":"resumes","public":false}'   # buckets are project settings
 

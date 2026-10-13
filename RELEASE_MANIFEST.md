@@ -18,7 +18,8 @@ Earlier results are labelled historical and are not included in the fresh totals
 **READY for manual testing** at
 [the fixed preview](https://transformer-talent-website-87oyi44go.vercel.app/dashboard/network?job=99101),
 Vercel `dpl_42j5rpFpCzfCPbWtHYobAw6Tvo7C`, Node 24.x, source `13f1b30`.
-The existing approved `tt-test-copy` is upgraded through `20261005120000`, selected
+The existing approved `tt-test-copy` is upgraded through `20261013090000` (labelled
+`qsqlgibgsxzlimoegcjx` on 2026-10-13; see the ledger's section 11), selected
 consistently by browser, REST, storage and PG, and left armed/open revision 17 /
 generation 13. Production remains untouched. No new Supabase project was created.
 
@@ -84,9 +85,11 @@ migration workaround.
 
 ## Migrations
 
-**136 tracked migration files**. Disposable bootstrap `000_local_bootstrap.sql` is
+**137 tracked migration files**. Disposable bootstrap `000_local_bootstrap.sql` is
 local only. The release chain in the cutover runbook (`20260926033900` through
-`20260928090000`) is followed by all eight forward files below, in order. An older
+`20260928090000`) is followed by all nine forward files below, in order; after the
+last one the operator labels the database (`select person_private.target_label('<ref>')`,
+runbook "Project label") before any process selects it. An older
 install from the copy's `23d7860` artifact first needs the missing
 `20260928061000_person_resume_contact_fill.sql`. Previously installed historical
 versions were not edited.
@@ -101,6 +104,7 @@ versions were not edited.
 | `20261005100000_person_send_decisions.sql` | Unpublished checked Send uses the same contact decisions | `86e72e9e509d0cb2383da6b0785c34bc` |
 | `20261005110000_person_historical_shadow_clears.sql` | Correct current receipt-proven shadow clears, including after publication; preserve superseding decisions and exact trigger modes | `e4270cf400a81fbf02cc39de23f398c8` |
 | `20261005120000_person_catchup_contact_snapshot.sql` | Complete, bounded, same-statement contact evidence for compatible historical verification | `e1dd9b33a2d606366d113a232bf7fc39` |
+| `20261013090000_person_target_label.sql` | Database-held project label (`person_private.target_identity`, operator-written once, immutable, no API grants) returned by `person_target_identity()`; the identifier alone cannot separate a physical clone from its source | `a281577cf4f57241a8ab6fd6157031e0` |
 
 The receipt correction uses NOWAIT table locks. Apply after recovery, load and
 drain gates; contention refuses atomically and requires settling the conflicting
@@ -137,6 +141,20 @@ The earlier preview restriction and Harvest-host typo were corrected by the
 approved October 5 hosted setup. Use the fixed tested URL above. Repository GitHub
 Actions target variables and production runtime/configuration still require
 verification at release; hosted preview success does not establish them.
+
+## Project-label fix (2026-10-13)
+
+Production and the test copy report the same `pg_control_system()` identifier
+(`7550817586112808987`; the copy is a physical clone), so the identity proof gained a
+database-held project label (`20261013090000`). The server gate (`assertServerIdentity`
+before the first REST request and the first PostgreSQL operation), the shared operator
+pool opener, the catch-up start, the finalizer and the sweep's preparation, ownership
+recovery and cleanup all require the label to equal the selection; unlabelled and
+foreign-labelled databases are refused before any write and nothing relabels. Evidence,
+commands and counts: `RELEASE_REMEDIATION.md` section 11. The copy was labelled
+`qsqlgibgsxzlimoegcjx`; production is not labelled (its migration is a release step).
+The hosted preview still runs `13f1b30`, so the deployed application gate has not yet
+exercised the label.
 
 ## Fresh verification of `79af7eb` (2026-10-04)
 

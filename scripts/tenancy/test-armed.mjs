@@ -26,6 +26,7 @@ test('preflight: target proved through PostgreSQL, controller disabled, nothing 
   const p = await preflightArmedSweep(env);
   assert.equal(p.local, true); assert.equal(p.rest_checked, false);
   assert.equal(p.system_identifier, (await pool.query('select system_identifier::text v from pg_control_system()')).rows[0].v);
+  assert.equal(p.project_ref, 'local'); assert.equal(p.identity, `local:${p.system_identifier}`);
   assert.deepEqual(p.controller, { ...(await control()) });
   assert.equal(p.controller.enabled, false);
 });
@@ -53,10 +54,10 @@ test('armForSweep: reconciled, anchored, armed and open; ownership is the exact 
   }
   const after = await control();
   assert.equal(handed.length, 1); ownership = handed[0];
-  assert.deepEqual(ownership, { database: preflight.system_identifier, run: runId, revision: after.revision, generation: after.generation, phase: 'open', last_action: 'arm' });
+  assert.deepEqual(ownership, { database: preflight.identity, run: runId, revision: after.revision, generation: after.generation, phase: 'open', last_action: 'arm' });
   assert.equal(BigInt(after.revision), BigInt(before.revision) + 1n); assert.equal(BigInt(after.generation), BigInt(before.generation) + 1n);
   // the durable event this sweep wrote is the only evidence a lost acknowledgement may use
-  assert.deepEqual(await recoverArmOwnership({ runId, database: preflight.system_identifier }, env), ownership);
+  assert.deepEqual(await recoverArmOwnership({ runId, database: preflight.identity }, env), ownership);
   assert.equal(await recoverArmOwnership({ runId: 'neverarmed1' }, env), null);
   assert.equal((await pool.query('select count(*)::int n from person_private.transition_events where reason_code=$1', [sweepReason('arm', runId)])).rows[0].n, 1);
   // an enabled controller is a precondition failure for a second sweep: no transition

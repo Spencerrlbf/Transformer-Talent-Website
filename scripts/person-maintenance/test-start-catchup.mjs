@@ -9,7 +9,7 @@ function fixture(overrides={}){
  const config={run:'synthetic-catchup',limit:10,batch:2,commit:PIN,dry:false,resume:false,maxBytes:34000000000,maxSeconds:60};
  // Fictional project refs: the selected target and a different project.
  const env={PINNED_RUNNER_DIR:root,PERSON_TARGET_PROJECT_REF:TARGET,SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),COMMS_DATABASE_URL:'postgresql://synthetic:secret-sentinel@127.0.0.1:55487/fixture',BACKFILL_CONFIG:JSON.stringify({reconcile:true,scope:'queue','dry-run':false}),...overrides.env};
- const site={select:async()=>{calls.push('existing');return overrides.existing??[];},rpc:async(fn,args)=>{calls.push([fn,args]);if(fn==='person_target_identity'){if(overrides.identityError)throw overrides.identityError;return overrides.identity??{system_identifier:'7000000000000000001'};}if(fn==='person_backfill_metrics')return overrides.metrics??{database_bytes:100,blocked_sessions:0};if(overrides.startError)throw overrides.startError;return {run_id:config.run,status:'running'};},end:async()=>{calls.push('site_end');if(overrides.endError)throw Error('secret-sentinel');}};
+ const site={select:async()=>{calls.push('existing');return overrides.existing??[];},rpc:async(fn,args)=>{calls.push([fn,args]);if(fn==='person_target_identity'){if(overrides.identityError)throw overrides.identityError;return overrides.identity??{system_identifier:'7000000000000000001',project_ref:TARGET};}if(fn==='person_backfill_metrics')return overrides.metrics??{database_bytes:100,blocked_sessions:0};if(overrides.startError)throw overrides.startError;return {run_id:config.run,status:'running'};},end:async()=>{calls.push('site_end');if(overrides.endError)throw Error('secret-sentinel');}};
  const comms={end:async()=>{calls.push('comms_end');if(overrides.endError)throw Error('secret-sentinel');}};
  const deps={env,verify:async()=>({root,bundleHash:'a'.repeat(64)}),out:r=>out.push(r),openDirectory:async()=>{calls.push('open_comms');if(overrides.openError)throw overrides.openError;return comms;},importPinned:async(_,file)=>{
   calls.push(file);
@@ -94,6 +94,12 @@ test('the communications source may not be the selected website project',async()
 test('a local selection cannot start a hosted catch-up',async()=>{
  const f=fixture({env:{PERSON_TARGET_PROJECT_REF:'local'}});
  await assert.rejects(main([],f.deps),/catchup_start:target/);assert.ok(!f.calls.includes('open_site'));
+});
+test('a destination that is labelled for another project, or never labelled, is refused before the directory opens',async()=>{
+ for(const [identity,code] of [[{system_identifier:'7000000000000000001',project_ref:'tsrqponmlkjihgfedcba'},'identity_label_mismatch'],[{system_identifier:'7000000000000000001'},'identity_unlabelled'],[{system_identifier:'7000000000000000001',project_ref:null},'identity_unlabelled']]){
+  const f=fixture({identity});
+  await assert.rejects(main([],f.deps),e=>reasonOf(e)===`person_target:${code}`);assert.ok(!f.calls.includes('open_comms'));assert.equal(starts(f.calls).length,0);
+ }
 });
 test('a destination without the release identity function is refused before the directory opens',async()=>{
  const f=fixture({identityError:Object.assign(Error('secret-sentinel'),{code:'PGRST202'})});

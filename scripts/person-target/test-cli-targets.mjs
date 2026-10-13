@@ -66,10 +66,10 @@ test('package.json sync-roles references only scripts that exist (RR-15)',()=>{
 
 // Finalizer: explicit destination, no original default.
 const session=(ref)=>`postgres://postgres.${ref}:secret-sentinel@aws-0-us-east-2.pooler.supabase.com:5432/postgres`;
-function fakeClient(identity='7000000000000000001'){
+function fakeClient(identity='7000000000000000001',label=TARGET){
  const sql=[];let ended=0;
  const client={
-  async query(text){sql.push(text);if(text.includes('person_target_identity'))return {rows:[{identity:{system_identifier:identity}}]};
+  async query(text){sql.push(text);if(text.includes('person_target_identity'))return {rows:[{identity:{system_identifier:identity,project_ref:label}}]};
    return [{},{},{},{},{rows:[{person_reconcile_finish:{status:'reconciled'}}]},{}];},
   async end(){ended++;},
  };
@@ -121,7 +121,7 @@ test('finalizer proves REST and PostgreSQL identity agree before finishing',asyn
  const f=fakeClient();const out=[];
  const env={PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:session(TARGET),SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)};
  const fetched=[];
- const fetchFn=async(url,init)=>{fetched.push(new URL(url).pathname);return {ok:true,json:async()=>({system_identifier:'7000000000000000001'})};};
+ const fetchFn=async(url,init)=>{fetched.push(new URL(url).pathname);return {ok:true,json:async()=>({system_identifier:'7000000000000000001',project_ref:TARGET})};};
  const r=await finalize(['--run-id=run-1'],{env,connect:f.connect,fetchFn,out:x=>out.push(x)});
  assert.equal(r.via,'postgres');assert.deepEqual(r.result,{person_reconcile_finish:{status:'reconciled'}});
  assert.deepEqual(fetched,['/rest/v1/rpc/person_target_identity']);
@@ -131,13 +131,13 @@ test('finalizer proves REST and PostgreSQL identity agree before finishing',asyn
 test('finalizer stops when REST and PostgreSQL are different clusters',async()=>{
  const f=fakeClient('7000000000000000002');
  const env={PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:session(TARGET),SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)};
- const fetchFn=async()=>({ok:true,json:async()=>({system_identifier:'7000000000000000001'})});
+ const fetchFn=async()=>({ok:true,json:async()=>({system_identifier:'7000000000000000001',project_ref:TARGET})});
  await assert.rejects(finalize(['--run-id=run-1'],{env,connect:f.connect,fetchFn}),/person_target:identity_mismatch/);
  assert.equal(f.sql.filter(x=>x.startsWith('begin;')).length,0);assert.equal(f.ended(),1);
 });
 test('finalizer refuses a changed multi-statement result instead of reporting success',async()=>{
  const f=fakeClient();
- f.client.query=async(text)=>{f.sql.push(text);if(text.includes('person_target_identity'))return {rows:[{identity:{system_identifier:'7000000000000000001'}}]};return [{},{},{},{},{rows:[{something_else:1}]},{}];};
+ f.client.query=async(text)=>{f.sql.push(text);if(text.includes('person_target_identity'))return {rows:[{identity:{system_identifier:'7000000000000000001',project_ref:TARGET}}]};return [{},{},{},{},{rows:[{something_else:1}]},{}];};
  await assert.rejects(finalize(['--run-id=run-1'],{env:{PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:session(TARGET)},connect:f.connect}),/finalize_result/);
  assert.equal(f.ended(),1);
 });
@@ -150,4 +150,13 @@ test('finalizer reasons never expose driver text',()=>{
  assert.equal(safeReason(Error('secret-sentinel')),'operation_failed:unknown');
  assert.equal(safeReason(Object.assign(Error('x'),{code:'57014'})),'operation_failed:57014');
  assert.equal(safeReason(Error('person_target:missing')),'person_target:missing');
+});
+test('finalizer refuses a destination whose label is missing or names another project, and a clone pair (same cluster, different labels), before finishing',async()=>{
+ const env={PERSON_TARGET_PROJECT_REF:TARGET,PERSON_PUBLISH_DATABASE_URL:session(TARGET),SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)};
+ const rest=(payload)=>async()=>({ok:true,json:async()=>payload});
+ for(const [label,restLabel,code] of [[OTHER,OTHER,'identity_label_mismatch'],[null,null,'identity_unlabelled'],[TARGET,OTHER,'identity_label_mismatch'],[OTHER,TARGET,'identity_label_mismatch']]){
+  const f=fakeClient('7000000000000000001',label);
+  await assert.rejects(finalize(['--run-id=run-1'],{env,connect:f.connect,fetchFn:rest({system_identifier:'7000000000000000001',project_ref:restLabel}),out:()=>{}}),new RegExp(`person_target:${code}`));
+  assert.ok(!f.sql.some(t=>t.startsWith('begin;')),'the finish statement never ran');assert.equal(f.ended(),1);
+ }
 });

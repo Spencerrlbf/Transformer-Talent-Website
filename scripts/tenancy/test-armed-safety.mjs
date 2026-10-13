@@ -33,12 +33,14 @@ const preload=path.join(os.tmpdir(),`tt-armed-seal-${process.pid}.cjs`);
 fs.writeFileSync(preload,`
 const fs=require('fs');const {install}=require(${JSON.stringify(path.join(root,'scripts/tenancy/fake-controller-pg.cjs'))});
 install();
-const log=process.env.SIM_LOG;const identity=JSON.parse(process.env.SIM_STATE).identity||'${IDENTITY}';
+const log=process.env.SIM_LOG;const sim=JSON.parse(process.env.SIM_STATE);const identity=sim.identity||'${IDENTITY}';
 const restIdentity=process.env.SIM_REST_IDENTITY||identity;
+// The label the REST side reports: SIM_REST_REF overrides ('' = unlabelled), else the database's.
+const restRef=process.env.SIM_REST_REF!==undefined?(process.env.SIM_REST_REF===''?null:process.env.SIM_REST_REF):('project_ref' in sim?sim.project_ref:'local');
 globalThis.fetch=async(input,init={})=>{
  const u=new URL(String(input));const method=init.method||'GET';
  fs.appendFileSync(log,'fetch '+method+' '+u.hostname+u.pathname+'\\n');
- if(u.pathname.endsWith('/rpc/person_target_identity'))return new Response(JSON.stringify({system_identifier:restIdentity}),{status:200,headers:{'content-type':'application/json'}});
+ if(u.pathname.endsWith('/rpc/person_target_identity'))return new Response(JSON.stringify({system_identifier:restIdentity,project_ref:restRef}),{status:200,headers:{'content-type':'application/json'}});
  if(u.pathname.endsWith('/rpc/person_transition_status'))return new Response(JSON.stringify({enabled:false,phase:'open'}),{status:200});
  return new Response('sealed',{status:503});
 };
@@ -73,7 +75,7 @@ test('CLI: an already-enabled controller with an operator window is refused befo
 test('CLI: setup fails while the controller is disabled; nothing is armed, nothing is disarmed',()=>{
  const r=runCli(['--armed','--base','http://127.0.0.1:1'],DISABLED);
  assert.equal(r.status,1);
- assert.match(r.stdout,/fixture target proved \(local, cluster 7000000000000000001\); controller disabled at revision 4/);
+ assert.match(r.stdout,/fixture target proved \(local, database labelled local, cluster 7000000000000000001\); controller disabled at revision 4/);
  assert.match(r.stdout,/CRASH/);
  assert.match(r.stdout,/controller untouched: this sweep did not arm it/);
  assert.deepEqual(r.transitions,[]);
@@ -84,6 +86,25 @@ test('CLI: REST and PostgreSQL report different clusters: refused before any fix
  const r=runCli(['--armed','--base','http://127.0.0.1:1'],DISABLED,{SIM_REST_IDENTITY:'7000000000000000002'});
  assert.equal(r.status,1);
  assert.match(r.stdout,/person_target:identity_mismatch/);
+ assert.deepEqual(r.transitions,[]);assert.deepEqual(r.writes,[]);
+});
+test('CLI: REST and PostgreSQL report the SAME cluster but different project labels (a physical clone and its source): refused before any fixture write',()=>{
+ const r=runCli(['--armed','--base','http://127.0.0.1:1'],DISABLED,{SIM_REST_REF:'abcdefghijklmnopqrst'});
+ assert.equal(r.status,1);
+ assert.match(r.stdout,/person_target:identity_label_mismatch/);
+ assert.deepEqual(r.transitions,[]);assert.deepEqual(r.writes,[]);
+});
+test('CLI: a database that was never labelled is refused before any fixture write; nothing labels it',()=>{
+ const r=runCli(['--armed','--base','http://127.0.0.1:1'],{...DISABLED,project_ref:null});
+ assert.equal(r.status,1);
+ assert.match(r.stdout,/person_target:identity_unlabelled/);
+ assert.deepEqual(r.transitions,[]);assert.deepEqual(r.writes,[]);
+ assert.ok(!r.lines.some(l=>/target_label|target_identity/.test(l)),'no label write attempted');
+});
+test('CLI: both clients agree on a label that is not the selected project: refused before any fixture write',()=>{
+ const r=runCli(['--armed','--base','http://127.0.0.1:1'],{...DISABLED,project_ref:'abcdefghijklmnopqrst'},{SIM_REST_REF:'abcdefghijklmnopqrst'});
+ assert.equal(r.status,1);
+ assert.match(r.stdout,/person_target:identity_label_mismatch/);
  assert.deepEqual(r.transitions,[]);assert.deepEqual(r.writes,[]);
 });
 test('CLI: a PostgreSQL URL for a hosted project under a local selection is refused offline, before any client',()=>{
@@ -100,7 +121,8 @@ const armed=await import('./armed.mjs');
 const env={...baseEnv};
 const reset=(state)=>{sim=install({state:{identity:IDENTITY,...state}});return sim;};
 const RUN_ID='k9x2abcd';
-const owned=(over={})=>({database:IDENTITY,run:RUN_ID,revision:'10',generation:'6',phase:'open',last_action:'arm',...over});
+const KEY=`local:${IDENTITY}`; // the identity a sweep records: label and cluster together
+const owned=(over={})=>({database:KEY,run:RUN_ID,revision:'10',generation:'6',phase:'open',last_action:'arm',...over});
 const rejectsOwnership=(p,detail)=>assert.rejects(p,e=>e.message===`tenancy_armed_ownership:${detail}`||(detail instanceof RegExp&&detail.test(e.message)),String(detail));
 
 test('ownership: reason codes are unique per run and action and fit the controller\'s format',()=>{
@@ -125,12 +147,12 @@ test('two operators: drain + reopen by someone else ends in the same phase and g
  // this sweep arms (rev 10, gen 6), as armForSweep would
  const r=await armed.recoverArmOwnership({runId:RUN_ID},env);assert.equal(r,null,'no event yet');
  sim.events.push({action:'arm',reason_code:armed.sweepReason('arm',RUN_ID),revision:'10',generation:'6'});sim.control={enabled:true,phase:'open',revision:'10',generation:'6'};
- const mine=await armed.recoverArmOwnership({runId:RUN_ID,database:IDENTITY},env);
+ const mine=await armed.recoverArmOwnership({runId:RUN_ID,database:KEY},env);
  assert.deepEqual(mine,owned());
  // another operator: drain (rev 11), reopen (rev 12, gen 7) -> phase open again
  sim.control={enabled:true,phase:'open',revision:'12',generation:'7'};
  await rejectsOwnership(armed.disarmAfterSweep({ownership:mine},env),'stale:open:12:7');
- await rejectsOwnership(armed.recoverArmOwnership({runId:RUN_ID,database:IDENTITY},env),'unresolved_arm:open:12:7');
+ await rejectsOwnership(armed.recoverArmOwnership({runId:RUN_ID,database:KEY},env),'unresolved_arm:open:12:7');
  assert.deepEqual(sim.actions,[]);
 });
 test('a foreign maintenance window stops the sequence before any transition',async()=>{
@@ -141,8 +163,26 @@ test('a foreign maintenance window stops the sequence before any transition',asy
 test('a different database than the one armed is refused',async()=>{
  reset({identity:'7000000000000000009',control:{enabled:true,phase:'open',revision:'10',generation:'6'}});
  await rejectsOwnership(armed.disarmAfterSweep({ownership:owned()},env),'database');
- await rejectsOwnership(armed.recoverArmOwnership({runId:RUN_ID,database:IDENTITY},env),'database');
+ await rejectsOwnership(armed.recoverArmOwnership({runId:RUN_ID,database:KEY},env),'database');
  assert.deepEqual(sim.actions,[]);
+});
+test('the other clone: same cluster identifier, the ownership was recorded on a database with another label',async()=>{
+ reset({control:{enabled:true,phase:'open',revision:'10',generation:'6'}});
+ await rejectsOwnership(armed.disarmAfterSweep({ownership:owned({database:`abcdefghijklmnopqrst:${IDENTITY}`})},env),'database');
+ await rejectsOwnership(armed.recoverArmOwnership({runId:RUN_ID,database:`abcdefghijklmnopqrst:${IDENTITY}`},env),'database');
+ assert.deepEqual(sim.actions,[]);
+});
+test('cleanup and recovery against a database labelled for another project, or never labelled, are refused before any read of the controller',async()=>{
+ const target=(p,code)=>assert.rejects(p,e=>e.message===`person_target:${code}`,code);
+ reset({project_ref:'abcdefghijklmnopqrst',control:{enabled:true,phase:'open',revision:'10',generation:'6'}});
+ await target(armed.disarmAfterSweep({ownership:owned()},env),'identity_label_mismatch');
+ await target(armed.recoverArmOwnership({runId:RUN_ID,database:KEY},env),'identity_label_mismatch');
+ assert.deepEqual(sim.actions,[]);
+ reset({project_ref:null,control:{enabled:true,phase:'open',revision:'10',generation:'6'}});
+ await target(armed.disarmAfterSweep({ownership:owned()},env),'identity_unlabelled');
+ await target(armed.recoverArmOwnership({runId:RUN_ID,database:KEY},env),'identity_unlabelled');
+ assert.deepEqual(sim.actions,[]);
+ assert.ok(!sim.actions.some(l=>/target_label/.test(l)));
 });
 test('owned happy path: drain, own window closed, seal, disarm, each CAS on the sweep\'s own values; unrelated unresolved work stops it',async()=>{
  reset({control:{enabled:true,phase:'open',revision:'10',generation:'6'},windows:[{...WINDOW,work_id:'22222222-2222-4222-8222-222222222222',run_id:`tenancy-${RUN_ID}`}]});

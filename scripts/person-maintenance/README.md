@@ -61,8 +61,9 @@ node scripts/person-maintenance/start-catchup.mjs
 The destination is the explicitly selected project (`scripts/person-target/README.md`):
 `SUPABASE_URL` and the service key's `ref` claim must name `PERSON_TARGET_PROJECT_REF`,
 the communications URL may not name it, and the REST destination must answer
-`person_target_identity()`, whose cluster identifier is recorded in the start
-output. There is no built-in website project. The helper verifies actual Git HEAD
+`person_target_identity()` with the selected project's database-held label
+(`20261013090000`; an unlabelled or foreign-labelled destination is refused), whose
+cluster identifier and label are recorded in the start output. There is no built-in website project. The helper verifies actual Git HEAD
 and a clean tracked tree independently of any commit label, rebuilds the ignored
 worker bundle from that tree, and records its hash. A source archive inside another
 checkout is refused. The pinned translators,

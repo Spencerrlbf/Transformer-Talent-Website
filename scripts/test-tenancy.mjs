@@ -333,7 +333,7 @@ try {
     // project and report the same cluster, and the controller must be disabled with
     // nothing unresolved. A refusal here writes nothing and cleans nothing up.
     preflight = await preflightArmedSweep(process.env, { svc });
-    console.log(`fixture target proved (${preflight.local ? "local" : preflight.target}, cluster ${preflight.system_identifier}); controller disabled at revision ${preflight.controller.revision}`);
+    console.log(`fixture target proved (${preflight.local ? "local" : preflight.target}, database labelled ${preflight.project_ref}, cluster ${preflight.system_identifier}); controller disabled at revision ${preflight.controller.revision}`);
   }
   W = await setup(run);
   const { A, B, TT } = W;
@@ -504,7 +504,7 @@ try {
     // the controller is not ours (preflight or setup failed before the arm, or the
     // arm's acknowledgement was lost: then only the durable event it wrote counts).
     try {
-      if (!ownership && preflight) ownership = await recoverArmOwnership({ runId: run.id, database: preflight.system_identifier });
+      if (!ownership && preflight) ownership = await recoverArmOwnership({ runId: run.id, database: preflight.identity });
       if (!ownership) {
         console.log("controller untouched: this sweep did not arm it");
       } else {

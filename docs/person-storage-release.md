@@ -59,6 +59,49 @@ legacy candidate fields. Transient transport/lock failures get at most three
 attempts with backoff. Integrity errors stop the run, and a lost committed
 response can be replayed without incrementing the person's normalized revision.
 
+## Project label (20261013090000)
+
+A copy restored from a project's backup is a physical clone: it keeps
+`pg_control_system()`'s identifier, so the identifier cannot tell the copy from the
+original (on 2026-10-13 production and the test copy both reported
+`7550817586112808987`). Each database therefore carries the project ref it belongs
+to, in `person_private.target_identity`, and every runtime proof requires that label
+to equal `PERSON_TARGET_PROJECT_REF`: the server gate before the first REST request
+and the first PostgreSQL operation, every operator CLI through the shared pool opener,
+the catch-up start, the finalizer, and the sweep's preparation, ownership recovery and
+cleanup. An unlabelled database is refused (`person_target:identity_unlabelled`); a
+label for another project is refused (`person_target:identity_label_mismatch`);
+nothing relabels a database to match its environment.
+
+Operator step, once per database, on the 5432 session endpoint, after the chain and
+the forward files are installed and before any process selects the project:
+
+```sh
+psql "<5432 session url>" -c "select person_private.target_label('<project ref>')"
+psql "<5432 session url>" -c "select public.person_target_identity()"   # project_ref must be the ref
+```
+
+The function inserts the label when none exists, returns the existing row when it
+already names the same project (`created: false`), and refuses any other value
+(`target_label_exists`). The row cannot be updated, deleted or truncated
+(`target_identity_immutable`); the table and the function have no API-role grants and
+are not reachable through PostgREST. The migration itself never writes a label.
+
+Consequences to plan for:
+
+- Production is labelled `kmuihequfurvjxpnugxf`; the test copy `qsqlgibgsxzlimoegcjx`;
+  disposable loopback stacks `local`. Legacy mode with no selection performs no
+  proof, so the label can be written before the application selects the project.
+- A database restored into a **new** project carries the **old** project's label and
+  is refused by every process selecting the new project. That is intended: a clone
+  can no longer pass as its source. Using such a restore as the new project's database
+  is a deliberate, recorded superuser action (disable the trigger, update the row,
+  re-enable), never an automatic step.
+- A deployment or CLI that passes the offline URL/key checks but reaches the other
+  clone (for example PostgreSQL on the copy while REST names production) now fails
+  with `identity_label_mismatch` before any write; before this migration the two
+  reported the same cluster and the check passed.
+
 ## Reconciliation and final accounting
 
 Dispatch the existing person-trial workflow at the reviewed commit with
@@ -99,8 +142,9 @@ PERSON_TARGET_PROJECT_REF=<ref> node scripts/person-reconcile-finalize.mjs --run
 ```
 
 With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` also set, the PostgreSQL path
-first proves that REST and PostgreSQL reach the same cluster
-(`public.person_target_identity()`, migration `20261003090000`).
+first proves that REST and PostgreSQL reach the same cluster and that the database
+holds the selected project's label (`public.person_target_identity()`, migrations
+`20261003090000` and `20261013090000`; see "Project label" above).
 
 This executes `SET LOCAL statement_timeout='8s'` before the finish statement.
 Finish rejects an unbounded caller and briefly gates normalized/capture commits

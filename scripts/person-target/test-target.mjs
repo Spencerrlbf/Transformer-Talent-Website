@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
  selectedTarget,hasSelectedTarget,restProjectRef,checkRestUrl,keyProjectRef,checkServiceKey,
- databaseIdentity,checkDatabaseUrl,checkLinkedWorkdir,checkTargetEnvironment,verifyRuntimeIdentity,identityValue,isTargetError,isSealedRestUrl,isLoopbackDatabaseUrl,
+ databaseIdentity,checkDatabaseUrl,checkLinkedWorkdir,checkTargetEnvironment,verifyRuntimeIdentity,verifyDatabaseIdentity,identityValue,identityRef,identityKey,isTargetError,isSealedRestUrl,isLoopbackDatabaseUrl,
 } from '../person-target.mjs';
 
 const COPY='abcdefghijklmnopqrst',ORIGINAL='tsrqponmlkjihgfedcba';
@@ -187,15 +187,35 @@ test('whole-environment check: mixed REST/PG configurations are refused before a
  assert.equal(checkTargetEnvironment({PERSON_TARGET_PROJECT_REF:COPY},{databaseUrls:[undefined]}).databases.length,0);
 });
 
-test('runtime identity: REST and PostgreSQL must report the same cluster',async()=>{
+test('runtime identity: identifier and database-held label must both be present, agree across clients and equal the selection',async()=>{
  assert.equal(identityValue({system_identifier:'7689662122152206805'}),'7689662122152206805');
  assert.equal(identityValue({identity:{system_identifier:'1'}}),'1');
  assert.equal(identityValue({system_identifier:'abc'}),null);
  assert.equal(identityValue(null),null);
- const same=await verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42'}),readDatabase:async()=>({identity:{system_identifier:'42'}})});
- assert.deepEqual(same,{system_identifier:'42'});
- await assert.rejects(verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42'}),readDatabase:async()=>({system_identifier:'43'})}),/person_target:identity_mismatch/);
- await assert.rejects(verifyRuntimeIdentity({readRest:async()=>{throw Error('HTTP_404');}}),/person_target:identity_rest/);
- await assert.rejects(verifyRuntimeIdentity({readDatabase:async()=>null}),/person_target:identity_database/);
- assert.deepEqual(await verifyRuntimeIdentity({readDatabase:async()=>({system_identifier:'7'})}),{system_identifier:'7'});
+ assert.equal(identityRef({project_ref:COPY}),COPY);assert.equal(identityRef({identity:{project_ref:'local'}}),'local');
+ assert.equal(identityRef({project_ref:'Prod'}),null);assert.equal(identityRef({project_ref:null}),null);assert.equal(identityRef({}),null);
+ assert.equal(identityKey({project_ref:COPY,system_identifier:'42'}),`${COPY}:42`);
+ const same=await verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42',project_ref:COPY}),readDatabase:async()=>({identity:{system_identifier:'42',project_ref:COPY}}),ref:COPY});
+ assert.deepEqual(same,{system_identifier:'42',project_ref:COPY,key:`${COPY}:42`});
+ // different clusters
+ await assert.rejects(verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42',project_ref:COPY}),readDatabase:async()=>({system_identifier:'43',project_ref:COPY}),ref:COPY}),/person_target:identity_mismatch/);
+ // the same cluster identifier with different labels: a physical clone and its source
+ await assert.rejects(verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42',project_ref:COPY}),readDatabase:async()=>({system_identifier:'42',project_ref:ORIGINAL}),ref:COPY}),/person_target:identity_label_mismatch/);
+ // both clients agree but on another project than the selection
+ await assert.rejects(verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42',project_ref:ORIGINAL}),readDatabase:async()=>({system_identifier:'42',project_ref:ORIGINAL}),ref:COPY}),/person_target:identity_label_mismatch/);
+ // never labelled: refused, never relabelled here
+ await assert.rejects(verifyRuntimeIdentity({readRest:async()=>({system_identifier:'42'}),readDatabase:async()=>({system_identifier:'42',project_ref:COPY}),ref:COPY}),/person_target:identity_unlabelled/);
+ await assert.rejects(verifyRuntimeIdentity({readDatabase:async()=>({system_identifier:'42',project_ref:null}),ref:COPY}),/person_target:identity_unlabelled/);
+ // a local selection needs the literal local label
+ assert.deepEqual(await verifyRuntimeIdentity({readDatabase:async()=>({system_identifier:'7',project_ref:'local'}),ref:'local'}),{system_identifier:'7',project_ref:'local',key:'local:7'});
+ await assert.rejects(verifyRuntimeIdentity({readDatabase:async()=>({system_identifier:'7',project_ref:COPY}),ref:'local'}),/person_target:identity_label_mismatch/);
+ // unreadable clients and a missing selection
+ await assert.rejects(verifyRuntimeIdentity({readRest:async()=>{throw Error('HTTP_404');},ref:COPY}),/person_target:identity_rest/);
+ await assert.rejects(verifyRuntimeIdentity({readDatabase:async()=>null,ref:COPY}),/person_target:identity_database/);
+ await assert.rejects(verifyRuntimeIdentity({readDatabase:async()=>({system_identifier:'7',project_ref:COPY})}),/person_target:identity_target/);
+ await assert.rejects(verifyRuntimeIdentity({readDatabase:async()=>({system_identifier:'7',project_ref:COPY}),ref:'Prod'}),/person_target:identity_target/);
+ // one PostgreSQL handle
+ const db={query:async()=>({rows:[{identity:{system_identifier:'9',project_ref:COPY}}]})};
+ assert.equal((await verifyDatabaseIdentity(db,COPY)).key,`${COPY}:9`);
+ await assert.rejects(verifyDatabaseIdentity(db,ORIGINAL),/person_target:identity_label_mismatch/);
 });

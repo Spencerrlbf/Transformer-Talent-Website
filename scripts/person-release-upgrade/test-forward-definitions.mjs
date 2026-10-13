@@ -35,6 +35,18 @@ test('identity index: forward validation equals the chain preflight predicate',(
  // Only comments mention CREATE INDEX: the executable part never builds one.
  assert.doesNotMatch(forward.split('\n').filter(l=>!l.startsWith('--')).join('\n'),/create index/i);
 });
+test('target label: the identity function keeps its grants and the label is operator-written only',()=>{
+ const label=read('20261013090000_person_target_label.sql');
+ const code=label.split('\n').filter(l=>!l.startsWith('--')).join('\n');
+ assert.match(code,/revoke all on function public\.person_target_identity\(\) from public,anon,authenticated;\ngrant execute on function public\.person_target_identity\(\) to service_role;/);
+ assert.match(code,/revoke all on person_private\.target_identity from public,anon,authenticated,service_role;/);
+ assert.match(code,/revoke all on function person_private\.target_label\(text\) from public,anon,authenticated,service_role;/);
+ assert.match(code,/before update or delete or truncate/);
+ // The migration never inserts a label itself: no literal ref, no current_setting, no inference.
+ assert.doesNotMatch(code,/insert into person_private\.target_identity\(project_ref\) values\('/);
+ assert.doesNotMatch(code,/current_setting\('app\./);
+ assert.doesNotMatch(code,/[a-z]{20}\.supabase/);
+});
 test('forward files are the only new versions and sort after the chain',()=>{
  const files=fs.readdirSync(dir).filter(f=>/^2026\d{10}_/.test(f)).sort();
  const last=files.at(-1);
@@ -47,6 +59,7 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261005100000_person_send_decisions.sql',
   '20261005110000_person_historical_shadow_clears.sql',
   '20261005120000_person_catchup_contact_snapshot.sql',
+  '20261013090000_person_target_label.sql',
  ]);
- assert.equal(last,'20261005120000_person_catchup_contact_snapshot.sql');
+ assert.equal(last,'20261013090000_person_target_label.sql');
 });

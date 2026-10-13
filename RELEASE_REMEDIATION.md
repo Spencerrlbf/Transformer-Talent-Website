@@ -1219,3 +1219,91 @@ Findings:
    every object from the remote (all refs connected again, `fsck` clean), the two top-level
    blobs were re-hashed from identical working files, and the dead alternates file was removed.
    The other session.s uncommitted edits (four files, `output/browser-acceptance/`) were left as found.
+
+## 11. October 13 project-label fix: the identity now separates production from its clone
+
+Authorized by Spencer on 2026-10-13 ("implement the project-specific identity fix first …
+This authorizes the fix and its test-copy verification"). Finding 3 of section 10: the copy
+is a physical clone and reports production's `pg_control_system()` identifier, so the
+runtime identity proof could not tell the two apart. Only the offline URL/key checks did.
+
+### Design
+
+- `20261013090000_person_target_label.sql` (MD5 `a281577cf4f57241a8ab6fd6157031e0`) adds
+  `person_private.target_identity` (one row: `project_ref`, `labelled_at`, `labelled_by`),
+  RLS on, all grants revoked from `public`, `anon`, `authenticated` and `service_role`; a
+  statement trigger refuses update, delete and truncate (`target_identity_immutable`);
+  `person_private.target_label(text)` inserts the label once with an explicit value, returns
+  the row when it already names the same project, refuses any other value
+  (`target_label_exists`) and any malformed value (`target_label_invalid`); not reachable
+  through PostgREST. `public.person_target_identity()` now also returns `project_ref` and
+  `labelled_at` (null until labelled). The migration never writes a label.
+- `scripts/person-target.mjs`: `verifyRuntimeIdentity({readRest, readDatabase, ref})`
+  requires identifier and label in every payload, agreement across clients on both, and
+  label = selected ref; codes `identity_unlabelled`, `identity_label_mismatch`,
+  `identity_target`; `verifyDatabaseIdentity(db, ref)`; `identityKey` = `<label>:<identifier>`.
+- Coverage (all refuse before any write; nothing relabels): the application gate
+  (`assertServerIdentity`, once per client kind per configuration per process, before the
+  first REST request in `sbRest` and before the first operation in `withPersonConnection`;
+  a failed proof is not cached; legacy mode without a selection and sealed loopback fixtures
+  without a selection are not checked, as before); the shared operator pool opener
+  (`openDatabase`, every CLI and the sweep, whenever a selection is set);
+  `start-catchup.mjs` (REST, label recorded with the run); `person-reconcile-finalize.mjs`
+  (REST + PostgreSQL); the sweep's `verifySweepTarget`/`preflightArmedSweep` (REST + PG,
+  returns `project_ref` and the key), `armForSweep` (`database_changed` on the key),
+  `recoverArmOwnership` and `disarmAfterSweep` (`tenancy_armed_ownership:database` when the
+  ownership record names the other clone). The ownership record's `database` field is now
+  the key; `test-tenancy.mjs` prints the label with the proved target.
+- Harnesses that install the chain tail install the new file; the transition-CLI harness
+  labels its fixture `local` (its suites select `local`). Docs: target README, runbook
+  section "Project label (20261013090000)" (install order, the restore-into-a-new-project
+  consequence, the deliberate relabel path), DISPOSABLE.md, maintenance README, manifest.
+
+### Local evidence (Node v24.1.0, synthetic data only)
+
+| Suite | Command | Result |
+|---|---|---|
+| Offline target/gate/CLI/runtime/catch-up inputs | `bash scripts/person-target/run-offline-tests.sh` | 67/67 (new: library label cases; REST gate: other label, unlabelled, 404, sealed, cache-after-failure; finalizer: label/unlabelled/clone pairs) |
+| Sealed sweep, transport, starter, forward definitions | `node --test scripts/tenancy/test-armed-safety.mjs scripts/tenancy/test-armed-transport.mjs scripts/person-maintenance/test-start-catchup.mjs scripts/person-release-upgrade/test-forward-definitions.mjs` | 58/58 (new CLI cases: same cluster + different labels, unlabelled, foreign label; helpers: other clone's ownership, foreign/unlabelled database before any controller read) |
+| Three databases in one cluster | `bash scripts/person-target/run-identity-tests.sh 55811` | 8/8: identical identifier, label decides; REST on A + PG on B refused; pool opener refuses B and C; relabel/update/delete/truncate refused; API roles denied; the production bundle's `withPersonConnection` runs no operation on B or C and proceeds on A |
+| Database harness matrix (sequential, cluster 55811) | identity, transition-cli (default and `TRANSITION_SUITE=armed` with the pinned runner), upgrade, application-edits, publish, audit, postcutover-audit, recruiter, recruiter-admission | 10/10 harnesses PASS (upgrade 133 ok-lines incl. catalog parity on `target_label`/`target_identity_immutable`) |
+| Real sweep CLI, same cluster, different labels | local stack REST (label `local`) + `LOCAL_DATABASE_URL` = `person_other_test` (same cluster, label `abcdefghijklmnopqrst`), `--armed` | `CRASH person_target:identity_label_mismatch`, "cleanup skipped: fixture target not proved; nothing was written"; no rows for the run id in either database; controller revision unchanged |
+| Read-only preflight on the labelled stack | `preflightArmedSweep` with REST + PG | passes: `project_ref local`, key `local:7692913108189810727`, controller disabled |
+| Fresh install + catch-up combination | `supabase db reset` (000 … `20261013090000`, 138 versions, `project_ref` null until `target_label('local')`), `bash scripts/person-maintenance/run-catchup-local-tests.sh 55811` | 14/14. A first run on the previous, re-used stack data gave 11/14 (`post_save_integrity:jobs_accounted` on this suite's fixture people): state pollution from running the suite twice on one stack, not the label; recorded here, the suite expects a clean stack |
+| Type check | `npx tsc --noEmit -p tsconfig.json` | no errors outside the stale `.next/types` artifacts |
+
+Sealed-suite correction: the server test's `pg` recorder never intercepted the server's
+dynamic `import("pg")`, so a PostgreSQL case written there reached a real driver (and would
+have opened a socket to the pooler host with a fictional ref). That case was removed from
+the sealed suite and lives in `test-server-identity-db.mjs` against loopback databases.
+
+### Hosted evidence on the copy `qsqlgibgsxzlimoegcjx` (authorized; production untouched)
+
+1. Before: history lacked `20261013090000`; `project_ref` null; controller enabled/open
+   revision 17 generation 13 (left for the manual tests; not changed).
+2. Installed `20261013090000` with `psql -1` on the 5432 session endpoint, recorded it in
+   `supabase_migrations.schema_migrations` (version `20261013090000`, name
+   `person_target_label`, one statement = the file without its trailing newline, MD5
+   `ba2b1c27680c1d4e4c9338c6889af98e`; 158 versions), `notify pgrst, 'reload schema'`.
+3. Before labelling, with the copy selected: `verifyRuntimeIdentity` (REST + PG),
+   `openDatabase`, `preflightArmedSweep`, `recoverArmOwnership` all refused
+   `person_target:identity_unlabelled`; nothing written.
+4. Labelled with the explicit value `qsqlgibgsxzlimoegcjx` (`created: true`,
+   `labelled_by postgres`). Relabel to production's ref refused (`target_label_exists`).
+5. After: REST and PG agree on `qsqlgibgsxzlimoegcjx:7550817586112808987`; `openDatabase`
+   opens; `verifyRuntimeIdentity` with `ref` = production refused
+   `identity_label_mismatch` (the production-process-reaching-the-copy case);
+   `preflightArmedSweep` refused `tenancy_armed_precondition:controller_enabled` (identity
+   passed, controller armed as found); `recoverArmOwnership` with an ownership recorded on
+   production's label refused `tenancy_armed_ownership:database`; with the copy's label and
+   a run that never armed returned `null`. No sweep was run (controller left armed/open).
+
+Not done here, by scope: production is unlabelled (its label is a release step after its
+migration install: `select person_private.target_label('kmuihequfurvjxpnugxf')`); the hosted
+preview still runs `13f1b30`, so the deployed application gate has not exercised the label
+(needs a push/redeploy of this branch and a signed-in request against the copy); the
+HOSTED_TEST_READINESS and MANUAL_ACCEPTANCE_PLAN lines that cite the cluster identifier as
+the copy's identity remain true but are not distinctive; those files carry another session's
+uncommitted edits and were not touched. The local stack was reset and re-seeded only with the
+catch-up suite's fixtures (the earlier smoke-seed data is gone; `smoke-seed.mjs` recreates
+it); it is stopped with volumes retained, labelled `local`. Cluster 55811 is stopped.

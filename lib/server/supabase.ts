@@ -1,5 +1,5 @@
 import { transitionRequestHeaders } from './person-transition/context';
-import { assertServerTarget } from './person/target';
+import { assertServerTarget, assertServerIdentity, personTargetRequired } from './person/target';
 
 const url = () => {
   const u = process.env.SUPABASE_URL;
@@ -15,10 +15,28 @@ const key = () => {
   return k;
 };
 
+/** The identity the REST destination reports, read with the service key directly
+ * (never through sbRest, which is what this proof admits). */
+async function restIdentity(base: string): Promise<unknown> {
+  const res = await fetch(`${base}/rest/v1/rpc/person_target_identity`, {
+    method: 'POST',
+    headers: { apikey: key(), Authorization: `Bearer ${key()}`, 'Content-Type': 'application/json' },
+    body: '{}',
+    signal: AbortSignal.timeout(15_000),
+    redirect: 'error',
+  });
+  if (!res.ok) throw new Error(`identity_http_${res.status}`);
+  return res.json();
+}
+
 export async function sbRest(
   path: string,
   init: RequestInit & { prefer?: string } = {}
 ): Promise<Response> {
+  // Offline: the URL, key and PostgreSQL URL name the selected project. Runtime: the
+  // project behind the URL holds that selection's label (once per configuration).
+  const base = url();
+  if (personTargetRequired()) await assertServerIdentity('rest', () => restIdentity(base));
   const headers = new Headers({
     apikey: key(),
     Authorization: `Bearer ${key()}`,
@@ -36,7 +54,7 @@ export async function sbRest(
   // before/without an async admission context. Never redirect those bodies.
   const carriesWork = !!admission['x-person-work-id'] ||
     /^rpc\/person_(?:transition|application_work)_/.test(path);
-  return fetch(`${url()}/rest/v1/${path}`, {
+  return fetch(`${base}/rest/v1/${path}`, {
     // A socket killed by machine sleep otherwise hangs its await forever —
     // observed holding a sourcing run's lease hostage overnight. No PostgREST
     // call here legitimately takes a minute.

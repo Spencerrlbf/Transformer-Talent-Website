@@ -80,8 +80,9 @@ export async function main(argv=process.argv.slice(2),{env=process.env,verify=ve
   checkTime();
   site=restSite(env.SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY);
   // Runtime proof that the REST destination is a real cluster that installed the
-  // release chain; the identifier is recorded with the run evidence.
-  const identity=await verifyRuntimeIdentity({readRest:()=>site.rpc('person_target_identity',{})});
+  // release chain AND holds the selected project's label (20261013090000); the
+  // identifier and label are recorded with the run evidence.
+  const identity=await verifyRuntimeIdentity({readRest:()=>site.rpc('person_target_identity',{}),ref:target.ref});
   comms=await openDirectory(env.COMMS_DATABASE_URL);
   const existing=await site.select('backfill_runs',{columns:'run_id,status',filters:[['run_id','eq',config.run]],order:'run_id.asc'});
   if(existing.length)throw Error('catchup_start:existing_run');
@@ -92,7 +93,7 @@ export async function main(argv=process.argv.slice(2),{env=process.env,verify=ve
   checkTime();
   const state=await site.rpc('person_reconcile_start',{p_run:config.run,p_commit:PIN,p_limit:config.limit,p_batch:config.batch,p_resume:false,p_scope:'queue',p_external_hash:hash});
   if(state.run_id!==config.run||state.status!=='running')throw Error('catchup_start:response');
-  const result={phase:'catchup_started',run:state.run_id,status:state.status,scope:'queue',commit:PIN,bundle_sha256:runtime.bundleHash,target:target.ref,system_identifier:identity.system_identifier,limit:config.limit,batch:config.batch};
+  const result={phase:'catchup_started',run:state.run_id,status:state.status,scope:'queue',commit:PIN,bundle_sha256:runtime.bundleHash,target:target.ref,system_identifier:identity.system_identifier,project_ref:identity.project_ref,limit:config.limit,batch:config.batch};
   out(result);return result;
  }finally{
   await Promise.allSettled([Promise.resolve().then(()=>comms?.end()),Promise.resolve().then(()=>site?.end())]);

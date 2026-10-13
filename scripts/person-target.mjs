@@ -16,9 +16,11 @@
 //   CLI        <workdir>/supabase/.temp/project-ref
 //   local      loopback hosts only, selected with PERSON_TARGET_PROJECT_REF=local
 // Runtime proof: public.person_target_identity() returns the cluster's
-// pg_control_system identifier, so a REST client and a PostgreSQL client can
-// be shown to reach the same physical database (a restored copy is a
-// different cluster even though every row and organization id is identical).
+// pg_control_system identifier AND the project label an operator wrote into
+// person_private.target_identity (20261013090000). A REST client and a
+// PostgreSQL client must report the same identifier and the same label, and the
+// label must equal the selection; the identifier alone cannot tell a physical
+// clone (the restored copy) from its source.
 const REF=/^[a-z]{20}$/;
 export const LOCAL_TARGET='local';
 const LOOPBACK=new Set(['localhost','127.0.0.1','::1','[::1]']);
@@ -169,16 +171,50 @@ export function checkTargetEnvironment(env=process.env,{restUrl=env.SUPABASE_URL
 }
 export const IDENTITY_SQL='select public.person_target_identity() identity';
 const digits=/^[0-9]{1,20}$/;
+const payloadOf=(result)=>result&&typeof result==='object'&&result.identity&&typeof result.identity==='object'?result.identity:result;
 export function identityValue(result){
- const value=result?.system_identifier??result?.identity?.system_identifier;
+ const value=payloadOf(result)?.system_identifier;
  return typeof value==='string'&&digits.test(value)?value:typeof value==='number'&&Number.isSafeInteger(value)?String(value):null;
 }
-/** Prove two clients reach the same cluster. `readRest` and `readDatabase` return
- * the person_target_identity() payloads; either failing is a target failure. */
-export async function verifyRuntimeIdentity({readRest,readDatabase}){
- let rest=null,database=null;
- if(readRest){rest=identityValue(await readRest().catch(()=>null));if(!rest)throw fail('identity_rest');}
- if(readDatabase){database=identityValue(await readDatabase().catch(()=>null));if(!database)throw fail('identity_database');}
- if(rest&&database&&rest!==database)throw fail('identity_mismatch');
- return {system_identifier:rest??database};
+/** The project label the database holds (person_private.target_identity, written once
+ * by an operator with an explicit value), or null when the database was never
+ * labelled. Never inferred from the environment. */
+export function identityRef(result){
+ const value=payloadOf(result)?.project_ref;
+ return value===LOCAL_TARGET||(typeof value==='string'&&REF.test(value))?value:null;
 }
+/** A cluster identifier alone cannot tell a physical clone from its source: a copy
+ * restored from a backup keeps pg_control_system's identifier (production and the
+ * test copy both report 7550817586112808987). The identity a process records and
+ * compares is the label and the identifier together. */
+export const identityKey=(identity)=>`${identity.project_ref}:${identity.system_identifier}`;
+function checkPayload(result,code){
+ const system_identifier=identityValue(result);
+ if(!system_identifier)throw fail(code);
+ const project_ref=identityRef(result);
+ if(!project_ref)throw fail('identity_unlabelled');
+ return {system_identifier,project_ref};
+}
+/** Prove the clients reach the selected project's database. `readRest` and
+ * `readDatabase` return person_target_identity() payloads; `ref` is the selected
+ * target (`local` for loopback fixtures). Every payload must carry the cluster
+ * identifier and the database-held label, the payloads must agree on both, and the
+ * label must equal `ref`. An unlabelled database is refused (`identity_unlabelled`);
+ * a label naming another project is refused (`identity_label_mismatch`); nothing
+ * here relabels anything. */
+export async function verifyRuntimeIdentity({readRest,readDatabase,ref}){
+ if(ref!==LOCAL_TARGET&&!(typeof ref==='string'&&REF.test(ref)))throw fail('identity_target');
+ let rest=null,database=null;
+ if(readRest)rest=checkPayload(await readRest().catch(()=>null),'identity_rest');
+ if(readDatabase)database=checkPayload(await readDatabase().catch(()=>null),'identity_database');
+ if(!rest&&!database)throw fail('identity_target');
+ if(rest&&database){
+  if(rest.system_identifier!==database.system_identifier)throw fail('identity_mismatch');
+  if(rest.project_ref!==database.project_ref)throw fail('identity_label_mismatch');
+ }
+ const identity=rest??database;
+ if(identity.project_ref!==ref)throw fail('identity_label_mismatch');
+ return {...identity,key:identityKey(identity)};
+}
+/** The same proof for one PostgreSQL client or pool (anything with `query`). */
+export const verifyDatabaseIdentity=(db,ref)=>verifyRuntimeIdentity({readDatabase:async()=>(await db.query(IDENTITY_SQL)).rows[0]?.identity,ref});

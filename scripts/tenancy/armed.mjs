@@ -29,7 +29,7 @@ import { pathToFileURL } from "node:url";
 import { openDatabase } from "../person-publish/lib.mjs";
 import { transitionStatus, waitDrained } from "../person-transition.mjs";
 import { prepareAnchors } from "../person-audit-anchors.mjs";
-import { checkTargetEnvironment, verifyRuntimeIdentity, IDENTITY_SQL } from "../person-target.mjs";
+import { checkTargetEnvironment, verifyRuntimeIdentity, verifyDatabaseIdentity, selectedTarget } from "../person-target.mjs";
 
 const PIN = "c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc";
 const RUN = /^[a-zA-Z0-9_-]{1,100}$/;
@@ -99,22 +99,29 @@ export function fixtureRpc(db, expected) {
 
 /** The database this sweep is about to write to, proved through both of the
  * fixture's clients: the PostgreSQL URL and the REST URL must name the selected
- * project offline and report the same cluster at run time. Does not attest the
- * deployed server, which has its own configuration. */
+ * project offline, and at run time both must report the same cluster AND the same
+ * database-held project label, equal to the selection (a physical clone shares the
+ * cluster identifier with its source; only the label tells them apart). An unlabelled
+ * or differently labelled database is refused before any fixture write. Does not
+ * attest the deployed server, which has its own configuration. */
 export async function verifySweepTarget(env = process.env, { svc } = {}) {
   const url = env.LOCAL_DATABASE_URL ?? env.PERSON_PUBLISH_DATABASE_URL;
   const report = checkTargetEnvironment(env, { restUrl: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY, databaseUrls: [url], ports: ["5432"] });
   const db = await operatorPool(env);
   try {
     const identity = await verifyRuntimeIdentity({
-      readDatabase: async () => (await db.query(IDENTITY_SQL)).rows[0].identity,
+      readDatabase: async () => (await db.query("select public.person_target_identity() identity")).rows[0].identity,
       readRest: svc ? () => svc("rpc/person_target_identity", { method: "POST", body: "{}" }) : undefined,
+      ref: report.ref,
     });
-    return { target: report.ref, local: report.local, system_identifier: identity.system_identifier, rest_checked: !!svc };
+    return { target: report.ref, local: report.local, system_identifier: identity.system_identifier, project_ref: identity.project_ref, identity: identity.key, rest_checked: !!svc };
   } finally {
     await db.end();
   }
 }
+/** The proved identity (label + cluster) of the database behind an operator handle,
+ * for the selected project; refuses an unlabelled or foreign-labelled database. */
+const provedIdentity = async (db, env) => (await verifyDatabaseIdentity(db, selectedTarget(env).ref)).key;
 
 /** Everything that must hold BEFORE the fixture writes a row: the target is proved
  * (above) and the controller is disabled with no unresolved maintenance work that
@@ -195,8 +202,8 @@ export async function armForSweep({ runId, candidateIds, preflight, onOwnership 
   const db = await operatorPool(env);
   const report = { controller: null, reconciled: 0, anchored: 0, pinned: false, ownership: null };
   try {
-    const identity = (await db.query(IDENTITY_SQL)).rows[0].identity?.system_identifier ?? null;
-    if (preflight && String(preflight.system_identifier) !== String(identity)) throw fail("tenancy_armed_precondition", "database_changed");
+    const identity = await provedIdentity(db, env);
+    if (preflight && preflight.identity !== identity) throw fail("tenancy_armed_precondition", "database_changed");
     let c = await control(db);
     if (c.enabled) throw fail("tenancy_armed_precondition", "controller_enabled");
     const initial = c;
@@ -260,13 +267,15 @@ export async function armForSweep({ runId, candidateIds, preflight, onOwnership 
  * the durable event this sweep's unique reason wrote proves the arm happened, and
  * the control row must still carry exactly that revision. Returns the ownership
  * record, `null` when this sweep never armed (no event), or throws when the event
- * exists but the controller has moved since (unresolved: nothing may be changed). */
+ * exists but the controller has moved since (unresolved: nothing may be changed).
+ * `database` is the identity key the preflight proved (label:cluster); a database
+ * with the same cluster identifier but another label is not the one armed. */
 export async function recoverArmOwnership({ runId, database }, env = process.env) {
   if (!RUN.test(runId)) throw fail("tenancy_armed_run");
   const db = await operatorPool(env);
   try {
-    const identity = (await db.query(IDENTITY_SQL)).rows[0].identity?.system_identifier ?? null;
-    if (database !== undefined && String(identity) !== String(database)) throw fail("tenancy_armed_ownership", "database");
+    const identity = await provedIdentity(db, env);
+    if (database !== undefined && identity !== database) throw fail("tenancy_armed_ownership", "database");
     const rows = (await db.query("select revision::text revision,generation::text generation from person_private.transition_events where action='arm' and reason_code=$1", [sweepReason("arm", runId)])).rows;
     if (!rows.length) return null;
     const c = await control(db);
@@ -288,8 +297,8 @@ export async function disarmAfterSweep({ ownership } = {}, env = process.env) {
   const db = await operatorPool(env);
   const steps = [];
   try {
-    const identity = (await db.query(IDENTITY_SQL)).rows[0].identity?.system_identifier ?? null;
-    if (String(identity) !== String(ownership.database)) throw fail("tenancy_armed_ownership", "database");
+    const identity = await provedIdentity(db, env);
+    if (identity !== ownership.database) throw fail("tenancy_armed_ownership", "database");
     let own = ownership;
     let c = await control(db);
     // Our last acknowledged change must be the current state; anything else means

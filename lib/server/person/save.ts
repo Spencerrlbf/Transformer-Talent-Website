@@ -1,6 +1,6 @@
 // Server/worker only. One checked-out PostgreSQL connection owns the complete
 // transaction, including the existing TypeScript projection and before-image.
-import { assertServerTarget } from "./target";
+import { assertServerTarget, assertServerIdentity, isTargetError, IDENTITY_SQL } from "./target";
 import { createHash, randomUUID } from "node:crypto";
 import { applicationProcessing } from "../person-transition/application";
 import { project, type ProjectionInput } from "./project";
@@ -884,8 +884,14 @@ export async function withPersonConnection<T>(
   let client: import("pg").PoolClient | undefined;
   try {
     client = await (await poolPromise).connect();
+    // The database this session reached must hold the selected project's label
+    // (once per configuration per process); a mismatch runs no operation.
+    const session = client;
+    await assertServerIdentity("database", async () => (await session.query(IDENTITY_SQL)).rows[0]?.identity);
     return await operation(client);
   } catch (error) {
+    // A target refusal names no value and is the gate's own result.
+    if (isTargetError(error)) throw error;
     // Only exact, application-owned codes may escape. Driver details can
     // contain private candidate data and must remain redacted.
     const safeCodes = new Set([

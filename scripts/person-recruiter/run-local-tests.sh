@@ -16,6 +16,7 @@ fi
 bash scripts/person-audit/install-local.sh "$PORT" person_recruiter_test
 q -d person_recruiter_test -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clear.sql
 q -d person_recruiter_test -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
+q -d person_recruiter_test -1 -f supabase/migrations/20261013090000_person_target_label.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_recruiter_test" node --test scripts/person-recruiter/test-recruiter.mjs
 node --test scripts/person-recruiter/test-contact-view.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_recruiter_test" node --test scripts/person-recruiter/test-server-paths.mjs
