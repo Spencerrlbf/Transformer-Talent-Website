@@ -1160,3 +1160,62 @@ setup probe. No main merge, production cutover or RR-09 completion is claimed.
 The local PG15 cluster55821 and isolated local Supabase stack are stopped with data
 retained. The hosted preview and existing copy remain available for Spencer's tests.
 Use MANUAL_ACCEPTANCE_PLAN.md in order; its results remain Not run until performed.
+
+## 10. October 13 read-only migration-history comparison (production vs copy)
+
+Authorized by Spencer on 2026-10-13 ("run the read-only migration comparison on both").
+Read-only `select` statements only; nothing was written to either project. Production
+was read through the Supabase connector (scoped to `kmuihequfurvjxpnugxf`); the copy
+through its PostgreSQL URL from the rehearsal env file. Observed at 12:51 UTC.
+
+| | Production `kmuihequfurvjxpnugxf` | Copy `qsqlgibgsxzlimoegcjx` |
+|---|---|---|
+| Versions in `supabase_migrations.schema_migrations` | 96 | 157 |
+| Last version | `20260926050355` | `20261005120000` |
+| Versions the other side lacks | 0 | **61** |
+| `pg_control_system()` identifier | `7550817586112808987` | `7550817586112808987` |
+| Postmaster start | 2026-09-25 23:46 UTC | 2026-09-28 19:02 UTC |
+| Database size | 33,773,358,227 bytes | 38,799,920,275 bytes |
+| `person_private` schema (072) | present | present |
+| `person_target_identity()` | absent | present |
+
+Findings:
+
+1. **The gap is exactly 61 versions**, confirming the figure in Spencer's plan. The copy's
+   history is a strict superset of production's. All 61 correspond to tracked repo files,
+   from `20260926033900_person_atomic_projection.sql` through
+   `20261005120000_person_catchup_contact_snapshot.sql` (composite MD5 of the 61 files in
+   order: `56d8fb28ec15066bef227a75e2389842`). Production already records three versions
+   inside that window (`20260926040300`, `20260926042200`, `20260926050355`, merged on
+   `main`); they must not be replayed. Versions to install on production:
+   `20260926033900,20260926044800,20260926054500,20260926061600,20260926065300,20260926072840,20260926074407,20260926080238,20260926082012,20260926172608,20260926183000,20260926201342,20260926213000,20260926233000,20260926235140,20260927001258,20260927004931,20260927013100,20260927020700,20260927023000,20260927025000,20260927035000,20260927052000,20260927060000,20260927065000,20260927070000,20260927080000,20260927090000,20260927100000,20260927110000,20260927120000,20260927130000,20260927140000,20260927150000,20260927160000,20260927170000,20260927180000,20260927190000,20260927200000,20260927210000,20260927220000,20260927230000,20260928000000,20260928010000,20260928020000,20260928030000,20260928040000,20260928050000,20260928060000,20260928061000,20260928070000,20260928080000,20260928090000,20261003090000,20261003100000,20261003110000,20261003120000,20261005090000,20261005100000,20261005110000,20261005120000`
+2. **`supabase db push` is not usable against either hosted project.** Both histories record
+   the legacy numeric files `001 … 072` under 90 timestamp versions that do not exist in the
+   repo; the CLI would treat the numeric files as unapplied. Production must be upgraded the
+   way the copy was (section 9): the 61 files applied in order with `psql -v ON_ERROR_STOP=1`,
+   each version then recorded in `supabase_migrations.schema_migrations`, PostgREST reloaded.
+3. **The system identifier does not distinguish production from the copy.** The copy is a
+   physical clone, so `pg_control_system()` returns the same identifier on both. The
+   `person_target_identity()` REST-vs-PostgreSQL agreement and the sweep's `database_changed`
+   check (`scripts/tenancy/armed.mjs`) therefore prove "same cluster" only in the sense that
+   both paths reach one of the two clones; only the URL/key project-ref checks separate them.
+   Earlier ledger lines that cite `7550817586112808987` as the copy's identity are true but
+   not distinctive. Before the production sitting, the identity should gain a project-specific
+   component (recorded at install time and compared with `PERSON_TARGET_PROJECT_REF`), or the
+   operator must rely on the ref checks and record that explicitly. Not implemented here.
+4. **Production is within 0.7% of the sweep's default size ceiling** (`TENANCY_MAX_DB_BYTES`
+   34,000,000,000 bytes). The armed sweep on production will refuse once the database crosses
+   it; an explicit, approved production ceiling will be needed at the sitting, as the copy
+   needed its 45 GB ceiling.
+5. **Backups on production were not checked** (dashboard setting, not visible by SQL). Section 9
+   records PITR disabled on the copy; the migrations are forward-only, so production needs a
+   confirmed backup (and ideally PITR) immediately before the install.
+6. **Repository integrity note (local only).** The shared repository
+   `pl/transformer-talent/.git` carries an `objects/info/alternates` entry pointing at a deleted
+   session scratchpad; `git fsck` reports 925 refs with missing objects, including the local
+   `main` ref (`0c2b9a8`) and many `origin/*` refs; the branch head `7d2c1a3` (equal to
+   `origin/fix/person-90-release-remediation`) itself lacked 79 trees and 223 blobs. Repaired
+   the same day without touching refs or working files: `git fetch --refetch origin` restored
+   every object from the remote (all refs connected again, `fsck` clean), the two top-level
+   blobs were re-hashed from identical working files, and the dead alternates file was removed.
+   The other session.s uncommitted edits (four files, `output/browser-acceptance/`) were left as found.
