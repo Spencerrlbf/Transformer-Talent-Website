@@ -176,7 +176,10 @@ fences the undo's writer with `audit_proof_frame`, rehearsed 2026-10-14); before
 per run; a later edit, later publication or email clash is a `conflict` and is left alone, counted
 in the undo run's totals (rehearsal: 486 restored, 0 conflict, 0 missing); publication resumes
 are pinned to the commit the run started at (do not move HEAD on the operator machine during a
-multi-window publication; run from a detached checkout of the release commit); data corruption → restore to a
+multi-window publication; run from a detached checkout of the release commit); people restored by an
+undo are refused by the armed admission afterwards (`audit_proof_chain`: the undo operation is not
+certified), so re-publishing them needs the controller disabled (legacy guarded path, `--ids` lists of
+at most 500) before re-arming — rehearsed on the copy; data corruption → restore to a
 new project and relabel deliberately.
 
 ## 4. Rehearsal results on the copy (summary; details §14)
