@@ -60,15 +60,31 @@ bytes (9/9 match), so the manifest reproduces the rehearsed installation.
 
 Growth drivers measured on the copy: `person_audit_anchors` 5.92 GB (avg 12,491 bytes ×
 422,785 anchors), `person_reconcile_people` 1.36 GB, `person_backfill_people` 0.73 GB,
-`person_signals` 0.24 GB, `person_projection_history` avg 3,272 bytes per publication.
+`person_signals` 0.24 GB.
+
+**Publication growth, measured on October 14 during the full publication (concurrency 16,
+7,000 people in 8.3 minutes, 39.03 → 39.31 GB): 41 KB per published person**, of which about
+21.5 KB is churn in `public.candidates` (dead row versions and TOAST/index churn from the
+profile update; `autovacuum` had not yet run on the table: it fires at 20 % dead rows ≈ 84,000
+updates, after which that space is reused) and about 20 KB is durable evidence
+(`person_change_events` ≈ 16 KB: the captured before/after candidate rows of the publication's
+own write; `person_projection_history` ≈ 4 KB; `person_audit_operations` ≈ 1 KB). The October 13
+estimate (+1.4 GB for publication history) missed the captured events and the churn.
+
 Scaled to production's 431,978 people: anchors ≈ 5.4 GB, reconcile/backfill bookkeeping ≈
-2.1 GB, full publication history ≈ 1.4 GB, other ≈ 0.4 GB → **≈ 43.3 GB after cutover**
-(+9.4 GB, +28 %), plus WAL churn during publication. Proposed production ceilings:
-`TENANCY_MAX_DB_BYTES` and the catch-up/publish/audit `--max-db-bytes` = **48,000,000,000**
-(the default 34 GB is already within 0.2 % of today's size and would refuse). **Owner check
-before approval**: the project's provisioned disk size and free space in the dashboard
-(Database → Disk); the Management API did not expose it to the CLI token. The upgrade must
-not start unless provisioned disk ≥ 60 GB or disk autoscaling is confirmed on.
+2.1 GB, durable publication evidence ≈ 8.6 GB, candidates churn up to ≈ 9 GB before autovacuum
+reclaims it (bounded by vacuum frequency; a `VACUUM public.candidates` between publication
+windows caps it at a few GB) → **≈ 50–55 GB after cutover** (+16–21 GB), plus WAL churn. The
+proposed production ceiling of 48 GB would stop publication before completion. **Revised
+proposal: `TENANCY_MAX_DB_BYTES` and the catch-up/publish/audit `--max-db-bytes` =
+58,000,000,000, provisioned disk ≥ 80 GB (or autoscaling confirmed on), and a scheduled
+`VACUUM public.candidates` after each publication window.** The copy's approved 45 GB ceiling
+stops its full publication early (ledger 15.5); raising it is a spending decision because the
+copy's disk would have to grow.
+
+**Owner check before approval**: the project's provisioned disk size and free space in the
+dashboard (Database → Disk); the Management API did not expose it to the CLI token. The upgrade
+must not start unless provisioned disk ≥ 80 GB or disk autoscaling is confirmed on.
 
 ### 3.3 Backups, recovery, rollback, live writes, Storage objects
 
@@ -148,22 +164,23 @@ for wf in derivative-worker.yml review-queue.yml refresh-queue.yml sync-candidat
 node scripts/person-transition.mjs --arm --expect-phase=disabled --reason=release_arm
 node scripts/person-transition.mjs --drain --expect-phase=open --reason=release_drain && node scripts/person-transition.mjs --wait-drained --max-seconds=600
 node scripts/person-transition.mjs --seal --expect-phase=draining --reason=release_seal
-BACKFILL_CONFIG='{"reconcile":true,"run-id":"<RUN>","scope":"queue","limit":1000000,"batch-size":100,"dry-run":false,"max-seconds":3300,"max-db-bytes":48000000000}' node scripts/person-maintenance/start-catchup.mjs
+BACKFILL_CONFIG='{"reconcile":true,"run-id":"<RUN>","scope":"queue","limit":1000000,"batch-size":100,"dry-run":false,"max-seconds":3300,"max-db-bytes":58000000000}' node scripts/person-maintenance/start-catchup.mjs
 node scripts/person-transition.mjs --open-window=catchup --run=<RUN> --minutes=240 --expect-phase=held --reason=release_catchup
 BACKFILL_CONFIG='{…same…,"resume":true}' node scripts/person-maintenance/run-catchup.mjs      # repeat (resume) until source_scan_complete
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_catchup_done
 node scripts/person-reconcile-finalize.mjs --run-id=<RUN>                                      # reconciled | review_required | catchup_pending
 node scripts/person-transition.mjs --open-window=anchors --run=<ANCHORS> --minutes=240 --expect-phase=held --reason=release_anchors
-PERSON_DATABASE_URL='<5432 session url>' node scripts/person-audit-anchors.mjs --save --limit=1000000 --batch=20 --max-bytes=48000000000   # the anchors CLI reads PERSON_DATABASE_URL
+PERSON_DATABASE_URL='<5432 session url>' node scripts/person-audit-anchors.mjs --save --limit=1000000 --batch=20 --max-bytes=58000000000   # the anchors CLI reads PERSON_DATABASE_URL
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_anchors_done
 node scripts/person-transition.mjs --reopen --expect-phase=held --reason=release_reopen
 # publication: one run, resumable across 720-minute windows; each window closed explicitly
 node scripts/person-transition.mjs --open-window=publish --run=<PUB> --minutes=720 --expect-phase=open --reason=release_publish
-node scripts/person-publish.mjs --run-id=<PUB> --mode=publish --review=skip --batch-size=500 --limit=1000000 --max-seconds=18000 --max-db-bytes=48000000000 --concurrency=8 [--resume]
+node scripts/person-publish.mjs --run-id=<PUB> --mode=publish --review=skip --batch-size=500 --limit=1000000 --max-seconds=18000 --max-db-bytes=58000000000 --concurrency=16 [--resume]
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_publish_window_closed
+psql '<5432 session url>' -c 'vacuum (analyze) public.candidates'                               # between windows: reclaim the publication's row churn (3.2)
 # post-publication catch-up (held: drain, seal, catch-up window, run-catchup until source_scan_complete, finalizer, reopen as above)
 # declared cutoff = the close of that held window; final audit and its finalizer:
-node scripts/person-postcutover-audit.mjs --run-id=<AUDIT> --record --scope=all --batch-size=20 --limit=1000000 --max-seconds=18000 --max-db-bytes=48000000000 --external-chunk=250 [--resume]
+node scripts/person-postcutover-audit.mjs --run-id=<AUDIT> --record --scope=all --batch-size=20 --limit=1000000 --max-seconds=18000 --max-db-bytes=58000000000 --external-chunk=250 [--resume]
 node scripts/person-postcutover-finalize.mjs --run-id=<AUDIT>                                  # audited | catchup_pending | review_required
 # 4. cutover: PERSON_WRITE_MODE=live for app and workers; re-enable the worker schedules; main merge of PR #2 after the remediation PR
 ```
@@ -226,12 +243,39 @@ new project and relabel deliberately.
    `.env.rehearsal`, launch entries; stop referencing the fixed October 5 URL.
 3. Delete the project in the dashboard (irreversible; billing stops from that point).
 
-## 7. Approval requested
+## 7. Approval requested, and the decisions only the owner can take
 
 Approve, in writing: (a) the production schema install with
 `scripts/person-release/apply-upgrade.sh` and the label statement; (b) the production
-configuration changes in 3.4; (c) the operator sequence in 3.5 with the ceilings in 3.2;
-(d) the main merge of the parent PR after the remediation PR review; (e) retirement of the
-copy per section 6 after production verification. Expected downtime: none for public pages;
-recruiter contact edits and application processing refused during held windows (minutes per
-window). Cost: the copy's hourly compute until deletion; no new paid services.
+configuration changes in 3.4 (transition support on before arming); (c) the operator sequence in
+3.5 with the revised ceilings in 3.2; (d) the main merge of the parent PR after the remediation
+PR review; (e) retirement of the copy per section 6 after production verification.
+
+Expected downtime: none for public pages; recruiter contact edits and application processing
+refused during held windows (the catch-up window: ≈ 17 minutes on the copy for 2,135 queued
+people plus ≈ 6 minutes of fingerprint; production's queue size at the sitting decides; anchors
+minutes). Publication runs with the controller open (writers keep working): ≈ 9 hours for
+431,978 people at the measured 13–14 people/s with 16 sessions from one operator machine (two
+720-minute windows at most), plus the post-publication held window and the final audit (its rate
+is in ledger 15.5). Cost: the copy's hourly compute until deletion; no new paid services; disk
+growth of production by 16–21 GB (3.2) under the existing plan's disk pricing.
+
+Decisions that are the owner's:
+
+1. **Disk and ceiling** (3.2): confirm provisioned disk ≥ 80 GB or autoscaling, approve the
+   58 GB `--max-db-bytes` ceiling, and whether the copy's ceiling may be raised to let its
+   publication finish (its disk would grow; a spending decision). Without it the copy
+   rehearsal's publication stops at the approved 45 GB.
+2. **External directory stability**: the communications project changes while a scan runs
+   (18 directory rows changed during the 17-minute copy scan), so the reconcile finalizer
+   reports `review_required`/`catchup_pending` and a short final scan at the cutoff is needed;
+   accept that outcome rule, or coordinate a pause of the directory's own writers (reply-ops)
+   for the cutoff window.
+3. **Rollback scope**: an undo is a full abandonment step for the publication (the armed
+   admission refuses undone people afterwards; re-publication needs the controller disabled,
+   rehearsed on the copy). Accept, or commission an armed-aware undo before the sitting.
+4. **Review policy**: 5,488 open identity conflicts over 9,352 people are `review_skipped`
+   with `--review=skip` (decision B5); the alternative `--review=publish` publishes them.
+5. **`package.json` `packageManager` line** from the October 12 session: commit (switches
+   Vercel's installer to pnpm without a lockfile) or discard.
+6. **Fresh backup/PITR** before the sitting (3.3) and the dashboard disk check (3.2).
