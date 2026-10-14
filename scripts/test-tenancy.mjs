@@ -524,15 +524,12 @@ try {
     console.log(`cleanup skipped: the controller could not be safely disarmed; run ${run.id} fixtures are retained. Remove later with: node scripts/test-tenancy.mjs --cleanup`);
   } else if (!flag("--keep")) {
     const td = await teardown({ runId: run.id, keys: collectKeys(W) });
-    let left = await leftovers(run.id);
-    if (ARMED && W?.TT) {
-      // Normalized, anchored pool people cannot be deleted (immutable audit evidence);
-      // they are retained synthetic rows in the disposable database.
-      const retained = left.filter((l) => /^candidates\b/.test(l));
-      left = left.filter((l) => !/^candidates\b/.test(l));
-      if (retained.length) console.log(`retained (armed mode, normalized evidence): ${retained.join("; ")}`);
-    }
-    console.log(`cleanup: ${JSON.stringify(td)}${left.length ? ` LEFTOVERS: ${left.join("; ")}` : " (nothing left)"}`);
+    const left = await leftovers(run.id, { retained: td.retained });
+    // Normalized, anchored pool people cannot be deleted (immutable audit evidence) and
+    // keep their complete normalized evidence graph, so the reconciler can still account
+    // for them; they are retained synthetic rows in the disposable database.
+    if (td.retained.length) console.log(`retained (normalized evidence kept whole): ${td.retained.length} pool people ${td.retained.join(", ")}`);
+    console.log(`cleanup: ${JSON.stringify({ ...td, retained: td.retained.length })}${left.length ? ` LEFTOVERS: ${left.join("; ")}` : " (nothing left)"}`);
   } else {
     console.log(`--keep: data left in place; remove with: node scripts/test-tenancy.mjs --cleanup`);
   }

@@ -461,14 +461,33 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
   const emailLike = encodeURIComponent(sweep ? `${EMAIL_PREFIX}*` : `${EMAIL_PREFIX}${runId}-*`);
   const tokenLike = sweep ? "zzlk*" : `zzlk${runId}*`;
 
-  // Fake pool people (and everything keyed to them).
+  // Fake pool people (and everything keyed to them). A pool person the armed sweep
+  // normalized cannot be removed (RESTRICT references from their sources, profile state
+  // and audit anchors), and the rows the normalizer derived for them (candidate_experiences
+  // with source 'person', educations, skills, contacts) ARE the stored side of the evidence
+  // graph the reconciler accounts for. Deleting those rows while the person stayed left two
+  // earlier people unreconcilable (release ledger, section 14). Such people are RETAINED
+  // whole: nothing of theirs is deleted except tenant-only rows that belong to the fixture
+  // companies being removed (their verdicts and applications), which no translator reads.
   const pool = (await svc(`candidates?source=eq.${POOL_SOURCE}&linkedin_username=like.${tokenLike}&select=id`, {}, { soft: true })) || [];
+  const normalized = new Set(pool.length
+    ? ((await svc(`candidate_profile_state?candidate_id=in.(${pool.map((p) => p.id).join(",")})&select=candidate_id`, {}, { soft: true })) || []).map((r) => r.candidate_id)
+    : []);
+  const retained = [];
   for (const { id } of pool) {
+    if (normalized.has(id)) {
+      await del(`match_verdicts?candidate_id=eq.${id}`);
+      for (const o of orgs) await del(`website_applications?organization_id=eq.${o.id}&candidate_id=eq.${id}`);
+      retained.push(id);
+      continue;
+    }
     for (const t of ["match_verdicts", "candidate_enrichments", "candidate_embeddings", "candidate_experiences", "refresh_queue", "person_signals", "role_shortlists"])
       await del(`${t}?candidate_id=eq.${id}`);
     for (const o of orgs) await del(`website_applications?organization_id=eq.${o.id}&candidate_id=eq.${id}`);
     await del(`candidates?id=eq.${id}`);
   }
+  // Rows of retained people are never swept by the company-wide deletions below.
+  const notRetained = retained.length ? `&candidate_id=not.in.(${retained.join(",")})` : "";
 
   // The fake TT job and the TT test login's own traces.
   if (tt) {
@@ -513,7 +532,7 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
     await del(`stage_events?${q}`);
     await del(`credit_grants?${q}`);
     await del(`recruiter_profiles?${q}`);
-    for (const t of ["candidate_enrichments", "candidate_embeddings", "candidate_experiences", "refresh_queue"]) await del(`${t}?${q}`);
+    for (const t of ["candidate_enrichments", "candidate_embeddings", "candidate_experiences", "refresh_queue"]) await del(`${t}?${q}${notRetained}`);
     await del(`org_roles?${q}`);
     await del(`org_members?${q}`);
     await del(`organizations?id=eq.${o.id}`);
@@ -551,16 +570,18 @@ export async function teardown({ runId = null, sweep = false, keys = [] } = {}) 
   }
   for (const id of users) await authAdmin(`admin/users/${id}`, { method: "DELETE" }).catch(() => {});
 
-  return { orgs: orgs.length, poolPeople: pool.length, files: names.length, users: users.length };
+  return { orgs: orgs.length, poolPeople: pool.length - retained.length, retained, files: names.length, users: users.length };
 }
 
-/** Rows still carrying this run's tokens anywhere teardown should have reached. */
-export async function leftovers(runId) {
+/** Rows still carrying this run's tokens anywhere teardown should have reached. People
+ * teardown retained on purpose (normalized evidence) and their own rows are not leftovers. */
+export async function leftovers(runId, { retained = [] } = {}) {
   const like = `*zzlk${runId}*`;
+  const keep = retained.length ? `&candidate_id=not.in.(${retained.join(",")})` : "";
   const checks = [
     ["organizations", `name=like.${like}`],
     ["org_roles", `title=like.${like}`],
-    ["candidates", `full_name=like.${like}`],
+    ["candidates", `full_name=like.${like}${retained.length ? `&id=not.in.(${retained.join(",")})` : ""}`],
     ["website_applications", `name=like.${like}`],
     ["sourced_candidates", `full_name=like.${like}`],
     ["candidate_notes", `body=like.${like}`],
@@ -572,7 +593,7 @@ export async function leftovers(runId) {
     ["recruiter_profiles", `bio=like.${like}`],
     ["referrals", `referrer_name=like.${like}`],
     ["match_verdicts", `role_hash=like.${like}`],
-    ["candidate_enrichments", `linkedin_username=like.${like}`],
+    ["candidate_enrichments", `linkedin_username=like.${like}${keep}`],
     ["org_members", `email=like.${encodeURIComponent(`${EMAIL_PREFIX}${runId}-*`)}`],
   ];
   const out = [];

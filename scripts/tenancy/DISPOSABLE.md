@@ -17,7 +17,8 @@ curl -X POST "$SUPABASE_URL/storage/v1/bucket" -H "apikey: $SERVICE" -H "Authori
   -H 'Content-Type: application/json' -d '{"id":"resumes","name":"resumes","public":false}'   # buckets are project settings
 
 # 2. Environment file (mode 600): SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL = the local API URL,
-#    the local anon/service keys, PERSON_DATABASE_URL = PERSON_PUBLISH_DATABASE_URL =
+#    the local anon/service keys (SUPABASE_ANON_KEY and NEXT_PUBLIC_SUPABASE_ANON_KEY both; the fixture
+#    reads SUPABASE_ANON_KEY), PERSON_DATABASE_URL = PERSON_PUBLISH_DATABASE_URL =
 #    LOCAL_DATABASE_URL = the local PostgreSQL URL, PERSON_TARGET_PROJECT_REF=local,
 #    OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io,api.openai.com,api.cloud.llamaindex.ai,api.typesafe.ai
 #    PERSON_WRITE_MODE=live PERSON_TRANSITION_SUPPORT=on, placeholder NYLAS_*/RESEND_API_KEY/HARVEST_API_KEY
@@ -70,3 +71,14 @@ lock in the same transaction. It never completes a whole-database source scan.
 approved copy-specific ceiling may be supplied, up to 45,000,000,000 bytes.
 The isolated full-schema regression `scripts/tenancy/test-scope.mjs` uses the
 loopback database `person_tenancy_scope_test` and retains its synthetic evidence.
+
+Retained people (2026-10-14). A pool person the armed sweep normalized cannot be deleted
+(RESTRICT references from sources, profile state and anchors), and the rows the normalizer
+derived for them (`candidate_experiences` with source `person`, educations, skills,
+contacts) are the stored side of the evidence graph the reconciler accounts for. Teardown
+therefore keeps such people whole: it removes only their verdicts and their applications
+in the fixture companies, reports them as `retained`, and excludes them from the
+company-wide deletions and from the leftover check. An earlier teardown deleted their
+derived job rows and left two people on the copy failing `post_save_integrity:
+jobs_accounted` (release ledger, section 15); their rows were re-derived from the stored
+owner source with the controller disabled, and the pinned catch-up then verified them.
