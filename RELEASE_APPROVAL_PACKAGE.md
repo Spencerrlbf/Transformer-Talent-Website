@@ -33,20 +33,28 @@ and `HOSTED_TEST_READINESS.md`.
 
 ## 3. Production upgrade package
 
-### 3.1 Ordered, checksummed manifest
+### 3.1 Ordered, checksummed manifest and atomic installer
 
-`scripts/person-release/production-upgrade-manifest.json`: 63 versions from
-`20260926033900_person_atomic_projection.sql` to `20261013100000_person_reconcile_page_plan.sql`
-with MD5 and SHA256, generated from `68a77db`'s tree, marking the three in-window versions
-production already records (`20260926040300`, `20260926042200`, `20260926050355`) as
-installed. `scripts/person-release/apply-upgrade.sh` applies the manifest on the 5432
-session endpoint: verifies each file's SHA256, skips any version already in
-`supabase_migrations.schema_migrations`, applies the rest in order each in its own
-transaction, records each with the exact file bytes as its statement and verifies the
-recorded hash, stops at the first error, reloads PostgREST, and prints the label statement
-for the operator. Dry-run against the copy: 62 skipped, 0 applied, wrong-ref URL refused
-offline. The copy's own history records the nine forward files with exactly these file
-bytes (9/9 match), so the manifest reproduces the rehearsed installation.
+`scripts/person-release/production-upgrade-manifest.json`: **64 versions** from
+`20260926033900_person_atomic_projection.sql` to
+`20261014120000_person_reconcile_v2_fingerprint_plan.sql` with SHA256, MD5 and trimmed MD5, plus
+the three window versions production already records (`recorded_in_window`: `20260926040300`,
+`20260926042200`, `20260926050355`, with the digests observed on production). The whole 96-row
+production history is digested in `production-history-digests.json` (whole-table digest
+`b7ca867b…`, read-only through the connector on 2026-10-14).
+
+`scripts/person-release/apply-upgrade.sh` (ledger 15.1): the destination passes the hardened
+validator (selection, 5432 session endpoint, no option overrides) and the database-held label
+check; every recorded window version is verified by digest before anything runs (a different body
+stops with `history_mismatch`); the identity index `candidates_person_username_idx` is built
+`CONCURRENTLY` before `20260927170000` when absent; then each remaining version's file and its
+history row (exact file bytes) commit in **one transaction**, so an error or a lost connection
+leaves neither and a resume skips only verified versions. Proof on an isolated database carrying
+production's history: faults before commit leave nothing, resume completes 96 + 64, tampered
+rows refuse, foreign selection refused (`test-apply-upgrade-resume.sh`, all checks). First hosted
+use: the copy, 2026-10-14 18:04 UTC, `applied=1 skipped=63` (the fingerprint forward), history
+160 versions. Dry run on the copy before that: 63 skipped, 1 to apply, 52 copy rows recorded
+without a body counted as `unverifiable_bodies` (none on production).
 
 ### 3.2 Capacity (read-only, 2026-10-13 19:0x UTC)
 
