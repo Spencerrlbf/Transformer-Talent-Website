@@ -154,7 +154,7 @@ BACKFILL_CONFIG='{…same…,"resume":true}' node scripts/person-maintenance/run
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_catchup_done
 node scripts/person-reconcile-finalize.mjs --run-id=<RUN>                                      # reconciled | review_required | catchup_pending
 node scripts/person-transition.mjs --open-window=anchors --run=<ANCHORS> --minutes=240 --expect-phase=held --reason=release_anchors
-node scripts/person-audit-anchors.mjs --save --limit=1000000 --batch=20 --max-bytes=48000000000
+PERSON_DATABASE_URL='<5432 session url>' node scripts/person-audit-anchors.mjs --save --limit=1000000 --batch=20 --max-bytes=48000000000   # the anchors CLI reads PERSON_DATABASE_URL
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_anchors_done
 node scripts/person-transition.mjs --reopen --expect-phase=held --reason=release_reopen
 # publication: one run, resumable across 720-minute windows; each window closed explicitly
@@ -170,9 +170,13 @@ node scripts/person-postcutover-finalize.mjs --run-id=<AUDIT>                   
 
 Rollback at any step: a failed migration leaves nothing of that version (fix, rerun; legacy mode
 unchanged); a gate refusal after labelling keeps legacy mode (unset the selection); a publication
-run is reversed with `scripts/person-publish-undo.mjs --run-id=<PUB> --apply` (before-images per
-run; a later edit, later publication or email clash is a `conflict` and is left alone, counted in
-the undo run's totals); the controller is disarmed through the CLI; data corruption → restore to a
+run is reversed with `scripts/person-publish-undo.mjs --run-id=<PUB> --apply` **after the controller
+has been disarmed through the CLI** (drain → wait-drained → seal → disarm; an armed controller
+fences the undo's writer with `audit_proof_frame`, rehearsed 2026-10-14); before-images are kept
+per run; a later edit, later publication or email clash is a `conflict` and is left alone, counted
+in the undo run's totals (rehearsal: 486 restored, 0 conflict, 0 missing); publication resumes
+are pinned to the commit the run started at (do not move HEAD on the operator machine during a
+multi-window publication; run from a detached checkout of the release commit); data corruption → restore to a
 new project and relabel deliberately.
 
 ## 4. Rehearsal results on the copy (summary; details §14)

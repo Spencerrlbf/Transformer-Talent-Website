@@ -217,3 +217,15 @@ artifact (913 calls each). The controller is operated by the rehearsal (ledger s
 Fixture note: on October 13 a verification script recorded explicit email and phone
 clears on Jordan Avery and they were withdrawn the same day (ledger section 12); Jordan's
 contacts display again.
+
+## Current artifact — October 14, 2026
+
+The application source is unchanged since `68a77db` (last application code change `331b64a`).
+The October 14 work (ledger section 15) changes operator tooling, the release package and
+documentation only: migration installer, Storage export, armed-sweep teardown, publication
+concurrency, audit chunking. No manual case depends on those paths, so the 16/16 results of
+October 7 and 12 stand and are not repeated. The copy's data changed through the rehearsal
+(publication of the whole pool at concurrency 16, a rollback of the 2,000-person benchmark run,
+the catch-ups and the final audit); dashboard surfaces read the same compatibility columns the
+publication writes, so a re-run of M1–M16 after the rehearsal is the owner's choice, not a
+prerequisite of this package.

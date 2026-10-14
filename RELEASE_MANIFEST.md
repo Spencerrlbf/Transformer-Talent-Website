@@ -15,6 +15,17 @@ synthetic databases and production build), **deployed runtime** (October 5 hoste
 copy; see [HOSTED_TEST_READINESS.md](HOSTED_TEST_READINESS.md)).
 Earlier results are labelled historical and are not included in the fresh totals.
 
+## Current artifact — October 14, 2026 (release engineering; see ledger section 15)
+
+| Item | Value |
+|---|---|
+| Application source | unchanged since **`68a77db`** (last application code change `331b64a`); October 14 commits touch operator tooling (`scripts/`), the release package and documentation only, so the deployed application artifact and its verification (16/16 manual, 913+913 sweep calls) stand |
+| Migration/tooling commits (reproducible) | `5ea8fae` installer + resume proof + production history digests; `e98407c` Storage export; `9c3b83b` teardown repair; `4b9e004` publication concurrency / audit chunk; `97c7cc6` documentation and concurrency bound 16; later: ledger 15.5 results |
+| Migrations | 63 files to install on production (`production-upgrade-manifest.json`, SHA256/MD5/trimmed MD5 each), 3 recorded-in-window versions with production's observed digests; the installer's resume proof passed on an isolated database carrying production's 96-row history (digest `b7ca867b…`) |
+| Database (copy) | `qsqlgibgsxzlimoegcjx`, 159 recorded versions through `20261013100000`; controller armed/open, revision 40, generation 30 at the start of the full publication |
+| Rehearsal | ledger 15.5: catch-up to `source_scan_complete` in 16.7 min (2 verified, 2,133 review), finalizer `review_required` (external directory moved), benchmark 7.4 people/s at concurrency 8 (486 newly projected of 2,000), rollback 486 restored / 0 conflict, full publication at concurrency 16 in progress |
+| Local proofs | installer resume proof all checks; Storage export tests 6/6; publish suite 11/18/4/8; external reader 6/6; loopback armed sweep 913 PASS with 3 retained people, pinned queue catch-up and full source scan 3/3 verified |
+
 ## Current artifact — October 13, 2026
 
 | Item | Value |

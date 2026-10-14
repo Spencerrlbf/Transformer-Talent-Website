@@ -1649,3 +1649,23 @@ round trips: 7–8 queries per chunk), so the fingerprint takes about 10–13 mi
 again at the end of a run. The October 13 probes' 600-second budgets ended inside that fingerprint
 with 0 people processed; that is the measured startup cost, not a defect. `--external-chunk`
 (default 250) is now an option; the budget must leave room for both fingerprints.
+
+### 15.5 Second copy rehearsal (October 14): the whole sequence, with findings
+
+Controller coordination entirely through the transition CLI with expected phases and the reason
+codes `rehearsal2_20261014_*` (revisions 30–40 so far). Preview deployment for the copy:
+`PERSON_TRANSITION_SUPPORT=on`, `PERSON_WRITE_MODE=live` (support on before arming). No worker
+targets the copy, so nothing had to be settled; production's procedure is in the package (3.5).
+
+| Step | Result |
+|---|---|
+| Evidence repair of the two leftovers (15.3) | controller disabled through drain → wait-drained → seal → disarm; 2 transactions |
+| arm → drain → wait-drained → seal | held at revision 35 |
+| `start-catchup.mjs` run `rehearsal-catchup-20261014` (`max-db-bytes` 45 GB, the copy's approved ceiling; the default 34 GB refused the 38.8 GB copy first) | fingerprint ≈ 6 min; started |
+| catch-up window (240 min) + `run-catchup.mjs`, one pass | **2,135 processed in 16.7 min**: 2 `verified` (the repaired leftovers), 2,133 `review` (1,859 published people whose only change is a publication-captured event, 274 holds from 2026-09-27); `source_scan_complete`; window closed |
+| `person-reconcile-finalize.mjs` | **`review_required`**, `external_stable=false`: the live communications directory moved during the 17-minute scan (`board.candidates` rows updated at 14:05 UTC by the directory's own writers; the copy reads production's communications project read-only). On production the same holds: the directory is written independently of this release, so a scan is externally stable only if nothing changes in it for the scan's duration; the finalizer's `catchup_pending`/`review_required` outcomes are the designed handling and a short final scan at the cutoff is the mitigation (owner decision below). The 2,133 reviews are a copy artefact of publishing before the catch-up (September 28 and October 13 runs); production publishes after its catch-up |
+| anchors window + `person-audit-anchors.mjs` | the CLI needs `PERSON_DATABASE_URL` (not `PERSON_PUBLISH_DATABASE_URL`): `audit_database_url_required`; corrected in the package; coverage unchanged 422,788 of 423,062 (the 274 held people) |
+| reopen; publish window; **benchmark** run `rehearsal-publish-bench-20261014`, `--concurrency=8`, 2,000 people after the October 13 cursor | **2,000 in ≈ 4.5 min (≈ 7.4 people/s, 8× the single-session rate)**: 486 `projected` (newly published), 1,463 `unchanged`, 50 `review_skipped`, 1 `audit_blocked`; window closed |
+| **rollback rehearsal**: `person-publish-undo.mjs --run-id=rehearsal-publish-bench-20261014` | with the controller **armed** the apply stops at once with `audit_proof_frame` (the undo path is the legacy guarded writer, which an armed controller fences); after drain → seal → disarm: dry count 486 pending, apply **486 restored, 0 conflict, 0 missing** in 9 min (sequential), run `…-undo` complete; re-armed (revision 40). Rule for production: disarm before undo (package 3.5) |
+| full publication, first attempt `rehearsal-publish-full-20261014` (`--concurrency=8`) | interrupted deliberately by SIGINT after its first page (500: 487 unchanged, 12 review_skipped, 1 audit_blocked) for the rollback rehearsal; the window was closed by work id. Its resume was refused with `publish_run_commit_differs` because the branch had received a documentation commit meanwhile: **resume is pinned to the commit the run started at**, so the operator machine must not change HEAD during a multi-window publication. Rehearsal continued from a detached worktree pinned at `97c7cc6` with a new run id; the interrupted run stays recorded as `running` (nothing projected) |
+| full publication `rehearsal-publish-full2-20261014` (`--concurrency=16`, 720-minute windows, `--max-seconds=18000`, resume per window) | in progress; results below |
