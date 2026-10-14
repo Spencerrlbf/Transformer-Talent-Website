@@ -207,16 +207,18 @@ certified), so re-publishing them needs the controller disabled (legacy guarded 
 at most 500) before re-arming — rehearsed on the copy; data corruption → restore to a
 new project and relabel deliberately.
 
-## 4. Rehearsal results on the copy (summary; details §14)
+## 4. Rehearsal results on the copy (October 13 summary in ledger §14; October 14 in §15)
 
-- Final-artifact tenancy verification: disabled and armed sweeps 913 calls PASS each, controller coordinated through the transition CLI.
-- Catch-up: the first run exposed a pager plan defect (statement timeout after 2,000 people; fixed by forward `20261013100000`, installed on the copy); the second run exposed two unreconcilable synthetic people left by the armed sweep's teardown (copy-only; blocks the pinned queue scan; follow-up filed). 142 genuine legacy changes verified; the 1,859 published people are `same_snapshot_mutation` reviews by the pinned rule and are the auditor's to attribute.
-- Anchors: complete; 422,788 of 423,062, the 274 held people excepted.
-- Publication: **0.91 people/s** single stream (one publish window per run, one window at a time) → ≈ 5.4 days for 423,062 people. Not completed.
-- Post-cutover audit: startup fingerprint over the directory provenance did not finish within 10 minutes on the copy; per-person rate unmeasured. Not completed.
-- Accounting: 2,135 pending = 1,859 + 274 + 2 with **zero unexplained differences**; counts table in §14.
+- Final-artifact tenancy verification: disabled and armed sweeps 913 calls PASS each (October 13); loopback armed sweep 913 PASS with the repaired teardown (October 14).
+- Catch-up (pinned translator, held window): `source_scan_complete` for 2,135 queued people in 16.7 min; the two leftovers verified after their evidence repair; finalizer `review_required` (external directory moved during the scan; 2,133 publication-artefact reviews). Boundary statement fixed by forward `20261014120000` (7 s → 1.2 s).
+- Anchors: complete; 422,788 of 423,062, the 274 held people excepted (twice).
+- Publication: **13.1 people/s at concurrency 16** (7.4 at 8; 0.91 single-session) → ≈ 9 h for production's 431,978 people. 163,500 people published on the copy (156,217 newly projected) in 3 h 28 min before the deliberate stop at the copy's approved 45 GB ceiling; growth **28.5 KB per person net** (3.2).
+- Rollback: 486 restored, 0 conflict, 0 missing; undone people need re-publication with the controller disabled (486/486 done).
+- Post-publication catch-up: 159,122 publication-captured people queued; at the pinned 2.1 people/s ≈ 21 h on the copy and ≈ 56 h for production; blocked on the copy by two more old-teardown leftovers (same repair).
+- Final audit at the declared cutoff 18:21:06 UTC: **3.8 people/s** (68,640 in the first 5-hour pass: 85 % verified, 13 % pending on directory snapshots, 2 % review), ≈ 31 h for the full pool from this machine; resumable at its commit.
+- Accounting of this rehearsal: 2,135 pending before → 2 verified + 2,133 review; publication 163,500 = 156,217 + 3,062 + 3,624 + 597 (every outcome recorded per person); undo 486 = 486 restored; re-publication 486 = 486 projected; **zero unexplained differences**.
 
-**RR-09 is not closed.** The production sitting cannot be approved on duration grounds until publication and audit have a plan that fits the maintenance budget (several resumable 720-minute windows over days, or a reviewed faster path), and the sweep-leftover defect is fixed or the armed sweep is kept away from production until after cutover.
+**RR-09 is not closed.** The sequence is correct and every step is rehearsed and measured, but a complete end-to-end run did not fit the copy's approved ceiling, and the post-publication catch-up and the final audit are the binding durations (owner decisions 1–3, section 7).
 
 ## 5. Remaining exceptions and dispositions
 
@@ -226,19 +228,30 @@ new project and relabel deliberately.
   destructive cleanup bundled with the release (ledger RR-10).
 - **Ambiguous historical contact decisions**: production has no `person_recruiter_primary`
   rows (the table is created by the chain), so **no historical decision needs disposition
-  in production**. On the copy, 3 automatic rows (NULL, not suppressed) remain: 2 are the
-  2026-10-13 withdrawal of the Jordan Avery test clears, 1 is a 2026-09-29 live phone row on a
-  real published person written during the recovery exercise; both are copy-only test
-  artefacts and are retired with the copy.
+  in production**. On the copy, 3 automatic rows remain: copy-only test artefacts, retired
+  with the copy.
 - **Three deferred application attempts** (`transition_work`, family `application`,
-  2026-09-29, expired leases): synthetic failed applications from the recovery exercise, no
-  receipts, no Harvest ledger rows, not linked; **they do not exist in production**
-  (no controller tables there). Disposition: leave deferred on the copy; nothing to replay.
-- **Production disk/PITR**: owner dashboard check (3.2, 3.3).
-- **Publication duration**: 0.91 people/s single stream (§14); a publication window is bound to one run and only one window may be open, so there is no parallel-run plan today. Decision needed: multi-day windows or a reviewed faster publication path.
-- **Post-cutover audit startup**: the directory-provenance fingerprint exceeded 10 minutes on the copy (62,208 linked contacts); a 15 s statement timeout stopped one attempt. The auditor needs a measured plan before the sitting.
-- **Armed sweep leftovers**: two synthetic people on the copy are unreconcilable after the sweep's teardown and stop the pinned queue scan; follow-up task filed. Do not run the armed sweep against production before the pinned catch-up has completed.
-- **Queue pager**: forward `20261013100000` (installed on the copy, in the production manifest) is required for any queue catch-up past a few thousand people.
+  2026-09-29, expired leases): synthetic, no receipts, not linked; **not in production**.
+  Disposition: leave deferred on the copy; nothing to replay.
+- **Synthetic sweep leftovers on the copy**: two repaired and verified (ledger 15.3); two more
+  (`0147d75c…`, `2a8bbcad…`) surfaced when the publication queued them, same disposition to
+  apply with the controller disabled; the repaired teardown prevents new ones. Production has
+  none (no armed sweep has run there); do not run the armed sweep on production before the
+  pinned catch-up has completed.
+- **Durations** (measured): publication ≈ 9 h at concurrency 16; post-publication catch-up
+  ≈ 56 h at the pinned translator's rate for 423k publication-captured people; final audit
+  ≈ 31 h from an operator machine (round trip 44 ms). Both long steps are resumable and run with
+  the controller open except the catch-up's held window. Decision needed on where they run
+  (a machine in the database's region would cut the round-trip share) and on the acceptance of
+  publication-captured reviews.
+- **External directory stability**: the communications project is written by its own tools
+  during any scan; the finalizer reports it (`review_required`/`catchup_pending`); owner
+  decision 2.
+- **Capacity**: 28.5 KB per published person; ceilings revised to 58 GB and disk ≥ 80 GB
+  (3.2); owner decision 1.
+- **Runs left on the copy**: catch-up `review_required`, post catch-up `failed`, publication
+  `running` (interrupted; resumable at `97c7cc6`), first full attempt `running` (nothing
+  projected), audit `paused` (resumable at `e2cf214`): recorded history, retired with the copy.
 
 ## 6. Retirement of the paid copy (after production verification)
 
