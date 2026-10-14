@@ -18,6 +18,7 @@ q -d person_recruiter_test -1 -f supabase/migrations/20261005090000_person_recru
 q -d person_recruiter_test -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 q -d person_recruiter_test -1 -f supabase/migrations/20261013090000_person_target_label.sql
 q -d person_recruiter_test -1 -f supabase/migrations/20261013100000_person_reconcile_page_plan.sql
+q -d person_recruiter_test -1 -f supabase/migrations/20261014120000_person_reconcile_v2_fingerprint_plan.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_recruiter_test" node --test scripts/person-recruiter/test-recruiter.mjs
 node --test scripts/person-recruiter/test-contact-view.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/person_recruiter_test" node --test scripts/person-recruiter/test-server-paths.mjs

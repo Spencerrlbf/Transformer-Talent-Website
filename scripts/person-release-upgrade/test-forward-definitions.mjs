@@ -56,6 +56,16 @@ test('reconcile page: the forward keeps the signature, grants and the non-queue 
   "coalesce(q.version,(select max(e.id) from public.person_change_events e where e.candidate_id=c.id),0) captured_version","and (r.notes->>'scope'<>'directory' or c.directory_contact_id is not null)"])assert.ok(chain.includes(frag)&&forward.includes(frag),frag.slice(0,40));
  assert.match(forward,/with ids as materialized/);assert.match(forward,/not p\.counted/);assert.match(forward,/limit n\n/);
 });
+test('v2 fingerprint: the forward keeps the signature and grants, hashes every row with the record hash and stays within the REST budget by plan',()=>{
+ const chain=read('20260926042200_person_reconcile.sql'), forward=read('20261014120000_person_reconcile_v2_fingerprint_plan.sql');
+ assert.match(chain,/create function public\.person_reconcile_v2_fingerprint\(\)\nreturns jsonb/);
+ assert.match(forward,/create or replace function public\.person_reconcile_v2_fingerprint\(\)\nreturns jsonb language sql stable parallel safe set search_path='' as \$\$/);
+ assert.doesNotMatch(forward.split('\n').filter(l=>!l.startsWith('--')).join('\n'),/grant|revoke|drop/i,'grants untouched, nothing dropped');
+ // same scope as the chain: _v2 rows of existing candidates; same result keys
+ for(const frag of ["from public.candidate_emails_v2 e where exists(select 1 from public.candidates c where c.id=e.candidate_id)","jsonb_build_object('rows',count(*),'hash'"])assert.ok(chain.includes(frag)&&forward.includes(frag),frag);
+ assert.match(forward,/bit_xor\(hash_record_extended\(e,0\)\)/);
+ assert.doesNotMatch(forward,/string_agg|order by/,'no per-row serialization or sort');
+});
 test('forward files are the only new versions and sort after the chain',()=>{
  const files=fs.readdirSync(dir).filter(f=>/^2026\d{10}_/.test(f)).sort();
  const last=files.at(-1);
@@ -70,6 +80,7 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261005120000_person_catchup_contact_snapshot.sql',
   '20261013090000_person_target_label.sql',
   '20261013100000_person_reconcile_page_plan.sql',
+  '20261014120000_person_reconcile_v2_fingerprint_plan.sql',
  ]);
- assert.equal(last,'20261013100000_person_reconcile_page_plan.sql');
+ assert.equal(last,'20261014120000_person_reconcile_v2_fingerprint_plan.sql');
 });

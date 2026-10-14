@@ -20,6 +20,7 @@ q -d $DB -1 -f supabase/migrations/20261005090000_person_recruiter_explicit_clea
 q -d $DB -1 -f supabase/migrations/20261005100000_person_send_decisions.sql
 q -d $DB -1 -f supabase/migrations/20261013090000_person_target_label.sql
 q -d $DB -1 -f supabase/migrations/20261013100000_person_reconcile_page_plan.sql
+q -d $DB -1 -f supabase/migrations/20261014120000_person_reconcile_v2_fingerprint_plan.sql
 q -d $DB -f scripts/person-derivatives/local-embeddings.sql
 q -d $DB -1 -f supabase/migrations/20260926072840_person_derivative_jobs.sql
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish/test-publish.mjs

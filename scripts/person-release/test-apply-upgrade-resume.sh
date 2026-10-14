@@ -92,7 +92,8 @@ out=$(run)
 grep -q "build index candidates_person_username_idx concurrently" <<<"$out" || { echo "FAIL index pre-build not reported" >&2; exit 1; }
 echo "ok identity index built concurrently before 20260927170000"
 expect "$(q -d $DB -c "select i.indisvalid and i.indisready from pg_index i where i.indexrelid=to_regclass('public.candidates_person_username_idx')")" t "identity index valid"
-expect "$(q -d $DB -c 'select count(*) from supabase_migrations.schema_migrations')" 159 "resume completed: 96 + 63 versions"
+N=$(python3 -c "import json;print(len(json.load(open('$MANIFEST'))['to_install']))")
+expect "$(q -d $DB -c 'select count(*) from supabase_migrations.schema_migrations')" $((96+N)) "resume completed: 96 + $N versions"
 mismatch=$(python3 - "$MANIFEST" <<'PY' | q -d $DB -f - 
 import json,sys
 m=json.load(open(sys.argv[1]))
@@ -100,16 +101,16 @@ print("select count(*) from (values "+",".join(f"('{r['version']}','{r['md5']}')
 PY
 )
 expect "$mismatch" 0 "every installed version is recorded once with the exact file bytes"
-out=$(run --dry-run); expect "$(grep -c '^skip ' <<<"$out")" 63 "a further dry run skips all 63 after verifying their digests"
+out=$(run --dry-run); expect "$(grep -c '^skip ' <<<"$out")" $N "a further dry run skips all $N after verifying their digests"
 expect "$(grep -c 'would apply' <<<"$out")" 0 "nothing left to apply"
-grep -q "applied=0 skipped=63 unverifiable_bodies=0" <<<"$out" || { echo "FAIL summary: $(tail -2 <<<"$out")" >&2; exit 1; }
+grep -q "applied=0 skipped=$N unverifiable_bodies=0" <<<"$out" || { echo "FAIL summary: $(tail -2 <<<"$out")" >&2; exit 1; }
 
 # (4) a recorded body that differs from the file stops the run.
 q -d $DB -c "update supabase_migrations.schema_migrations set statements[1]=statements[1]||'-- tampered' where version='20260927090000'"
 set +e; out=$(run --dry-run 2>&1); code=$?; set -e
 expect "$code" 5 "tampered history row refused"; grep -q "history_mismatch 20260927090000" <<<"$out" || { echo "FAIL: $out" >&2; exit 1; }
 q -d $DB -c "update supabase_migrations.schema_migrations set statements[1]=left(statements[1],length(statements[1])-length('-- tampered')) where version='20260927090000'"
-out=$(run --dry-run); grep -q "applied=0 skipped=63" <<<"$out"; echo "ok restored row verifies again"
+out=$(run --dry-run); grep -q "applied=0 skipped=$N" <<<"$out"; echo "ok restored row verifies again"
 # The label is the operator's separate statement; a labelled database with the right label passes.
 q -d $DB -c "select person_private.target_label('local')" >/dev/null
 out=$(run --dry-run); grep -q "database_label=local" <<<"$out" || { echo "FAIL label not read" >&2; exit 1; }; echo "ok labelled database accepted for the matching selection"
