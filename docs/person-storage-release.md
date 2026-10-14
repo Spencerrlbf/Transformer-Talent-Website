@@ -380,7 +380,12 @@ with the run id, then the same profile update path as `savePerson`. `--mode=dry`
 ids, statuses and the names of changed columns only. Per-person outcomes are
 `projected`, `unchanged`, `held`, `unmigrated`, `drift`, `audit_blocked` and
 `review_skipped`; `--review=skip|publish` carries Spencer's decision on people
-with an open identity or contact review record. Pages are bounded (at most 500),
+with an open identity or contact review record. `--concurrency=N` (1..8, default 1)
+lets that many sessions publish people of the same page side by side: every person
+keeps its own transaction, lock, checks and durable result on one session; only the
+network round trips overlap (publication is latency-bound: 17 round trips per person,
+measured 2026-10-14; the first failure stops the page after each session has finished
+the person it was on). Pages are bounded (at most 500),
 the checkpoint follows the page, and a crash between a person's commit and the
 checkpoint is safe: the original per-person outcome commits atomically with
 the projection and is reused on replay. Totals are derived from these distinct
@@ -487,7 +492,7 @@ and source-version payloads. It records complete start/end fingerprints over
 all linked contacts and the website scope and `_v2` witness. Missing access or
 coverage stays pending. There is no operator boolean that can substitute for
 source observations. This is an observed cross-database boundary, not a
-transaction locking both projects; new source changes still require catch-up.
+transaction locking both projects; new source changes still require catch-up. The fingerprint reads the directory's provenance in chunks of `--external-chunk` contacts (1..1000, default 250); its cost is the provenance volume, so on the copy (62,208 linked contacts) it takes about ten minutes at either end of a run regardless of the chunk, and the run's `--max-seconds` budget must leave room for both. The scope statement over every link and `_v2` row measured 9.8 s on 423,062 candidates (2026-10-14) and runs under a 60-second statement bound.
 
 Snapshot and recording calls use an armed 15-second statement timeout. The
 record RPC takes gates 72005 then 72006 exclusively, checks committed candidate,

@@ -18,6 +18,7 @@
 //   --resume             continue from the run's saved cursor
 //   --max-seconds=N      pause with a checkpoint after this long (default 3600)
 //   --max-db-bytes=N     stop when the database reaches this size
+//   --external-chunk=N   contacts per directory provenance read, 1..1000 (default 250)
 //   --out=<path>         private per-person detail: id, status, reason, check
 //                        names and counts. Never documents or values.
 //
@@ -42,6 +43,7 @@ export const SPEC={
  resume:{type:'flag',default:false},
  'max-seconds':{type:'int',name:'maxSeconds',min:1,max:18000,default:3600},
  'max-db-bytes':{type:'int',name:'maxBytes',min:1000000,max:1000000000000,default:34000000000},
+ 'external-chunk':{type:'int',name:'externalChunk',min:1,max:1000,default:250},
  out:{type:'text',max:1000,default:null},
 };
 const STATUSES=['verified','pending','review'];
@@ -63,7 +65,7 @@ async function scan({pool,lib,options,comms=null,cols=null,now=Date.now,onProgre
  const counts=Object.fromEntries(STATUSES.map(s=>[s,0]));counts.boundary_moved=0;const reasons={},detail=[];
  const expired=()=>now()-started>=options.maxSeconds*1000;
  const gate=auditCapacity(pool,{maxBytes:options.maxBytes,now});
- const reader=external??externalReader({pool,comms,cols,lib,gate,expired});
+ const reader=external??externalReader({pool,comms,cols,lib,gate,expired,chunk:options.externalChunk??100});
  const finish=(state,reason)=>{
   const summary={phase:state==='stopped'?'audit_stopped':'audit_finished',status:state,run:options.runId,record:options.record,scope:options.scope,
    processed:considered,start_after:options.after,last_id:after,full_population_scan:state==='exhausted'&&options.scope==='all'&&!options.after&&!options.resume,...counts,reasons,seconds:Math.round((now()-started)/1000),...(reason?{reason}:{})};
