@@ -116,35 +116,64 @@ not start unless provisioned disk ≥ 60 GB or disk autoscaling is confirmed on.
   `PERSON_CATCHUP_COMPATIBILITY_ID=c4d0e4e-explicit-contact-clear-v1`,
   `PERSON_CATCHUP_ARTIFACT_SHA256=0d30436b535ffc015624b7f8f0153c6cf769908ed6e6a31597f8e71659407250`.
 
-### 3.5 Release commands (production; each requires the approval below)
+### 3.5 Release sequence and commands (production; each step requires the approval below)
+
+Order of operations, as rehearsed on the copy on October 14 (ledger section 15): schema install
+(application still legacy) → label → application and workers deployed with the selection **and
+transition support on** (`PERSON_TRANSITION_SUPPORT=on`, legacy write mode) → old workers settled →
+arm → drain/seal → catch-up → reconcile finalizer → anchors → reopen → publication windows →
+post-publication catch-up (held) → final audit at the declared cutoff → audit finalizer → live write
+mode. Every maintenance window is closed explicitly; every CLI value below is inside its option's
+range (`--max-seconds` ≤ 18,000, `--minutes` ≤ 720 for publication, 240 otherwise, `--limit` ≤
+1,000,000, `--batch-size` ≤ 500, `--concurrency` ≤ 16).
 
 ```sh
-# 0. owner: dashboard disk/PITR check; fresh backup; storage export (read-only)
-bash scripts/person-release/export-storage-objects.sh <private dir>
-# 1. schema (app still legacy)
+# 0. owner: dashboard disk/PITR check; fresh backup; Storage export (read-only, folders walked, verified)
+PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf SUPABASE_URL=https://kmuihequfurvjxpnugxf.supabase.co SUPABASE_SERVICE_ROLE_KEY=… STORAGE_DATABASE_URL='<5432 session url>' \
+  bash scripts/person-release/export-storage-objects.sh <private dir> && bash scripts/person-release/export-storage-objects.sh --verify <private dir>
+# 1. schema (app still legacy): atomic per version, recorded versions verified and skipped, identity index built concurrently first
 PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf UPGRADE_DATABASE_URL='<5432 session url>' bash scripts/person-release/apply-upgrade.sh --dry-run
 PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf UPGRADE_DATABASE_URL='<5432 session url>' bash scripts/person-release/apply-upgrade.sh
 psql '<5432 session url>' -c "select person_private.target_label('kmuihequfurvjxpnugxf')"
 psql '<5432 session url>' -c "select public.person_target_identity()"
-# 2. application in legacy mode with the selection (Vercel production env), then verify REST+PG identity through one signed-in request
-# 3. operator sequence (runbook "Reconciliation and final accounting", "Cutover runbook scripts"), as rehearsed on the copy (§14)
+# 2. application (Vercel production env, 3.4) and workers (GitHub variables/secrets) with the selection,
+#    PERSON_WRITE_MODE=legacy and PERSON_TRANSITION_SUPPORT=on; verify REST+PG identity through one signed-in request.
+#    Support must be on BEFORE the controller is armed: an armed controller refuses raw legacy candidate writes
+#    (candidate_mutation_frame); supported writers defer through the transition path instead.
+# 2b. old workers settled: no in-progress run, schedules paused for the sitting (derivative-worker hourly,
+#     review-queue 06:30, sync-candidates 07:00, refresh-queue 08:00 UTC); re-enable after step 4.
+gh run list --status in_progress --limit 20
+for wf in derivative-worker.yml review-queue.yml refresh-queue.yml sync-candidates.yml; do gh workflow disable "$wf"; done
+# 3. operator sequence (reason codes [a-z0-9_]{1,80}; every change names the phase it expects)
 node scripts/person-transition.mjs --arm --expect-phase=disabled --reason=release_arm
-node scripts/person-transition.mjs --drain --expect-phase=open --reason=release_drain && node scripts/person-transition.mjs --wait-drained
+node scripts/person-transition.mjs --drain --expect-phase=open --reason=release_drain && node scripts/person-transition.mjs --wait-drained --max-seconds=600
 node scripts/person-transition.mjs --seal --expect-phase=draining --reason=release_seal
-node scripts/person-maintenance/start-catchup.mjs                                   # BACKFILL_CONFIG queue scan, new run id
+BACKFILL_CONFIG='{"reconcile":true,"run-id":"<RUN>","scope":"queue","limit":1000000,"batch-size":100,"dry-run":false,"max-seconds":3300,"max-db-bytes":48000000000}' node scripts/person-maintenance/start-catchup.mjs
 node scripts/person-transition.mjs --open-window=catchup --run=<RUN> --minutes=240 --expect-phase=held --reason=release_catchup
-node scripts/person-maintenance/run-catchup.mjs                                     # resume:true, same config; repeat until source_scan_complete
+BACKFILL_CONFIG='{…same…,"resume":true}' node scripts/person-maintenance/run-catchup.mjs      # repeat (resume) until source_scan_complete
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_catchup_done
-node scripts/person-transition.mjs --open-window=anchors --run=<ANCHORS> --minutes=120 --expect-phase=held --reason=release_anchors
-node scripts/person-audit-anchors.mjs --save --limit=<n> --batch=20
+node scripts/person-reconcile-finalize.mjs --run-id=<RUN>                                      # reconciled | review_required | catchup_pending
+node scripts/person-transition.mjs --open-window=anchors --run=<ANCHORS> --minutes=240 --expect-phase=held --reason=release_anchors
+node scripts/person-audit-anchors.mjs --save --limit=1000000 --batch=20 --max-bytes=48000000000
 node scripts/person-transition.mjs --close-window=<WORK> --reason=release_anchors_done
 node scripts/person-transition.mjs --reopen --expect-phase=held --reason=release_reopen
+# publication: one run, resumable across 720-minute windows; each window closed explicitly
 node scripts/person-transition.mjs --open-window=publish --run=<PUB> --minutes=720 --expect-phase=open --reason=release_publish
-node scripts/person-publish.mjs --run-id=<PUB> --mode=publish --review=skip --batch-size=500 --limit=<n> --max-seconds=43000 --max-db-bytes=48000000000  # resume per window
-# post-publication catch-up (held window), final audit at the declared cutoff:
-node scripts/person-postcutover-audit.mjs --run-id=<AUDIT> --record --scope=all --batch-size=20 --limit=<n> --max-db-bytes=48000000000
-# 4. cutover: PERSON_WRITE_MODE=live, PERSON_TRANSITION_SUPPORT=on for app and workers; main merge of PR #2 after the remediation PR
+node scripts/person-publish.mjs --run-id=<PUB> --mode=publish --review=skip --batch-size=500 --limit=1000000 --max-seconds=18000 --max-db-bytes=48000000000 --concurrency=8 [--resume]
+node scripts/person-transition.mjs --close-window=<WORK> --reason=release_publish_window_closed
+# post-publication catch-up (held: drain, seal, catch-up window, run-catchup until source_scan_complete, finalizer, reopen as above)
+# declared cutoff = the close of that held window; final audit and its finalizer:
+node scripts/person-postcutover-audit.mjs --run-id=<AUDIT> --record --scope=all --batch-size=20 --limit=1000000 --max-seconds=18000 --max-db-bytes=48000000000 --external-chunk=250 [--resume]
+node scripts/person-postcutover-finalize.mjs --run-id=<AUDIT>                                  # audited | catchup_pending | review_required
+# 4. cutover: PERSON_WRITE_MODE=live for app and workers; re-enable the worker schedules; main merge of PR #2 after the remediation PR
 ```
+
+Rollback at any step: a failed migration leaves nothing of that version (fix, rerun; legacy mode
+unchanged); a gate refusal after labelling keeps legacy mode (unset the selection); a publication
+run is reversed with `scripts/person-publish-undo.mjs --run-id=<PUB> --apply` (before-images per
+run; a later edit, later publication or email clash is a `conflict` and is left alone, counted in
+the undo run's totals); the controller is disarmed through the CLI; data corruption → restore to a
+new project and relabel deliberately.
 
 ## 4. Rehearsal results on the copy (summary; details §14)
 

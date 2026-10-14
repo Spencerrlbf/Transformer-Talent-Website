@@ -380,7 +380,7 @@ with the run id, then the same profile update path as `savePerson`. `--mode=dry`
 ids, statuses and the names of changed columns only. Per-person outcomes are
 `projected`, `unchanged`, `held`, `unmigrated`, `drift`, `audit_blocked` and
 `review_skipped`; `--review=skip|publish` carries Spencer's decision on people
-with an open identity or contact review record. `--concurrency=N` (1..8, default 1)
+with an open identity or contact review record. `--concurrency=N` (1..16, default 1)
 lets that many sessions publish people of the same page side by side: every person
 keeps its own transaction, lock, checks and durable result on one session; only the
 network round trips overlap (publication is latency-bound: 17 round trips per person,

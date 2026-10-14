@@ -235,7 +235,7 @@ test("concurrent sessions publish a page side by side with the same per-person o
     assert.equal((await pool.query("select status from person_publish_runs where run_id='conc-2'")).rows[0].status, "failed");
     assert.equal(await count("select count(*)::int n from pg_stat_activity where application_name='tt-publish-test-wide' and state='idle in transaction'"), 0);
   } finally { await wide.end(); }
-  assert.throws(() => opts(["--run-id=x", "--concurrency=9"]), /publish_option:concurrency/);
+  assert.throws(() => opts(["--run-id=x", "--concurrency=17"]), /publish_option:concurrency/);
   assert.throws(() => opts(["--run-id=x", "--concurrency=0"]), /publish_option:concurrency/);
 });
 

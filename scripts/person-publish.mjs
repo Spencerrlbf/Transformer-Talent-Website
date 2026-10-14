@@ -18,7 +18,7 @@
 //   --max-seconds=N      pause with a checkpoint after this long (default 3600)
 //   --max-db-bytes=N     stop when the database reaches this size
 //   --concurrency=N      sessions publishing people of the same page side by side,
-//                        1..8 (default 1). Every person keeps its own transaction on
+//                        1..16 (default 1). Every person keeps its own transaction on
 //                        its own session with the same checks; only the wait for the
 //                        network round trips overlaps (publication measured
 //                        latency-bound: 17 round trips per person, 2026-10-14).
@@ -49,7 +49,7 @@ export const SPEC={
  review:{type:'enum',values:['skip','publish'],default:'skip'},
  'max-seconds':{type:'int',name:'maxSeconds',min:1,max:18000,default:3600},
  'max-db-bytes':{type:'int',name:'maxBytes',min:1000000,max:1000000000000,default:34000000000},
- concurrency:{type:'int',min:1,max:8,default:1},
+ concurrency:{type:'int',min:1,max:16,default:1},
  out:{type:'text',max:1000,default:null},
 };
 const COUNTS=['projected','unchanged','held','unmigrated','drift','audit_blocked','review_skipped','dry_changed','dry_unchanged','email_collision'];

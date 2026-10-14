@@ -1539,3 +1539,113 @@ by the two sweep leftovers; the pinned translator stops the run), full publicati
 the measured rate), the post-publication catch-up and the final audit at a declared cutoff.
 RR-09 therefore remains open; the measured rates and the two defects found (pager plan, sweep
 leftovers) are the output of this rehearsal.
+
+## 15. October 14 release engineering: installer, Storage export, teardown, profiles, second rehearsal
+
+Authorized by Spencer on 2026-10-14 ("Please complete the remaining release engineering before
+requesting production approval … Use existing approved environments and budgets. Keep production
+read-only during preparation"). Production was read only (migration history digests, Storage
+inventory counts). The copy was written only through the operator CLIs, the fixture paths, and
+the one evidence repair described below.
+
+### 15.1 Migration installer (`scripts/person-release/apply-upgrade.sh`, commit `5ea8fae`)
+
+Defects found in the October 13 script and fixed:
+
+| Defect | Fix |
+|---|---|
+| The migration file ran in one transaction (`psql -1`) and the history row was inserted in a second; a failure between them left an applied version that a resume would replay | one transaction per version holds the file (`\i`) and the row; an error or a lost connection before `commit` leaves neither |
+| Destination check was a shell `case` on the URL text | the hardened validator (`checkDatabaseUrl`, 5432 only, no option overrides, selection must match) runs first; the database-held label is read at run time (unlabelled or own label pass, any other label refuses) |
+| Recorded versions were skipped by version number only | every window version already recorded is verified by digest (trailing whitespace trimmed) before anything is applied: installer rows against the file, the three CLI-recorded production rows against the digests observed on production (`recorded_in_window`); a different body stops the run (`history_mismatch`); a row recorded without a body is counted (`unverifiable_bodies`, 52 such rows on the copy from the September 28 rehearsal, none on production) |
+| `20260927170000` builds the case-folded identity index inside its transaction when absent (ShareLock on `candidates` for the build, under that file's 30 s statement timeout) | the installer builds `candidates_person_username_idx` `CONCURRENTLY` in autocommit before that file; an invalid leftover build stops the run for the operator |
+
+Production's recorded body of `20260926050355` differs from the repository file by two bytes
+inside the body (7,262 vs 7,260 bytes), so its observed digest is what the installer verifies; the
+other two CLI-recorded rows equal the files after trimming. The copy's row for `20261013090000`
+lacks the file's final newline (recorded on October 13 by hand), which is why the comparison trims
+trailing whitespace.
+
+Proof on an isolated loopback database carrying production's history
+(`scripts/person-release/test-apply-upgrade-resume.sh`, PostgreSQL 15.13, port 55811): the 96
+history rows were exported read-only from the copy, whose matching rows carry the same per-row
+and whole-table digests as production (`production-history-digests.json`, whole-table digest
+`b7ca867bf59bbe2bf9cc3af24b0536c4`, compared with production through the connector); the base
+schema is the local fixture schema plus production's pre-window person migrations and the three
+recorded window versions. Results: foreign selection refused before any connection
+(`person_target:database_mismatch`); an error injected before the commit of `20260926183000`
+left 96 + 10 versions, no `person_publish_runs` table, no row for the version; a connection
+terminated before the commit of `20260926213000` left 96 + 12 versions and no audit tables; the
+resume built the identity index concurrently, skipped every recorded version after verifying it,
+and ended at 159 versions with every installed version recorded once with the exact file bytes;
+a tampered recorded body was refused (exit 5); the labelled database was accepted for its own
+selection. Dry run on the copy: 63 skipped (52 bodies unverifiable), 3 recorded-in-window verified,
+nothing to apply.
+
+### 15.2 Storage export (`scripts/person-release/export-storage-objects.mjs`, commit `e98407c`)
+
+The October 13 script skipped folder entries, and **every object of production lives in a folder**
+(55 objects: `company-assets` 1, `recruiter-photos` 1, `resumes` 53; all nested, all with plain
+MD5 eTags, read-only count 2026-10-14). It would have exported nothing. The new export walks
+folders recursively, rejects any non-2xx listing, compares the REST listing with the independent
+`storage.objects` inventory over the 5432 endpoint (same bucket/name set and sizes), verifies
+every body's size and, where the eTag is a plain MD5, its MD5, records SHA256 and MD5 in the
+manifest and re-hashes the export with `--verify`. Offline tests: 6/6. On the copy: inventory
+38 = 38 (3 buckets), then `storage_download_failed` for the first object. Diagnosis (read-only):
+the copy carries production's `storage.objects` rows but **not production's blobs** (the physical
+clone restored the database, not the object store); the 28 objects uploaded before the clone
+answer `NoSuchKey`, the 10 uploaded to the copy afterwards download and verify (sizes 10/10,
+MD5 10/10). The export therefore stops on the copy by design and needs production's object store
+to complete; the download/verification path is proven on the copy's 10 real blobs.
+
+### 15.3 Armed-sweep teardown (`scripts/tenancy/fixture.mjs`, commit `9c3b83b`) and the two leftovers
+
+Cause of the two unreconcilable people (section 14): the fixture's pool people were normalized by
+the armed sweep (baseline reconcile), so their `candidates` rows could not be deleted (RESTRICT
+references from sources, profile state, anchors); the raw teardown nevertheless deleted their
+derived job rows (`candidate_experiences` with source `person`), which the writer had derived
+from the legacy row and which the pinned translator accounts for (`jobs_accounted`: expected 1
+job from the owning `legacy_import` source, stored 0). The deletion of derived rows is not
+captured (no change event), so nothing re-queued them until the enrichment deletes did.
+
+Fix: teardown now detects normalized pool people (`candidate_profile_state`) and retains them
+whole: only their verdicts and their applications in the fixture companies are removed; their
+rows are excluded from the company-wide deletions and from the leftover check; the sweep reports
+them as `retained`. Loopback proof on the reset disposable stack (139 versions, labelled `local`,
+production build of the branch, `next start` on 3400): armed sweep run 913 calls PASS in 45 s,
+3 pool people retained each with 1 derived job row, 1 source, 1 anchor, 0 pending; pinned queue
+catch-up `source_scan_complete` (0 pending, external stable); pinned **full source scan**
+(`scope: all`, the production workflow's path, run `local-fullscan-1791985938`): 3 processed, all
+3 `verified` with `integrity_ok`, `source_scan_complete`, external stable.
+
+Disposition of the two existing copy leftovers (`fc347915…`, `355deede…`), evidence preserving:
+with the controller disabled (drain → wait-drained → seal → disarm through the CLI, revisions
+30–32, reason codes `rehearsal2_20261014_*_for_repair`), their missing derived rows were
+re-derived from the stored owner source exactly as `save_person` writes them (same
+`legacy_import` source id as `jobs_source_id`, same row key, company resolved through
+`person_company` with no creation and no conflict, TT organization, source `person`), one
+transaction per person, after asserting the stored source hash equals the translator's document
+hash, `applied_lists` is true and no active derived row existed. Nothing was deleted; sources,
+anchors, events and audit rows are untouched. Before/after: 0 → 1 active derived job row each
+(row digests `119ec4e7…`, `56673d1c…`). The pinned catch-up then recorded both as **verified**
+(15.5).
+
+### 15.4 Profiles (copy, from this machine; round trip 44 ms to the copy, 43 ms to the directory)
+
+Publication, dry projection of 30 unpublished people: **17 queries per person, every query ≈ 46 ms,
+801 ms per person**: publication is network-latency bound (server time per query 1–2 ms). A real
+publication adds the projection RPC, the result insert and the commit (≈ 20 round trips, the
+0.91 people/s of section 14). Fix without changing the per-person path: `--concurrency` (1..8,
+commit `4b9e004`) publishes people of one page on that many sessions; each person keeps its own
+transaction, lock, checks and durable result; the first failure stops the page after each session
+finishes its person. Regression: `test-publish.mjs` 11/11 including concurrency (6 people on 4
+sessions, outcomes identical, resume a no-op, a failing session marks the run failed and leaves no
+session idle in transaction); review regressions 18/18, preview 4/4, gates 8/8.
+
+Post-cutover audit startup: the scope statement (`person_postcutover_audit_external_inputs()`,
+all candidate/receipt/primary/state links and 283,732 `_v2` rows) takes **9.8 s** on 423,062
+candidates (its 15 s bound had no margin; now 60 s); the directory fingerprint reads full
+provenance for 62,208 linked contacts in chunks, **1.1–2.7 s per 100 contacts** (data volume, not
+round trips: 7–8 queries per chunk), so the fingerprint takes about 10–13 minutes at the start and
+again at the end of a run. The October 13 probes' 600-second budgets ended inside that fingerprint
+with 0 people processed; that is the measured startup cost, not a defect. `--external-chunk`
+(default 250) is now an option; the budget must leave room for both fingerprints.
