@@ -158,7 +158,7 @@ jobs:
       - run: node scripts/build-worker-lib.mjs
       - name: Install the pinned checkout's own dependencies (ignored by its clean-tree check)
         run: cd pinned && npm ci --no-audit --no-fund
-      - name: Diagnose the connection strings (sanitized: kinds, hosts, ports, option names; never credentials)
+      - name: "Diagnose the connection strings (sanitized - kinds, hosts, ports, option names; never credentials)"
         env:
           COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
