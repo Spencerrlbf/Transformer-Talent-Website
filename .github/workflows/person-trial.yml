@@ -158,6 +158,19 @@ jobs:
       - run: node scripts/build-worker-lib.mjs
       - name: Install the pinned checkout's own dependencies (ignored by its clean-tree check)
         run: cd pinned && npm ci --no-audit --no-fund
+      - name: Diagnose the connection strings (sanitized: kinds, hosts, ports, option names; never credentials)
+        env:
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
+        run: |
+          node --input-type=module -e '
+          import {databaseIdentity,restProjectRef,keyProjectRef} from "./scripts/person-target.mjs";
+          const env=process.env;const out={target:env.PERSON_TARGET_PROJECT_REF,rest_ref:restProjectRef(env.SUPABASE_URL),key_ref:keyProjectRef(env.SUPABASE_SERVICE_ROLE_KEY)};
+          try{const u=new URL(env.COMMS_DATABASE_URL);out.comms={protocol:u.protocol,host:u.hostname,port:u.port||"(none)",user_shape:u.username.replace(/[a-z0-9]/g,"x"),options:[...u.searchParams.keys()],path:u.pathname};}catch(e){out.comms="unparseable";}
+          try{const id=databaseIdentity(env.COMMS_DATABASE_URL);out.comms_identity={kind:id.kind,ref:id.ref,port:id.port,role:id.role.replace(/[a-z0-9]/g,"x")};}catch(e){out.comms_identity=e.message;}
+          console.log(JSON.stringify(out));'
       - name: Start the catch-up run (fingerprint + checkpoint)
         if: ${{ inputs.catchup_mode != 'run' }}
         env:
