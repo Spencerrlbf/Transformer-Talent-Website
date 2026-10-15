@@ -202,7 +202,7 @@ jobs:
           import {prepareCompatibilityRuntime} from "./scripts/person-maintenance/contact-compat-runtime.mjs";
           const pinned=verifyPinnedRuntime(process.env.PINNED_RUNNER_DIR);const rt=prepareCompatibilityRuntime(pinned);const m=rt.manifest;
           console.log(JSON.stringify({artifact_identity:m.artifact_identity,bundle:rt.bundleHash,esbuild:process.env.npm_package_version??null,files:Object.fromEntries(Object.entries(m.files||m).filter(([k,v])=>v&&typeof v==="object"&&("input_sha256" in v)).map(([k,v])=>[k,{i:v.input_sha256,o:v.output_sha256}]))},null,0));'
-          node -p "'pinned esbuild '+require('./pinned/node_modules/esbuild/package.json').version"
+          node -p "'pinned esbuild '+require('./pinned/node_modules/esbuild/package.json').version" 2>/dev/null || echo "pinned esbuild: not installed in the pinned tree (bundle digest above is the identity)"
       - name: Run the pinned catch-up until the source scan completes (resume per pass)
         if: ${{ inputs.catchup_mode != 'start' }}
         env:
