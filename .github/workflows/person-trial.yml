@@ -192,6 +192,17 @@ jobs:
         # The runner's GITHUB_SHA (the branch head) cannot be overridden by step env; the pinned
         # options() read the commit from it, so it is removed for the pinned helpers.
         run: env -u GITHUB_SHA node scripts/person-maintenance/start-catchup.mjs
+      - name: "Derived runtime manifest on this runner (digests only), for review against the approved artifact identity"
+        if: ${{ inputs.catchup_mode != 'start' }}
+        env:
+          PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
+        run: |
+          env -u GITHUB_SHA node --input-type=module -e '
+          import {verifyPinnedRuntime} from "./scripts/person-maintenance/start-catchup.mjs";
+          import {prepareCompatibilityRuntime} from "./scripts/person-maintenance/contact-compat-runtime.mjs";
+          const pinned=verifyPinnedRuntime(process.env.PINNED_RUNNER_DIR);const rt=prepareCompatibilityRuntime(pinned);const m=rt.manifest;
+          console.log(JSON.stringify({artifact_identity:m.artifact_identity,bundle:rt.bundleHash,esbuild:process.env.npm_package_version??null,files:Object.fromEntries(Object.entries(m.files||m).filter(([k,v])=>v&&typeof v==="object"&&("input_sha256" in v)).map(([k,v])=>[k,{i:v.input_sha256,o:v.output_sha256}]))},null,0));'
+          node -p "'pinned esbuild '+require('./pinned/node_modules/esbuild/package.json').version"
       - name: Run the pinned catch-up until the source scan completes (resume per pass)
         if: ${{ inputs.catchup_mode != 'start' }}
         env:
