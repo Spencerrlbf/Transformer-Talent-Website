@@ -107,5 +107,6 @@ if test -f supabase/migrations/20260928070000_person_network_send.sql; then
 fi
 q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
+q -d $DB -1 -f supabase/migrations/20261015120000_person_publish_capture_attribution.sql
 node scripts/build-worker-lib.mjs
 LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-publish-admission/test-publish-admission.mjs

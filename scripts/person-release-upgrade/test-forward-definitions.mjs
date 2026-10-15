@@ -66,6 +66,21 @@ test('v2 fingerprint: the forward keeps the signature and grants, hashes every r
  assert.match(forward,/bit_xor\(hash_record_extended\(e,0\)\)/);
  assert.doesNotMatch(forward,/string_agg|order by/,'no per-row serialization or sort');
 });
+test('publish capture attribution: the forward keeps the signature, grants and every check of the chain, and adds only the post-projection step',()=>{
+ const chain=read('20260928050000_person_publish_admission.sql'), forward=read('20261015120000_person_publish_capture_attribution.sql');
+ const sig=/create (or replace )?function public\.person_publish_project\(p_run text,p_candidate uuid,p_revision bigint,p_envelope jsonb\) returns jsonb\nlanguage plpgsql security definer set search_path='' set timezone='UTC' set datestyle='ISO,YMD' as \$\$/;
+ assert.match(chain,sig);assert.match(forward,sig);
+ assert.doesNotMatch(forward.split('\n').filter(l=>!l.startsWith('--')).join('\n'),/grant|revoke|drop/i,'grants untouched, nothing dropped');
+ for(const frag of ["if current_setting('transaction_isolation')<>'read committed' then raise exception 'publish_isolation';end if;","opened:=person_private.maintenance_enter('publish',p_run);","if not exists(select 1 from public.person_publish_runs where run_id=p_run and mode='publish' and status='running') then raise exception 'publish_run_inactive';end if;","perform 1 from public.candidates where id=p_candidate for update;","oid:=person_private.publish_audit_begin(p_candidate);","r:=person_private.projection_apply(w.work_id,w.work_id,p_candidate,oid,p_revision,p_envelope);","perform person_private.maintenance_frame('publish');\n perform person_private.maintenance_leave(opened);\n return r||jsonb_build_object('operationId',oid);"])assert.ok(chain.includes(frag)&&forward.includes(frag),frag);
+ assert.match(forward,/prior_pending:=exists\(select 1 from public\.person_change_events e where e\.candidate_id=p_candidate and e\.reconciled_at is null\);/);
+ assert.match(forward,/transaction_id=pg_current_xact_id\(\) and e\.source_table='candidates'/);
+ assert.match(forward,/delete from public\.person_change_queue where candidate_id=p_candidate and version=own_version;/);
+ // the statement fence admits the publish frame for the same two tables only, with the active-frame check
+ const fence=read('20260928030000_person_maintenance_window.sql');
+ assert.match(fence,/if not \(tg_table_name in \('person_change_events','person_change_queue'\) and person_private\.maintenance_frame_present\('catchup'\)\) then raise exception 'audit_proof_maintenance';end if;/);
+ assert.match(forward,/tg_table_name in \('person_change_events','person_change_queue'\)\n\s+and \(person_private\.maintenance_frame_present\('catchup'\) or person_private\.maintenance_frame_present\('publish'\)\)\) then raise exception 'audit_proof_maintenance';end if;/);
+ assert.match(forward,/else perform person_private\.maintenance_frame\('publish'\);end if;/);
+});
 test('forward files are the only new versions and sort after the chain',()=>{
  const files=fs.readdirSync(dir).filter(f=>/^2026\d{10}_/.test(f)).sort();
  const last=files.at(-1);
@@ -81,6 +96,7 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261013090000_person_target_label.sql',
   '20261013100000_person_reconcile_page_plan.sql',
   '20261014120000_person_reconcile_v2_fingerprint_plan.sql',
+  '20261015120000_person_publish_capture_attribution.sql',
  ]);
- assert.equal(last,'20261014120000_person_reconcile_v2_fingerprint_plan.sql');
+ assert.equal(last,'20261015120000_person_publish_capture_attribution.sql');
 });

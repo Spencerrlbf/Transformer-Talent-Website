@@ -35,9 +35,9 @@ and `HOSTED_TEST_READINESS.md`.
 
 ### 3.1 Ordered, checksummed manifest and atomic installer
 
-`scripts/person-release/production-upgrade-manifest.json`: **64 versions** from
+`scripts/person-release/production-upgrade-manifest.json`: **65 versions** from
 `20260926033900_person_atomic_projection.sql` to
-`20261014120000_person_reconcile_v2_fingerprint_plan.sql` with SHA256, MD5 and trimmed MD5, plus
+`20261015120000_person_publish_capture_attribution.sql` with SHA256, MD5 and trimmed MD5, plus
 the three window versions production already records (`recorded_in_window`: `20260926040300`,
 `20260926042200`, `20260926050355`, with the digests observed on production). The whole 96-row
 production history is digested in `production-history-digests.json` (whole-table digest
@@ -50,7 +50,7 @@ stops with `history_mismatch`); the identity index `candidates_person_username_i
 `CONCURRENTLY` before `20260927170000` when absent; then each remaining version's file and its
 history row (exact file bytes) commit in **one transaction**, so an error or a lost connection
 leaves neither and a resume skips only verified versions. Proof on an isolated database carrying
-production's history: faults before commit leave nothing, resume completes 96 + 64, tampered
+production's history: faults before commit leave nothing, resume completes 96 + 65, tampered
 rows refuse, foreign selection refused (`test-apply-upgrade-resume.sh`, all checks). First hosted
 use: the copy, 2026-10-14 18:04 UTC, `applied=1 skipped=63` (the fingerprint forward), history
 160 versions. Dry run on the copy before that: 63 skipped, 1 to apply, 52 copy rows recorded

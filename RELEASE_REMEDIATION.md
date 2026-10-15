@@ -1685,3 +1685,144 @@ final audit (68,640 of 423,062 in its first 5-hour pass at 3.8 people/s; resumab
 integrity check stayed in force; no timeout was raised to pass a step (the two forwards change
 plans, not budgets). The measured rates and the capacity figures are the input to the owner
 decisions in the package (section 7).
+
+## 16. October 15: armed-sweep teardown, the exact deletion that strands a retained person, and its regression test
+
+Follow-up to 14 (`rehearsal-catchup-20261013b`) and 15.3. Local disposable PostgreSQL only
+(a scratch 15.13 cluster on 127.0.0.1:55821 built by `scripts/person-transition-cli/run-local-tests.sh`,
+`TRANSITION_SUITE=armed`, 139 versions, labelled `local`); no hosted database was read or written;
+the pinned checkout at `pl/pinned` (c4d0e4e, worker lib already built) was used read-only through
+`PINNED_RUNNER_DIR`.
+
+### 16.1 Reproduction: which teardown deletion makes a retained normalized person unreconcilable
+
+Method: after the armed suite (three `leaktest` people normalized by the sweep's baseline reconcile,
+anchored, controller disarmed), the post-suite database was cloned once per experiment. Each clone
+received the child rows the fixture writes for its pool people (an enrichment in TT's company with
+provider `leaktest`, a fixture-company application linked to the person, an embedding, a
+`person_signals` row, a `refresh_queue` row), a settling queue reconcile, then exactly ONE deletion
+type of the pre-`9c3b83b` teardown, then two reconciles: the queue page the pinned catch-up pages
+(`person_reconcile_page`) and the exact three ids paged as the sweep pages them. Each experiment ran
+with the current translator; the decisive ones also with the pinned translator (c4d0e4e). The two
+`person-reconcile.mjs` files are byte-identical; `person-trial.mjs` differs only in the recruiter-clear
+rule.
+
+| Deletion (per retained person) | Captured as a change event? | Queue page | Exact ids | Pinned translator |
+|---|---|---|---|---|
+| none | | empty | verified ×3 | same |
+| `candidate_enrichments` (TT company, provider `leaktest`) | yes (TT-company rows are captured) | **verified** | verified ×3 | same |
+| **`candidate_experiences` (the derived rows, source `person`)** | **no** | empty (nothing re-queues the person) | **`post_save_integrity:jobs_accounted`** | **same** |
+| `candidate_embeddings` | no | empty | verified ×3 | |
+| `person_signals` | no | empty | verified ×3 | |
+| `refresh_queue` | no | empty | verified ×3 | |
+| `website_applications` in the fixture company | no (non-TT rows are not captured) | empty | verified ×3 | |
+| all of the above together (the old teardown) | enrichment delete only | **`jobs_accounted`** on the first person paged | `jobs_accounted` | same |
+
+Conclusion. The cause is the deletion of the derived `candidate_experiences` rows alone: the
+list owner (`candidate_profile_state.jobs_source_id`, the stored `legacy_import` snapshot) still
+lists one job, zero are stored, and `checkStored` fails `jobs_accounted` before any record is
+written. The deletion is not captured, so the person stays off the queue; the enrichment delete the
+same teardown performed IS captured and is what put the person on the queue page in section 14.
+Restoring the enrichment rows therefore could not help (they were never a translator input:
+`readSources` takes only `provider=harvest, status=ok` ledger rows, and the event rule skips the
+rest). The candidate row itself is refused by `candidate_sources_candidate_id_fkey` (RESTRICT),
+which is why the person survives without its derived rows. All of this matches 15.3's diagnosis and
+contradicts 14's first hypothesis (enrichment rows), now recorded as superseded.
+
+### 16.2 Fix (this branch, on top of `9c3b83b`)
+
+- `scripts/tenancy/pool-teardown.mjs` (new): the pool-person teardown plan as data and one function,
+  shared by the REST fixture and the local regression test. Retention evidence =
+  `candidate_profile_state`, `candidate_sources`, `person_audit_anchors`, and derived
+  `candidate_experiences` (source `person`). A retained person loses only `match_verdicts` rows and
+  fixture-company `website_applications` (tenant-only, read by no translator); sources, state,
+  derived rows, anchors, enrichments and the rest are kept. **Fails closed**: if any evidence table
+  cannot be read, no pool person's row is deleted.
+- `scripts/tenancy/fixture.mjs`: `teardown()` uses the plan; the evidence reads are hard (no `soft`),
+  chunked by 50 ids. Previously a failed `candidate_profile_state` read was treated as "nobody is
+  normalized" and would have repeated the deletion.
+- `scripts/test-tenancy.mjs`: a refused teardown prints `cleanup refused: …` with the `--cleanup`
+  instruction and is recorded as a CRASH finding instead of aborting the report.
+- `scripts/tenancy/armed.mjs`: the runner selection is exported as `sweepRunner()` so the test
+  reconciles with the exact translator the sweep normalized with.
+
+### 16.3 Regression test (`scripts/tenancy/test-armed.mjs`, 9 cases; `TRANSITION_SUITE=armed`)
+
+Seeding now writes the fixture-shaped child rows above. After the disarm case: the shared plan runs
+through SQL adapters on the harness database (tables the local chain lacks, `match_verdicts` and
+`role_shortlists`, are reported as skipped, never assumed); inventory before/after proves only the
+fixture-company application went; a synthetic evidence-read failure proves the refusal deletes
+nothing; the current translator reconciles the three retained people exactly as the sweep pages
+them, all `verified`, the catch-up queue page is empty; with `PINNED_RUNNER_DIR` the pinned
+translator reconciles them `verified` too. The negative control then deletes the enrichment row
+(captured, queue page = that person, `verified`) and the derived rows of another person (not
+captured, queue empty; exact reconcile rejects with `post_save_integrity:jobs_accounted`).
+
+`scripts/tenancy/test-pool-teardown.mjs` (new, mocked REST boundary, no database) covers the
+fixture's own adapter: a person proved normalized by `candidate_sources` alone receives exactly two
+DELETEs (`match_verdicts?candidate_id=eq.…`, `website_applications?organization_id=eq.<fixture
+company>&candidate_id=eq.…`), a raw person receives every pool-child DELETE and its own row's, the
+company-wide DELETEs carry `candidate_id=not.in.(<retained>)`, all four evidence tables are read
+(derived rows with `source=eq.person`), and a 500 from any one of them rejects the teardown with no
+pool DELETE issued.
+
+Run record (2026-10-15, scratch cluster 127.0.0.1:55821, fresh chain per run):
+
+| Command | Result |
+|---|---|
+| `TRANSITION_SUITE=armed PINNED_RUNNER_DIR=<c4d0e4e> bash scripts/person-transition-cli/run-local-tests.sh 55821` | 9/9 (teardown plan 180 ms, negative control 74 ms; pinned translator verified the retained people) |
+| `TRANSITION_SUITE=armed bash scripts/person-transition-cli/run-local-tests.sh 55821` (current runner) | 9/9 |
+| `node --test scripts/tenancy/test-pool-teardown.mjs` | 2/2 |
+| `node --test scripts/tenancy/test-cleanup-scope.mjs` (unchanged) | 2/2 |
+
+The first run of the new case failed on its own bookkeeping, not on the code: with every person
+retained the plan attempts only `match_verdicts`, so only that absent table is reported skipped
+(`role_shortlists` is never touched for a retained person); the assertion was corrected to the
+tables the plan attempts.
+
+### 16.4 Operating rule
+
+Until this branch is released, **the armed sweep must not run against a database whose pinned
+catch-up has not completed** (also written into `scripts/tenancy/DISPOSABLE.md`). Every earlier
+sweep build deletes the retained people's derived job rows, the damage is invisible to the queue
+until a captured delete surfaces it, and the pinned loop then stops the whole catch-up on that
+person. Where an earlier sweep already ran (the copy: `fc347915…`, `355deede…` repaired in 15.3;
+`0147d75c…`, `2a8bbcad…` still to repair, 15.5), re-derive the rows as in 15.3 before starting or
+resuming the catch-up.
+
+### 15.6 October 15: the two approved speed-ups
+
+Authorized by Spencer on 2026-10-15 ("agree, both"): the package (a)–(e) with the revised
+ceilings, and the two speed-ups for the long jobs.
+
+**B. The publisher attributes its own captured event** (forward
+`20261015120000_person_publish_capture_attribution.sql`). Every armed publication updates
+`public.candidates`, and the capture trigger queues the person for the reconciler, which can only
+record a same-snapshot review (no source changed); on the copy that queued 159,122 people, ≈ 56 h of
+catch-up for production. The forward keeps `person_publish_project`'s signature, grants and every
+check and adds one step after the projection: when the person had no unreconciled captured change
+before the publication, the transaction's own `candidates` events are marked reconciled and the
+queue row they advanced is released, exactly as a verified reconciliation does; a person with
+anything pending before is left to the reconciler. The statement fence that refuses event and
+queue writes while armed (`audit_proof_maintenance`, admitted only inside a catch-up frame since
+`20260928030000`) now also admits the publish frame for the same two tables with the same
+active-frame check. Tests: forward-definition tests 8/8 (signature, grants, every chain check
+present verbatim, fence admits only those two tables); publish-admission suite 12/12 including two
+new cases (a published person leaves the queue with its event reconciled and is not pending; a
+person with an unreconciled captured enrichment change stays queued with both events waiting);
+application-edits, transition CLI, publish, post-cutover audit and upgrade harnesses green; resume
+proof all checks with 65 versions. Expected effect on production: the post-publication catch-up
+shrinks from every published person to the people whose sources actually changed during
+publication.
+
+**A. A runner in the database's region.** Production is in AWS `us-east-2` (IPv6 direct host; the
+session pooler `aws-0-us-east-2.pooler.supabase.com` on 5432 is the operator path). This machine's
+round trip is 44–59 ms. A read-only latency probe workflow (`person-runtime-probe.yml`) was added,
+but GitHub only dispatches workflows present on the default branch, so it has not run; the owner
+chooses between a small cloud machine in `us-east-2` (his account) and a GitHub runner (needs the
+ops workflow on `main`).
+
+Production facts read for the plan (read-only, 16:40 UTC): PostgreSQL 17.6, 34.23 GB, 437,037
+candidates, 423,588 profile states and 493,355 sources from the September normalization, 25,734
+queued people, 84,499 directory-linked people, 96 recorded versions, `max_connections` 160. No
+initial backfill is needed; the first catch-up covers the queue and the ≈ 13,000 newer candidates.
