@@ -184,19 +184,19 @@ jobs:
         env:
           BACKFILL_CONFIG: ${{ inputs.catchup }}
           PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
-          GITHUB_SHA: c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc   # the pinned options() read the commit from here; the runner's own value is the branch head
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
           PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node scripts/person-maintenance/start-catchup.mjs
+        # The runner's GITHUB_SHA (the branch head) cannot be overridden by step env; the pinned
+        # options() read the commit from it, so it is removed for the pinned helpers.
+        run: env -u GITHUB_SHA node scripts/person-maintenance/start-catchup.mjs
       - name: Run the pinned catch-up until the source scan completes (resume per pass)
         if: ${{ inputs.catchup_mode != 'start' }}
         env:
           BASE_CONFIG: ${{ inputs.catchup }}
           PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
-          GITHUB_SHA: c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc   # the pinned options() read the commit from here; the runner's own value is the branch head
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
           PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
@@ -206,7 +206,7 @@ jobs:
           export BACKFILL_CONFIG="$(python3 -c 'import json,os;c=json.loads(os.environ["BASE_CONFIG"]);c["resume"]=True;print(json.dumps(c))')"
           for pass in 1 2 3 4 5 6; do
             echo "=== catch-up pass $pass $(date -u +%FT%TZ)"
-            node scripts/person-maintenance/run-catchup.mjs > pass.log 2>&1; rc=$?
+            env -u GITHUB_SHA node scripts/person-maintenance/run-catchup.mjs > pass.log 2>&1; rc=$?
             grep -E '"phase":"(catchup_runner|reconcile_stopped|catchup_runner_finished|catchup_runner_stopped|source_scan_complete|reconcile_paused|reconcile_checkpoint)"' pass.log | cut -c1-400 | tail -5
             echo "pass $pass exit=$rc"
             grep -q '"phase":"source_scan_complete"' pass.log && exit 0
