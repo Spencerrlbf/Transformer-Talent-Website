@@ -160,7 +160,6 @@ jobs:
         run: cd pinned && npm ci --no-audit --no-fund
       - name: "Diagnose the connection strings (sanitized - kinds, hosts, ports, option names; never credentials)"
         env:
-          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
@@ -171,6 +170,15 @@ jobs:
           try{const u=new URL(env.COMMS_DATABASE_URL);out.comms={protocol:u.protocol,host:u.hostname,port:u.port||"(none)",user_shape:u.username.replace(/[a-z0-9]/g,"x"),options:[...u.searchParams.keys()],path:u.pathname};}catch(e){out.comms="unparseable";}
           try{const id=databaseIdentity(env.COMMS_DATABASE_URL);out.comms_identity={kind:id.kind,ref:id.ref,port:id.port,role:id.role.replace(/[a-z0-9]/g,"x")};}catch(e){out.comms_identity=e.message;}
           console.log(JSON.stringify(out));'
+      - name: "Normalize the communications URL for the hardened validator (keeps sslmode only; masked, never printed)"
+        env:
+          COMMS_RAW: ${{ secrets.COMMS_DATABASE_URL }}
+        run: |
+          CLEAN=$(node --input-type=module -e '
+          const u=new URL(process.env.COMMS_RAW);const mode=u.searchParams.get("sslmode");u.search="";if(mode)u.searchParams.set("sslmode",mode);process.stdout.write(u.toString());')
+          echo "::add-mask::$CLEAN"
+          echo "COMMS_DATABASE_URL=$CLEAN" >> "$GITHUB_ENV"
+          node --input-type=module -e 'import {databaseIdentity} from "./scripts/person-target.mjs";const id=databaseIdentity(process.argv[1]);console.log(JSON.stringify({comms_normalized:{kind:id.kind,port:id.port}}));' "$CLEAN"
       - name: Start the catch-up run (fingerprint + checkpoint)
         if: ${{ inputs.catchup_mode != 'run' }}
         env:
@@ -179,7 +187,6 @@ jobs:
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
           PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
-          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/person-maintenance/start-catchup.mjs
@@ -191,7 +198,6 @@ jobs:
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
           PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
-          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
@@ -216,13 +222,21 @@ jobs:
           node-version: 24
       - run: npm install --no-save --no-audit --no-fund pg@8
       - run: node scripts/build-worker-lib.mjs
+      - name: "Normalize the communications URL for the hardened validator (keeps sslmode only; masked, never printed)"
+        env:
+          COMMS_RAW: ${{ secrets.COMMS_DATABASE_URL }}
+        run: |
+          CLEAN=$(node --input-type=module -e '
+          const u=new URL(process.env.COMMS_RAW);const mode=u.searchParams.get("sslmode");u.search="";if(mode)u.searchParams.set("sslmode",mode);process.stdout.write(u.toString());')
+          echo "::add-mask::$CLEAN"
+          echo "COMMS_DATABASE_URL=$CLEAN" >> "$GITHUB_ENV"
+          node --input-type=module -e 'import {databaseIdentity} from "./scripts/person-target.mjs";const id=databaseIdentity(process.argv[1]);console.log(JSON.stringify({comms_normalized:{kind:id.kind,port:id.port}}));' "$CLEAN"
       - name: Post-cutover audit (one pass; resume by dispatching again with audit_resume)
         env:
           AUDIT_OPTIONS: ${{ inputs.audit }}
           AUDIT_RESUME: ${{ inputs.audit_resume && '--resume' || '' }}
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_PUBLISH_DATABASE_URL: ${{ secrets.PERSON_PUBLISH_DATABASE_URL }}
-          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
         run: |
           # shellcheck disable=SC2086
           node scripts/person-postcutover-audit.mjs $AUDIT_OPTIONS $AUDIT_RESUME > audit.log 2>&1; rc=$?
@@ -243,6 +257,5 @@ jobs:
         env:
           BACKFILL_CONFIG: ${{ inputs.backfill }}
           BACKFILL_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
-          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
