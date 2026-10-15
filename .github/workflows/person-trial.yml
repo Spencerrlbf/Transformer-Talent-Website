@@ -207,7 +207,8 @@ jobs:
           for pass in 1 2 3 4 5 6; do
             echo "=== catch-up pass $pass $(date -u +%FT%TZ)"
             env -u GITHUB_SHA node scripts/person-maintenance/run-catchup.mjs > pass.log 2>&1; rc=$?
-            grep -E '"phase":"(catchup_runner|reconcile_stopped|catchup_runner_finished|catchup_runner_stopped|source_scan_complete|reconcile_paused|reconcile_checkpoint)"' pass.log | cut -c1-400 | tail -5
+            grep -E '"phase":"(catchup_runner|reconcile_stopped|catchup_runner_finished|catchup_runner_stopped|catchup_run_stopped|source_scan_complete|reconcile_paused|reconcile_checkpoint)"' pass.log | cut -c1-400 | tail -5
+            [ $rc -eq 0 ] || { echo "--- last lines (sanitized)"; sed -E 's/eyJ[A-Za-z0-9._-]+/<jwt>/g; s#postgres(ql)?://[^ "]+#<pg-url>#g' pass.log | tail -8 | cut -c1-300; }
             echo "pass $pass exit=$rc"
             grep -q '"phase":"source_scan_complete"' pass.log && exit 0
             [ $rc -eq 0 ] || exit $rc
