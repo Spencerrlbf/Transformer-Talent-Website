@@ -127,11 +127,33 @@ export function verifyExport(out,log=(x)=>console.log(JSON.stringify(x))){
  const result={phase:'storage_export_verified',project:m.project,objects:m.manifest.length,ok,missing,mismatch,complete:!missing&&!mismatch};
  log(result);return result;
 }
+/** The inventory connection. The export runs BEFORE the schema install (step 0 of the sitting),
+ * when production has no identity function yet, so the installer's rule applies instead of
+ * the operator pool's: the URL must pass the hardened validator; when the identity function
+ * exists its label must equal the selection; an unlabelled database (pre-install) passes. */
+export async function openStorageDatabase(env,{pgModule}={}){
+ const pg=pgModule??(await import('pg')).default;
+ const {databaseConfig}=await import('../person-publish/lib.mjs');
+ const pool=new pg.Pool(databaseConfig({...env,PERSON_PUBLISH_DATABASE_URL:env.STORAGE_DATABASE_URL,LOCAL_DATABASE_URL:undefined},'tt-storage-export'));
+ pool.on('error',()=>{});
+ try{
+  await checkStorageDatabaseLabel(pool,env);
+  return pool;
+ }catch(error){await pool.end();throw error;}
+}
+export async function checkStorageDatabaseLabel(db,env){
+ const {selectedTarget}=await import('../person-target.mjs');
+ const ref=selectedTarget(env).ref;
+ const present=(await db.query("select to_regprocedure('public.person_target_identity()') is not null present")).rows[0].present;
+ if(!present)return {label:null,checked:false};
+ const label=(await db.query("select public.person_target_identity()->>'project_ref' label")).rows[0].label;
+ if(label!==null&&label!==ref)throw fail('storage_export_label_mismatch');
+ return {label,checked:true};
+}
 export async function main(argv=process.argv.slice(2),env=process.env){
  if(argv[0]==='--verify'){const r=verifyExport(argv[1]??fail('storage_export_dir'));if(!r.complete)process.exitCode=1;return r;}
  const out=argv[0];if(!out||argv.length!==1)throw fail('storage_export_dir');
- const {openDatabase}=await import('../person-publish/lib.mjs');
- const db=await openDatabase({...env,PERSON_PUBLISH_DATABASE_URL:env.STORAGE_DATABASE_URL,LOCAL_DATABASE_URL:undefined},'tt-storage-export');
+ const db=await openStorageDatabase(env);
  try{return await exportObjects({env,db,out});}finally{await db.end();}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)

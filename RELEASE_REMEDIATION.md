@@ -1826,3 +1826,16 @@ Production facts read for the plan (read-only, 16:40 UTC): PostgreSQL 17.6, 34.2
 candidates, 423,588 profile states and 493,355 sources from the September normalization, 25,734
 queued people, 84,499 directory-linked people, 96 recorded versions, `max_connections` 160. No
 initial backfill is needed; the first catch-up covers the queue and the ≈ 13,000 newer candidates.
+
+### 15.7 October 15: production sitting, step 0 (read-only)
+
+Operator file created by the owner (`pl/.env.production.operator`, mode 600; production's session
+pooler is `aws-1-us-east-2`, not `aws-0`; the direct host is IPv6-only from this machine). Service
+role key verified (project claim and role; REST probe 437,037 candidates). **Storage export**
+(`export-storage-objects.sh`): inventory REST = `storage.objects` 56 = 56 across 3 buckets, 56
+downloaded, 56 sizes verified, 56 MD5s verified against plain eTags, 8,433,265 bytes, `--verify`
+complete; kept private outside the repository. The export now opens its inventory connection under
+the installer's rule (an unlabelled pre-install database passes, a foreign label refuses; tests
+7/7), because production has no identity function before the install. **Installer dry run** on
+production: 96 versions, the three recorded window versions verified, 65 to apply, the identity
+index to be built concurrently before `20260927170000`, nothing applied.

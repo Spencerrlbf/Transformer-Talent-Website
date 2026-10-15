@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {exportObjects,verifyExport,listBucket,compareInventories,safeObjectPath} from './export-storage-objects.mjs';
+import {exportObjects,verifyExport,listBucket,compareInventories,safeObjectPath,checkStorageDatabaseLabel} from './export-storage-objects.mjs';
 
 const REF='abcdefghijklmnopqrst';
 const env={PERSON_TARGET_PROJECT_REF:REF,SUPABASE_URL:`https://${REF}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:'sb_secret_test',STORAGE_DATABASE_URL:`postgresql://postgres.${REF}:x@aws-0-us-east-2.pooler.supabase.com:5432/postgres`};
@@ -87,4 +87,12 @@ test('the destination must be the selected project on the 5432 session endpoint;
  await assert.rejects(exportObjects({env:{...env,SUPABASE_URL:'https://zyxwvutsrqponmlkjihg.supabase.co'},fetchFn,db,out:tmp(),log:()=>{}}),/person_target:rest_mismatch/);
  await assert.rejects(exportObjects({env:{...env,STORAGE_DATABASE_URL:undefined},fetchFn,db,out:tmp(),log:()=>{}}),/storage_export_database_required/);
  assert.throws(()=>safeObjectPath('../x'),/storage_object_name/);assert.throws(()=>safeObjectPath('/abs'),/storage_object_name/);assert.throws(()=>safeObjectPath('a//b'),/storage_object_name/);
+});
+
+test('the inventory connection accepts an unlabelled (pre-install) database and the selection\'s own label, and refuses another label',async()=>{
+ const db=(present,label)=>({query:async(sql)=>sql.includes('to_regprocedure')?{rows:[{present}]}:{rows:[{label}]}});
+ assert.deepEqual(await checkStorageDatabaseLabel(db(false,null),env),{label:null,checked:false});
+ assert.deepEqual(await checkStorageDatabaseLabel(db(true,null),env),{label:null,checked:true});
+ assert.deepEqual(await checkStorageDatabaseLabel(db(true,REF),env),{label:REF,checked:true});
+ await assert.rejects(checkStorageDatabaseLabel(db(true,'zyxwvutsrqponmlkjihg'),env),/storage_export_label_mismatch/);
 });
