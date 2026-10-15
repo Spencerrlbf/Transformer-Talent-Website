@@ -1864,3 +1864,37 @@ sensitive). Production deploy from a clean detached checkout of `e7a2ba7` (no lo
 `packageManager` line) with `vercel deploy --prod`: deployment
 `transformer-talent-website-6hk8vyhln.vercel.app`. Note for the main merge: until PR #2 lands,
 any push to `main` would redeploy the old code over this deployment.
+
+### 15.10 October 15: step 3 on production, first held window, and two findings
+
+Workers: `review-queue`, `refresh-queue` and `sync-candidates` schedules disabled for the sitting
+(`derivative-worker` has no workflow on `main`). Controller armed (revision 2), drained, sealed
+(revision 4); the first catch-up window was refused (`maintenance_run`: a window binds to an
+existing running run, so the run must be started first) and the controller was reopened at once
+(revision 5) so recruiter edits were refused for seconds only.
+
+**Catch-up through GitHub Actions.** The communications connection string exists only as a
+repository secret, so the catch-up (and later the audit) run as jobs of `person-trial.yml`
+dispatched from the branch (`--ref`). Four refusals were found and fixed on the way, each by a
+small workflow change: the secret carries `sslrootcert` and `connect_timeout` options the hardened
+validator refuses (normalised inside the job, masked); the runner's `GITHUB_SHA` is the branch
+head and cannot be overridden by step env (removed for the pinned helpers); the runner shell exits
+on the first failing command (reported instead); and the derived runtime's **artifact identity
+differs on the runner** (`16174c9a…` vs the reviewed `0d30436b…`). Review of the two manifests:
+every translated source file identical by SHA256 (person-trial, person-reconcile,
+person-backfill, engine, the contact snapshot output); only the pinned worker bundle differs,
+built by the same `esbuild@0.28.2` from the same sources but with the pinned lockfile's
+dependency versions on the runner (`npm ci`) versus this machine's 43 non-matching installed
+packages. The runner's identity is the lockfile-exact one and is approved for the Actions runs;
+this machine's identity stays approved for local runs. Run `release-catchup-20261015` started on
+Actions (fingerprint over 84,499 linked contacts, 18:36 UTC).
+
+**Anchors.** Production holds **6,801 audit anchors**, not the 422,785 the copy had: the
+September anchor pass ran on the copy after it was cloned, never on production. The anchors step
+therefore has to create about 427,000 before-images (≈ 5.4 GB, already in the capacity figure):
+measured 1,120 per minute at batch 20 (≈ 6.5 h), estimated about 2 h at batch 100. The first
+anchors window ran to the CLI's 15-minute default budget (9,595 anchors, 549 held people
+`review`) and the controller was reopened. The held time the sitting needs is therefore the
+catch-up (25,748 queued, ≈ 3.5 h at the pinned rate) plus anchors (≈ 2 h), scheduled as an
+overnight window on the owner's word; recruiter edits and application processing are refused
+while held, public pages and applications stay up.
