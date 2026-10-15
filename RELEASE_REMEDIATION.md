@@ -1839,3 +1839,18 @@ the installer's rule (an unlabelled pre-install database passes, a foreign label
 7/7), because production has no identity function before the install. **Installer dry run** on
 production: 96 versions, the three recorded window versions verified, 65 to apply, the identity
 index to be built concurrently before `20260927170000`, nothing applied.
+
+### 15.8 October 15: production schema install (step 1)
+
+Preconditions met: disk raised by the owner from 40 GB (33.06 GB used, spend cap on) to 80 GB
+with the spend cap disabled; daily physical backup completed 2026-10-15 06:26 UTC (CLI); package
+approved 2026-10-15 ("agree, both"). `apply-upgrade.sh` on production, 17:37:42–17:39:58 UTC:
+`candidates_person_username_idx` built concurrently (autocommit) before `20260927170000`, then
+**65 versions applied, 0 skipped, 0 unverifiable bodies, history 96 → 161**, each file and its
+history row in one transaction, exit 0, PostgREST reloaded. The application stayed in legacy
+mode throughout (no `PERSON_*` variables in production). Label statement and identity checks
+recorded below.
+Label written at 17:40:15 UTC (`person_private.target_label('kmuihequfurvjxpnugxf')`, created
+true). Identity through PostgreSQL and through REST: project `kmuihequfurvjxpnugxf`, cluster
+`7550817586112808987`; controller disabled, revision 1, generation 1; a further installer dry run
+skips all 65 with verified digests. Step 1 complete; the application is still in legacy mode.
