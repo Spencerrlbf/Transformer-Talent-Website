@@ -44,6 +44,36 @@ on:
         description: "Undo the trial for these ids (scripts/person-trial-undo.mjs); with dry_run ticked it only counts"
         type: boolean
         default: false
+      probe:
+        description: "Read-only: TCP connect times from this runner to the selected project's hosts"
+        type: boolean
+        default: false
+      catchup:
+        description: 'Release catch-up (scripts/person-maintenance): BACKFILL_CONFIG JSON without resume (run-id, scope queue, limit, batch-size, max-seconds, max-db-bytes)'
+        type: string
+        required: false
+        default: ''
+      catchup_start:
+        description: "Run start-catchup.mjs first (new run); unticked resumes an existing run"
+        type: boolean
+        default: false
+      catchup_compatibility_id:
+        description: "Reviewed compatibility id of the derived pinned runtime"
+        type: string
+        default: "c4d0e4e-explicit-contact-clear-v1"
+      catchup_artifact_sha256:
+        description: "Reviewed artifact identity of the derived pinned runtime"
+        type: string
+        default: "0d30436b535ffc015624b7f8f0153c6cf769908ed6e6a31597f8e71659407250"
+      audit:
+        description: 'Release post-cutover audit: person-postcutover-audit.mjs options without --resume (run-id, --record, --scope, --batch-size, --limit, --max-seconds, --max-db-bytes, --external-chunk)'
+        type: string
+        required: false
+        default: ''
+      audit_resume:
+        description: "Resume the audit run named in audit (unticked starts it)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,7 +86,7 @@ concurrency:
 
 jobs:
   trial:
-    if: ${{ inputs.backfill == '' }}
+    if: ${{ inputs.backfill == '' && inputs.catchup == '' && inputs.audit == '' && !inputs.probe }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -85,6 +115,104 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
+  # Release operations (branch fix/person-90-release-remediation; dispatched with --ref so this
+  # file's version runs). The runner sits near the database; secrets never leave Actions.
+  probe:
+    if: ${{ inputs.probe }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: TCP connect times (10 samples each, read-only)
+        env:
+          REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
+        run: |
+          [[ "$REF" =~ ^[a-z]{20}$ ]] || { echo "PERSON_TARGET_PROJECT_REF variable missing"; exit 2; }
+          python3 - "$REF" <<'PY'
+          import socket,time,sys,statistics
+          ref=sys.argv[1]
+          for host,port in [(f"{ref}.supabase.co",443),("aws-1-us-east-2.pooler.supabase.com",5432),("aws-1-us-east-2.pooler.supabase.com",6543)]:
+              ms=[]
+              for _ in range(10):
+                  t=time.time()
+                  try:
+                      s=socket.create_connection((host,port),timeout=5); s.close(); ms.append((time.time()-t)*1000)
+                  except Exception as e: print(host,port,"error",e); break
+              if ms: print(f"{host}:{port} connect median {statistics.median(ms):.1f} ms min {min(ms):.1f} ms")
+          PY
+  catchup:
+    if: ${{ inputs.catchup != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc
+          path: pinned
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --no-save --no-audit --no-fund pg@8
+      - run: node scripts/build-worker-lib.mjs
+      - name: Install the pinned checkout's own dependencies (ignored by its clean-tree check)
+        run: cd pinned && npm ci --no-audit --no-fund
+      - name: Start the catch-up run (fingerprint + checkpoint)
+        if: ${{ inputs.catchup_start }}
+        env:
+          BACKFILL_CONFIG: ${{ inputs.catchup }}
+          PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
+          PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
+          PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
+          PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/person-maintenance/start-catchup.mjs
+      - name: Run the pinned catch-up until the source scan completes (resume per pass)
+        env:
+          BASE_CONFIG: ${{ inputs.catchup }}
+          PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
+          PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
+          PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
+          PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          export BACKFILL_CONFIG="$(python3 -c 'import json,os;c=json.loads(os.environ["BASE_CONFIG"]);c["resume"]=True;print(json.dumps(c))')"
+          for pass in 1 2 3 4 5 6; do
+            echo "=== catch-up pass $pass $(date -u +%FT%TZ)"
+            node scripts/person-maintenance/run-catchup.mjs > pass.log 2>&1; rc=$?
+            grep -E '"phase":"(catchup_runner|reconcile_stopped|catchup_runner_finished|catchup_runner_stopped|source_scan_complete|reconcile_paused|reconcile_checkpoint)"' pass.log | cut -c1-400 | tail -5
+            echo "pass $pass exit=$rc"
+            grep -q '"phase":"source_scan_complete"' pass.log && exit 0
+            [ $rc -eq 0 ] || exit $rc
+          done
+          echo "time budget used; resume with a new dispatch"; exit 3
+  audit:
+    if: ${{ inputs.audit != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --no-save --no-audit --no-fund pg@8
+      - run: node scripts/build-worker-lib.mjs
+      - name: Post-cutover audit (one pass; resume by dispatching again with audit_resume)
+        env:
+          AUDIT_OPTIONS: ${{ inputs.audit }}
+          AUDIT_RESUME: ${{ inputs.audit_resume && '--resume' || '' }}
+          PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
+          PERSON_PUBLISH_DATABASE_URL: ${{ secrets.PERSON_PUBLISH_DATABASE_URL }}
+          COMMS_DATABASE_URL: ${{ secrets.COMMS_DATABASE_URL }}
+        run: |
+          # shellcheck disable=SC2086
+          node scripts/person-postcutover-audit.mjs $AUDIT_OPTIONS $AUDIT_RESUME > audit.log 2>&1; rc=$?
+          grep -E '"phase":"audit_(start|checkpoint|finished|stopped)"' audit.log | cut -c1-400 | tail -4
+          echo "exit=$rc"; exit $rc
   backfill:
     if: ${{ inputs.backfill != '' && !inputs.undo && !inputs.describe }}
     runs-on: ubuntu-latest
