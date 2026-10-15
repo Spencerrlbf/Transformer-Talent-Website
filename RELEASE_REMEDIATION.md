@@ -1854,3 +1854,13 @@ Label written at 17:40:15 UTC (`person_private.target_label('kmuihequfurvjxpnugx
 true). Identity through PostgreSQL and through REST: project `kmuihequfurvjxpnugxf`, cluster
 `7550817586112808987`; controller disabled, revision 1, generation 1; a further installer dry run
 skips all 65 with verified digests. Step 1 complete; the application is still in legacy mode.
+
+### 15.9 October 15: configuration and deploy (step 2), on the owner's "go step 2"
+
+GitHub repository: variables `PERSON_TARGET_PROJECT_REF=kmuihequfurvjxpnugxf`,
+`PERSON_WRITE_MODE=legacy`, `PERSON_TRANSITION_SUPPORT=on`; secret `PERSON_DATABASE_URL`
+(transaction pooler, 6543). Vercel production environment: the same four (`PERSON_DATABASE_URL`
+sensitive). Production deploy from a clean detached checkout of `e7a2ba7` (no local changes, no
+`packageManager` line) with `vercel deploy --prod`: deployment
+`transformer-talent-website-6hk8vyhln.vercel.app`. Note for the main merge: until PR #2 lands,
+any push to `main` would redeploy the old code over this deployment.
