@@ -184,6 +184,7 @@ jobs:
         env:
           BACKFILL_CONFIG: ${{ inputs.catchup }}
           PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
+          GITHUB_SHA: c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc   # the pinned options() read the commit from here; the runner's own value is the branch head
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
           PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
@@ -195,6 +196,7 @@ jobs:
         env:
           BASE_CONFIG: ${{ inputs.catchup }}
           PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
+          GITHUB_SHA: c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc   # the pinned options() read the commit from here; the runner's own value is the branch head
           PERSON_TARGET_PROJECT_REF: ${{ vars.PERSON_TARGET_PROJECT_REF }}
           PERSON_CATCHUP_COMPATIBILITY_ID: ${{ inputs.catchup_compatibility_id }}
           PERSON_CATCHUP_ARTIFACT_SHA256: ${{ inputs.catchup_artifact_sha256 }}
