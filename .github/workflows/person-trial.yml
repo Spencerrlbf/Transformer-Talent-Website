@@ -53,10 +53,11 @@ on:
         type: string
         required: false
         default: ''
-      catchup_start:
-        description: "Run start-catchup.mjs first (new run); unticked resumes an existing run"
-        type: boolean
-        default: false
+      catchup_mode:
+        description: "start = create the run (fingerprint + checkpoint) only; run = resume passes inside an open window; both = start then run"
+        type: choice
+        options: [start, run, both]
+        default: run
       catchup_compatibility_id:
         description: "Reviewed compatibility id of the derived pinned runtime"
         type: string
@@ -158,7 +159,7 @@ jobs:
       - name: Install the pinned checkout's own dependencies (ignored by its clean-tree check)
         run: cd pinned && npm ci --no-audit --no-fund
       - name: Start the catch-up run (fingerprint + checkpoint)
-        if: ${{ inputs.catchup_start }}
+        if: ${{ inputs.catchup_mode != 'run' }}
         env:
           BACKFILL_CONFIG: ${{ inputs.catchup }}
           PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
@@ -170,6 +171,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/person-maintenance/start-catchup.mjs
       - name: Run the pinned catch-up until the source scan completes (resume per pass)
+        if: ${{ inputs.catchup_mode != 'start' }}
         env:
           BASE_CONFIG: ${{ inputs.catchup }}
           PINNED_RUNNER_DIR: ${{ github.workspace }}/pinned
