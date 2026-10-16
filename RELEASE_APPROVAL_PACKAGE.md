@@ -35,7 +35,7 @@ and `HOSTED_TEST_READINESS.md`.
 
 ### 3.1 Ordered, checksummed manifest and atomic installer
 
-`scripts/person-release/production-upgrade-manifest.json`: **65 versions** from
+`scripts/person-release/production-upgrade-manifest.json`: **66 versions** (65 installed on production 2026-10-15; `20261016230000_person_reconcile_people_latest_idx` added 2026-10-16, ledger section 17) from
 `20260926033900_person_atomic_projection.sql` to
 `20261015120000_person_publish_capture_attribution.sql` with SHA256, MD5 and trimmed MD5, plus
 the three window versions production already records (`recorded_in_window`: `20260926040300`,

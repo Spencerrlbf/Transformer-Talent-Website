@@ -1898,3 +1898,27 @@ anchors window ran to the CLI's 15-minute default budget (9,595 anchors, 549 hel
 catch-up (25,748 queued, ≈ 3.5 h at the pinned rate) plus anchors (≈ 2 h), scheduled as an
 overnight window on the owner's word; recruiter edits and application processing are refused
 while held, public pages and applications stay up.
+
+## 17. October 15–16: production sitting (held window, publication, post-publication catch-up)
+
+Spencer's approvals: package (a)–(e) with the 58 GB ceiling and both speed-ups (October 15); "now" for the
+held window (19:37 UTC October 15); "go publication" (12:01 UTC October 16); "go catch-up" (21:39 UTC).
+Production: `kmuihequfurvjxpnugxf`, 437,037 candidates, deployment `e7a2ba7` in legacy mode with support on,
+schedules review-queue/refresh-queue/sync-candidates disabled for the sitting.
+
+| Step | Result |
+|---|---|
+| Held window 1 (19:37–05:01 UTC; the Mac rebooted at 03:46 UTC and the script died at 00:39 UTC; resumed 04:18 UTC) | catch-up `release-catchup-20261015` on the GitHub runner (artifact `16174c9a…`): **25,748 processed in 1 h 40 min (4.3 people/s)**, 19,764 verified, 5,984 review (`same_snapshot_mutation` 5,982, `harvest_cache_date_unknown` 2; 211 of them in open identity conflicts, 485 without normalized state). Anchors: 16,439 → 349,784 (night pass, batch 100, 1,860/min) → **431,053** after the resume; the 5,984 review people stay unanchored. Finalizer: first attempt `operation_failed:57014` (cold cache; `person_reconcile_finish` requires `statement_timeout` ≤ 8 s and its latest-check query runs 5 s warm with a parallel worker, 10.8 s without), succeeded on a warm cache without any timeout change: **`review_required`**, `unverified` 5,984, `unresolved_review` 5,984, `queue_pending` 5,970, `external_stable` false, `open_identity_conflicts` 5,959 (over 10,067 people). Controller reopened revision 11. |
+| Publication `release-publish-20261016` (12:01–21:00 UTC, from `pl/deploy` at `e7a2ba7`, `--concurrency=16`, two 720-minute windows, paused at 18,000 s, `vacuum (analyze) candidates` 2 min 51 s between them) | **436,552 processed in 9 h (14.4 people/s)**: 413,960 `projected`, 7,237 `unchanged`, 10,067 `review_skipped` (open identity conflicts, decision B5), 5,288 `audit_blocked` (exactly the unanchored review people), 0 held/unmigrated/drift, 3 email collisions. Growth 25.8–28.7 KB/person after the first 20 minutes (34.7 KB/person at the start); database 38 → 50.7 GB (ceiling 58). The change queue stayed at 5,970 throughout: `publish_project` attributed its own captured events (speed-up B, 20261015120000), so no publication-captured people entered the queue. |
+| Post-publication catch-up `release-catchup-post-20261016` (held window 21:39–22:04 UTC) | run created on the runner (`catchup_started`); the `run` pass recorded 3,600 review and stopped `operation_failed:57014` at page 37: PostgreSQL's log names `person_reconcile_page` (20261013100000) cancelled at the REST layer's 8 s limit. Cause (EXPLAIN on production at that cursor): the pending view's latest-check `distinct on (candidate_id) … order by candidate_id, checked_at desc, run_id desc` has no index in that order; the planner's two paths — incremental sort on `(candidate_id, checked_at desc)` (231 ms) and a primary-key scan `(run_id, candidate_id)` with an external sort of the 553,732 rows past the cursor (698 ms warm, > 8 s cold) — have near-equal cost estimates and the choice flipped with the cursor. The window was closed and the controller reopened (revision 14); the finalizer did not run (the run is `failed`, resumable: `person_backfill_start` with resume sets it running again). |
+
+Fix: forward `20261016230000_person_reconcile_people_latest_idx.sql` adds `person_reconcile_people_latest_idx
+(candidate_id, checked_at desc, run_id desc)`, the exact distinct-on order, so the latest-check queries
+(`person_reconcile_pending`, `person_reconcile_finish`) need no sort at all. No function, grant or
+timeout changes. Verified: forward-definition tests 9/9 (new case: one index, exact order, nothing
+else), upgrade harness (older chain + forwards = clean install) 4/4 with 139 passing checks, installer
+dry run on production `applied=0 skipped=65 … would apply 20261016230000` (manifest 66 versions). The
+same plan flip explains the 2026-10-13 copy failure's sibling (section 15, `rehearsal-catchup-20261013`)
+only in part: that one was the pager probing the view per candidate, fixed by 20261013100000; this one
+is the view's own sort. Install needs Spencer's approval (production change); then resume the run
+(`run` passes), finalizer, reopen.

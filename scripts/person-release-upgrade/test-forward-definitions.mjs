@@ -97,6 +97,15 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261013100000_person_reconcile_page_plan.sql',
   '20261014120000_person_reconcile_v2_fingerprint_plan.sql',
   '20261015120000_person_publish_capture_attribution.sql',
+  '20261016230000_person_reconcile_people_latest_idx.sql',
  ]);
- assert.equal(last,'20261015120000_person_publish_capture_attribution.sql');
+ assert.equal(last,'20261016230000_person_reconcile_people_latest_idx.sql');
+});
+test('reconcile latest index: the forward adds one index in the exact distinct-on order of the pending view and the finisher, nothing else',()=>{
+ const chain=read('20260926042200_person_reconcile.sql'), forward=read('20261016230000_person_reconcile_people_latest_idx.sql');
+ const code=forward.split('\n').filter(l=>!l.startsWith('--')).join('\n').trim();
+ assert.equal(code,"create index if not exists person_reconcile_people_latest_idx\n on public.person_reconcile_people(candidate_id, checked_at desc, run_id desc);");
+ // the order the chain's latest-check queries use (person_reconcile_pending and person_reconcile_finish)
+ assert.ok(chain.includes('distinct on(candidate_id) candidate_id,status,revision from public.person_reconcile_people where counted order by candidate_id,checked_at desc,run_id desc'));
+ assert.doesNotMatch(code,/grant|revoke|drop|alter|create or replace/i);
 });
