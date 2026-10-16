@@ -6,7 +6,7 @@ writer is stopped:
 
 | Step | What it admits | Bound to |
 |---|---|---|
-| `catchup` | The historical reconcile runner's existing RPCs: `person_backfill_save(_many)`, `person_backfill_audit_many`, `person_reconcile_record_many`, including their saves, missing-employer flags, captured-event marking and queue draining | One exact run ID, which must already be a running reconcile run pinned to `c4d0e4e` |
+| `catchup` | The historical reconcile runner's existing RPCs: `person_backfill_save(_many)`, `person_backfill_audit_many`, `person_reconcile_checkpoint`, including their saves, missing-employer flags, captured-event marking and queue draining | One exact run ID, which must already be a running reconcile run pinned to `c4d0e4e` |
 | `anchors` | `person_audit_anchor_commit` from the anchor CLI | Any caller while the window is open |
 
 The pinned runtime (`c4d0e4e`) needs no change: the RPCs keep their public signatures
@@ -52,14 +52,21 @@ reviewed release checkout, with an absolute clean Git checkout of the actual
 ```sh
 # Credentials are already configured privately; do not place them on a command line.
 # Run/recovery/capacity and no-conflicting-process gates must pass first.
+PERSON_TARGET_PROJECT_REF=<ref of the selected website database> \
 PINNED_RUNNER_DIR=/absolute/pinned-checkout \
 BACKFILL_CONFIG='{"reconcile":true,"run-id":"NEW_RUN","scope":"queue","limit":1000,"batch-size":100,"dry-run":false}' \
 node scripts/person-maintenance/start-catchup.mjs
 ```
 
-The helper verifies actual Git HEAD and a clean tracked tree independently of any
-commit label, rebuilds the ignored worker bundle from that tree, and records its
-hash. A source archive inside another checkout is refused. The pinned translators,
+The destination is the explicitly selected project (`scripts/person-target/README.md`):
+`SUPABASE_URL` and the service key's `ref` claim must name `PERSON_TARGET_PROJECT_REF`,
+the communications URL may not name it, and the REST destination must answer
+`person_target_identity()` with the selected project's database-held label
+(`20261013090000`; an unlabelled or foreign-labelled destination is refused), whose
+cluster identifier and label are recorded in the start output. There is no built-in website project. The helper verifies actual Git HEAD
+and a clean tracked tree independently of any commit label, rebuilds the ignored
+worker bundle from that tree, and records its hash. A source archive inside another
+checkout is refused. The pinned translators,
 fingerprint algorithm and options remain unchanged; the helper uses a bounded
 read-only directory connection using a verified Supabase direct/session endpoint
 on port 5432 (transaction poolers and custom proxies are refused; loopback fixtures
@@ -71,13 +78,66 @@ individual queries retain the stated bounds. Existing run IDs and failed
 DB-capacity checks are refused before fingerprint/start. Output contains run status
 and hashes only; errors are sanitized and acquired resources are closed on failure.
 
-After a successful start, open that run's window and use the actual pinned CLI with
-the identical configuration plus `resume:true`. Inspect durable state after an
-ambiguous start: absent means diagnose and start again after gates pass; a matching
-running checkpoint means continue that run after opening its window, even if the
-start response was lost. Failed/paused checkpoints need diagnosis and matching
-configuration before resume. Finalized checkpoints stay closed. Never infer that
-an initial fingerprint timeout created a run, and never duplicate an active run.
+After a successful start, open that run's window and run the pinned catch-up with
+the identical configuration plus `resume:true` through the reviewed runner helper:
+
+```sh
+PINNED_RUNNER_DIR=<clean c4d0e4e checkout> PERSON_TARGET_PROJECT_REF=<ref> \
+  SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… COMMS_DATABASE_URL=… \
+  PERSON_CATCHUP_COMPATIBILITY_ID=c4d0e4e-explicit-contact-clear-v1 \
+  PERSON_CATCHUP_ARTIFACT_SHA256=<reviewed manifest artifact_identity> \
+  BACKFILL_CONFIG='{"run-id":"RUN_ID","reconcile":true,"scope":"queue","dry-run":false,"resume":true,…}' \
+  node scripts/person-maintenance/run-catchup.mjs
+```
+
+`run-catchup.mjs` verifies the pinned checkout exactly as the start helper does
+(HEAD = pin, clean tree, bundle rebuilt and hashed), checks the configuration
+contract and the website selection, then imports and runs the **pinned**
+`scripts/person-reconcile.mjs` main: the translator, the external fingerprint, the
+page loop and every SQL checkpoint are the pinned code, unchanged. The website is
+reached over REST (`restSite`, `fetch`, bounded and caught); the directory over the
+pinned `openComms` `pg.Client`, to which the helper attaches the one thing the pinned
+client lacks: an `error` listener. Without it an idle directory connection dropped by
+the server is an uncaught exception (process dies, run left `running`, the pinned
+loop's failure path never runs). With it the loss is logged as
+`catchup_comms_connection_lost:<SQLSTATE>`, the client stays unusable, and the pinned
+loop fails the run in its own controlled way (`failed`, `reconcile_stopped`, exit 1)
+at its next directory read; `last_id` advances only inside
+`person_reconcile_checkpoint`, so nothing is recorded twice and the same
+configuration resumes the run. `scripts/person-maintenance/run-catchup-local-tests.sh`
+proves this on the disposable local stack with the actual wrapper: transport
+failure/resume, late input gates, verified email/phone/both suppression, certified
+clear races, unchanged eligible fallback, and scalar REST row-cap coverage.
+Install `20261005120000_person_catchup_contact_snapshot.sql` before running.
+
+The runner also refuses, before anything else, CLI arguments and `BACKFILL_*` aliases
+(the pinned parser would prefer them over the checked JSON), a pinned tree carrying an
+`.env`/`.env.*` file (the pinned loader fills missing variables from it after
+validation), and re-checks the pinned-visible environment and the pinned parser's
+effective options after importing the pinned modules. It runs under Node 24 only
+(`scripts/check-node.mjs`).
+
+**Explicitly cleared contacts in the queue.** The catch-up wrapper derives an ephemeral
+runtime from the clean historical checkout. Only historical `readNew` and
+`checkStored` contact evidence and primary checks change; the translator, external
+fingerprint, reconciliation loop and checkpoints remain identical. A scalar
+service-role-only RPC loads contacts, recruiter decisions, summary and profile state
+in one snapshot for each page. Failed or malformed evidence stops verification.
+Explicit suppression requires every rank absent; automatic and absent decisions
+retain the historical primary rules, including selected values that later become ineligible.
+Email and phone history checks remain enforced.
+
+Hosted use requires owner acknowledgement before transport:
+`PERSON_CATCHUP_COMPATIBILITY_ID=c4d0e4e-explicit-contact-clear-v1`.
+Hosted use also requires `PERSON_CATCHUP_ARTIFACT_SHA256` to match the exact
+reviewed manifest identity; a supplied wrong hash fails locally too. The manifest
+includes input/output hashes, helper hashes and the snapshot SQL hash. Snapshots
+require complete state/summary/count evidence and refuse more than 10,000 contacts
+or an 8 MiB serialized budget before constructing the aggregate.
+A clear after the snapshot loses revision/version CAS and remains pending. The
+historical checkpoint advances even for pending records; start a new bounded queue
+run for those earlier ids. Certified clears may separately require
+`same_snapshot_mutation` review; review is not verified/drained clear evidence.
 
 The September 30 helper change has 27 offline tests covering false commit labels,
 privacy, acquisition cleanup, capacity refusal, existing checkpoints, lost responses, endpoint refusal and expiry before start. These use synthetic transports. The historical restored-copy rehearsal
@@ -118,3 +178,9 @@ append-only history and disarm. The cross-family suite
 migration) passed 504/504. A test proves the service role cannot reach the helpers
 (it fails when the pre-review grants are restored). Untested: concurrent close or
 `transition_set` against an in-flight frame, and expiry in the middle of one RPC. No production database or hosted preview was used.
+
+Every resume through `run-catchup.mjs` first proves the REST destination's
+`person_target_identity()` label against `PERSON_TARGET_PROJECT_REF` (20261013090000):
+an unlabelled database, another project's database or the other clone of the project
+(same cluster identifier, different label) is refused before any preparation, pinned
+import or page read. The pinned translator is not changed.

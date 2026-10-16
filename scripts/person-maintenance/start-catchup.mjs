@@ -6,10 +6,14 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {checkNode} from '../check-node.mjs';
 import pg from 'pg';
+import {selectedTarget,checkRestUrl,checkServiceKey,databaseIdentity,verifyRuntimeIdentity,isTargetError} from '../person-target.mjs';
 export const PIN='c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc';
-const CODES=new Set(['directory','session_connection_required','deadline','not_pinned','dirty_runtime','bundle_build','config','credentials','capacity','existing_run','response']);
+const CODES=new Set(['directory','session_connection_required','deadline','not_pinned','dirty_runtime','bundle_build','config','credentials','capacity','existing_run','response','target']);
 export function reasonOf(error){
+ if(isTargetError(error))return error.message;
+ if(/^node_runtime:/.test(error?.message??''))return error.message;
  const code=error?.message?.replace(/^catchup_start:/,'');
  return CODES.has(code)?`catchup_start:${code}`:`operation_failed:${/^[0-9A-Z]{5}$/.test(error?.code??'')?error.code:'unknown'}`;
 }
@@ -49,6 +53,7 @@ export async function openReadOnlyDirectory(url,{Client=pg.Client}={}){
 const load=(root,f)=>import(pathToFileURL(path.join(root,'scripts',f)).href);
 /** Dependencies can be replaced only by offline fault-injection tests. */
 export async function main(argv=process.argv.slice(2),{env=process.env,verify=verifyPinnedRuntime,importPinned=load,openDirectory=openReadOnlyDirectory,now=()=>performance.now(),out=x=>console.log(JSON.stringify(x))}={}){
+ checkNode();
  const started=now();
  if(argv.length)throw Error('catchup_start:config');
  const runtime=await verify(env.PINNED_RUNNER_DIR);
@@ -58,8 +63,14 @@ export async function main(argv=process.argv.slice(2),{env=process.env,verify=ve
   const raw=JSON.parse(env.BACKFILL_CONFIG??'{}');
   if(raw.reconcile!==true||raw.scope!=='queue'||raw['dry-run']!==false||raw.resume===true)throw Error('catchup_start:config');
   if(!env.COMMS_DATABASE_URL||!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||env.LOCAL_DATABASE_URL)throw Error('catchup_start:credentials');
-  const siteUrl=new URL(env.SUPABASE_URL);
-  if(siteUrl.protocol!=='https:'||siteUrl.hostname!=='kmuihequfurvjxpnugxf.supabase.co'||siteUrl.username||siteUrl.password||siteUrl.port||siteUrl.search||siteUrl.hash||!['','/'].includes(siteUrl.pathname))throw Error('catchup_start:credentials');
+  // The website destination is the explicitly selected project, never a built-in
+  // default (RR-06). The communications source is a different project by contract.
+  const target=selectedTarget(env);
+  if(target.local)throw Error('catchup_start:target');
+  checkRestUrl(env.SUPABASE_URL,target);
+  checkServiceKey(env.SUPABASE_SERVICE_ROLE_KEY,target);
+  let source;try{source=databaseIdentity(env.COMMS_DATABASE_URL);}catch{throw Error('catchup_start:credentials');}
+  if(source.ref===target.ref)throw Error('catchup_start:credentials');
   const {options}=await importPinned(runtime.root,'person-backfill.mjs');
   const {restSite,commsColumns}=await importPinned(runtime.root,'person-trial.mjs');
   const {externalFingerprint}=await importPinned(runtime.root,'person-reconcile.mjs');
@@ -68,6 +79,10 @@ export async function main(argv=process.argv.slice(2),{env=process.env,verify=ve
   const checkTime=()=>{if(now()-started>=config.maxSeconds*1000)throw Error('catchup_start:deadline');};
   checkTime();
   site=restSite(env.SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY);
+  // Runtime proof that the REST destination is a real cluster that installed the
+  // release chain AND holds the selected project's label (20261013090000); the
+  // identifier and label are recorded with the run evidence.
+  const identity=await verifyRuntimeIdentity({readRest:()=>site.rpc('person_target_identity',{}),ref:target.ref});
   comms=await openDirectory(env.COMMS_DATABASE_URL);
   const existing=await site.select('backfill_runs',{columns:'run_id,status',filters:[['run_id','eq',config.run]],order:'run_id.asc'});
   if(existing.length)throw Error('catchup_start:existing_run');
@@ -78,7 +93,7 @@ export async function main(argv=process.argv.slice(2),{env=process.env,verify=ve
   checkTime();
   const state=await site.rpc('person_reconcile_start',{p_run:config.run,p_commit:PIN,p_limit:config.limit,p_batch:config.batch,p_resume:false,p_scope:'queue',p_external_hash:hash});
   if(state.run_id!==config.run||state.status!=='running')throw Error('catchup_start:response');
-  const result={phase:'catchup_started',run:state.run_id,status:state.status,scope:'queue',commit:PIN,bundle_sha256:runtime.bundleHash,limit:config.limit,batch:config.batch};
+  const result={phase:'catchup_started',run:state.run_id,status:state.status,scope:'queue',commit:PIN,bundle_sha256:runtime.bundleHash,target:target.ref,system_identifier:identity.system_identifier,project_ref:identity.project_ref,limit:config.limit,batch:config.batch};
   out(result);return result;
  }finally{
   await Promise.allSettled([Promise.resolve().then(()=>comms?.end()),Promise.resolve().then(()=>site?.end())]);

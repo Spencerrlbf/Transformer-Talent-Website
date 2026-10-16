@@ -2,6 +2,7 @@
 // before each SQL statement starts; a function-level SET cannot arm its caller.
 import pg from 'pg';
 import {checkout} from '../person-db-session.mjs';
+import {checkDatabaseUrl,selectedTarget} from '../person-target.mjs';
 const methods={person_backfill_metrics:[],person_audit_anchor_page:['p_after','p_limit'],person_audit_anchor_inputs:['p_ids'],person_audit_anchor_commit:['p_items']};
 export function anchorDatabaseConfig(env=process.env){
  const url=env.LOCAL_DATABASE_URL??env.PERSON_DATABASE_URL;
@@ -11,6 +12,8 @@ export function anchorDatabaseConfig(env=process.env){
  // pg applies URL query options after explicit client configuration. Only TLS
  // mode is accepted, so host/options/timeout overrides cannot bypass checks.
  if(parsed.hash||[...parsed.searchParams.keys()].some(k=>k!=='sslmode')||parsed.searchParams.getAll('sslmode').length>1)throw Error('audit_database_url');
+ // Hosted anchors go only to the explicitly selected project; see person-target.mjs.
+ if(!env.LOCAL_DATABASE_URL)checkDatabaseUrl(url,selectedTarget(env));
  return {connectionString:url,max:2,statement_timeout:15000,query_timeout:16000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:'tt-person-audit-anchors'};
 }
 // Supabase's poolers (6543 and the 5432 session pooler) drop the client's startup

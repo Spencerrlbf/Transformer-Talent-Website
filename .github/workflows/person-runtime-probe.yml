@@ -1,0 +1,40 @@
+name: Person runtime probe
+# Read-only latency probe from a GitHub-hosted runner to the production project's public
+# endpoints (REST host, session pooler). No secrets, no database connection: TCP connect time
+# only, to size the operator jobs (publication, catch-up, audit) that are round-trip bound.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Supabase project ref whose public hosts to probe"
+        type: string
+        required: true
+      pooler_host:
+        description: "Session pooler host (aws-0-<region>.pooler.supabase.com)"
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: TCP connect times (10 samples each)
+        shell: bash
+        run: |
+          [[ "${{ inputs.ref }}" =~ ^[a-z]{20}$ ]] || { echo "invalid ref"; exit 2; }
+          [[ "${{ inputs.pooler_host }}" =~ ^aws-[0-9]-[a-z0-9-]+\.pooler\.supabase\.com$ ]] || { echo "invalid pooler host"; exit 2; }
+          python3 - "${{ inputs.ref }}" "${{ inputs.pooler_host }}" <<'PY'
+          import socket,time,sys,statistics
+          ref,pooler=sys.argv[1],sys.argv[2]
+          for host,port in [(f"{ref}.supabase.co",443),(pooler,5432),(pooler,6543)]:
+              ms=[]
+              for _ in range(10):
+                  t=time.time()
+                  try:
+                      s=socket.create_connection((host,port),timeout=5); s.close(); ms.append((time.time()-t)*1000)
+                  except Exception as e: print(host,port,"error",e); break
+              if ms: print(f"{host}:{port} connect median {statistics.median(ms):.1f} ms min {min(ms):.1f} ms")
+          PY
+          echo "runner: $(curl -s https://ifconfig.me 2>/dev/null | head -c 40) / $(cat /etc/hostname 2>/dev/null)"

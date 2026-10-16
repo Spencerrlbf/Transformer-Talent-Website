@@ -209,7 +209,70 @@ earlier function bodies; do not move publication/review helpers to the end:
 20260928070000_person_network_send.sql
 20260928080000_person_derivative_publish.sql
 20260928090000_person_maintenance_deferred.sql
+20261003090000_person_target_identity.sql
+20261003100000_person_forward_application_contact.sql
+20261003110000_person_forward_network_send.sql
+20261003120000_person_forward_identity_index.sql
+20261005090000_person_recruiter_explicit_clear.sql
+20261005100000_person_send_decisions.sql
+20261005110000_person_historical_shadow_clears.sql
+20261005120000_person_catchup_contact_snapshot.sql
 ```
+
+The four `20261003*` files are the release remediation (RELEASE_REMEDIATION.md);
+`20261005090000` (explicit recruiter clears across publication) and `20261005100000`
+(the checked Send applies the same decisions) follow them and are additive: a column
+with a default, a constraint, the ranking function, in-place patches of the certified
+writer and of the Send RPC, and a one-time classification of historical NULL
+decisions (unpublished people's clears kept and reranked; published people's left
+automatic and counted by the NOTICE for owner review, see the ledger).
+`20261005110000` then corrects published-then-shadow clears only when the current
+decision points to a completed shadow receipt with explicit NULL requested and
+effective contact. It preserves receipts, legacy fields, later choices and projection
+state. It acquires both target-table locks with `NOWAIT`: drain migration activity
+first; if it refuses, stop and retry only after the conflicting activity settles.
+It restores each trigger's original mode and reports only the restored count.
+`20261005120000` installs the read-only, service-role-only scalar snapshot used by
+the compatible catch-up verifier. Install both forward versions in order; do not
+edit or replay an older installed migration to obtain these changes.
+On a fresh install apply the same forward versions once; the upgrade harness
+checks that its catalog matches an older install upgraded in this order. On a database that installed
+the earlier bodies of `20260927170000`, `20260928060000` or `20260928070000` (the
+2026-09-28 test copy did), they are the only supported way to bring those
+definitions to the release: they replace the contact-fill and Send definitions,
+complete each existing Send witness's insertion proof only where its captured
+INSERT event reproduces the recorded row hash (anything else stays unresolved for
+the audit, nothing is fabricated), and re-validate the identity index without
+creating one. Never re-run an already-applied version file to "refresh" its body.
+
+**Older-install prerequisite.** An install taken from the 2026-09-28 artifact
+(`23d7860`, the baseline copy) has 127 migration files and lacks
+`20260928061000_person_resume_contact_fill.sql` altogether: that version was added
+by the prepared parent. Such an install must apply that **missing** version first,
+in order, and only then the four `20261003*` forward files; applying the forward
+files alone leaves the linked resume-fill functions absent. This is the
+installation of a version the database never had, which is different from
+replacing the body of a version it already has (never done). The sequence for the
+copy is therefore:
+
+```
+20260928061000_person_resume_contact_fill.sql      # missing on the copy: install
+20261003090000_person_target_identity.sql
+20261003100000_person_forward_application_contact.sql
+20261003110000_person_forward_network_send.sql
+20261003120000_person_forward_identity_index.sql
+20261005090000_person_recruiter_explicit_clear.sql
+20261005100000_person_send_decisions.sql
+20261005110000_person_historical_shadow_clears.sql
+20261005120000_person_catchup_contact_snapshot.sql
+```
+
+An install that already has `20260928061000` (any install from the prepared parent
+or later) skips the first line. Both paths are verified by
+`scripts/person-application-edits/run-local-tests.sh` (clean) and
+`scripts/person-release-upgrade/run-upgrade-tests.sh` (an old install in the copy's
+state, upgraded exactly as above, then compared object by object with a clean
+install), on a loopback PostgreSQL only.
 
 Before applying the chain, build the directory identity index without blocking
 candidate writes. Run this block with `psql -X -v ON_ERROR_STOP=1`, outside a
@@ -274,6 +337,20 @@ receipt, anchor or attribution evidence as a routine rollback.
 
 Supply secrets through server-only configuration, never chat or committed files:
 
+- `PERSON_TARGET_PROJECT_REF`: the one Supabase project every normalized-storage
+  process may touch (`scripts/person-target/README.md`). Set it on Vercel for the
+  deployment, as the `PERSON_TARGET_PROJECT_REF` repository variable for the four
+  normalized workflows, and in every operator shell. With shadow/live mode or
+  transition support on, the server, the workers and the publish/anchor/catch-up/
+  finalize CLIs refuse to open a connection unless `SUPABASE_URL`, the JWT key
+  claims and every PostgreSQL URL (pooler username `postgres.<ref>`) name this
+  project. A rehearsal copy is selected the same way with its own ref; nothing
+  defaults to the website project any more.
+- `OUTBOUND_DENY_HOSTS` (rehearsal deployments only): comma-separated provider
+  hosts the process must never reach, for example
+  `api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io`. A copied
+  database carries real mailbox grants and Airtable ids; this denies the request
+  before it leaves. Leave it unset in production.
 - `PERSON_DATABASE_URL`: website app/worker PostgreSQL URL, transaction pooler
   supported; also used by the anchor CLI.
 - `PERSON_PUBLISH_DATABASE_URL`: dedicated website direct/session endpoint on
@@ -381,8 +458,32 @@ Inspect durable state after every unsuccessful or ambiguous start:
 - A finalized run stays closed. An active or expired maintenance window is retained
   until its owner is stopped/settled and its exact work ID is explicitly closed.
 
-Once the window is open, run the bounded pinned queue catch-up, then its finalizer
-inside that same window, inspect its exact outcome, and close the window. Neither
+Once the window is open, run the bounded pinned queue catch-up through the reviewed
+runner (`scripts/person-maintenance/run-catchup.mjs`, see
+`scripts/person-maintenance/README.md`: it verifies the pin, refuses late or
+unsupported inputs, and handles the directory connection's transport failures;
+its reviewed compatibility artifact supports explicit clears without changing the
+historical translator or checkpoint policy), then its finalizer inside that same window, inspect its exact
+outcome, and close the window. Hosted use also requires explicit acceptance of
+`PERSON_CATCHUP_COMPATIBILITY_ID=c4d0e4e-explicit-contact-clear-v1` plus
+`PERSON_CATCHUP_ARTIFACT_SHA256=<approved composite hash>` from the release manifest.
+The generated hash must match before the runner imports or connects. The runtime is separately
+identified; the database checkpoint retains the historical base pin. A later clear
+that loses the revision/capture comparison remains pending, and an already-visited
+ID requires a new bounded queue run. Source conflicts such as
+`same_snapshot_mutation` remain review outcomes; never change a recruiter decision
+to make the historical verifier pass. The
+starter (`scripts/person-maintenance/start-catchup.mjs`) and the finalizer
+(`scripts/person-reconcile-finalize.mjs`) both take the destination from
+`PERSON_TARGET_PROJECT_REF`; the starter records the REST cluster identity
+(`person_target_identity()`) with the run, and the finalizer proves the REST and
+PostgreSQL identities agree before finishing:
+
+```sh
+PERSON_TARGET_PROJECT_REF=<ref> PERSON_PUBLISH_DATABASE_URL=<5432 session url> \
+  SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=… \
+  node scripts/person-reconcile-finalize.mjs --run-id=<run-id>
+``` Neither
 an unstable boundary nor a review outcome is converted into a stable audit anchor.
 Historical copy observations reported cold fingerprint timeouts and faster warm
 queries. Those observations do not establish production capacity or justify

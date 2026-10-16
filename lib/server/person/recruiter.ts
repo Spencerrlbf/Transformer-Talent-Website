@@ -37,15 +37,20 @@ const uuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const str = (value: unknown) =>
   typeof value === "string" && value.trim() ? value.trim() : null;
+/** A recruiter's contact save. An empty `email`/`phone` is an EXPLICIT CLEAR: that
+ * kind has no primary, published or not, until the recruiter chooses again. To
+ * withdraw a preference and let the automatic ranking choose instead, name the kind
+ * in `automatic` (library-level; the drawer has no control for it). */
 export interface RecruiterContactInput {
   organizationId: string;
   candidateId: string;
   actorId: string;
   requestId: string;
-  contact: PoolContact;
+  contact: PoolContact & { automatic?: ("email" | "phone")[] };
   mode: "shadow" | "live";
 }
-function cleanContact(input: PoolContact): PoolContact {
+type CleanedContact = PoolContact & { automatic?: ("email" | "phone")[] };
+function cleanContact(input: RecruiterContactInput["contact"]): CleanedContact {
   const email = str(input.email),
     phone = str(input.phone),
     github = str(input.github);
@@ -70,7 +75,14 @@ function cleanContact(input: PoolContact): PoolContact {
     }
     if (others.length >= 8) break;
   }
-  return { email, phone, github, otherEmails: others };
+  const out: CleanedContact = { email, phone, github, otherEmails: others };
+  if (input.automatic != null) {
+    if (!Array.isArray(input.automatic) || input.automatic.some((k) => k !== "email" && k !== "phone")) throw Error("invalid_contact");
+    // Automatic selection is only meaningful for a kind the save leaves empty.
+    const automatic = [...new Set(input.automatic)].filter((k) => !out[k]).sort();
+    if (automatic.length) out.automatic = automatic as ("email" | "phone")[];
+  }
+  return out;
 }
 export async function currentContact(
   c: PersonConnection,
@@ -277,8 +289,9 @@ export async function saveRecruiterContactOnConnection(
     await savePersonLocked(c, [doc], { mode: "shadow" }, before, audit);
     for (const [kind, value] of Object.entries(choices))
       await c.query(
-        "insert into public.person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id) values($1,$2,$3,$4) on conflict(candidate_id,kind) do update set chosen_value=excluded.chosen_value,receipt_id=excluded.receipt_id",
-        [a.candidateId, kind, value, a.requestId],
+        "insert into public.person_recruiter_primary(candidate_id,kind,chosen_value,receipt_id,suppressed) values($1,$2,$3,$4,$5) on conflict(candidate_id,kind) do update set chosen_value=excluded.chosen_value,receipt_id=excluded.receipt_id,suppressed=excluded.suppressed",
+        // An empty kind is an explicit clear unless the save asked for automatic selection.
+        [a.candidateId, kind, value, a.requestId, value === null && !(cleaned.automatic ?? []).includes(kind as "email" | "phone")],
       );
     // Even an empty doc can withdraw a historical manual preference.
     await c.query("select public.person_rerank_contacts($1)", [a.candidateId]);
@@ -321,10 +334,11 @@ export async function saveRecruiterContactOnConnection(
       before,
       audit,
     );
+    const { automatic: _automatic, ...requested } = cleaned;
     const contact =
       a.mode === "live"
-        ? effectivePoolContact(stored, cleaned).contact
-        : cleaned;
+        ? effectivePoolContact(stored, requested).contact
+        : requested;
     await c.query(
       "update public.person_recruiter_receipts set effective_contact=$2,result=$3 where id=$1",
       [a.requestId, contact, result],

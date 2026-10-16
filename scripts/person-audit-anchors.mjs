@@ -2,6 +2,7 @@
 // Bounded legacy-witness preparation only. Historical migration accounting,
 // source facts, external stores and live candidate fields are never changed.
 import {pathToFileURL} from 'node:url';
+import {checkNode} from './check-node.mjs';
 import {openAnchorDatabase} from './person-audit/database.mjs';
 import {retryTransient,safeErrorCode} from './person-backfill/engine.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,6 +51,7 @@ export async function prepareAnchors({site,prepare,options,onProgress=()=>{},now
  return finish('limit_reached');
 }
 export async function main(){
+ checkNode();
  const options=anchorOptions(),site=await openAnchorDatabase();
  try{
   const {prepareLegacyAuditAnchor}=await import('./dist/worker-lib.mjs');
@@ -57,4 +59,4 @@ export async function main(){
  }finally{await site.end();}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
- main().catch(error=>{const reason=/^audit_[a-z_]+$/.test(error.message??'')?error.message:`operation_failed:${safeErrorCode(error)}`;console.error(JSON.stringify({phase:'anchor_stopped',reason}));process.exitCode=1;});
+ main().catch(error=>{const reason=/^audit_[a-z_]+$/.test(error.message??'')||/^node_runtime:[a-z_]+:v[0-9.]+$/.test(error.message??'')?error.message:`operation_failed:${safeErrorCode(error)}`;console.error(JSON.stringify({phase:'anchor_stopped',reason}));process.exitCode=1;});

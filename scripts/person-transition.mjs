@@ -11,6 +11,7 @@
 // Every controller change and window opening names the phase the operator expects (--expect-phase);
 // a different phase is refused. Output is status JSON only.
 import {pathToFileURL} from 'node:url';
+import {checkNode} from './check-node.mjs';
 import {openDatabase,parseOptions,safeReason,log} from './person-publish/lib.mjs';
 
 export const SPEC={
@@ -83,6 +84,7 @@ export async function waitDrained(pool,{maxSeconds,sleep=(ms)=>new Promise(r=>se
 }
 
 export async function main(argv=process.argv.slice(2),{env=process.env,out=log}={}){
+ checkNode();
  const o=parseOptions(argv,SPEC);
  const chosen=[o.status,...ACTIONS.map(a=>o[a]),o.waitDrained,Boolean(o.openWindow),Boolean(o.closeWindow)].filter(Boolean).length;
  if(chosen!==1)throw Error('transition_option:one_action');

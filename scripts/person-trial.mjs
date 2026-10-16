@@ -246,6 +246,9 @@ export async function pgSite(url) {
   const { default: pg } = await import("pg");
   // A pool, so the parallel saves (applyDocs) really run side by side, as they do over REST.
   const db = new pg.Pool({ connectionString: url, application_name: "tt-person-trial-local", max: 4 });
+  // An idle client the server drops emits on the pool; without a listener that is an
+  // uncaught exception in whatever step holds this site. Log the code only.
+  db.on("error", (error) => console.error(`person_trial_pool_idle_error:${/^[0-9A-Z]{5}$/.test(error?.code ?? "") ? error.code : "operation_failed"}`));
   await db.query("select 1");
   const where = (filters, params) => (filters.length ? ` where ${filters.map((f) => sqlFilter(f, params)).join(" and ")}` : "");
   const u = new URL(url);
@@ -689,6 +692,9 @@ export async function readNew(site, ids, { globalCounts = true } = {}) {
    ()=>selectIn(site,"candidate_contacts","candidate_id",ids,{order:"candidate_id.asc,kind.asc,value_normalized.asc"}),
    ()=>selectIn(site,"candidate_contact_summary","candidate_id",ids,{order:"candidate_id.asc"})
   ],4,fn=>fn());
+  // The recruiter's explicit decisions (20261005090000): a suppressed kind legitimately
+  // has no primary; the integrity check needs them to tell that from corruption.
+  const recruiterPrimary = await selectIn(site,"person_recruiter_primary","candidate_id",ids,{order:"candidate_id.asc,kind.asc"}).catch(()=>[]);
   const conflictParts=[];for(let i=0;i<ids.length;i+=40)conflictParts.push(ids.slice(i,i+40));
   const [conflictRows,companies,schools,skills,writerCompanies,writerSchools]=await mapBounded([
    async()=>(await mapBounded(conflictParts,4,part=>site.select("identity_conflicts",{filters:[["candidate_ids","ov",part]],order:"id.asc"}))).flat(),
@@ -710,6 +716,7 @@ export async function readNew(site, ids, { globalCounts = true } = {}) {
     educations: groupBy(educations, "candidate_id"),
     cskills: groupBy(cskills, "candidate_id"),
     contacts: groupBy(contacts, "candidate_id"),
+    recruiterPrimary: groupBy(recruiterPrimary, "candidate_id"),
     summary: new Map(summary.map((s) => [s.candidate_id, s])),
     conflicts,
     companyById: new Map(companies.map((c) => [c.id, c])),
@@ -883,16 +890,19 @@ export function checkStored(tally, id, inp, docs, t, lib) {
   if (phonesMissing) tally.bad("phones_present", id);
 
   const eligible = (c) => c.status === "active" && !c.never_primary;
-  const primaryOk = (rows, check) => {
+  // An explicit recruiter clear (person_recruiter_primary.suppressed, 20261005090000)
+  // means that kind has no primary on purpose; usable rows then carry no rank.
+  const suppressed = (kind) => (t.recruiterPrimary?.get(id) ?? []).some((r) => r.kind === kind && r.chosen_value == null && r.suppressed === true);
+  const primaryOk = (rows, check, kind) => {
     tally.run(check);
     const ranked1 = rows.filter((c) => Number(c.rank) === 1);
     const usable = rows.filter(eligible).length;
-    const ok = usable ? ranked1.length === 1 && eligible(ranked1[0]) : ranked1.length === 0;
+    const ok = usable && !suppressed(kind) ? ranked1.length === 1 && eligible(ranked1[0]) : ranked1.length === 0;
     if (!ok) tally.bad(check, id);
-    return { usable, primary: ranked1.length };
+    return { usable, primary: ranked1.length, ...(suppressed(kind) ? { cleared: true } : {}) };
   };
-  const pe = primaryOk(emails, "one_primary_email");
-  const pp = primaryOk(phones, "one_primary_phone");
+  const pe = primaryOk(emails, "one_primary_email", "email");
+  const pp = primaryOk(phones, "one_primary_phone", "phone");
 
   tally.run("dead_never_primary");
   if (contacts.some((c) => c.rank !== null && c.rank !== undefined && (c.status !== "active" || c.never_primary))) tally.bad("dead_never_primary", id);

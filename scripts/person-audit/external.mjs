@@ -5,14 +5,21 @@ import {readDirectory} from '../person-trial.mjs';
 import {timed} from './runtime.mjs';
 const hash=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const incomplete=reason=>({complete:false,reason});
-export function externalReader({pool,comms,cols,lib,gate=async()=>{},expired=()=>false,read=readDirectory}){
+/** `chunk` contacts per directory read (default 100; the audit CLI passes --external-chunk).
+ * The fingerprint over every linked contact is read once at the start and once at the end
+ * of a run; its cost is the provenance volume, so larger chunks save only round trips. */
+export function externalReader({pool,comms,cols,lib,gate=async()=>{},expired=()=>false,read=readDirectory,chunk=100}){
+ if(!Number.isSafeInteger(chunk)||chunk<1||chunk>1000)throw Error('audit_external_chunk');
  const check=async()=>{if(expired())throw Error('audit_duration');await gate();if(expired())throw Error('audit_duration');};
- const scope=async()=>{await check();return (await timed(pool,15,'select public.person_postcutover_audit_external_inputs() r')).rows[0].r;};
+ // The scope statement aggregates every candidate/receipt/primary/state link and the v2
+ // rows: 9.8 s on the 423,062-candidate copy (2026-10-14). Its budget is 60 s, a bound on
+ // one read-only statement, not a wait for completion.
+ const scope=async()=>{await check();return (await timed(pool,60,'select public.person_postcutover_audit_external_inputs() r')).rows[0].r;};
  async function directory(ids){
   if(!ids.length)return {complete:true,rows:new Map()};
   if(!comms||!cols)return {...incomplete('external_unavailable'),rows:new Map()};
   const rows=new Map();
-  try{for(let i=0;i<ids.length;i+=100){await check();const chunk=ids.slice(i,i+100);const page=await read(comms,chunk,cols,{provenance:true});if(page.size!==chunk.length||chunk.some(id=>!page.has(id)))return {...incomplete('external_coverage'),rows:new Map()};for(const entry of page)rows.set(...entry);}}
+  try{for(let i=0;i<ids.length;i+=chunk){await check();const part=ids.slice(i,i+chunk);const page=await read(comms,part,cols,{provenance:true});if(page.size!==part.length||part.some(id=>!page.has(id)))return {...incomplete('external_coverage'),rows:new Map()};for(const entry of page)rows.set(...entry);}}
   catch(e){if(['audit_duration','audit_capacity','audit_latency'].includes(e.message))throw e;return {...incomplete('external_unavailable'),rows:new Map()};}
   return {complete:true,rows};
  }
@@ -22,7 +29,7 @@ export function externalReader({pool,comms,cols,lib,gate=async()=>{},expired=()=
    const before=await scope();
    if(!Array.isArray(before?.contact_ids)||before.contact_count!==before.contact_ids.length)throw Error('audit_external_scope');
    const h=createHash('sha256');h.update(JSON.stringify({scope_hash:before.scope_hash,v2_hash:before.v2_hash,v2_rows:before.v2_rows,contact_count:before.contact_count}));
-   for(let i=0;i<before.contact_ids.length;i+=100){const ids=before.contact_ids.slice(i,i+100);const page=await directory(ids);if(!page.complete)return incomplete(page.reason);for(const id of ids)h.update(JSON.stringify([id,lib.directorySnapshotHash(page.rows.get(id))]));}
+   for(let i=0;i<before.contact_ids.length;i+=chunk){const ids=before.contact_ids.slice(i,i+chunk);const page=await directory(ids);if(!page.complete)return incomplete(page.reason);for(const id of ids)h.update(JSON.stringify([id,lib.directorySnapshotHash(page.rows.get(id))]));}
    const after=await scope();
    if(hash(before)!==hash(after))return incomplete('external_scope_moved');
    return {complete:true,hash:h.digest('hex'),scope_hash:before.scope_hash,v2_hash:before.v2_hash,v2_rows:before.v2_rows,contact_count:before.contact_count};

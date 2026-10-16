@@ -158,6 +158,7 @@ function integrity(snapshot, docs, lib, out) {
     educations: new Map([[id, arr(n.educations)]]),
     cskills: new Map([[id, arr(n.skills)]]),
     contacts: new Map([[id, arr(n.contacts)]]),
+    recruiterPrimary: new Map([[id, arr(snapshot.recruiter_primary)]]),
     summary: new Map(n.summary ? [[id, n.summary]] : []),
     conflicts: arr(n.conflicts),
     companyById: new Map(arr(n.companies).map((c) => [c.id, c])),

@@ -212,6 +212,33 @@ test("a scan pages migrated people by id, pauses at its limit and resumes from t
   assert.equal(await count("select count(*)::int n from person_publish_results where run_id='scan-1'"), 2);
 });
 
+test("concurrent sessions publish a page side by side with the same per-person outcomes, and a resume is a no-op", async () => {
+  const ids = Array.from({ length: 6 }, (_, i) => `c0000000-0000-4000-8000-0000000000d${i}`);
+  for (const [i, id] of ids.entries()) await fixture(id, `synthetic-publish-conc-${i}`, "Developer");
+  const wide = new pg.Pool({ ...databaseConfig({ LOCAL_DATABASE_URL: url }, "tt-publish-test-wide"), max: 6 });
+  try {
+    const first = await runPublish({ pool: wide, lib, options: opts(["--run-id=conc-1", "--mode=publish", `--ids=${ids.join(",")}`, "--batch-size=6", "--concurrency=4", "--review=publish"]), onProgress: quiet });
+    assert.equal(first.phase, "publish_complete");
+    assert.equal(first.processed, 6);
+    assert.equal(first.projected, 6);
+    const results = (await pool.query("select candidate_id,status,history_id from person_publish_results where run_id='conc-1' order by candidate_id")).rows;
+    assert.deepEqual(results.map((r) => r.candidate_id), ids, "one durable outcome per person");
+    assert.ok(results.every((r) => r.status === "projected" && r.history_id), "every person carries its own projection history row");
+    for (const id of ids) assert.equal(await historyRows(id), 1);
+    const again = await runPublish({ pool: wide, lib, options: opts(["--run-id=conc-1", "--mode=publish", `--ids=${ids.join(",")}`, "--batch-size=6", "--concurrency=4", "--review=publish", "--resume"]), onProgress: quiet });
+    assert.equal(again.processed, 6);
+    assert.equal(again.projected, 6, "resume reuses the recorded outcomes; nothing is republished");
+    for (const id of ids) assert.equal(await historyRows(id), 1);
+    // A failure on one session stops the page; no session is released mid-transaction.
+    const broken = { ...lib, publishPersonProjectionOnConnection: async (client, id, o) => { if (id === ids[1]) throw Error("publish_test_boom"); return lib.publishPersonProjectionOnConnection(client, id, o); } };
+    await assert.rejects(runPublish({ pool: wide, lib: broken, options: opts(["--run-id=conc-2", "--mode=publish", `--ids=${ids.join(",")}`, "--batch-size=6", "--concurrency=3", "--review=publish"]), onProgress: quiet }), /publish_test_boom/);
+    assert.equal((await pool.query("select status from person_publish_runs where run_id='conc-2'")).rows[0].status, "failed");
+    assert.equal(await count("select count(*)::int n from pg_stat_activity where application_name='tt-publish-test-wide' and state='idle in transaction'"), 0);
+  } finally { await wide.end(); }
+  assert.throws(() => opts(["--run-id=x", "--concurrency=17"]), /publish_option:concurrency/);
+  assert.throws(() => opts(["--run-id=x", "--concurrency=0"]), /publish_option:concurrency/);
+});
+
 test('publish sessions bound themselves when a pooler drops the startup timeout', async () => {
   const { openDatabase } = await import('./lib.mjs');
   const pool = await openDatabase({ LOCAL_DATABASE_URL: process.env.LOCAL_DATABASE_URL }, 'tt-person-publish-test', { statement_timeout: undefined });
