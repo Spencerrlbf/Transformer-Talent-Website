@@ -1922,3 +1922,15 @@ same plan flip explains the 2026-10-13 copy failure's sibling (section 15, `rehe
 only in part: that one was the pager probing the view per candidate, fixed by 20261013100000; this one
 is the view's own sort. Install needs Spencer's approval (production change); then resume the run
 (`run` passes), finalizer, reopen.
+
+**October 19 (index installed, cutoff declared).** Spencer approved both (October 19): the installer applied
+`20261016230000` on production in 55 s (`applied=1 skipped=65`, history 162, index valid); with the index
+the pager at the failing cursor runs through `person_reconcile_people_latest_idx` and the finisher's
+latest-check query takes 5.3 s without parallel workers (10.8 s before). Held window 14:47–16:20 UTC: new
+run `release-catchup-post2-20261016` on the runner, `source_scan_complete` after 5,984 processed (all
+`review`, the same people), finalizer **`review_required`** (`unverified` 5,984, `queue_pending` 5,970,
+`open_identity_conflicts` 5,962) on its second attempt (the first, cold, still hit 57014). **Declared
+cutoff: 2026-10-19T16:20:11Z** (close of that held window); controller reopened revision 17. Operator
+note: the driver's `gh run watch` returned early on the first `run` pass, so a second pass was dispatched
+while the first was still running; both resumed the same run (idempotent per-person upserts, per-candidate
+advisory locks) and the end state is coherent. The audit driver polls run status instead.
