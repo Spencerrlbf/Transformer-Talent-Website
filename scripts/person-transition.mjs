@@ -5,7 +5,7 @@
 //   node scripts/person-transition.mjs --status
 //   node scripts/person-transition.mjs --arm|--drain|--seal|--reopen|--disarm --expect-phase=P --reason=code
 //   node scripts/person-transition.mjs --wait-drained [--max-seconds=600]
-//   node scripts/person-transition.mjs --open-window=catchup|anchors|publish --run=RUN --minutes=N --expect-phase=P --reason=code
+//   node scripts/person-transition.mjs --open-window=catchup|anchors|publish|audit_finalize --run=RUN --minutes=N --expect-phase=P --reason=code
 //   node scripts/person-transition.mjs --close-window=WORK_ID --reason=code
 //
 // Every controller change and window opening names the phase the operator expects (--expect-phase);
@@ -20,7 +20,7 @@ export const SPEC={
  reopen:{type:'flag',default:false},disarm:{type:'flag',default:false},
  'wait-drained':{type:'flag',name:'waitDrained',default:false},
  'max-seconds':{type:'int',name:'maxSeconds',min:1,max:3600,default:600},
- 'open-window':{type:'enum',name:'openWindow',values:['catchup','anchors','publish'],default:null},
+ 'open-window':{type:'enum',name:'openWindow',values:['catchup','anchors','publish','audit_finalize'],default:null},
  run:{type:'run',default:null},
  minutes:{type:'int',min:1,max:720,default:null},
  'close-window':{type:'uuid',name:'closeWindow',default:null},

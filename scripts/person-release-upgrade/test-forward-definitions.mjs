@@ -98,8 +98,40 @@ test('forward files are the only new versions and sort after the chain',()=>{
   '20261014120000_person_reconcile_v2_fingerprint_plan.sql',
   '20261015120000_person_publish_capture_attribution.sql',
   '20261016230000_person_reconcile_people_latest_idx.sql',
+  '20261022010000_person_audit_finalize_window.sql',
  ]);
- assert.equal(last,'20261016230000_person_reconcile_people_latest_idx.sql');
+ assert.equal(last,'20261022010000_person_audit_finalize_window.sql');
+});
+test('audit finalize window: the forward keeps the finalizer\'s signature, gates and every check, adds the audit_finalize step and a frame-entering wrapper, widens no grant',()=>{
+ const chain=read('20260926233000_person_audit_reference_ownership.sql'), windows=read('20260928050000_person_publish_admission.sql'), forward=read('20261022010000_person_audit_finalize_window.sql');
+ const code=forward.split('\n').filter(l=>!l.startsWith('--')).join('\n');
+ const sig=/create or replace function public\.person_postcutover_audit_finalize\(p_run text,p_pass integer default 1\) returns jsonb\nlanguage plpgsql volatile set search_path='' set timezone='UTC' set datestyle='ISO,YMD' set lock_timeout='2s' as \$\$/;
+ assert.match(chain,sig);assert.match(forward,sig);
+ assert.doesNotMatch(code,/grant/i,'nothing granted');
+ // the only drops are the two step check constraints, re-added at once with the new step (as 20260928050000 did for publish)
+ assert.deepEqual(code.match(/drop[^;]*;/gi),['drop constraint maintenance_frames_step_check;','drop constraint maintenance_events_step_check;']);
+ for(const tbl of ['frames','events'])assert.match(code,new RegExp(`alter table person_private\\.maintenance_${tbl} add constraint maintenance_${tbl}_step_check check\\(step in \\('catchup','anchors','publish','audit_finalize'\\)\\);`));
+ assert.match(code,/revoke all on function public\.person_postcutover_audit_finalize_window\(text,integer\) from public,anon,authenticated;/);
+ // every check and gate of the chain's finalizer is verbatim in the forward
+ for(const frag of ["if current_setting('transaction_isolation')<>'read committed' then raise exception 'audit_isolation';end if;","perform pg_advisory_xact_lock(72005,0);","perform pg_advisory_xact_lock(72006,0);",
+  "if not found or r.status not in ('running','paused') then raise exception 'audit_run_finished';end if;","if r.pass is distinct from p_pass then raise exception 'audit_run_pass';end if;",
+  "state:=case when reviews>0 then 'review_required'","when unverified>0 or stale>0 or dir_stale>0 or lookup_stale>0 or holds>0 or dir_pending>0 or not external_stable then 'catchup_pending' else 'audited' end;",
+  "ext:=public.person_postcutover_audit_external_inputs();"])assert.ok(chain.includes(frag)&&forward.includes(frag),frag);
+ // the 8 s rule stays for callers outside a window; the window bound is the window maximum
+ assert.match(code,/if person_private\.maintenance_frame_present\('audit_finalize'\) then\n\s+if current_setting\('statement_timeout'\)::interval<=interval '0 seconds' or current_setting\('statement_timeout'\)::interval>interval '240 minutes' then raise exception 'audit_statement_timeout';end if;\n\s+elsif current_setting\('statement_timeout'\)::interval<=interval '0 seconds' or current_setting\('statement_timeout'\)::interval>interval '8 seconds' then raise exception 'audit_statement_timeout';end if;/);
+ // the window step: held only, bound to a scan-complete audit run; the other steps' rules are verbatim
+ for(const frag of ["if not c.enabled or c.phase<>'held' then raise exception 'maintenance_requires_held';end if;",
+  "max_minutes:=case when p_step='publish' then 720 else 240 end;","and notes->>'commit'='c4d0e4e9b11e2fd88d4b087967bf3ae490a5f0bc') then raise exception 'maintenance_run';end if;"])assert.ok(windows.includes(frag)&&forward.includes(frag),frag);
+ // the held-branch unresolved check is the one 20260928090000 patched into the live definition (deferred work is resolved)
+ const deferred=read('20260928090000_person_maintenance_deferred.sql');
+ const patched=deferred.match(/execute replace\(d,n,'(.*?)'\);/s)[1].replace(/''/g,"'");
+ assert.ok(forward.includes(patched),'patched unresolved check carried verbatim');
+ assert.ok(!code.includes("scope='tt_person' and status<>'completed') then raise exception 'transition_unresolved'"),'the unpatched held check is gone');
+ assert.match(code,/if p_step='audit_finalize' and not exists\(select 1 from public\.person_postcutover_audit_runs where run_id=p_run and status in \('running','paused'\) and scan_complete\) then raise exception 'maintenance_run';end if;/);
+ assert.match(code,/if p_step in \('catchup','publish','audit_finalize'\) then/);
+ assert.match(code,/p_step not in \('catchup','anchors','publish','audit_finalize'\)/);
+ // the wrapper mirrors the catch-up wrappers: enter, run the unchanged finalizer, leave
+ assert.match(code,/opened:=person_private\.maintenance_enter\('audit_finalize',p_run\);\n result:=public\.person_postcutover_audit_finalize\(p_run,p_pass\);\n perform person_private\.maintenance_leave\(opened\);/);
 });
 test('reconcile latest index: the forward adds one index in the exact distinct-on order of the pending view and the finisher, nothing else',()=>{
  const chain=read('20260926042200_person_reconcile.sql'), forward=read('20261016230000_person_reconcile_people_latest_idx.sql');

@@ -193,3 +193,40 @@ for (const expired of [false, true]) test(`drain reports ${expired ? 'expired' :
     await setTransition(pool, 'reopen', 'window_probe_reopen', 'held');
   }
 });
+
+test('audit finalizer: admitted inside a held audit_finalize window for a scan-complete run; the 8 s rule holds outside it', async () => {
+  const run = 'rehearsal-audit-final';
+  await pool.query("select public.person_postcutover_audit_start($1,'test','all',20,false)", [run]);
+  for (const [a, from] of [['drain', 'open'], ['seal', 'draining']]) await setTransition(pool, a, `audit_final_${a}`, from);
+  // the window is bound to an audit run whose scan is complete
+  await assert.rejects(openWindow(pool, 'audit_finalize', run, 30, 'audit_finalize_early', 'held'), (e) => reasonOf(e) === 'maintenance_run');
+  await pool.query('update person_postcutover_audit_runs set scan_complete=true where run_id=$1', [run]);
+  const c = await pool.connect();
+  try {
+    // without a frame the long-bounded caller is refused, by the finalizer and by the wrapper alike
+    await c.query('begin'); await c.query("set local statement_timeout='20s'");
+    await assert.rejects(c.query('select public.person_postcutover_audit_finalize($1,1)', [run]), /audit_statement_timeout/);
+    await c.query('rollback');
+    await c.query('begin'); await c.query("set local statement_timeout='20s'");
+    await assert.rejects(c.query('select public.person_postcutover_audit_finalize_window($1,1)', [run]), /maintenance_admission|audit_statement_timeout/);
+    await c.query('rollback');
+    const w = await openWindow(pool, 'audit_finalize', run, 30, 'audit_finalize_window', 'held');
+    // another run's window does not admit this run
+    await c.query('begin'); await c.query("set local statement_timeout='20s'");
+    await assert.rejects(c.query("select public.person_postcutover_audit_finalize_window('rehearsal-audit-other',1)"), /maintenance_admission|audit_run_finished/);
+    await c.query('rollback');
+    await c.query('begin'); await c.query("set local statement_timeout='20s'");
+    const r = (await c.query('select public.person_postcutover_audit_finalize_window($1,1) r', [run])).rows[0].r;
+    await c.query('commit');
+    assert.ok(['catchup_pending', 'review_required'].includes(r.status), JSON.stringify(r.status));
+    assert.equal(Number(r.notes.eligible), await n('select count(*) n from candidates'));
+    assert.equal(await n('select count(*) n from person_private.maintenance_frames'), 0, 'frame left behind');
+    // finished runs are not finalized twice, window or not
+    await c.query('begin'); await c.query("set local statement_timeout='20s'");
+    await assert.rejects(c.query('select public.person_postcutover_audit_finalize_window($1,1)', [run]), /audit_run_finished/);
+    await c.query('rollback');
+    await closeWindow(pool, w.work_id, 'audit_finalize_done');
+  } finally { c.release(); }
+  await setTransition(pool, 'reopen', 'audit_final_reopen', 'held');
+  assert.equal(await phase(), 'open');
+});

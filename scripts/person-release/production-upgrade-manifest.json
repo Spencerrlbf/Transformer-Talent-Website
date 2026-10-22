@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-16",
+ "generated": "2026-10-22",
  "source_branch": "fix/person-90-release-remediation",
  "source_commit": "68a77db0dd8c045b1ae67f2fc084903a11c990ea",
  "production_project_ref": "kmuihequfurvjxpnugxf",
@@ -11,7 +11,7 @@
   "20260926042200",
   "20260926050355"
  ],
- "to_install_count": 66,
+ "to_install_count": 67,
  "to_install": [
   {
    "version": "20260926033900",
@@ -606,6 +606,15 @@
    "bytes": 1126,
    "installed_on_production_2026_10_13": false,
    "md5_trimmed": "df436050786e25d30e63cf30ea5f39dc"
+  },
+  {
+   "version": "20261022010000",
+   "file": "20261022010000_person_audit_finalize_window.sql",
+   "md5": "98bc4885f361f056d77f23e3b46d1e23",
+   "sha256": "fa82f0256028061fb9748be3a2a06840248a0b3a47f0654fe1458961cf66d6fb",
+   "bytes": 13478,
+   "installed_on_production_2026_10_13": false,
+   "md5_trimmed": "728f5a0703ac6c28f310771deff812e9"
   }
  ],
  "recorded_in_window": [

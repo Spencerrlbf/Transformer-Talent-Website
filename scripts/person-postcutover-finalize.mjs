@@ -14,20 +14,23 @@ import {openDatabase,parseOptions,safeReason,log} from './person-publish/lib.mjs
 
 export const SPEC={
  'run-id':{type:'run',name:'runId',required:true},
-
+ // --window: run inside an open `audit_finalize` maintenance window (controller held, opened with the
+ // transition CLI for this run). The finalizer then takes the window's bound (240 min) instead of 8 s.
+ 'window':{type:'flag',name:'window',default:false},
 };
 export async function finalizeAudit(args){return withAuditRunLock(args.pool,args.options.runId,pool=>finish({...args,pool}));}
 async function finish({pool,options,onProgress=log}){
  const client=await pool.connect();
  try{
   await client.query('begin');
-  await client.query("set local statement_timeout='8s'");
+  await client.query(options.window?"set local statement_timeout='240min'":"set local statement_timeout='8s'");
   await client.query("set local lock_timeout='2s'");
   const pass=(await client.query('select pass from public.person_postcutover_audit_runs where run_id=$1',[options.runId])).rows[0]?.pass;
   if(!pass)throw Error('audit_run_missing');
-  const run=(await client.query('select public.person_postcutover_audit_finalize($1,$2) r',[options.runId,pass])).rows[0].r;
+  const fn=options.window?'public.person_postcutover_audit_finalize_window':'public.person_postcutover_audit_finalize';
+  const run=(await client.query(`select ${fn}($1,$2) r`,[options.runId,pass])).rows[0].r;
   await client.query('commit');
-  const summary={phase:'audit_finalized',run:options.runId,status:run.status,counts:run.counts,...Object.fromEntries(['eligible','unverified','unresolved_review','stale','directory_stale','lookup_stale','source_date_holds','directory_pending','open_identity_conflicts','external_stable'].map(k=>[k,run.notes?.[k]]))};
+  const summary={phase:'audit_finalized',run:options.runId,window:Boolean(options.window),status:run.status,counts:run.counts,...Object.fromEntries(['eligible','unverified','unresolved_review','stale','directory_stale','lookup_stale','source_date_holds','directory_pending','open_identity_conflicts','external_stable'].map(k=>[k,run.notes?.[k]]))};
   onProgress(summary);
   return summary;
  }catch(error){await client.query('rollback').catch(()=>{});throw error;}

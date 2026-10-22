@@ -1934,3 +1934,38 @@ cutoff: 2026-10-19T16:20:11Z** (close of that held window); controller reopened 
 note: the driver's `gh run watch` returned early on the first `run` pass, so a second pass was dispatched
 while the first was still running; both resumed the same run (idempotent per-person upserts, per-candidate
 advisory locks) and the end state is coherent. The audit driver polls run status instead.
+
+**October 19–22: final audit.** Spencer "go audit" (October 19, 18:13 UTC). `release-audit-20261019` on the
+GitHub runner (`--record --scope=all --batch-size=20 --limit=1000000 --max-seconds=18000 --max-db-bytes=58000000000
+--external-chunk=250`, pinned to branch head `bc7cd2e`, resumed per dispatch with `audit_resume`): nine passes,
+18:14 UTC October 19 → 02:40 UTC October 22, with a 13-hour gap after the Mac rebooted at 00:20 UTC October 20
+and killed the local dispatcher (the audit itself checkpoints per page). Rate 7.4 people/s at first, 2 people/s
+by the last passes (page queries steady at 120–150 ms; the slowdown is on the runner/directory side). **Scan
+exhausted: 437,037 recorded** = 349,269 `verified` (79.9 %), 65,008 `pending` (`directory_snapshot_not_admitted`:
+linked contacts whose directory record moved since the website admitted it; the directory sync has been paused
+since October 15 while reply-ops keeps writing), 22,760 `review` (`historical_owner_unavailable` 6,560 = the
+audit-blocked publication outcomes, `anchor_required` 5,984 = the unanchored review people, `source_owner_unknown`
+5,793, `document_identity_missing` 4,416, `source_reconstruction_failed` 7), 0 `boundary_moved`. Database 51.9 GB.
+
+**Finalizer at scale (measured read-only, 2026-10-22 02:50 UTC, rolled back):** `person_postcutover_audit_finalize`
+requires `statement_timeout` ≤ 8 s because it holds the writer and capture gates for its one comparison statement.
+On production that statement takes about 137 s (`person_private.postcutover_boundaries` for the 349,269 verified
+people 97 s; the comparison join 40 s; `person_postcutover_audit_external_inputs()` another 19 s). The local scale
+probe (`test-audit-scale.mjs`, 423,050 empty synthetic candidates) never exercised real-shaped people, and the
+copy rehearsal's audit was not exhausted, so this was not measured before (checklist item 20 said "finalizer
+refuses a non-exhausted run"). The 8 s rule is not a tunable: it protects live writers. The controller's held
+phase with a leased maintenance window is the existing answer for long maintenance that must not meet live
+writers (catch-up, anchors), so forward `20261022010000_person_audit_finalize_window.sql` adds the step
+`audit_finalize`: admitted by `maintenance_open` only while held, with no unresolved work, for an audit run that
+exists, is running or paused and has `scan_complete`; `person_postcutover_audit_finalize` keeps every check and
+gate and takes the window's bound (240 minutes) only when the transaction holds an `audit_finalize` frame, 8 s
+otherwise; `person_postcutover_audit_finalize_window(run, pass)` enters the frame, runs the unchanged finalizer
+and leaves it, as the catch-up wrappers do; no grant widened. CLI: `person-postcutover-finalize.mjs --window`
+(240-minute statement bound, the wrapper), transition CLI `--open-window=audit_finalize`. Tests: forward
+definitions 10/10 (new case: signature, gates, every check and every other step's rule verbatim; the two-bound
+rule; the wrapper's enter/run/leave), transition rehearsal suite (new case: refused before `scan_complete`,
+refused without a frame or for another run, finalizes inside the window with a 20 s bound, no frame left behind,
+finished runs refused), upgrade harness (older chain + forwards = clean install). Install needs Spencer's
+approval; then: drain → seal → `--open-window=audit_finalize --run=release-audit-20261019 --minutes=30` →
+`person-postcutover-finalize.mjs --run-id=release-audit-20261019 --window` → close → reopen (expected
+`review_required`; about 5 minutes of paused edits).
