@@ -18,6 +18,11 @@ export const SPEC={
  // transition CLI for this run). The finalizer then takes the window's bound (240 min) instead of 8 s.
  'window':{type:'flag',name:'window',default:false},
 };
+/** Pool overrides for the operator's pool: inside an audit_finalize window the one finalize statement
+ * runs for minutes (about 2.5 on production), so the client-side query timeout must not cancel the
+ * client while the server keeps running the statement (an orphaned statement would hold the gates
+ * until it finishes). The server-side bound is the transaction's `set local statement_timeout`. */
+export function finalizePoolOverrides(options){return options.window?{query_timeout:245*60*1000}:{};}
 export async function finalizeAudit(args){return withAuditRunLock(args.pool,args.options.runId,pool=>finish({...args,pool}));}
 async function finish({pool,options,onProgress=log}){
  const client=await pool.connect();
@@ -38,7 +43,7 @@ async function finish({pool,options,onProgress=log}){
 }
 export async function main(argv=process.argv.slice(2)){
  const options=parseOptions(argv,SPEC);
- const pool=await openDatabase(process.env,'tt-person-postcutover-finalize');
+ const pool=await openDatabase(process.env,'tt-person-postcutover-finalize',finalizePoolOverrides(options));
  try{return await finalizeAudit({pool,options});}
  finally{await pool.end();}
 }

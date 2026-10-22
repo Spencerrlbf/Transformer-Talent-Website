@@ -1969,3 +1969,20 @@ finished runs refused), upgrade harness (older chain + forwards = clean install)
 approval; then: drain → seal → `--open-window=audit_finalize --run=release-audit-20261019 --minutes=30` →
 `person-postcutover-finalize.mjs --run-id=release-audit-20261019 --window` → close → reopen (expected
 `review_required`; about 5 minutes of paused edits).
+
+**October 22, 20:07–20:15 UTC: forward installed, audit finalized.** Spencer "approve both". Installer:
+`applied=1 skipped=66`, history 163; the step constraints carry `audit_finalize`, the deferred-work patch of
+20260928090000 is intact in the live definition, the finalizer is frame-aware. First held window
+(20:08–20:11): the finalizer CLI stopped after 21 s with `audit_session_lock_lost`: the operator pool's
+client-side `query_timeout` (21 s) cancelled the client while the server kept running the statement, which
+then held the gates as an orphan until it completed (about 3 minutes) and rolled back on the lost
+connection; the transition CLI's close/reopen waited on those gates (57014) until it finished. Fix:
+`person-postcutover-finalize.mjs --window` opens its pool with a client-side timeout that outlasts the
+240-minute window bound (`finalizePoolOverrides`, offline test `scripts/person-audit/test-finalize-cli.mjs`);
+the server-side bound stays the transaction's `set local statement_timeout`. Second held window
+(20:12:32–20:15:14): **`audit_finalized` in 2 min 37 s, `review_required`** — eligible 437,037, unverified
+87,768 (65,008 pending + 22,760 review), `stale` 0, `directory_stale` 0, `lookup_stale` 0 (no verified person's
+boundary moved between its audit and the finalization), `source_date_holds` 2, `directory_pending` 0,
+`open_identity_conflicts` 5,962, `external_stable` false (the directory moved during the 2.5-day scan, as
+decision 2 anticipates). Controller reopened, revision 23. Recruiter edits were paused for about 6 minutes in
+total across the two windows.
