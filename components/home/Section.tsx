@@ -1,38 +1,42 @@
 import Link from "next/link";
-import type { Fact, Section as SectionCopy } from "@/lib/home/copy";
-import { LABELS } from "@/lib/home/copy";
+import type { Fact, Stage } from "@/lib/home/copy";
+import { LABELS, STAGES } from "@/lib/home/copy";
 
-// One homepage section, Modal-shaped: eyebrow with a 12px mark, heading,
-// one-line sub, the "means / you get" pair, a demo slot, three facts, one
-// link. The demo is passed as children; until a demo exists the slot shows
-// a quiet pending panel so the page reads honestly on the preview.
+// One stage of the request, Modal-shaped: a trace strip showing where this
+// stage sits in the pipeline, the stage name as the eyebrow, a heading that
+// says what happens in the search at that stage, one-line sub, a demo slot,
+// three facts, one link. Until a demo exists the slot shows a quiet pending
+// panel so the page reads honestly on the preview.
 
-export function Eyebrow({ children }: { children: React.ReactNode }) {
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+export function Trace({ current }: { current: string }) {
   return (
-    <div className="il-eyebrow">
-      <i aria-hidden="true" />
-      {children}
-    </div>
+    <ol className="il-trace" aria-label={LABELS.trace}>
+      {STAGES.map((s, i) => (
+        <li key={s.id} aria-current={s.id === current ? "step" : undefined}>
+          <a href={`#${s.id}`}>
+            <span>{pad(i + 1)}</span> {s.name.split(",")[0]}
+          </a>
+        </li>
+      ))}
+    </ol>
   );
 }
 
-export function MeansGets({ means, getsYou }: { means: string; getsYou: string }) {
-  if (!means && !getsYou) return null;
+export function Eyebrow({ index, children }: { index?: number; children: React.ReactNode }) {
   return (
-    <dl className="il-mg">
-      {means && (
-        <div>
-          <dt>{LABELS.means}</dt>
-          <dd>{means}</dd>
-        </div>
+    <div className="il-eyebrow">
+      <i aria-hidden="true" />
+      {index !== undefined && (
+        <span className="il-eyebrow-n">
+          {pad(index)} {LABELS.stageOf} {pad(STAGES.length)}
+        </span>
       )}
-      {getsYou && (
-        <div>
-          <dt>{LABELS.getsYou}</dt>
-          <dd>{getsYou}</dd>
-        </div>
-      )}
-    </dl>
+      {children}
+    </div>
   );
 }
 
@@ -43,7 +47,7 @@ export function Facts({ facts }: { facts: Fact[] }) {
       {facts.map((f) => (
         <li key={f.title}>
           <i aria-hidden="true" />
-          <h4>{f.title}</h4>
+          <h3>{f.title}</h3>
           <p>{f.body}</p>
         </li>
       ))}
@@ -89,24 +93,21 @@ export function CtaLink({ label, href }: { label: string; href: string }) {
   );
 }
 
-export default function Section({ copy, children }: { copy: SectionCopy; children?: React.ReactNode }) {
+export default function StageSection({ stage, children }: { stage: Stage; children?: React.ReactNode }) {
+  const index = STAGES.findIndex((s) => s.id === stage.id) + 1;
   return (
-    <section
-      className={`il-section${copy.tone === "light" ? " il-light" : ""}`}
-      id={copy.id}
-      aria-labelledby={`${copy.id}-h`}
-    >
+    <section className="il-section" id={stage.id} aria-labelledby={`${stage.id}-h`}>
       <div className="il-wrap">
+        <Trace current={stage.id} />
         <div className="il-sec-head">
-          <Eyebrow>{copy.eyebrow}</Eyebrow>
-          <h2 className="il-h2" id={`${copy.id}-h`}>{copy.heading}</h2>
-          {copy.sub && <p className="il-lede">{copy.sub}</p>}
-          <MeansGets means={copy.means} getsYou={copy.getsYou} />
+          <Eyebrow index={index}>{stage.name}</Eyebrow>
+          <h2 className="il-h2" id={`${stage.id}-h`}>{stage.heading}</h2>
+          {stage.sub && <p className="il-lede">{stage.sub}</p>}
         </div>
-        {children ?? <DemoSlot description={copy.demo} buildStep={copy.buildStep} />}
-        <Facts facts={copy.facts} />
+        {children ?? <DemoSlot description={stage.demo} buildStep={stage.buildStep} />}
+        <Facts facts={stage.facts} />
         <div className="il-sec-foot">
-          <CtaLink label={copy.cta.label} href={copy.cta.href} />
+          <CtaLink label={stage.cta.label} href={stage.cta.href} />
         </div>
       </div>
     </section>

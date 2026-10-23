@@ -21,14 +21,8 @@ export const WARM_START_DELTA_HOURS: number | null = null;
 /** Closed roles needed before the time-to-first-profile curve renders. */
 export const CDF_MIN_ROLES = 10;
 
-/** Only "Pay on hire. One fee, at start date." ships until this is true. */
-export const PRICING_CONFIRMED = false;
-
 /** Announcement bar with the live role count. Off until Spencer says yes. */
 export const SHOW_ROLE_COUNT_BANNER = false;
-
-/** Swaps the top-k CTA to "Read a sample profile" once an approved sample exists. */
-export const SAMPLE_PROFILE_READY = false;
 
 const WORDS: Record<number, string> = { 5: "Five", 500: "five hundred" };
 /** Number words for headings; falls back to digits for unmapped values. */

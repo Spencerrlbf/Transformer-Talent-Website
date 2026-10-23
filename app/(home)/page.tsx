@@ -1,18 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Inter, DM_Mono } from "next/font/google";
-import Section, { CtaLink, DemoSlot, Eyebrow, Facts, MeansGets } from "@/components/home/Section";
+import StageSection, { DemoSlot } from "@/components/home/Section";
 import { PLACEMENTS } from "@/data/placements";
-import {
-  ATTENTION, CTA, CUSTOMERS, FOOTER, HERO, KV_CACHE, LABELS, MARKET, NAV, OPEN_NOW_DEMO, PROOF, QUOTES, SCALE_TO_ZERO, TOP_K, TTFT,
-} from "@/lib/home/copy";
+import { CTA, FOOTER, HERO, LABELS, NAV, OPEN_NOW_DEMO, PROOF, QUOTES, STAGES } from "@/lib/home/copy";
 import "./home.css";
 
-// The inference-layer homepage. Plan: Recruitment-Matching/mocks/
-// inference-layer/plan-v2.md. This is build step 1, the skeleton: chrome,
-// every section's copy in its final shape, and a pending panel in each
-// demo slot. Demos arrive in later steps. Every string is in
-// lib/home/copy.ts, every number in lib/home/placeholders.ts.
+// The inference-layer homepage: one request through the serving stack, with
+// the search as the content of each stage. Plan: Recruitment-Matching/mocks/
+// inference-layer/plan-v2.md (stage wording per Spencer, 2026-10-23). This
+// is the skeleton: every stage in its final shape with a pending panel in
+// its demo slot. Every string is in lib/home/copy.ts, every number in
+// lib/home/placeholders.ts.
 
 const ilSans = Inter({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-il-sans" });
 const ilMono = DM_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-il-mono" });
@@ -31,6 +30,8 @@ function Pill({ label, href, primary }: { label: string; href: string; primary?:
   );
 }
 
+const STOP = STAGES[STAGES.length - 1];
+
 export default function Home() {
   return (
     <div className={`il-home ${ilSans.variable} ${ilMono.variable}`}>
@@ -48,65 +49,37 @@ export default function Home() {
       </header>
 
       <main>
-      <section className="il-hero" aria-labelledby="hero-h">
-        <div className="il-wrap">
-          <h1 className="il-h1" id="hero-h">
-            {HERO.headlineBefore}<em>{HERO.headlineAccent}</em>{HERO.headlineAfter}
-          </h1>
-          <p className="il-hero-sub">{HERO.sub}</p>
-          <MeansGets means={HERO.means} getsYou={HERO.getsYou} />
-          <div className="il-ctas">
-            <Pill label={CTA.sendBrief.label} href={CTA.sendBrief.href} primary />
-            <Pill label={CTA.bookCall.label} href={CTA.bookCall.href} />
-          </div>
-          <DemoSlot description={HERO.stageAria} buildStep={3} className="il-stage" />
-          <div className="il-proof">
-            <span className="il-proof-lead">{PROOF.lead}</span>
-            <ul className="il-investors">
-              {PROOF.investors.map((v) => <li key={v}>{v}</li>)}
+        <section className="il-hero" aria-labelledby="hero-h">
+          <div className="il-wrap">
+            <h1 className="il-h1" id="hero-h">
+              {HERO.headlineBefore}<em>{HERO.headlineAccent}</em>{HERO.headlineAfter}
+            </h1>
+            <p className="il-hero-sub">{HERO.sub}</p>
+            <div className="il-ctas">
+              <Pill label={CTA.sendBrief.label} href={CTA.sendBrief.href} primary />
+              <Pill label={CTA.bookCall.label} href={CTA.bookCall.href} />
+            </div>
+            <DemoSlot description={HERO.stageAria} buildStep={3} className="il-stage" />
+            <div className="il-proof">
+              <span className="il-proof-lead">{PROOF.lead}</span>
+              <ul className="il-investors">
+                {PROOF.investors.map((v) => <li key={v}>{v}</li>)}
+              </ul>
+            </div>
+            <ul className="il-placed" aria-label={LABELS.recentPlacements}>
+              {PLACEMENTS.map((p) => (
+                <li key={p.company}>
+                  <span className="il-placed-role">{p.role}</span>
+                  <a href={p.url} target="_blank" rel="noreferrer">{p.company}</a>
+                </li>
+              ))}
             </ul>
           </div>
-          <ul className="il-placed" aria-label={LABELS.recentPlacements}>
-            {PLACEMENTS.map((p) => (
-              <li key={p.company}>
-                <span className="il-placed-role">{p.role}</span>
-                <a href={p.url} target="_blank" rel="noreferrer">{p.company}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+        </section>
 
-      <Section copy={KV_CACHE}>
-        <div className="il-tabs">
-          <ol className="il-tablist" aria-label={LABELS.stages}>
-            {KV_CACHE.tabs!.map((t) => <li key={t.id}><a href={`#${t.id}`}>{t.label}</a></li>)}
-          </ol>
-          <div className="il-tabpanels">
-            {KV_CACHE.tabs!.map((t) => (
-              <article className="il-tab" id={t.id} key={t.id}>
-                <h3>{t.heading}</h3>
-                <p className="il-tab-sub">{t.sub}</p>
-                <MeansGets means={t.means} getsYou={t.getsYou} />
-                <DemoSlot description={t.demo} buildStep={8} />
-                <Facts facts={t.facts} />
-              </article>
-            ))}
-          </div>
-        </div>
-      </Section>
+        {STAGES.slice(0, -1).map((stage) => <StageSection key={stage.id} stage={stage} />)}
 
-      <Section copy={TOP_K} />
-      <Section copy={ATTENTION} />
-      <Section copy={MARKET} />
-      <Section copy={TTFT} />
-
-      <section className="il-section" id={CUSTOMERS.id} aria-labelledby={`${CUSTOMERS.id}-h`}>
-        <div className="il-wrap">
-          <div className="il-sec-head">
-            <Eyebrow>{CUSTOMERS.eyebrow}</Eyebrow>
-            <h2 className="il-h2" id={`${CUSTOMERS.id}-h`}>{CUSTOMERS.heading}</h2>
-          </div>
+        <StageSection stage={STOP}>
           <div className="il-quotes">
             {QUOTES.map((q) => (
               <figure className="il-quote" key={q.who}>
@@ -116,13 +89,7 @@ export default function Home() {
             ))}
           </div>
           <DemoSlot description={OPEN_NOW_DEMO} buildStep={4} />
-          <div className="il-sec-foot">
-            <CtaLink label={CUSTOMERS.cta.label} href={CUSTOMERS.cta.href} />
-          </div>
-        </div>
-      </section>
-
-      <Section copy={SCALE_TO_ZERO} />
+        </StageSection>
       </main>
 
       <footer className="il-foot">
@@ -130,7 +97,7 @@ export default function Home() {
           <div className="il-foot-cols">
             {FOOTER.columns.map((c) => (
               <div key={c.title}>
-                <h4>{c.title}</h4>
+                <h3>{c.title}</h3>
                 <ul>
                   {c.links.map((l) => (
                     <li key={l.href + l.label}>
