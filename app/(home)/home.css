@@ -76,7 +76,36 @@ body:has(.il-home) { background: #040804; }
 .il-demo-pending { aspect-ratio: 1058 / 400; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; }
 .il-demo-pending p { font-size: 15px; line-height: 22px; color: var(--il-t3); max-width: 520px; }
 .il-demo-tag { font-family: var(--il-mono); font-size: 12px; letter-spacing: 0.03em; color: var(--il-t3); border: 1px dashed var(--il-l10); border-radius: 4px; padding: 3px 8px; }
-.il-stage { aspect-ratio: 1058 / 520; }
+.il-stage {
+  display: block; line-height: 0;
+  /* halftone: a repeating dot pattern at very low contrast so the stage is not flat */
+  background-color: var(--il-s1000);
+  background-image: radial-gradient(var(--il-l3) 1px, transparent 1.5px);
+  background-size: 6px 6px;
+}
+.il-tl-legend { display: none; flex-wrap: wrap; gap: 4px 16px; margin-top: 12px; font-family: var(--il-mono); font-size: 12px; letter-spacing: 0.03em; color: var(--il-t2); counter-reset: stage; }
+.il-tl-legend li { counter-increment: stage; }
+.il-tl-legend li::before { content: counter(stage, decimal-leading-zero) " "; color: var(--il-t3); }
+.il-footnote { margin-top: 12px; font-family: var(--il-mono); font-size: 12px; letter-spacing: 0.03em; color: var(--il-t3); }
+
+/* request timeline: the hero visual, drawn in by phase (see RequestTimeline.tsx) */
+.il-tl { display: block; width: 100%; height: auto; }
+/* the stage renders at 928px for a 1058 viewBox, so user units are scaled by 1058/928 to land at 12px and 11px */
+.il-tl text { font-family: var(--il-mono); font-size: 13.7px; letter-spacing: 0.03em; fill: var(--il-t2); }
+.il-tl .il-tl-hair { vector-effect: non-scaling-stroke; }
+.il-tl .il-tl-note { font-size: 12.5px; fill: var(--il-t3); }
+.il-tl .il-tl-tag { font-size: 12.5px; fill: var(--il-t3); }
+.il-tl .il-tl-hi { font-size: 12.5px; fill: var(--il-green2); }
+.il-tl .il-tl-draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.il-tl .il-tl-fade { opacity: 0; }
+.il-tl .il-tl-draw, .il-tl .il-tl-fade {
+  animation: il-phase 450ms ease-out forwards;
+  animation-delay: calc(var(--phase, 0) * 1800ms);
+}
+@keyframes il-phase { to { stroke-dashoffset: 0; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .il-tl .il-tl-draw, .il-tl .il-tl-fade { animation: none; stroke-dashoffset: 0; opacity: 1; }
+}
 
 /* proof row + placed strip */
 .il-proof { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 12px 24px; margin-top: 48px; }
@@ -136,6 +165,7 @@ body:has(.il-home) { background: #040804; }
   .il-placed { grid-template-columns: 1fr; }
   .il-facts, .il-quotes { grid-template-columns: 1fr; }
   .il-demo-pending { aspect-ratio: auto; min-height: 180px; }
-  .il-stage { aspect-ratio: 4 / 3; }
+  .il-tl-labels { display: none; }
+  .il-tl-legend { display: flex; }
   .il-foot-cols { grid-template-columns: 1fr 1fr; }
 }

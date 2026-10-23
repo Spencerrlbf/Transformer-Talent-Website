@@ -34,6 +34,13 @@ export const HERO = {
   stageAria:
     "One request end to end: cold start already paid, the brief loaded at prefill, held in the cache, candidates decoded and sampled, streamed as they clear, and the stop token at a signed offer.",
   footnote: "Timing illustrative until measured from role data.",
+  timeline: {
+    title: "One request through the search",
+    roleTwo: "role two, same company",
+    heldBack: "held back",
+    firstProfile: "first profile",
+    sharedPrefix: "shared prefix",
+  },
 };
 
 export const PROOF = {
@@ -89,7 +96,7 @@ export const STAGES: Stage[] = [
     name: "kv cache",
     heading: "Your brief and feedback stay cached throughout the search.",
     sub: "Shared company context gives the next role a warm start.",
-    demo: "A cache strip that grows as reviews are appended, then a second lane for role two with the shared cells already lit. Readout: evicted 0.",
+    demo: "A cache strip that grows as reviews are appended, then a second lane for role two with the shared cells already lit. Readout: evicted none.",
     buildStep: 8,
     facts: [
       { title: "Feedback appended.", body: "Pass or progress, with your reason, is written into the search the moment you send it." },

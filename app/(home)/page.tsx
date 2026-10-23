@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Inter, DM_Mono } from "next/font/google";
 import StageSection, { DemoSlot } from "@/components/home/Section";
+import RequestTimeline from "@/components/home/RequestTimeline";
 import { PLACEMENTS } from "@/data/placements";
 import { CTA, FOOTER, HERO, LABELS, NAV, OPEN_NOW_DEMO, PROOF, QUOTES, STAGES } from "@/lib/home/copy";
 import "./home.css";
@@ -9,8 +10,8 @@ import "./home.css";
 // The inference-layer homepage: one request through the serving stack, with
 // the search as the content of each stage. Plan: Recruitment-Matching/mocks/
 // inference-layer/plan-v2.md (stage wording per Spencer, 2026-10-23). This
-// is the skeleton: every stage in its final shape with a pending panel in
-// its demo slot. Every string is in lib/home/copy.ts, every number in
+// hero carries the static request timeline (build step 3); the stage
+// sections still show a pending panel in their demo slots. Every string is in lib/home/copy.ts, every number in
 // lib/home/placeholders.ts.
 
 const ilSans = Inter({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-il-sans" });
@@ -59,7 +60,13 @@ export default function Home() {
               <Pill label={CTA.sendBrief.label} href={CTA.sendBrief.href} primary />
               <Pill label={CTA.bookCall.label} href={CTA.bookCall.href} />
             </div>
-            <DemoSlot description={HERO.stageAria} buildStep={3} className="il-stage" />
+            <DemoSlot description={HERO.stageAria} className="il-stage">
+              <RequestTimeline />
+            </DemoSlot>
+            <ol className="il-tl-legend" aria-label={HERO.timeline.title}>
+              {STAGES.map((s) => <li key={s.id}>{s.name}</li>)}
+            </ol>
+            <p className="il-footnote">{HERO.footnote}</p>
             <div className="il-proof">
               <span className="il-proof-lead">{PROOF.lead}</span>
               <ul className="il-investors">
