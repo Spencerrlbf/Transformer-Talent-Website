@@ -41,7 +41,7 @@ body:has(.il-home) {
   width: 100%;
 }
 .il-home a { color: inherit; text-decoration: none; }
-.il-home h1, .il-home h2, .il-home h3, .il-home p { margin: 0; }
+.il-home :where(h1, h2, h3, p) { margin: 0; }
 
 .il-wrap { max-width: var(--il-w); margin: 0 auto; padding: 0 var(--il-pad); }
 
@@ -54,7 +54,7 @@ body:has(.il-home) {
 
 /* nav */
 .il-nav { height: 64px; display: flex; align-items: center; justify-content: space-between; }
-.il-brand { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 16px; }
+.il-brand { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 16px; white-space: nowrap; }
 .il-brand b { width: 18px; height: 18px; background: linear-gradient(135deg, var(--il-green2), var(--il-deep)); border-radius: 4px; display: inline-block; }
 .il-links { display: flex; gap: 32px; font-size: 15px; color: var(--il-t2); }
 .il-links a:hover { color: var(--il-t1); }
@@ -87,7 +87,7 @@ body:has(.il-home) {
 .il-term {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   background: var(--il-s900); border: 1px solid var(--il-l5); border-radius: 10px; padding: 24px 32px; min-width: 440px;
-  text-align: left; font-family: var(--il-mono); font-size: 13px; line-height: 20px; letter-spacing: 0.03em;
+  text-align: left; font-family: var(--il-mono); font-size: 13px; line-height: 20px; letter-spacing: 0.03em; overflow: hidden;
   box-shadow: 0 1px 3px rgba(4, 8, 4, 0.5), 0 2px 32px rgba(4, 8, 4, 0.6);
 }
 .il-term .ln { color: var(--il-t2); white-space: nowrap; min-height: 20px; }
@@ -148,6 +148,9 @@ body:has(.il-home) {
 @media (max-width: 860px) {
   .il-home { --il-pad: 20px; --il-sec: 88px; }
   .il-links { display: none; }
+  .il-navright .ghost { display: none; }
+  .il-pill { white-space: nowrap; padding: 6px 14px; font-size: 15px; }
+  .il-legend { display: none; }
   .il-h1 { font-size: 34px; line-height: 38px; }
   .il-split, .il-panels, .il-steps { grid-template-columns: 1fr; }
   .il-split .il-lede { padding-top: 0; }
