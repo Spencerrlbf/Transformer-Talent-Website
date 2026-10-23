@@ -20,6 +20,7 @@ const id = (n) => `ad000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const A = id(1), B = id(2), C = id(3), U = id(4); // U has no anchor.
 const D = id(5), R = id(6); // D's primary email belongs to R.
 const E = id(7); // Published armed, then rolled back.
+const F = id(8); // Carries an unreconciled legacy edit when published.
 const one = async (sql, args = []) => (await pool.query(sql, args)).rows[0];
 const status = async () => (await one('select person_transition_status() r')).r;
 const act = async (a) => { const s = await status(); return (await one("select person_private.transition_set($1,$2,$3,'synthetic_test') r", [a, s.revision, s.generation])).r; };
@@ -56,6 +57,10 @@ test('setup: anchored people while disabled, then arm', async () => {
     [D, JSON.stringify([{ title: 'Engineer', company: 'Synthetic Co', is_current: true, start_date: { year: 2020, month: 'Jan' } }])]);
   await pool.query("insert into candidate_emails(candidate_id,email_address,is_primary) values($1,'taken-pubadm@example.com',true)", [D]);
   await prepareAuditFixture(D);
+  // F: anchored, then a captured enrichment row nobody reconciled (the candidates row and its audit chain untouched).
+  await seed(F, 8, true);
+  await pool.query("insert into candidate_enrichments(organization_id,candidate_id,linkedin_username,provider,operation,status,cache_status,raw_payload) values($1,$2,'synthetic-pubadm-8','harvest','full_profile','ok','miss','{}'::jsonb)", [lib.TT_ORG_ID, F]);
+  assert.equal(await n('select count(*) n from person_change_events where candidate_id=$1 and reconciled_at is null', [F]), 1);
   assert.equal((await act('arm')).enabled, true);
   assert.equal((await status()).phase, 'open');
 });
@@ -92,6 +97,11 @@ test('the window admits its run while the controller stays open for other writer
   assert.equal(await n('select count(*) n from person_private.certified_audit_operations where operation_id=$1', [op.id]), 1);
   assert.equal(await n("select count(*) n from person_change_attributions where operation_id=$1 and scope='profile'", [op.id]), 1);
   assert.equal(await n('select count(*) n from person_projection_state where candidate_id=$1', [A]), 1);
+  // The publication's own captured write is attributed: nothing is left for the reconciler.
+  assert.equal(await n('select count(*) n from person_change_queue where candidate_id=$1', [A]), 0, 'queue row released');
+  assert.equal(await n("select count(*) n from person_change_events where candidate_id=$1 and source_table='candidates' and reconciled_at is null", [A]), 0, 'publication event reconciled');
+  assert.ok(await n("select count(*) n from person_change_events where candidate_id=$1 and source_table='candidates' and reconciled_at is not null", [A]) >= 1);
+  assert.equal(await n('select count(*) n from person_reconcile_pending where candidate_id=$1', [A]), 0, 'not pending');
   const r = await one("select status from person_publish_results where run_id='pub-1' and candidate_id=$1", [U]);
   assert.equal(r.status, 'audit_blocked');
   for (const t of ['maintenance_frames', 'publish_projection_frames', 'application_projection_frames', 'audit_proof_frames'])
@@ -112,6 +122,19 @@ test('a second publish of the same person is unchanged and the chain stays valid
   } finally { await closeWindow(w.work_id); }
   assert.equal((await plan(A)).status, 'verified');
   assert.equal((await plan(B)).status, 'verified');
+});
+
+test('a person with an unreconciled captured change stays queued after publication', async () => {
+  const before = await one('select version from person_change_queue where candidate_id=$1', [F]);
+  const w = await openWindow('publish', 'pub-f');
+  try {
+    const summary = await publish('pub-f', [F]);
+    assert.equal(summary.projected, 1, JSON.stringify(summary));
+  } finally { await closeWindow(w.work_id); }
+  const after = await one('select version from person_change_queue where candidate_id=$1', [F]);
+  assert.ok(after && Number(after.version) > Number(before.version), 'queue row kept and advanced to the publication event');
+  assert.equal(await n("select count(*) n from person_change_events where candidate_id=$1 and reconciled_at is null", [F]), 2, 'the enrichment change and the publication event both wait for the reconciler');
+  assert.equal(await n('select count(*) n from person_reconcile_pending where candidate_id=$1', [F]), 1);
 });
 
 test('draining refuses publication; seal waits for the window to close', async () => {

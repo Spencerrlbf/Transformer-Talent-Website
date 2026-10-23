@@ -76,6 +76,8 @@ type Detail = {
   } | null;
   noReply?: { markedAt: string; checkBackAt: string | null; jobId: string | null } | null;
   pipeline: PipelineEntry[];
+  /** Suggested roles judged contact or worth a message: Fit tab, "Also a match". */
+  alsoMatches?: PipelineEntry[];
   /** Where the Profile tab's history comes from and when it was fetched. */
   profileSource?: string | null;
   experience: {
@@ -1401,6 +1403,25 @@ export default function CandidateDrawer({
                       <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} decision={p.jobId === roleContext ? decision : undefined} companies={companies} />
                     </section>
                   ))}
+                  {(detail.alsoMatches?.length ?? 0) > 0 && (
+                    <>
+                      <div className="cv2d-also">
+                        Also a match · {detail.alsoMatches!.length} {detail.alsoMatches!.length === 1 ? "role" : "roles"}
+                      </div>
+                      {detail.alsoMatches!.map((p) => (
+                        <section className="cv2d-fit-role" key={`also-${p.jobId}`}>
+                          <div className="cv2d-fit-title">
+                            {p.title} <em>#{p.jobId}</em>
+                            <span className="cv2d-fit-via">suggested</span>
+                            <button type="button" className="cv2d-rolebtn cv2d-fit-job" title="View this job" onClick={() => setOpenJob(p.jobId)}>
+                              View job
+                            </button>
+                          </div>
+                          <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} companies={companies} />
+                        </section>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
 
@@ -1412,6 +1433,9 @@ export default function CandidateDrawer({
                       <p className="cv2d-about">{detail.about}</p>
                     </>
                   )}
+                  <div className="cv2d-prof-wrap">
+                  <div className="cv2d-prof">
+                  <div className="cv2d-prof-main">
                   <h4 className="cv2d-sec">Experience</h4>
                   {detail.profileSource && <p className="cv2d-dim">{detail.profileSource}</p>}
                   {detail.experience.length === 0 && (
@@ -1445,10 +1469,13 @@ export default function CandidateDrawer({
                       </div>
                     </div>
                   ))}
+                  </div>
 
+                  {(detail.education.length > 0 || detail.skills.length > 0) && (
+                  <aside className="cv2d-prof-side">
                   {detail.education.length > 0 && (
                     <>
-                      <h4 className="cv2d-sec" style={{ marginTop: 26 }}>
+                      <h4 className="cv2d-sec">
                         Education
                       </h4>
                       {detail.education.map((e, i) => (
@@ -1475,7 +1502,7 @@ export default function CandidateDrawer({
 
                   {detail.skills.length > 0 && (
                     <>
-                      <h4 className="cv2d-sec" style={{ marginTop: 26 }}>
+                      <h4 className={detail.education.length > 0 ? "cv2d-sec cv2d-sec-gap" : "cv2d-sec"}>
                         Skills
                       </h4>
                       <div className="cv2d-skills">
@@ -1486,6 +1513,10 @@ export default function CandidateDrawer({
                       </div>
                     </>
                   )}
+                  </aside>
+                  )}
+                  </div>
+                  </div>
                 </>
               )}
 

@@ -50,5 +50,11 @@ test('connection URL cannot override the validated host or execution timeout',as
  assert.equal(typeof anchorDatabaseConfig,'function');
  for(const suffix of ['?host=remote.invalid','?hostaddr=10.0.0.1','?statement_timeout=0','?options=-c%20statement_timeout%3D0'])assert.throws(()=>anchorDatabaseConfig({LOCAL_DATABASE_URL:`postgresql://localhost/local${suffix}`}),/audit_database_url/);
  const c=new pg.Client(anchorDatabaseConfig({LOCAL_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/person_audit_test'}));assert.equal(c.connectionParameters.host,'127.0.0.1');assert.equal(c.connectionParameters.statement_timeout,15000);
- const remote=new pg.Client(anchorDatabaseConfig({PERSON_DATABASE_URL:'postgresql://postgres@db.example/website?sslmode=require'}));assert.equal(remote.connectionParameters.host,'db.example');assert.equal(remote.connectionParameters.statement_timeout,15000);
+ // Hosted anchors need the explicitly selected project (fictional refs); unknown hosts and
+ // other projects are refused before a client exists (RR-06/07).
+ const ref='abcdefghijklmnopqrst',other='tsrqponmlkjihgfedcba';
+ assert.throws(()=>anchorDatabaseConfig({PERSON_DATABASE_URL:'postgresql://postgres@db.example/website?sslmode=require'}),/person_target:missing/);
+ assert.throws(()=>anchorDatabaseConfig({PERSON_TARGET_PROJECT_REF:ref,PERSON_DATABASE_URL:'postgresql://postgres@db.example/website?sslmode=require'}),/person_target:database_host/);
+ assert.throws(()=>anchorDatabaseConfig({PERSON_TARGET_PROJECT_REF:ref,PERSON_DATABASE_URL:`postgresql://postgres.${other}@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require`}),/person_target:database_mismatch/);
+ const remote=new pg.Client(anchorDatabaseConfig({PERSON_TARGET_PROJECT_REF:ref,PERSON_DATABASE_URL:`postgresql://postgres.${ref}@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require`}));assert.equal(remote.connectionParameters.host,'aws-0-us-east-1.pooler.supabase.com');assert.equal(remote.connectionParameters.statement_timeout,15000);
 });

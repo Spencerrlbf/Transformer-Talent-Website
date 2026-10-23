@@ -77,6 +77,14 @@ globalThis.fetch = async (input, init = {}) => {
   }
   if (["candidate_emails", "candidate_emails_v2"].includes(table))
     return Response.json([]);
+  // The recruiter's explicit decisions (person_recruiter_primary, read by poolEmails
+  // for unpublished people): served from the fixture database.
+  if (table === "person_recruiter_primary" && method === "GET") {
+    const ids = (u.searchParams.get("candidate_id") ?? "").replace(/^in\.\(|\)$/g, "").split(",").map((x) => x.replace(/"/g, "")).filter(Boolean);
+    return Response.json(
+      (await db.query("select candidate_id,kind,chosen_value,coalesce((to_jsonb(p)->>'suppressed')::boolean,false) suppressed from person_recruiter_primary p where candidate_id=any($1::uuid[])", [ids])).rows,
+    );
+  }
   if (
     ["sourced_candidates", "website_applications", "candidates"].includes(
       table,

@@ -2,6 +2,7 @@
 # Local PostgreSQL only: the controller and maintenance sequence.
 # Resets only the disposable person_transition_rehearsal_test database.
 set -euo pipefail
+node scripts/check-node.mjs >/dev/null   # supported runtime, before any fixture DDL
 PORT="${1:?local port required}"
 PSQL="${PSQL:-psql}"
 [[ "$PORT" =~ ^[0-9]+$ ]] || exit 2
@@ -109,5 +110,20 @@ q -d $DB -1 -f supabase/migrations/20260928080000_person_derivative_publish.sql
 if test -f supabase/migrations/20260928090000_person_maintenance_deferred.sql; then
  q -d $DB -1 -f supabase/migrations/20260928090000_person_maintenance_deferred.sql
 fi
+# Release forward migrations (the armed sweep proves its target with person_target_identity()).
+for migration in 20261003090000_person_target_identity 20261003100000_person_forward_application_contact 20261003110000_person_forward_network_send 20261003120000_person_forward_identity_index 20261005090000_person_recruiter_explicit_clear 20261005100000_person_send_decisions 20261013090000_person_target_label 20261013100000_person_reconcile_page_plan 20261014120000_person_reconcile_v2_fingerprint_plan 20261015120000_person_publish_capture_attribution 20261022010000_person_audit_finalize_window; do
+ q -d $DB -1 -f "supabase/migrations/$migration.sql"
+done
+# The operator's explicit label for this loopback fixture (the suites select `local`).
+q -d $DB -c "select person_private.target_label('local')"
 node scripts/build-worker-lib.mjs
+# TRANSITION_SUITE=armed runs only the leak test's armed-mode orchestration on the fresh chain
+# (scripts/tenancy/run-armed-local-tests.sh); the default runs the rehearsal and recovery cases.
+if [ "${TRANSITION_SUITE:-}" = armed ]; then
+ PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/tenancy/test-armed.mjs
+ exit 0
+fi
 PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-rehearsal.mjs
+# Recovery cases on the same state: socket loss at COMMIT, window close/expiry during
+# an admitted publication, undo after a legitimate edit (release review section 7).
+PINNED_RUNNER_DIR="${PINNED_RUNNER_DIR:-}" LOCAL_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/$DB" node --test --test-concurrency=1 scripts/person-transition-cli/test-recovery.mjs

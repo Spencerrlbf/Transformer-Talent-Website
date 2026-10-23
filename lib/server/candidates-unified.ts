@@ -21,10 +21,11 @@ import { signResumeUrl } from "./applicants";
 import { getOrgId } from "./spine";
 import { clientTag, clientReason } from "./client-reason";
 import { isVerdictView, type VerdictView } from "@/lib/verdict-view";
-import { poolEmails } from "./network";
+import { poolEmails, poolPhone, recruiterContactDecisions, type RecruiterDecisions } from "./network";
 import { publishedPoolProfiles } from "./person/profile-view";
 import { poolContacts } from "./person/pool-contact";
 import { saveRecruiterContact } from "./person/recruiter";
+import { isTargetError } from "./person/target";
 import { personWriteMode } from "./person/intake";
 import { TT_ORG_ID } from "./person/normalize";
 import { poolDisplayPositions, poolEducation } from "./pool/profile";
@@ -276,6 +277,10 @@ export type UnifiedDetail = {
     /** "no_reply" when Past because we stopped chasing them. */
     stageReason?: string | null;
   }[];
+  /** Roles the system suggested and the judge rated positively (contact or worth a
+   *  message) that are not already in the pipeline. Shown on the Fit tab only, under
+   *  "Also a match"; the table, its filters and the Pipeline tab ignore them. */
+  alsoMatches?: UnifiedDetail["pipeline"];
   experience: ExperienceGroup[];
   /** Where the Profile tab's history comes from and when it was fetched
    *  ("Refreshed from LinkedIn, Sep 24, 2026"); null when there is none. */
@@ -1464,6 +1469,39 @@ function applicantPipeline(
   });
 }
 
+/** Suggested roles judged "contact" or "message" for this person, not already in the
+ *  pipeline: contact first, then message, newest first. */
+function applicantAlsoMatches(
+  a: AppRow,
+  pairings: Map<string, VerdictRow>,
+  exclude: Set<string>,
+  byExternal?: Map<string, RoleInfo>
+): UnifiedDetail["pipeline"] {
+  const rank = (label: string) => (label === "contact" ? 0 : 1);
+  return matchedVerdicts(pairings, a.candidate_id)
+    .map(({ jobId, row }) => ({ jobId, row, v2: readable(row).v2 }))
+    .filter((m) => !exclude.has(m.jobId) && m.v2 && (m.v2.label === "contact" || m.v2.label === "message"))
+    .sort((x, y) => rank(x.v2!.label) - rank(y.v2!.label) || (y.row.created_at || "").localeCompare(x.row.created_at || ""))
+    .map(({ jobId, row, v2 }) => {
+      const info = byExternal?.get(jobId);
+      return {
+        jobId,
+        title: row.org_roles?.title || `Role #${jobId}`,
+        company: info?.company ?? null,
+        salary: info?.salary ?? null,
+        location: info?.location ?? null,
+        via: "matched" as const,
+        tag: v2!.label,
+        tagLabel: labelOf(v2!.label),
+        reason: v2!.paragraph,
+        verdict: v2!,
+        feedbackKey: `app_${a.id}`,
+        addedAt: row.created_at || a.created_at,
+        stage: "new",
+      };
+    });
+}
+
 const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -1491,10 +1529,15 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
     }[];
     if (!p) return null;
 
-    const published = await publishedPoolProfiles([id]);
+    // The drawer's contact block is EDITABLE: a save writes back whatever it shows, so
+    // every read behind it must be complete. A failed published-view read, decision
+    // lookup or verification-history read is "unavailable" (the route answers 503 and
+    // nothing is editable), never a blank that a later save would turn into an
+    // explicit clear.
+    const published = await publishedPoolProfiles([id]).catch(() => { throw Error("pool_contact_unavailable"); });
     const canonical = published.get(id);
     if (canonical) p = canonical.profile as typeof p;
-    const [enrRes, vRes, emailMap] = await Promise.all([
+    const [enrRes, vRes, decisions] = await Promise.all([
       canonical ? Promise.resolve(null) : sbRest(
         `candidate_enrichments?candidate_id=eq.${id}&operation=eq.full_profile` +
           `&raw_payload=not.is.null&select=raw_payload,created_at&order=created_at.desc&limit=1`
@@ -1503,8 +1546,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
         `match_verdicts?organization_id=eq.${orgId}&candidate_id=eq.${id}` +
           `&select=org_role_id,created_at,verdict&order=created_at.desc`
       ),
-      poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published),
+      published.has(id) ? new Map<string, RecruiterDecisions>() : recruiterContactDecisions([id], { requireComplete: true }),
     ]);
+    const emailMap = await poolEmails([id], new Map([[id, p.contact?.email ?? p.email]]), published, { decisions, requireComplete: true });
     const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: HarvestProfile | null; created_at: string }[];
     const verdicts = (vRes.ok ? await vRes.json() : []) as {
       org_role_id: string; created_at: string;
@@ -1600,7 +1644,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
           .filter((e) => e.toLowerCase() !== (primary || "").toLowerCase());
         return {
           email: primary,
-          phone: str(p.contact?.phone) ?? str(p.phone),
+          phone: canonical ? canonical.contact.phone ?? null : poolPhone(decisions.get(id), p.contact?.phone, p.phone),
           github: str(p.contact?.github),
           otherEmails: curated ?? fallback,
         };
@@ -1715,6 +1759,9 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
 
     await appendAttached(orgId, key, pipeline, byExternal);
     await attachStages(orgId, key, pipeline);
+    const alsoMatches = (a.role_ids || []).length
+      ? applicantAlsoMatches(a, pairings, new Set(pipeline.map((x) => x.jobId)), byExternal)
+      : [];
     const sentSnapshot = a.source === "transformer_talent" &&
       (a.harvest_profile as Record<string, unknown> | null)?.profileStorageVersion === "tt-published-1";
     const bits = profileBits(sentSnapshot ? a.harvest_profile as HarvestProfile : sourced?.profile || (a.harvest_profile as HarvestProfile | null));
@@ -1735,6 +1782,7 @@ export async function unifiedCandidateDetail(orgId: string, key: string): Promis
       shortlisted: await isShortlisted(orgId, key),
       viaTT: a.source === "transformer_talent",
       alsoSourced: !!sourced,
+      alsoMatches,
       provenance: (() => {
         // "referral: by NAME <EMAIL>" — credit the referrer in the drawer.
         const m = (a.source || "").match(/^referral: by (.+) <([^>]+)>/);
@@ -1856,6 +1904,11 @@ export async function saveRecruiterContactMapped(
     if (reason === "person_recruiter_unavailable") return { error: "temporarily_unavailable" };
     if (reason === "person_not_found") return { error: "not_found" };
     if (["person_recruiter_not_migrated", "person_recruiter_source_hold"].includes(reason)) return { error: "contact_review_required" };
+    // The target gate refused the session (unselected, unlabelled or foreign-labelled
+    // database): the write path is unavailable, and the refusal is logged by its code.
+    if (isTargetError(error)) { console.error(`person_contact_target_refused:${reason}`); return { error: "temporarily_unavailable" }; }
+    // Only an application code or a SQLSTATE is logged; driver text can carry private data.
+    console.error(`person_contact_save_failed:${/^[A-Za-z_:0-9-]{1,80}$/.test(reason) ? reason : /^[0-9A-Z]{5}$/.test((error as { code?: string })?.code ?? "") ? `pg_${(error as { code?: string }).code}` : "unknown"}`);
     return { error: "save_failed" };
   }
 }

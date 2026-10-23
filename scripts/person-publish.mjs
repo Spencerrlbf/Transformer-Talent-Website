@@ -17,6 +17,11 @@
 //                        skip (default) or publish. Spencer's decision B5.
 //   --max-seconds=N      pause with a checkpoint after this long (default 3600)
 //   --max-db-bytes=N     stop when the database reaches this size
+//   --concurrency=N      sessions publishing people of the same page side by side,
+//                        1..16 (default 1). Every person keeps its own transaction on
+//                        its own session with the same checks; only the wait for the
+//                        network round trips overlaps (publication measured
+//                        latency-bound: 17 round trips per person, 2026-10-14).
 //   --out=<path>         dry-run detail: per person id, status and the NAMES of
 //                        changed columns, never values. Keep private.
 //
@@ -30,6 +35,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {checkNode} from './check-node.mjs';
 import {openDatabase,parseOptions,capacityGate,pinnedCommit,safeReason,log,withRunLock} from './person-publish/lib.mjs';
 
 export const SPEC={
@@ -43,6 +49,7 @@ export const SPEC={
  review:{type:'enum',values:['skip','publish'],default:'skip'},
  'max-seconds':{type:'int',name:'maxSeconds',min:1,max:18000,default:3600},
  'max-db-bytes':{type:'int',name:'maxBytes',min:1000000,max:1000000000000,default:34000000000},
+ concurrency:{type:'int',min:1,max:16,default:1},
  out:{type:'text',max:1000,default:null},
 };
 const COUNTS=['projected','unchanged','held','unmigrated','drift','audit_blocked','review_skipped','dry_changed','dry_unchanged','email_collision'];
@@ -90,11 +97,33 @@ async function checkpoint(pool,options,state,status,extra={}){
   [options.runId,status,state.last_id,state.processed,state.counts,extra]);
 }
 export async function runPublish({pool,lib,options,now=Date.now,onProgress=log,hooks={}}){
- options={...options,ids:options.ids?[...new Set(options.ids)].sort():null};
+ options={...options,ids:options.ids?[...new Set(options.ids)].sort():null,concurrency:options.concurrency??1};
  if(options.resume&&options.after)throw Error('publish_option:after_on_resume');
- return withRunLock(pool,options.runId,client=>runPublishLocked({pool:client,lib,options,now,onProgress,hooks}));
+ return withRunLock(pool,options.runId,client=>runPublishLocked({pool:client,workers:pool,lib,options,now,onProgress,hooks}));
 }
-async function runPublishLocked({pool,lib,options,now,onProgress,hooks}){
+/** One page of people. With concurrency 1 every person runs on the run-lock session as
+ * before. With more, that many sessions each take the next unprocessed person of the page;
+ * each person is still one audited transaction on one session, results come back in page
+ * order, and the first failure stops the page once every session has finished the person
+ * it was on (no session is released mid-transaction). */
+async function publishPage({pool,workers,lib,options,page}){
+ const publish=(client,row)=>lib.publishPersonProjectionOnConnection(client,row.id,{runId:options.runId,dryRun:options.mode==='dry',recordResult:options.mode==='publish',skipReview:options.review==='skip'});
+ const results=new Array(page.length);
+ if(options.concurrency<=1||page.length<=1){for(const [i,row] of page.entries())results[i]=await publish(pool,row);return results;}
+ const n=Math.min(options.concurrency,page.length);let next=0,failed=null;
+ const clients=[];
+ try{
+  for(let i=0;i<n;i++)clients.push({client:await workers.connect(),broken:null});
+  const settled=await Promise.allSettled(clients.map(async(w)=>{
+   for(;;){if(failed)return;const i=next++;if(i>=page.length)return;
+    try{results[i]=await publish(w.client,page[i]);}catch(error){failed=failed??error;w.broken=error;throw error;}}
+  }));
+  const rejected=settled.find(s=>s.status==='rejected');
+  if(rejected)throw rejected.reason;
+ }finally{for(const w of clients)w.client.release(w.broken??undefined);}
+ return results;
+}
+async function runPublishLocked({pool,workers,lib,options,now,onProgress,hooks}){
  const started=now(),commit=pinnedCommit();
  if(options.ids&&options.after)throw Error('publish_option:after_with_ids');
  if(options.ids&&(await pool.query('select count(*)::int n from public.candidates where id=any($1::uuid[])',[options.ids])).rows[0].n!==options.ids.length)throw Error('publish_target_missing');
@@ -105,13 +134,14 @@ async function runPublishLocked({pool,lib,options,now,onProgress,hooks}){
  let considered=0,status='complete';
  try{
   metrics=await gate();
-  onProgress({phase:'publish_start',run:options.runId,mode:options.mode,review:options.review,commit,resume:options.resume,after:state.last_id,processed:state.processed,...metrics});
+  onProgress({phase:'publish_start',run:options.runId,mode:options.mode,review:options.review,commit,resume:options.resume,concurrency:options.concurrency,after:state.last_id,processed:state.processed,...metrics});
   while(considered<options.limit){
    if((now()-started)/1000>options.maxSeconds){status='paused';break;}
    const page=await readPage(pool,options,state.last_id,Math.min(options.batch,options.limit-considered));
    if(!page.length)break;
-    for(const row of page){
-     const result=await lib.publishPersonProjectionOnConnection(pool,row.id,{runId:options.runId,dryRun:options.mode==='dry',recordResult:options.mode==='publish',skipReview:options.review==='skip'});
+    const results=await publishPage({pool,workers,lib,options,page});
+    for(const [i,row] of page.entries()){
+     const result=results[i];
      if(options.mode==='dry'){
       state.counts[result.status]=(state.counts[result.status]??0)+1;
       if(result.emailCollision)state.counts.email_collision++;
@@ -140,8 +170,10 @@ async function runPublishLocked({pool,lib,options,now,onProgress,hooks}){
  }
 }
 export async function main(argv=process.argv.slice(2)){
+ checkNode();
  const options=parseOptions(argv,SPEC);
- const pool=await openDatabase(process.env,'tt-person-publish');
+ // One session holds the run lock; --concurrency more publish people side by side.
+ const pool=await openDatabase(process.env,'tt-person-publish',{max:options.concurrency+1});
  try{
   const lib=await import('./dist/worker-lib.mjs');
   return await runPublish({pool,lib,options});

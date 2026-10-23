@@ -3,6 +3,7 @@
 // never the communications database. Logs carry ids, counts and statuses only.
 import pg from 'pg';
 import {checkout} from '../person-db-session.mjs';
+import {checkDatabaseUrl,selectedTarget,hasSelectedTarget,verifyDatabaseIdentity} from '../person-target.mjs';
 import {execFileSync} from 'node:child_process';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,6 +23,10 @@ export function databaseConfig(env=process.env,applicationName='tt-person-publis
   (parsed.port||'5432')!=='5432'||
   !(/^(db\.[a-z0-9-]+\.supabase\.co|[a-z0-9-]+\.pooler\.supabase\.com)$/.test(parsed.hostname))
  ))throw Error('publish_session_connection_required');
+ // A hosted URL must name the explicitly selected project (PERSON_TARGET_PROJECT_REF):
+ // the pooler host is shared by every project in the region, so the hostname check
+ // above cannot tell the original from a copy. Loopback fixtures need no selection.
+ if(!env.LOCAL_DATABASE_URL)checkDatabaseUrl(url,selectedTarget(env),{ports:['5432']});
  // Every transaction sets its own local lock/statement timeouts; this bounds
  // the reads and checkpoints made outside them.
  return {connectionString:url,max:2,statement_timeout:20000,query_timeout:21000,connectionTimeoutMillis:10000,idleTimeoutMillis:10000,allowExitOnIdle:true,application_name:applicationName};
@@ -49,6 +54,11 @@ export async function openDatabase(env=process.env,applicationName,overrides={})
   on:(...args)=>pool.on(...args),
  };
  try{await db.query('select 1');}catch(e){await pool.end();throw e;}
+ // Runtime identity (20261013090000): with a selection, the database behind this
+ // handle must hold that project's label; unlabelled or foreign-labelled databases are
+ // refused before the handle is handed out. A loopback fixture without a selection
+ // has nothing hosted to protect and is not checked (same rule as the server gate).
+ if(hasSelectedTarget(env)){try{await verifyDatabaseIdentity(db,selectedTarget(env).ref);}catch(e){await pool.end();throw e;}}
  return db;
 }
 /** Serialize publish and undo for the same run across independent processes.
@@ -110,7 +120,7 @@ export function capacityGate(pool,{maxBytes,now=Date.now}){
 }
 export function safeReason(error){
  const message=error?.message??'';
- if(/^(publish_|person_|audit_|legacy_|invalid_)[a-z_:0-9-]+$/.test(message))return message;
+ if(/^(publish_|person_|audit_|legacy_|invalid_)[a-z_:0-9-]+$/.test(message)||/^node_runtime:[a-z_]+:v[0-9.]+$/.test(message))return message;
  return `operation_failed:${/^[0-9A-Z]{5}$/.test(error?.code??'')?error.code:'unknown'}`;
 }
 export const log=(record)=>console.log(JSON.stringify(record));

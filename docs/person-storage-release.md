@@ -59,6 +59,49 @@ legacy candidate fields. Transient transport/lock failures get at most three
 attempts with backoff. Integrity errors stop the run, and a lost committed
 response can be replayed without incrementing the person's normalized revision.
 
+## Project label (20261013090000)
+
+A copy restored from a project's backup is a physical clone: it keeps
+`pg_control_system()`'s identifier, so the identifier cannot tell the copy from the
+original (on 2026-10-13 production and the test copy both reported
+`7550817586112808987`). Each database therefore carries the project ref it belongs
+to, in `person_private.target_identity`, and every runtime proof requires that label
+to equal `PERSON_TARGET_PROJECT_REF`: the server gate before the first REST request
+and the first PostgreSQL operation, every operator CLI through the shared pool opener,
+the catch-up start, the finalizer, and the sweep's preparation, ownership recovery and
+cleanup. An unlabelled database is refused (`person_target:identity_unlabelled`); a
+label for another project is refused (`person_target:identity_label_mismatch`);
+nothing relabels a database to match its environment.
+
+Operator step, once per database, on the 5432 session endpoint, after the chain and
+the forward files are installed and before any process selects the project:
+
+```sh
+psql "<5432 session url>" -c "select person_private.target_label('<project ref>')"
+psql "<5432 session url>" -c "select public.person_target_identity()"   # project_ref must be the ref
+```
+
+The function inserts the label when none exists, returns the existing row when it
+already names the same project (`created: false`), and refuses any other value
+(`target_label_exists`). The row cannot be updated, deleted or truncated
+(`target_identity_immutable`); the table and the function have no API-role grants and
+are not reachable through PostgREST. The migration itself never writes a label.
+
+Consequences to plan for:
+
+- Production is labelled `kmuihequfurvjxpnugxf`; the test copy `qsqlgibgsxzlimoegcjx`;
+  disposable loopback stacks `local`. Legacy mode with no selection performs no
+  proof, so the label can be written before the application selects the project.
+- A database restored into a **new** project carries the **old** project's label and
+  is refused by every process selecting the new project. That is intended: a clone
+  can no longer pass as its source. Using such a restore as the new project's database
+  is a deliberate, recorded superuser action (disable the trigger, update the row,
+  re-enable), never an automatic step.
+- A deployment or CLI that passes the offline URL/key checks but reaches the other
+  clone (for example PostgreSQL on the copy while REST names production) now fails
+  with `identity_label_mismatch` before any write; before this migration the two
+  reported the same cluster and the check passed.
+
 ## Reconciliation and final accounting
 
 Dispatch the existing person-trial workflow at the reviewed commit with
@@ -87,11 +130,24 @@ promise that outside systems will stop changing after it. Run final catch-up
 again before the later approved application cutover.
 
 A completed source scan pauses with `source_scan_complete` and an external
-boundary result. Finalize locally using the already-linked website CLI project:
+boundary result. Finalize locally against the explicitly selected project
+(`PERSON_TARGET_PROJECT_REF`; see `scripts/person-target/README.md`), through
+the 5432 session endpoint or a Supabase CLI workdir linked to that same project:
 
 ```sh
-node scripts/person-reconcile-finalize.mjs --run-id=<run-id> --workdir=<linked-website-workdir>
+PERSON_TARGET_PROJECT_REF=<ref> PERSON_PUBLISH_DATABASE_URL=<5432 session url> \
+  node scripts/person-reconcile-finalize.mjs --run-id=<run-id>
+# or
+PERSON_TARGET_PROJECT_REF=<ref> node scripts/person-reconcile-finalize.mjs --run-id=<run-id> --workdir=<workdir linked to <ref>>
 ```
+
+Both paths first prove that the destination holds the selected project's label and
+cluster identity (`public.person_target_identity()`, migrations `20261003090000` and
+`20261013090000`; see "Project label" above): the PostgreSQL path on its session, the
+`--workdir` path through the same linked CLI before the finish file is sent. With
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` also set, REST must report the same
+identity. A catch-up resume (`scripts/person-maintenance/run-catchup.mjs`) proves the
+REST destination's label the same way before any preparation.
 
 This executes `SET LOCAL statement_timeout='8s'` before the finish statement.
 Finish rejects an unbounded caller and briefly gates normalized/capture commits
@@ -324,7 +380,12 @@ with the run id, then the same profile update path as `savePerson`. `--mode=dry`
 ids, statuses and the names of changed columns only. Per-person outcomes are
 `projected`, `unchanged`, `held`, `unmigrated`, `drift`, `audit_blocked` and
 `review_skipped`; `--review=skip|publish` carries Spencer's decision on people
-with an open identity or contact review record. Pages are bounded (at most 500),
+with an open identity or contact review record. `--concurrency=N` (1..16, default 1)
+lets that many sessions publish people of the same page side by side: every person
+keeps its own transaction, lock, checks and durable result on one session; only the
+network round trips overlap (publication is latency-bound: 17 round trips per person,
+measured 2026-10-14; the first failure stops the page after each session has finished
+the person it was on). Pages are bounded (at most 500),
 the checkpoint follows the page, and a crash between a person's commit and the
 checkpoint is safe: the original per-person outcome commits atomically with
 the projection and is reused on replay. Totals are derived from these distinct
@@ -431,7 +492,7 @@ and source-version payloads. It records complete start/end fingerprints over
 all linked contacts and the website scope and `_v2` witness. Missing access or
 coverage stays pending. There is no operator boolean that can substitute for
 source observations. This is an observed cross-database boundary, not a
-transaction locking both projects; new source changes still require catch-up.
+transaction locking both projects; new source changes still require catch-up. The fingerprint reads the directory's provenance in chunks of `--external-chunk` contacts (1..1000, default 250); its cost is the provenance volume, so on the copy (62,208 linked contacts) it takes about ten minutes at either end of a run regardless of the chunk, and the run's `--max-seconds` budget must leave room for both. The scope statement over every link and `_v2` row measured 9.8 s on 423,062 candidates (2026-10-14) and runs under a 60-second statement bound.
 
 Snapshot and recording calls use an armed 15-second statement timeout. The
 record RPC takes gates 72005 then 72006 exclusively, checks committed candidate,
