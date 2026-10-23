@@ -35,6 +35,7 @@ export function Eyebrow({ index, children }: { index?: number; children: React.R
           {pad(index)} {LABELS.stageOf} {pad(STAGES.length)}
         </span>
       )}
+      {index !== undefined && " "}
       {children}
     </div>
   );

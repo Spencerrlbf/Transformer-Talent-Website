@@ -91,7 +91,7 @@ body:has(.il-home) { background: #040804; }
 /* request trace: where this stage sits in the pipeline */
 .il-trace { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 48px; font-family: var(--il-mono); font-size: 11px; letter-spacing: 0.03em; color: var(--il-t3); }
 .il-trace a { display: inline-flex; gap: 6px; padding: 2px 0; border-bottom: 1px solid transparent; }
-.il-trace a span { color: var(--il-t4); }
+.il-trace a span { color: var(--il-t3); }
 .il-trace a:hover { color: var(--il-t2); }
 .il-trace li[aria-current] a { color: var(--il-green); border-bottom-color: var(--il-green); }
 .il-trace li[aria-current] a span { color: var(--il-green); }

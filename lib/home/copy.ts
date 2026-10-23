@@ -79,7 +79,7 @@ export const STAGES: Stage[] = [
     buildStep: 7,
     facts: [
       { title: "Loaded once.", body: "Team, hiring bar, compensation and the lessons from your last hire, held for the whole search." },
-      { title: "One call.", body: "The kickoff is the only pass you sit through." },
+      { title: "One kickoff.", body: "The brief is loaded there and not asked for again." },
       { title: "Your words.", body: "The brief is held as you gave it, not rewritten into a job title." },
     ],
     cta: CTA.sendBrief,
@@ -101,8 +101,8 @@ export const STAGES: Stage[] = [
   {
     id: "decode",
     name: "decode",
-    heading: "Candidates are evaluated against the full context.",
-    sub: "A reasoned match, or a market read when no one fits.",
+    heading: "We evaluate candidates against the full context.",
+    sub: "Returning a reasoned match, or a market read when no one fits.",
     demo: "Hover a phrase from the sample brief and the field rises where it matters; hover a candidate and the lines behind the match brighten. A thin market returns a market read instead of a name.",
     buildStep: 9,
     facts: [
@@ -120,7 +120,7 @@ export const STAGES: Stage[] = [
     demo: `${K} candidates rise above a line labelled held back, each with its reason; the rest stay below the cut.`,
     buildStep: 9,
     facts: [
-      { title: `Top-k is ${K.toLowerCase()}.`, body: "You see the top of the distribution, not the distribution." },
+      { title: "The top of the distribution.", body: "You see the top, not the whole distribution." },
       { title: "You set the temperature.", body: "How far beyond the spec we explore is your call." },
       { title: "Below the cut stays below the cut.", body: "Everything else is held back, not forwarded." },
     ],
@@ -129,14 +129,14 @@ export const STAGES: Stage[] = [
   {
     id: "stream",
     name: "stream",
-    heading: "Candidates are presented as they clear review.",
+    heading: "Candidates are presented to you as they clear review.",
     sub: "Each with a profile and the brief-linked evidence behind their fit.",
     demo: "A ticker of the roles we place, a request timeline for two roles at one company, and a curve of time to first profile that reads measuring until the data exists.",
     buildStep: 4,
     facts: [
       { title: "As they clear review.", body: "Candidates arrive one at a time, not in a Friday batch." },
       { title: "Brief-linked evidence.", body: "Each profile carries the lines of your brief behind the fit." },
-      { title: "Time to first profile, reported.", body: "Median and p90 measured from closed roles, updated as roles close." },
+      { title: "Time to first profile: measuring.", body: "Median and p90 will be reported from closed roles once enough have closed." },
     ],
     cta: CTA.sendBrief,
   },
