@@ -70,7 +70,7 @@ export function DemoSlot({
     );
   }
   return (
-    <div className={`il-demo il-demo-pending ${className ?? ""}`} aria-label={description}>
+    <div className={`il-demo il-demo-pending ${className ?? ""}`}>
       <span className="il-demo-tag">
         {LABELS.demoPending}
         {buildStep ? `, build step ${buildStep}` : ""}

@@ -4,7 +4,7 @@ import { Inter, DM_Mono } from "next/font/google";
 import Section, { CtaLink, DemoSlot, Eyebrow, Facts, MeansGets } from "@/components/home/Section";
 import { PLACEMENTS } from "@/data/placements";
 import {
-  ATTENTION, CTA, CUSTOMERS, FOOTER, HERO, KV_CACHE, MARKET, NAV, PROOF, QUOTES, SCALE_TO_ZERO, TOP_K, TTFT,
+  ATTENTION, CTA, CUSTOMERS, FOOTER, HERO, KV_CACHE, LABELS, MARKET, NAV, OPEN_NOW_DEMO, PROOF, QUOTES, SCALE_TO_ZERO, TOP_K, TTFT,
 } from "@/lib/home/copy";
 import "./home.css";
 
@@ -19,8 +19,7 @@ const ilMono = DM_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "
 
 export const metadata: Metadata = {
   title: { absolute: "Transformer Talent, the inference layer for hiring" },
-  description:
-    "Talent infrastructure for teams that develop, train, and serve. Senior AI and software engineers, placed at venture-backed start-ups. Pay on hire.",
+  description: HERO.sub,
 };
 
 function Pill({ label, href, primary }: { label: string; href: string; primary?: boolean }) {
@@ -34,9 +33,9 @@ function Pill({ label, href, primary }: { label: string; href: string; primary?:
 
 export default function Home() {
   return (
-    <main className={`il-home ${ilSans.variable} ${ilMono.variable}`}>
-      <div className="il-wrap">
-        <nav className="il-nav" aria-label="Main">
+    <div className={`il-home ${ilSans.variable} ${ilMono.variable}`}>
+      <header className="il-wrap">
+        <nav className="il-nav" aria-label={LABELS.mainNav}>
           <Link className="il-brand" href="/"><b aria-hidden="true" />{NAV.brand}</Link>
           <div className="il-links">
             {NAV.links.map((l) => <Link key={l.href} href={l.href}>{l.label}</Link>)}
@@ -46,14 +45,16 @@ export default function Home() {
             <Pill label={NAV.cta.label} href={NAV.cta.href} primary />
           </div>
         </nav>
-      </div>
+      </header>
 
+      <main>
       <section className="il-hero" aria-labelledby="hero-h">
         <div className="il-wrap">
           <h1 className="il-h1" id="hero-h">
             {HERO.headlineBefore}<em>{HERO.headlineAccent}</em>{HERO.headlineAfter}
           </h1>
           <p className="il-hero-sub">{HERO.sub}</p>
+          <MeansGets means={HERO.means} getsYou={HERO.getsYou} />
           <div className="il-ctas">
             <Pill label={CTA.sendBrief.label} href={CTA.sendBrief.href} primary />
             <Pill label={CTA.bookCall.label} href={CTA.bookCall.href} />
@@ -65,7 +66,7 @@ export default function Home() {
               {PROOF.investors.map((v) => <li key={v}>{v}</li>)}
             </ul>
           </div>
-          <ul className="il-placed" aria-label="Recent placements">
+          <ul className="il-placed" aria-label={LABELS.recentPlacements}>
             {PLACEMENTS.map((p) => (
               <li key={p.company}>
                 <span className="il-placed-role">{p.role}</span>
@@ -78,7 +79,7 @@ export default function Home() {
 
       <Section copy={KV_CACHE}>
         <div className="il-tabs">
-          <ol className="il-tablist" aria-label="Stages of the search">
+          <ol className="il-tablist" aria-label={LABELS.stages}>
             {KV_CACHE.tabs!.map((t) => <li key={t.id}><a href={`#${t.id}`}>{t.label}</a></li>)}
           </ol>
           <div className="il-tabpanels">
@@ -114,7 +115,7 @@ export default function Home() {
               </figure>
             ))}
           </div>
-          <DemoSlot description="Open now: three live roles, server-rendered from the roles list." buildStep={4} />
+          <DemoSlot description={OPEN_NOW_DEMO} buildStep={4} />
           <div className="il-sec-foot">
             <CtaLink label={CUSTOMERS.cta.label} href={CUSTOMERS.cta.href} />
           </div>
@@ -122,6 +123,7 @@ export default function Home() {
       </section>
 
       <Section copy={SCALE_TO_ZERO} />
+      </main>
 
       <footer className="il-foot">
         <div className="il-wrap">
@@ -142,6 +144,6 @@ export default function Home() {
           <div className="il-foot-line">{FOOTER.line}</div>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }

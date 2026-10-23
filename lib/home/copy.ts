@@ -123,7 +123,7 @@ export const KV_CACHE: Section = {
       demo: "Two replies land as new cells in the cache; matching profiles step up; nothing goes dark.",
       facts: [
         { title: "Two words is enough.", body: "A reason makes the next profile sharper." },
-        { title: "Nothing evicted.", body: "We do not forget what senior means to you between batches." },
+        { title: "Nothing evicted while the role is open.", body: "We do not forget what senior means to you between batches." },
         { title: "Your reason, in your words.", body: "We hold it as you wrote it." },
       ],
     },
@@ -234,6 +234,8 @@ export const CUSTOMERS: Section = {
   cta: CTA.viewRoles,
 };
 
+export const OPEN_NOW_DEMO = "Open now: three roles from the board.";
+
 export const QUOTES = [
   { text: "Five key hires over the last two years. We now only work with Transformer Talent.", who: "CTO, Series B fintech" },
   { text: "The only recruiters we've used who actually understood the role before sending profiles.", who: "Founder, Applied AI, seed" },
@@ -274,4 +276,12 @@ export const FOOTER = {
   line: "Transformer Talent. Founded by a former software engineer.",
 };
 
-export const LABELS = { means: "means", getsYou: "you get", demoPending: "demo", sample: "sample" };
+export const LABELS = {
+  means: "means",
+  getsYou: "you get",
+  demoPending: "demo",
+  sample: "sample",
+  mainNav: "Main",
+  recentPlacements: "Recent placements",
+  stages: "Stages of the search",
+};
