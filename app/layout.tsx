@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, Instrument_Serif } from "next/font/google";
-import Link from "next/link";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { jsonForScript } from "@/lib/server/html";
@@ -21,8 +20,8 @@ const serif = Instrument_Serif({
 export const metadata: Metadata = {
   metadataBase: new URL("https://transformertalent.com"),
   title: {
-    default: "Transformer Talent — AI/ML & Software Engineering Search",
-    template: "%s — Transformer Talent",
+    default: "Transformer Talent | AI/ML & Software Engineering Search",
+    template: "%s | Transformer Talent",
   },
   description:
     "We place AI/ML and software engineers with startups backed by Sequoia, 8VC, and Felicis. Upload your JD and see potential matches in seconds.",
@@ -53,33 +52,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: jsonForScript(ORG_LD) }}
         />
-        <div className="topbar-outer">
-          <div className="wrap">
-            <div className="topbar">
-              <Link href="/" className="brand">
-                Transformer<b>_</b>Talent
-              </Link>
-              <nav>
-                <Link href="/about">/about</Link>
-                <Link href="/market-index">/market-index</Link>
-                <Link href="/roles">/roles</Link>
-                <Link href="/talent" className="run">
-                  UPLOAD JD →
-                </Link>
-              </nav>
-              <span className="status">SYSTEM LIVE</span>
-            </div>
-          </div>
-        </div>
         {children}
-        <footer>
-          <div className="wrap">
-            <span>© 2026 TRANSFORMER TALENT — “TALENT IS ALL YOU NEED”</span>
-            <a href="mailto:spencer@transformertalent.com">
-              spencer@transformertalent.com
-            </a>
-          </div>
-        </footer>
         <Analytics />
       </body>
     </html>
