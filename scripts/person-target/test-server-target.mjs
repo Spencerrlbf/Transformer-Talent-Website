@@ -1,0 +1,193 @@
+// The server's two clients (REST via sbRest, PostgreSQL via withPersonConnection)
+// refuse a mixed or unselected environment before any socket. `pg` is replaced by
+// a recording module; `fetch` records and rejects. Everything is fictional.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+
+const TARGET='abcdefghijklmnopqrst',OTHER='tsrqponmlkjihgfedcba';
+const jwt=(ref)=>['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',Buffer.from(JSON.stringify({iss:'supabase',ref,role:'service_role'})).toString('base64url'),'sig'].join('.');
+const pooler=(ref,port=6543)=>`postgres://postgres.${ref}:secret-sentinel@aws-0-us-east-2.pooler.supabase.com:${port}/postgres`;
+
+// Replace `pg` (left external by the bundle) with a recorder before importing.
+const require=createRequire(fileURLToPath(import.meta.url));
+const pgPath=require.resolve('pg');
+const pools=[];
+// The server imports `pg` dynamically (ESM), which bypasses require.cache: this recorder
+// only observes pools created through the CJS path and never connects. The PostgreSQL
+// half of the runtime identity proof therefore runs against real loopback databases in
+// test-server-identity-db.mjs (run-identity-tests.sh), not here.
+require.cache[pgPath]={id:pgPath,filename:pgPath,loaded:true,exports:{default:{Pool:class{constructor(config){this.config=config;pools.push(this);}on(){}async connect(){throw Error('sealed_pg_connect');}}}}};
+const fetched=[];
+// `restIdentity` set: the identity RPC answers with it (a function may return a Response);
+// every other request, and the RPC when unset, is sealed.
+let restIdentity=null;
+globalThis.fetch=async(url)=>{
+ const u=new URL(String(url));fetched.push(u.hostname);
+ if(u.pathname.endsWith('/rest/v1/rpc/person_target_identity')&&restIdentity){
+  if(typeof restIdentity==='function')return restIdentity();
+  return new Response(JSON.stringify(restIdentity),{status:200,headers:{'content-type':'application/json'}});
+ }
+ throw Error('sealed_fetch');
+};
+const lib=await import('./dist/server.mjs');
+
+function withEnv(values,fn){
+ const saved={};
+ for(const k of ['PERSON_TARGET_PROJECT_REF','PERSON_WRITE_MODE','PERSON_TRANSITION_SUPPORT','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','PERSON_DATABASE_URL']){saved[k]=process.env[k];if(values[k]===undefined)delete process.env[k];else process.env[k]=values[k];}
+ lib.resetServerTargetCache();
+ const restore=()=>{for(const [k,v] of Object.entries(saved)){if(v===undefined)delete process.env[k];else process.env[k]=v;}lib.resetServerTargetCache();};
+ let result;
+ try{result=fn();}catch(error){restore();throw error;}
+ if(result&&typeof result.then==='function')return result.finally(restore);
+ restore();return result;
+}
+const rejectsTarget=async(promise,code)=>assert.rejects(promise,e=>e.message===`person_target:${code}`,code);
+
+test('legacy mode with no selection keeps today\'s behavior: no target check',()=>{
+ withEnv({PERSON_WRITE_MODE:'legacy',SUPABASE_URL:`https://${OTHER}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},()=>{
+  assert.equal(lib.personTargetRequired(),false);assert.equal(lib.assertServerTarget(),null);
+ });
+ withEnv({},()=>assert.equal(lib.personTargetRequired(),false));
+});
+test('shadow/live mode or transition support with a hosted client requires an explicit selection',()=>{
+ const hosted={SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)};
+ withEnv({PERSON_WRITE_MODE:'shadow',...hosted},()=>{assert.equal(lib.personTargetRequired(),true);assert.throws(()=>lib.assertServerTarget(),/person_target:missing/);});
+ withEnv({PERSON_WRITE_MODE:'live',...hosted},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ withEnv({PERSON_TRANSITION_SUPPORT:'on',...hosted},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ // Either hosted client alone is enough to require the selection.
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',PERSON_DATABASE_URL:pooler(TARGET)},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ // An unknown REST host (custom domain, proxy) is treated as hosted.
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'https://api.example.test',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>assert.throws(()=>lib.assertServerTarget(),/person_target:missing/));
+ withEnv({PERSON_TARGET_PROJECT_REF:TARGET},()=>assert.equal(lib.personTargetRequired(),true));
+});
+test('a sealed local fixture (loopback PostgreSQL, loopback or .invalid REST) needs no selection',()=>{
+ withEnv({PERSON_WRITE_MODE:'live',PERSON_TRANSITION_SUPPORT:'on',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>{
+  assert.equal(lib.personTargetRequired(),false);assert.equal(lib.assertServerTarget(),null);
+ });
+ withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://127.0.0.1:54321',PERSON_DATABASE_URL:'postgresql://postgres@localhost:5432/fixture'},()=>assert.equal(lib.personTargetRequired(),false));
+ // With an explicit local selection, the same fixture is checked and passes.
+ withEnv({PERSON_TARGET_PROJECT_REF:'local',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},()=>assert.equal(lib.assertServerTarget(),'local'));
+});
+test('a consistent selection passes and is cached per configuration',()=>{
+ withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},()=>{
+  assert.equal(lib.assertServerTarget(),TARGET);assert.equal(lib.assertServerTarget(),TARGET);
+  process.env.PERSON_DATABASE_URL=pooler(OTHER);
+  assert.throws(()=>lib.assertServerTarget(),/person_target:database_mismatch/);
+  process.env.PERSON_DATABASE_URL=pooler(TARGET);assert.equal(lib.assertServerTarget(),TARGET);
+  // Keys for different projects have the same length: a swapped key must miss the cache.
+  assert.equal(jwt(OTHER).length,jwt(TARGET).length);
+  process.env.SUPABASE_SERVICE_ROLE_KEY=jwt(OTHER);
+  assert.throws(()=>lib.assertServerTarget(),/person_target:key_mismatch/);
+ });
+});
+test('REST on the copy while PostgreSQL names the original: refused before any socket',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(OTHER)},async()=>{
+  const before=pools.length,beforeFetch=fetched.length;
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'database_mismatch');
+  await rejectsTarget(lib.sbRest('organizations?select=id'),'database_mismatch');
+  assert.equal(pools.length,before);assert.equal(fetched.length,beforeFetch);
+ });
+});
+test('PostgreSQL on the copy while REST names the original: refused before any socket',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${OTHER}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  const before=pools.length,beforeFetch=fetched.length;
+  await rejectsTarget(lib.sbRest('organizations?select=id'),'rest_mismatch');
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'rest_mismatch');
+  assert.equal(pools.length,before);assert.equal(fetched.length,beforeFetch);
+ });
+});
+test('a service key issued for another project is refused even when both URLs match',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'shadow',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(OTHER),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  const beforeFetch=fetched.length;
+  await rejectsTarget(lib.sbRest('organizations?select=id'),'key_mismatch');
+  assert.equal(fetched.length,beforeFetch);
+ });
+});
+test('missing selection with support on: no REST request and no pool',async()=>{
+ await withEnv({PERSON_TRANSITION_SUPPORT:'on',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  const before=pools.length,beforeFetch=fetched.length;
+  await rejectsTarget(lib.sbRest('organizations?select=id'),'missing');
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'missing');
+  assert.equal(pools.length,before);assert.equal(fetched.length,beforeFetch);
+ });
+});
+const CLUSTER='7550817586112808987';
+test('a consistent live configuration proceeds to the (sealed) clients once the destination proves the selected label',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  restIdentity={system_identifier:CLUSTER,project_ref:TARGET};
+  try{
+   const before=fetched.length;
+   await assert.rejects(lib.sbRest('organizations?select=id'),/sealed_fetch/);
+   assert.deepEqual(fetched.slice(before),[`${TARGET}.supabase.co`,`${TARGET}.supabase.co`],'identity RPC, then the request');
+   // the proof is cached per configuration: the next request goes straight through
+   await assert.rejects(lib.sbRest('organizations?select=id'),/sealed_fetch/);
+   assert.equal(fetched.length,before+3);
+  }finally{restIdentity=null;}
+ });
+});
+// 20261013090000: the runtime half of the gate. The REST destination and the PostgreSQL
+// session must each report the SELECTED project's database-held label; a clone of the
+// project (same cluster identifier) with another label, or a database never labelled,
+// is refused before the request or the operation.
+test('REST: a destination labelled for another project, or unlabelled, or without the identity function is refused; no request follows',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET),PERSON_DATABASE_URL:pooler(TARGET)},async()=>{
+  for(const [identity,code] of [[{system_identifier:CLUSTER,project_ref:OTHER},'identity_label_mismatch'],[{system_identifier:CLUSTER},'identity_unlabelled'],[{system_identifier:CLUSTER,project_ref:null},'identity_unlabelled'],[()=>new Response('{}',{status:404}),'identity_rest'],[()=>{throw Error('sealed_fetch');},'identity_rest']]){
+   restIdentity=identity;lib.resetServerTargetCache();
+   try{
+    const before=fetched.length;
+    await rejectsTarget(lib.sbRest('organizations?select=id'),code);
+    assert.equal(fetched.length,before+1,'only the identity RPC was sent');
+    // a failed proof is not cached: the next call proves again (and fails again)
+    await rejectsTarget(lib.sbRest('organizations?select=id'),code);
+    assert.equal(fetched.length,before+2);
+   }finally{restIdentity=null;}
+  }
+ });
+});
+test('legacy mode without a selection performs no identity proof',async()=>{
+ await withEnv({PERSON_WRITE_MODE:'legacy',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)},async()=>{
+  const before=fetched.length;
+  await assert.rejects(lib.sbRest('organizations?select=id'),/sealed_fetch/);
+  assert.equal(fetched.length,before+1,'the request itself, no identity RPC');
+ });
+});
+// R2-01: query options that move pg's effective destination are refused by the
+// server gate before any pool exists, including a loopback authority whose `host`
+// option names a hosted database (it must not pass as a sealed fixture either).
+test('PostgreSQL URL overrides are refused before any pool (R2-01)',async()=>{
+ const base={PERSON_TARGET_PROJECT_REF:TARGET,PERSON_WRITE_MODE:'live',SUPABASE_URL:`https://${TARGET}.supabase.co`,SUPABASE_SERVICE_ROLE_KEY:jwt(TARGET)};
+ for(const url of [`${pooler(TARGET)}?user=postgres.${OTHER}`,`${pooler(TARGET)}?host=db.${OTHER}.supabase.co`,`${pooler(TARGET)}?%68ost=db.${OTHER}.supabase.co`,`${pooler(TARGET)}?port=5432`,`${pooler(TARGET)}?sslmode=require&sslmode=disable`])
+  await withEnv({...base,PERSON_DATABASE_URL:url},async()=>{
+   const before=pools.length,beforeFetch=fetched.length;
+   await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'database_options');
+   await rejectsTarget(lib.sbRest('organizations?select=id'),'database_options');
+   assert.equal(pools.length,before);assert.equal(fetched.length,beforeFetch);
+  });
+ // Loopback authority, hosted override, no selection: this is NOT a sealed fixture.
+ await withEnv({PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:`postgresql://postgres@127.0.0.1:55487/fixture?host=db.${OTHER}.supabase.co`},async()=>{
+  assert.equal(lib.personTargetRequired(),true);
+  const before=pools.length;
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'missing');
+  assert.equal(pools.length,before);
+ });
+ // ...and with a local selection it is refused as an option, not accepted as local.
+ await withEnv({PERSON_TARGET_PROJECT_REF:'local',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://local-only.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',PERSON_DATABASE_URL:`postgresql://postgres@127.0.0.1:55487/fixture?host=db.${OTHER}.supabase.co`},async()=>{
+  const before=pools.length;
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'database_options');
+  assert.equal(pools.length,before);
+ });
+ // The supported TLS option still passes the gate (the sealed pool is then constructed).
+ await withEnv({...base,PERSON_DATABASE_URL:`${pooler(TARGET)}?sslmode=require`},async()=>{
+  assert.equal(lib.assertServerTarget(),TARGET);
+ });
+});
+test('a local selection accepts loopback clients only',async()=>{
+ await withEnv({PERSON_TARGET_PROJECT_REF:'local',PERSON_WRITE_MODE:'live',SUPABASE_URL:'http://127.0.0.1:54321',SUPABASE_SERVICE_ROLE_KEY:'local-key',PERSON_DATABASE_URL:'postgresql://postgres@127.0.0.1:55487/fixture'},async()=>{
+  assert.equal(lib.assertServerTarget(),'local');
+  process.env.PERSON_DATABASE_URL=pooler(TARGET);lib.resetServerTargetCache();
+  await rejectsTarget(lib.withPersonConnection(async()=>'reached'),'database_mismatch');
+ });
+});

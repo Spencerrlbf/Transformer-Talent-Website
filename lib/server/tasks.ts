@@ -216,9 +216,13 @@ export async function completeEmailTask(orgId: string, id: string, candidateKey:
   return res.ok && ((await res.json()) as unknown[]).length > 0;
 }
 
-export async function deleteTask(orgId: string, id: string): Promise<boolean> {
-  const res = await sbRest(`tasks?id=eq.${id}&organization_id=eq.${orgId}`, { method: "DELETE" });
-  return res.ok;
+/** Null means no task belongs to this organization; false means storage failed. */
+export async function deleteTask(orgId: string, id: string): Promise<boolean | null> {
+  const res = await sbRest(`tasks?id=eq.${id}&organization_id=eq.${orgId}&select=id`, {
+    method: "DELETE", prefer: "return=representation",
+  });
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0 ? true : null;
 }
 
 export async function addNote(args: {

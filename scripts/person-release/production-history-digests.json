@@ -1,0 +1,583 @@
+{
+ "source": "supabase_migrations.schema_migrations of production kmuihequfurvjxpnugxf (read-only, 2026-10-14 13:2x UTC); the copy qsqlgibgsxzlimoegcjx carries the same 96 rows (same all_rows_digest)",
+ "row_digest": "md5(name|array_to_string(statements,chr(1)))",
+ "all_rows_digest": "md5(string_agg(version|name|statements_count|row_digest, newline order by version)) = b7ca867bf59bbe2bf9cc3af24b0536c4",
+ "rows": [
+  {
+   "version": "20250920013106",
+   "name": "enable_vector_extension",
+   "statements": 1,
+   "digest": "70d259ba3eca7211ae248fbec2aabf7e"
+  },
+  {
+   "version": "20250920013110",
+   "name": "create_jobs_table",
+   "statements": 1,
+   "digest": "d9422fee549e5f3fa2da1c44c9013e72"
+  },
+  {
+   "version": "20250920013115",
+   "name": "create_candidates_table",
+   "statements": 1,
+   "digest": "b7361c50aed0cdc34f450d0b99388139"
+  },
+  {
+   "version": "20250920013118",
+   "name": "create_applications_table",
+   "statements": 1,
+   "digest": "5347593585611f7c4e27b72cb89651e9"
+  },
+  {
+   "version": "20250920013121",
+   "name": "create_ai_match_results_table",
+   "statements": 1,
+   "digest": "010b8461e5e6e4d6dc1f99c7928dc02e"
+  },
+  {
+   "version": "20250920020252",
+   "name": "update_jobs_embeddings_schema",
+   "statements": 1,
+   "digest": "cea1aff65ad5fc8cb840687e142da406"
+  },
+  {
+   "version": "20250920020301",
+   "name": "update_candidates_embeddings_schema",
+   "statements": 1,
+   "digest": "6d3266eaae1e0737ded1d5fe54b9ec6d"
+  },
+  {
+   "version": "20250920020527",
+   "name": "create_vector_search_functions",
+   "statements": 1,
+   "digest": "2fc6c795acf5b4fc6a4e6e9ba3614bca"
+  },
+  {
+   "version": "20250920125809",
+   "name": "add_linkedin_fields_to_candidates",
+   "statements": 1,
+   "digest": "d1967aa56fc2d1c84b5083b92269bec5"
+  },
+  {
+   "version": "20250922055740",
+   "name": "create_recruiters_table",
+   "statements": 1,
+   "digest": "35c21051fe23d1295a1cc4539da47bc4"
+  },
+  {
+   "version": "20250922060208",
+   "name": "create_recruiter_candidates_table",
+   "statements": 1,
+   "digest": "a8cf420e64384063b073bafa50699589"
+  },
+  {
+   "version": "20251006073032",
+   "name": "add_connection_request_status",
+   "statements": 1,
+   "digest": "5a24a31969edbebf46c08363f43105a9"
+  },
+  {
+   "version": "20251006073213",
+   "name": "simplify_connection_statuses",
+   "statements": 1,
+   "digest": "27a3b8eab0728423f0595970dfc43af8"
+  },
+  {
+   "version": "20251006073936",
+   "name": "remove_active_status",
+   "statements": 1,
+   "digest": "bede191f0f40d222092e47a5777dfc66"
+  },
+  {
+   "version": "20251006074103",
+   "name": "fix_status_constraint",
+   "statements": 1,
+   "digest": "8e130b391ffb42e85e695f7b751500b8"
+  },
+  {
+   "version": "20251006074642",
+   "name": "update_existing_to_connected",
+   "statements": 1,
+   "digest": "77d6169b37e17ce67a760ecdca3d14e6"
+  },
+  {
+   "version": "20260415014843",
+   "name": "create_canonical_layer_a_tables",
+   "statements": 1,
+   "digest": "8601a2ff91d4e45b4b422be03ae0e066"
+  },
+  {
+   "version": "20260818140248",
+   "name": "enable_rls_on_exposed_tables",
+   "statements": 1,
+   "digest": "1020dab4c73b5f24ecf2571d35215866"
+  },
+  {
+   "version": "20260818140426",
+   "name": "close_security_definer_view_anon_exposure",
+   "statements": 1,
+   "digest": "186471372b16cba442a709d828aa66ab"
+  },
+  {
+   "version": "20260818153943",
+   "name": "match_roles_keyword_org_filter",
+   "statements": 1,
+   "digest": "72c047a453511e5582a9396e6fc35c7c"
+  },
+  {
+   "version": "20260818164308",
+   "name": "sourcing_module_schema",
+   "statements": 1,
+   "digest": "645e592ff5e0022ec30c8b81bb40fb08"
+  },
+  {
+   "version": "20260818174414",
+   "name": "sourcing_member_id_and_rank",
+   "statements": 1,
+   "digest": "4a12f6ff51fd9ba59cfa8ab5d7e191d0"
+  },
+  {
+   "version": "20260818195128",
+   "name": "sourcing_screen_attempts",
+   "statements": 1,
+   "digest": "3b658b08c7bb2635dc3bc3e24a379c82"
+  },
+  {
+   "version": "20260819035943",
+   "name": "sourcing_engine_hardening",
+   "statements": 1,
+   "digest": "db183114f1e6bd810b1d50406a84ccc6"
+  },
+  {
+   "version": "20260819162043",
+   "name": "sourcing_credits",
+   "statements": 1,
+   "digest": "2013e12193a3651ad8e1ce32839969d0"
+  },
+  {
+   "version": "20260819162339",
+   "name": "sourcing_run_provider_mode",
+   "statements": 1,
+   "digest": "156a75b4d9a6253e524b052a9c804335"
+  },
+  {
+   "version": "20260819162418",
+   "name": "create_run_with_credits_mode",
+   "statements": 1,
+   "digest": "5784c37f0a105f5cac2b986ae7b182b1"
+  },
+  {
+   "version": "20260819193752",
+   "name": "em_judge_support",
+   "statements": 1,
+   "digest": "82256db45064ccc8103e94789652b4e7"
+  },
+  {
+   "version": "20260820021839",
+   "name": "candidates_v2_contact",
+   "statements": 1,
+   "digest": "5a11f4af939e5724f32c9ec91ef21263"
+  },
+  {
+   "version": "20260820170012",
+   "name": "job_targets",
+   "statements": 1,
+   "digest": "7e970e05dd5ca8f6f3917d6a82c5caa9"
+  },
+  {
+   "version": "20260820181807",
+   "name": "pipeline_statuses",
+   "statements": 1,
+   "digest": "275f91070f482957c6f9339f520f12e6"
+  },
+  {
+   "version": "20260820203121",
+   "name": "linked_org_role",
+   "statements": 1,
+   "digest": "e138e2d9ba470df5d7190fdfdaa7c26d"
+  },
+  {
+   "version": "20260820210157",
+   "name": "pool_contact",
+   "statements": 1,
+   "digest": "ac36f758f4e617febda7a946ebd457b8"
+  },
+  {
+   "version": "20260821014219",
+   "name": "jd_linkedin",
+   "statements": 1,
+   "digest": "dca88bf16bcac65fc660d6763253bd4f"
+  },
+  {
+   "version": "20260821030609",
+   "name": "recruiter_profiles",
+   "statements": 1,
+   "digest": "e68957c082e5bbc3be96d0ec0ea6cf3d"
+  },
+  {
+   "version": "20260821032137",
+   "name": "application_recruiter",
+   "statements": 1,
+   "digest": "a487561f64a21e6bbf6f30a377cb67c0"
+  },
+  {
+   "version": "20260821134014",
+   "name": "referrals",
+   "statements": 1,
+   "digest": "46a6b33ce1cb9c366f61ecb9774a3ade"
+  },
+  {
+   "version": "20260821165337",
+   "name": "interview_stages",
+   "statements": 1,
+   "digest": "4950318a7f1f3aa64861f6ecfc81540d"
+  },
+  {
+   "version": "20260821173611",
+   "name": "stage_events",
+   "statements": 1,
+   "digest": "640fe611f2b5b469845699237fefbe88"
+  },
+  {
+   "version": "20260821185624",
+   "name": "company_page",
+   "statements": 1,
+   "digest": "fa3897adf3e7ff416f259ea02b134e62"
+  },
+  {
+   "version": "20260821224856",
+   "name": "sourcing_requests",
+   "statements": 1,
+   "digest": "1a4644ff94064f0c5d51c38b61dbcd96"
+  },
+  {
+   "version": "20260822015131",
+   "name": "booking_contact",
+   "statements": 1,
+   "digest": "1a279cbce356d081a516d13ae518d108"
+  },
+  {
+   "version": "20260822031148",
+   "name": "page_events",
+   "statements": 1,
+   "digest": "7bcae0a06968676d7883799f56f89542"
+  },
+  {
+   "version": "20260822035023",
+   "name": "team",
+   "statements": 1,
+   "digest": "7cc7e8041c5548e60d68e1e6771c35b2"
+  },
+  {
+   "version": "20260825152626",
+   "name": "future_interest",
+   "statements": 1,
+   "digest": "537724b6b47fb36134c1a8632c4191e8"
+  },
+  {
+   "version": "20260828141425",
+   "name": "future_workplace",
+   "statements": 1,
+   "digest": "4a902fd05ef1bd14242b77c665f7112b"
+  },
+  {
+   "version": "20260831144943",
+   "name": "org_board_referrals",
+   "statements": 1,
+   "digest": "97ebca816e596fab8eefffcf0c2430e3"
+  },
+  {
+   "version": "20260831184551",
+   "name": "tasks_and_candidate_notes",
+   "statements": 1,
+   "digest": "a917c91baeb3c135d3cd0df1ac11db00"
+  },
+  {
+   "version": "20260831191138",
+   "name": "tracked_links",
+   "statements": 1,
+   "digest": "b03d23ef8cbbe71c5fcef93b7abc203f"
+  },
+  {
+   "version": "20260901131304",
+   "name": "note_edits",
+   "statements": 1,
+   "digest": "35bf51f95ab207e2e040dd409afe03d5"
+  },
+  {
+   "version": "20260901142733",
+   "name": "lists_and_attachments",
+   "statements": 1,
+   "digest": "0c52823e865cecbbc73b8e095ca1bc66"
+  },
+  {
+   "version": "20260901173216",
+   "name": "email_send_as_you",
+   "statements": 1,
+   "digest": "4a91ab14b2853ba2d801a0890eca0fa0"
+  },
+  {
+   "version": "20260901180519",
+   "name": "email_log_full_index",
+   "statements": 1,
+   "digest": "450c7b1f51ac70a29f778d3723adeda5"
+  },
+  {
+   "version": "20260902013533",
+   "name": "email_log_clean_text",
+   "statements": 1,
+   "digest": "74b7189da98e6eee19043b76a8a52c0d"
+  },
+  {
+   "version": "20260902040715",
+   "name": "047_inbox",
+   "statements": 1,
+   "digest": "a451e7e95357805631b76f2c09641464"
+  },
+  {
+   "version": "20260902150400",
+   "name": "048_quick_actions",
+   "statements": 1,
+   "digest": "d150aec79a67386ba380167a6e7cf25f"
+  },
+  {
+   "version": "20260902210721",
+   "name": "049_reply_reminders",
+   "statements": 1,
+   "digest": "1cbaf8caed6dfb58e582fc1cad3f48cf"
+  },
+  {
+   "version": "20260903024143",
+   "name": "050_no_reply",
+   "statements": 1,
+   "digest": "08125a0bb50f1a25f1ab83c894fecf42"
+  },
+  {
+   "version": "20260903152250",
+   "name": "home_goals",
+   "statements": 1,
+   "digest": "3d34736e197f4c91e2295779ee1ebb50"
+  },
+  {
+   "version": "20260904001504",
+   "name": "quick_action_templates",
+   "statements": 1,
+   "digest": "989c91783ff50a03fa7c158f3342ce44"
+  },
+  {
+   "version": "20260905151411",
+   "name": "drop_quick_action_templates",
+   "statements": 1,
+   "digest": "a31b4c0b00dc5a22d55fc70b8aa52728"
+  },
+  {
+   "version": "20260907205041",
+   "name": "verdict_evals",
+   "statements": 1,
+   "digest": "97e4ebd9910c46c228f817584ec5e00c"
+  },
+  {
+   "version": "20260921160855",
+   "name": "role_scorecard",
+   "statements": 1,
+   "digest": "e514ba36d3bb58d1b473d65536a158ac"
+  },
+  {
+   "version": "20260921180246",
+   "name": "row_judge_evals",
+   "statements": 1,
+   "digest": "d1fdd02ab3f59de4e557892cdc1c5aaa"
+  },
+  {
+   "version": "20260923135122",
+   "name": "company_snapshot",
+   "statements": 1,
+   "digest": "2f4ca2ed32b8d1d8a46c073642d532bb"
+  },
+  {
+   "version": "20260924005405",
+   "name": "person_signals",
+   "statements": 1,
+   "digest": "de84c663dc2a2ace76a3f596a4c3671b"
+  },
+  {
+   "version": "20260924163028",
+   "name": "059_directory_sync",
+   "statements": 1,
+   "digest": "bc781d804bc9e5bd968d841a6bd1faf1"
+  },
+  {
+   "version": "20260924184027",
+   "name": "060_role_shortlists",
+   "statements": 1,
+   "digest": "f0bd28094c73c484cbb06284a092b2c6"
+  },
+  {
+   "version": "20260924212309",
+   "name": "061_one_org_per_login",
+   "statements": 1,
+   "digest": "1c960ecf474f67b5c69eccd8842f6e4b"
+  },
+  {
+   "version": "20260924213156",
+   "name": "close_public_policies_legacy_tables",
+   "statements": 1,
+   "digest": "411fab13d0738ba19ea63ae1edb77634"
+  },
+  {
+   "version": "20260925013036",
+   "name": "062_job_lead_recipients",
+   "statements": 1,
+   "digest": "de3838f9a3b7053e1842896aaf3f3158"
+  },
+  {
+   "version": "20260925013514",
+   "name": "063_daily_review_limit",
+   "statements": 1,
+   "digest": "9fc6c26d0d00e7271d5b75ab5d9d8409"
+  },
+  {
+   "version": "20260925014156",
+   "name": "062_network_people",
+   "statements": 1,
+   "digest": "d9fca3dd1e921d75f0fe8db016a0f17e"
+  },
+  {
+   "version": "20260925015033",
+   "name": "065_network_people_private",
+   "statements": 1,
+   "digest": "41b4aaeaa21066ad4c1345879a35ab3c"
+  },
+  {
+   "version": "20260925035711",
+   "name": "066_network_people_by_fit",
+   "statements": 1,
+   "digest": "3c1d27edeba08f3ce0f4c58912ce2d93"
+  },
+  {
+   "version": "20260925035757",
+   "name": "066_network_people_by_fit_v2",
+   "statements": 1,
+   "digest": "c0e7c94540383c8bdabb6a97c547b8fe"
+  },
+  {
+   "version": "20260925035839",
+   "name": "066_network_people_by_fit_v3",
+   "statements": 1,
+   "digest": "45a4d27e10836acc5a6b88be443e58f8"
+  },
+  {
+   "version": "20260925035915",
+   "name": "066_network_people_by_fit_v4",
+   "statements": 1,
+   "digest": "585a8d70f381ad9f954dbe497f1cec59"
+  },
+  {
+   "version": "20260925035955",
+   "name": "066_network_people_by_fit_v5",
+   "statements": 1,
+   "digest": "24496c44189cea505fe18dfbdb6e7c32"
+  },
+  {
+   "version": "20260925040030",
+   "name": "066_network_people_by_fit_v6",
+   "statements": 1,
+   "digest": "49a457d390f3f0547c2ec140de679485"
+  },
+  {
+   "version": "20260925040634",
+   "name": "067_match_candidates_wide",
+   "statements": 1,
+   "digest": "aeb81bb7fd34c4c8753cd5b1c635024a"
+  },
+  {
+   "version": "20260925124852",
+   "name": "066b_match_verdicts_v2_columns",
+   "statements": 1,
+   "digest": "ab18508e2e39341a88544367217a77ff"
+  },
+  {
+   "version": "20260925124916",
+   "name": "066c_network_people_by_fit_light",
+   "statements": 1,
+   "digest": "f5bc865b4324beaffbca9ad69eaa3102"
+  },
+  {
+   "version": "20260925124945",
+   "name": "066d_match_verdicts_network_index",
+   "statements": 1,
+   "digest": "22b08efa043578d457c753c851678473"
+  },
+  {
+   "version": "20260925130720",
+   "name": "068_network_matches",
+   "statements": 1,
+   "digest": "420ed6678a4ae60c27d35c80ba1aa8ca"
+  },
+  {
+   "version": "20260925135500",
+   "name": "069_person_role_types",
+   "statements": 1,
+   "digest": "b9def80f1f30c822bfc5958fcabf11ab"
+  },
+  {
+   "version": "20260925171141",
+   "name": "070_network_matches_by_role",
+   "statements": 1,
+   "digest": "6972fc3991153adff0ee68f45d860ae6"
+  },
+  {
+   "version": "20260925174842",
+   "name": "071_one_send_per_person_job",
+   "statements": 1,
+   "digest": "2744d23d2820b950d15c137644d7d866"
+  },
+  {
+   "version": "20260925224447",
+   "name": "071_candidate_chunks_index",
+   "statements": 1,
+   "digest": "5a16f6b1f9ca85956de7a3986629b7f8"
+  },
+  {
+   "version": "20260926011500",
+   "name": "072_person_tables",
+   "statements": 1,
+   "digest": "111d66d5214f629178d5d0a24f9bdee3"
+  },
+  {
+   "version": "20260926025355",
+   "name": "person_writer_corrections",
+   "statements": 1,
+   "digest": "7f11832168da33febf2dffab29d0470f"
+  },
+  {
+   "version": "20260926031057",
+   "name": "person_backfill_capture",
+   "statements": 1,
+   "digest": "be7f08461e5c3dc44dfe284914934307"
+  },
+  {
+   "version": "20260926032752",
+   "name": "person_missing_employer_review",
+   "statements": 1,
+   "digest": "fe0229333f0ea22c98cd1f0981d4b787"
+  },
+  {
+   "version": "20260926040300",
+   "name": "person_backfill_bulk",
+   "statements": 1,
+   "digest": "6fd935d625d3349ce619f2ed943e5ff2"
+  },
+  {
+   "version": "20260926042200",
+   "name": "person_reconcile",
+   "statements": 1,
+   "digest": "514e1e159922efbe931bdcaccd6ccf9e"
+  },
+  {
+   "version": "20260926050355",
+   "name": "person_source_date_holds",
+   "statements": 1,
+   "digest": "18fc8f7eee97e700edf8ec69a920a73f"
+  }
+ ]
+}

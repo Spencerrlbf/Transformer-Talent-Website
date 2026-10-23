@@ -1,3 +1,6 @@
+import { insertFutureIntent } from '@/lib/server/person-transition/acceptance';
+import { createHash } from 'node:crypto';
+import { transitionSupport } from '@/lib/server/person-transition/context';
 import { after, NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbInsert, sbRest } from "@/lib/server/supabase";
@@ -50,11 +53,12 @@ async function uploadResume(path: string, buf: Buffer): Promise<boolean> {
     },
     body: new Uint8Array(buf),
   });
-  if (!res.ok) console.error("resume upload failed", res.status, await res.text());
+  if (!res.ok) console.error("resume upload failed", res.status);
   return res.ok;
 }
 
 export async function POST(req: NextRequest) {
+  const transition = transitionSupport();
   let form: FormData;
   try {
     form = await req.formData();
@@ -138,6 +142,8 @@ export async function POST(req: NextRequest) {
   // with the new date and preferences instead of creating a duplicate. The
   // "we'll be in touch later" ask is meaningful even from a recent applicant.
   const orgId = boardOrg?.id ?? (await getOrgId());
+  if (transition && !orgId) return NextResponse.json({ error: "Something went wrong saving your application. Please try again." }, { status: 502 });
+  if (!transition) {
   const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
   const dupUsername = linkedinUsername(linkedin) || "";
   const [dupByEmail, dupByLinkedin] = await Promise.all([
@@ -187,10 +193,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, followUpAt });
   }
 
+  }
+
   // Resume is optional here — the whole point is catching people who aren't
   // ready to formally apply yet.
   const file = form.get("resume");
   let resumePath: string | null = null;
+  let resumeSha: string | null = null;
   let resumeBuf: Buffer | null = null;
   let resumeSafeName = "resume.pdf";
   if (file instanceof File && file.size > 0) {
@@ -200,7 +209,13 @@ export async function POST(req: NextRequest) {
     resumeBuf = Buffer.from(await file.arrayBuffer());
     resumeSafeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
     const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${resumeSafeName}`;
-    if (await uploadResume(path, resumeBuf)) resumePath = path;
+    const uploaded = await uploadResume(path, resumeBuf).catch(() => false);
+    if (uploaded) {
+      resumePath = path;
+      if (transition) resumeSha = createHash('sha256').update(resumeBuf).digest('hex');
+    } else if (transition) {
+      return NextResponse.json({ error: "We couldn't save your resume. Please try again." }, { status: 502 });
+    }
   }
 
   // Attribution only when the profile is real, published, and belongs to the
@@ -216,9 +231,7 @@ export async function POST(req: NextRequest) {
     if (rp && rp.organization_id === orgId) recruiterProfileId = rp.id;
   }
 
-  const submission = await sbInsert<{ id: string }>(
-    "website_applications",
-    {
+  const acceptedRow = {
       organization_id: orgId,
       recruiter_profile_id: recruiterProfileId,
       // Name resolved from the LinkedIn profile by the pipeline (same as
@@ -236,17 +249,20 @@ export async function POST(req: NextRequest) {
       role_ids: [],
       role_titles: [],
       resume_path: resumePath,
+      ...(transition ? { person_resume_sha256: resumeSha, person_processing_version: 1 } : {}),
       resume_text: null,
-      status: "processing",
+      status: transition ? "queued" : "processing",
       source: "future",
       ip: ip === "unknown" ? null : ip,
       user_agent: clean(req.headers.get("user-agent"), 500),
-    },
-    true
-  ).catch((e) => {
-    console.error("future-interest insert failed", e);
-    return null;
-  });
+    };
+  let submission: { id: string } | null = null;
+  try {
+    submission = transition
+      ? await insertFutureIntent(acceptedRow)
+      : await sbInsert<{ id: string }>("website_applications", acceptedRow, true);
+    if (transition && !submission) return NextResponse.json({ ok: true, followUpAt });
+  } catch { console.error("future-interest insert failed", "storage_unavailable"); }
 
   if (!submission) {
     return NextResponse.json(

@@ -1,8 +1,13 @@
+import { applicationEditReady, applicationEditsChecked } from '@/lib/server/person-transition/acceptance';
+import { fillLinkedResumeContact } from "@/lib/server/person/resume-fill";
+import { personWriteMode } from "@/lib/server/person/intake";
+import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMember } from "@/lib/server/dashboard-auth";
 import { signResumeUrl } from "@/lib/server/applicants";
-import { saveUnifiedResumePath, resumeNameFromPath } from "@/lib/server/candidates-unified";
-import { extractEmails, extractPhone, fillExtractedContact, pdfText } from "@/lib/server/contact-extract";
+import { saveUnifiedResumePath, resumeNameFromPath, ttApplicationCandidate } from "@/lib/server/candidates-unified";
+import { extractEmails, extractPhone, fillExtractedContact, normalizePhone, pdfText } from "@/lib/server/contact-extract";
+import { sbRpc } from "@/lib/server/supabase";
 import { candidateInOrg } from "@/lib/server/tasks";
 
 export const maxDuration = 60;
@@ -21,6 +26,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
   // This company's person, checked before anything is stored.
   if (!(await candidateInOrg(member.org.id, key)))
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // TT application rows: the checked edit must be admissible before anything is stored.
+  const checked = key.startsWith("app_") && applicationEditsChecked(member.org.id);
+  if (checked && !(await applicationEditReady(key.slice(4))))
+    return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
 
   let form: FormData;
   try {
@@ -55,15 +65,22 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     return NextResponse.json({ error: "upload_failed" }, { status: 502 });
   }
 
-  if (!(await saveUnifiedResumePath(member.org.id, key, path)))
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (!(await saveUnifiedResumePath(member.org.id, key, path, sha256))) {
+    if (checked) {
+      // The checked edit became unavailable after the preflight: remove the unreferenced upload and retry later.
+      await fetch(`${base}/storage/v1/object/resumes/${path}`, { method: "DELETE", headers: { Authorization: `Bearer ${storageKey}`, apikey: storageKey } }).catch(() => null);
+      return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
+    }
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   // Phone (and any extra email) off the resume into the contact block —
   // gaps only, a typed value always wins. Local pdf-parse of the first
   // pages, time-boxed: the upload is already saved, and a slow PDF must
   // never turn it into a failure. Returns only what changed so the drawer
   // can merge it into its own (sourced + application) view of the person.
-  let filled: Awaited<ReturnType<typeof fillExtractedContact>> = null;
+  let filled: { email?: string | null; phone?: string | null; otherEmails?: string[] } | null = null;
   try {
     const text = await Promise.race([
       pdfText(Buffer.from(bytes), 3),
@@ -71,9 +88,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ key: strin
     ]);
     const phone = extractPhone(text);
     const emails = extractEmails(text);
-    if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
+    if (checked && (phone || emails.length)) {
+      // Linked fills use their own certified parser evidence, bound to this upload.
+      // An unlinked application fills its own copy atomically.
+      const linked = await ttApplicationCandidate(key.slice(4));
+      const mode = personWriteMode();
+      if (linked.found && linked.candidateId && mode !== "legacy") {
+        filled = await fillLinkedResumeContact({ organizationId: member.org.id, applicationId: key.slice(4), candidateId: linked.candidateId, actorId: member.userId, requestId: crypto.randomUUID(), path, sha256, phone, emails, mode });
+      } else if (linked.found && !linked.candidateId) {
+        const r = await sbRpc<{ status?: string; filled?: { phone?: string | null; otherEmails?: string[] } }>("person_application_contact_fill",
+          { p_application: key.slice(4), p_phone: normalizePhone(phone), p_emails: emails }).catch(() => null);
+        if (r?.status === "saved" && r.filled) filled = r.filled;
+      }
+    } else if (phone || emails.length) filled = await fillExtractedContact(key, { phone, emails }, member.org.id);
   } catch (err) {
-    console.error("resume contact extraction failed", err);
+    console.error("resume contact extraction failed");
   }
 
   return NextResponse.json({

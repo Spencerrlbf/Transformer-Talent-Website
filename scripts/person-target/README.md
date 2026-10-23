@@ -1,0 +1,152 @@
+# One explicit project for every normalized-storage process
+
+`scripts/person-target.mjs` is the single authority for *which Supabase project a
+process may touch*. The Next.js server (`lib/server/person/target.ts`), the bundled
+worker library and the operator CLIs import the same module. It answers release
+review findings RR-06 (original-only procedures and hidden original defaults),
+RR-07 (browser Auth target does not prove server/worker isolation) and RR-08
+(copied grants and inherited provider credentials).
+
+## Selecting the project
+
+```
+PERSON_TARGET_PROJECT_REF=<20-letter Supabase project ref>   # hosted project
+PERSON_TARGET_PROJECT_REF=local                              # loopback fixture only
+```
+
+Nothing defaults to the website project. The selection is **required** whenever:
+
+- it is set at all (then it is always enforced), or
+- `PERSON_WRITE_MODE` is `shadow`/`live` or `PERSON_TRANSITION_SUPPORT=on` **and**
+  either client could reach a hosted project (`SUPABASE_URL` is not loopback/`.invalid`
+  or `PERSON_DATABASE_URL` is not loopback), or
+- an operator CLI is given a hosted PostgreSQL URL (publish, undo, guard, transition,
+  anchors, catch-up start, reconcile finalize).
+
+Legacy mode with no selection keeps today's production behavior. A sealed local
+fixture (loopback PostgreSQL, loopback or `.invalid` REST) needs no selection.
+
+## Signals that must all name the selected project
+
+| Client | Signal | Checked where |
+|---|---|---|
+| REST | `https://<ref>.supabase.co` exactly (no port, path, credentials) | `sbRest`, CLIs, role utilities |
+| JWT keys | `payload.ref` of the legacy anon/service key; `sb_secret_` keys carry no claim and are accepted only together with the runtime identity check | `sbRest`, CLIs |
+| direct PostgreSQL | `db.<ref>.supabase.co` | `withPersonConnection`, CLIs |
+| pooler PostgreSQL | `*.pooler.supabase.com` **and** username `<role>.<ref>` (the host is shared by every project in the region) | same |
+| CLI workdir | `<workdir>/supabase/.temp/project-ref` | `person-reconcile-finalize.mjs --workdir` |
+| transport | publish/anchor/finalize CLIs additionally require port 5432 session endpoints | CLIs |
+| PostgreSQL options | only `sslmode`, at most once (`require`/`verify-ca`/`verify-full` on a hosted host); `host`, `port`, `user`, encoded names and every other option are refused because pg applies them *after* the authority (a loopback authority with `?host=db.<ref>.supabase.co` connects to the hosted database) | `databaseIdentity`, every consumer |
+| PostgreSQL string shape | explicit port, username and database (pg would otherwise take `PGPORT`/`PGUSER`/`PGDATABASE`); no whitespace or malformed `%xx` (pg re-encodes such a string and resolves it against its internal `postgres://base`, connecting to host `base`) | `databaseIdentity` |
+
+Every check runs before a connection, queue claim, write or provider call. Failures
+are `person_target:<code>` (`missing`, `invalid`, `rest_mismatch`, `key_mismatch`,
+`key_unverifiable`, `database_mismatch`, `database_host`, `database_port`,
+`database_options`, `database_role`, `pooler_username`, `workdir_mismatch`, `identity_rest`,
+`identity_database`, `identity_mismatch`, `identity_unlabelled`, `identity_label_mismatch`,
+`identity_target`) and never contain the configured values.
+`test-target.mjs` compares every accepted URL with the installed driver's
+`connectionParameters` (host, port, user) without connecting.
+
+## Runtime identity
+
+Migration `20261003090000_person_target_identity.sql` installs
+`public.person_target_identity()` (service_role only, read-only). It returns the
+cluster's `pg_control_system()` identifier and, since
+`20261013090000_person_target_label.sql`, the **database-held project label**.
+
+The identifier alone is not enough: a copy restored from a project's backup is a
+physical clone and keeps the identifier (on 2026-10-13 production
+`kmuihequfurvjxpnugxf` and the copy `qsqlgibgsxzlimoegcjx` both reported
+`7550817586112808987`). The label is what separates them:
+
+- `person_private.target_identity` holds one row (`project_ref`, `labelled_at`,
+  `labelled_by`). An operator writes it **once**, with an explicit value, on the
+  session endpoint: `select person_private.target_label('<project ref>')` (`'local'`
+  for a loopback fixture). The function inserts when no label exists, returns the row
+  when the same label exists, and refuses any other value (`target_label_exists`).
+  Update, delete and truncate are refused (`target_identity_immutable`). The table and
+  the function have no grants for `anon`, `authenticated` or `service_role` and are
+  not reachable through PostgREST; the migration itself never writes a label.
+- `verifyRuntimeIdentity({readRest, readDatabase, ref})` requires every payload to
+  carry the identifier and a label, requires both clients to agree on both, and
+  requires the label to equal the selected `ref`. Codes: `identity_unlabelled` (a
+  database nobody labelled), `identity_label_mismatch` (another project's label, or
+  the two clients report different labels), `identity_mismatch` (different clusters),
+  `identity_rest` / `identity_database` (unreadable), `identity_target` (no valid
+  selection given). It never relabels. The identity a process records is the key
+  `<label>:<identifier>` (`identityKey`).
+- Where it runs: the server gate (`assertServerIdentity`: once per client kind per
+  configuration per process, before the first REST request in `sbRest` and before the
+  first operation on a PostgreSQL session in `withPersonConnection`; a failed proof is
+  not cached); the shared operator pool opener (`openDatabase`, every CLI and the
+  sweep, whenever a selection is set); `start-catchup.mjs` (REST, recorded with the
+  run) and `run-catchup.mjs` (every resume proves the REST destination's label before
+  any preparation or pinned import; the pinned translator is unchanged);
+  `person-reconcile-finalize.mjs` on both of its paths (PostgreSQL: REST + session;
+  `--workdir`: the identity read through the same linked Supabase CLI, `--output json`,
+  before the finish file is sent, plus REST when configured); the sweep's
+  `verifySweepTarget`/`preflightArmedSweep`, `armForSweep` (`database_changed`),
+  `recoverArmOwnership` and `disarmAfterSweep` (`tenancy_armed_ownership:database`
+  when the ownership record names the other clone).
+- Legacy mode with no selection and sealed loopback fixtures without a selection are
+  not label-checked (the same rule as the offline gate); every hosted use has a
+  selection and is.
+
+Tests: `test-target.mjs` (library), `test-server-target.mjs` (both server clients,
+sealed), `test-cli-targets.mjs` (finalizer), `../person-maintenance/test-start-catchup.mjs`,
+`../tenancy/test-armed-safety.mjs` (the real sweep CLI against the controller double:
+same cluster + different labels, unlabelled, foreign label; cleanup and recovery on the
+other clone) and `run-identity-tests.sh <port>` (three databases in one PostgreSQL
+cluster, so the identifier is identical and only the label differs).
+
+## Denied provider transports (disposable deployments)
+
+`OUTBOUND_DENY_HOSTS=api.us.nylas.com,api.resend.com,.airtable.com,api.harvestapi.io`
+installs a `fetch` guard (`lib/server/outbound-guard.ts`, from `instrumentation.ts`
+on the server and from the worker bundle on import). Requests to a listed host (exact
+or `.suffix`) fail with `outbound_denied:<host>` before leaving the process and are
+counted (`deniedRequests()`). Unset in production: nothing is installed. OpenAI and
+the selected Supabase project stay reachable unless listed. Scope: the guard covers
+`fetch` (every provider client in `lib/server` and the workers uses it); it does not
+intercept raw `node:net`/`node:https` sockets, which nothing in the release uses for
+providers. Trailing-dot hostnames are matched like their plain form.
+
+The hostnames are the ones the clients build, not nicknames: Harvest is
+`api.harvestapi.io` (`lib/server/sourcing/harvest.ts`, `lib/server/applicants.ts`,
+`scripts/refresh-worker.mjs`); an earlier example named `api.harvest-api.com`, which
+nothing calls, so following it left the real endpoint reachable (review R2-04).
+`test-provider-denial.mjs` drives the real Harvest, Resend, Nylas and Airtable clients
+with synthetic credentials against a recording transport under the documented list:
+every request is refused in-process and counted. A runtime refusal observed for one
+provider (for example `outbound_denied:api.resend.com` on a deployment) proves that
+provider's path only; the per-provider proof for the others is this test plus the
+deployment's configured list, which must be read, not assumed.
+
+The role utilities (`sync-org-roles.mjs`, `embed-roles.mjs`) accept only a hosted
+`https://<ref>.supabase.co` URL; they have no loopback mode. The workers that build
+their own REST helpers (`review-queue.mjs`, `refresh-worker.mjs`, `sync-directory.mjs`)
+call `assertServerTarget()` before their first request.
+
+## Deployment checklist
+
+- Vercel: `PERSON_TARGET_PROJECT_REF` on every environment that runs shadow/live or
+  transition support; for a rehearsal branch also `OUTBOUND_DENY_HOSTS`, test provider
+  keys, and the copy's URLs/keys.
+- GitHub Actions: repository variable `PERSON_TARGET_PROJECT_REF`; the four
+  normalized workflows pass it to the workers.
+- Operator shells: `PERSON_TARGET_PROJECT_REF` next to `PERSON_PUBLISH_DATABASE_URL`
+  / `PERSON_DATABASE_URL`.
+
+## Tests
+
+```sh
+bash scripts/person-target/run-offline-tests.sh   # no database, no network
+```
+
+`test-target.mjs` (selection and signals), `test-cli-targets.mjs` (sealed child
+processes: role utilities and the finalizer stop before any socket),
+`test-server-target.mjs` (mixed REST/PostgreSQL configurations refused before any
+pool or request), `test-outbound-guard.mjs` (denied hosts counted, others pass),
+`test-provider-denial.mjs` (the real provider clients under the documented list).
+`scripts/person-maintenance/test-start-catchup.mjs` covers the catch-up starter.

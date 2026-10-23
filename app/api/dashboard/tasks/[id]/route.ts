@@ -42,6 +42,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!ID_RE.test(id)) return NextResponse.json({ error: "bad_id" }, { status: 400 });
 
   const ok = await deleteTask(member.org.id, id);
+  if (ok === null) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return ok
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "delete_failed" }, { status: 500 });

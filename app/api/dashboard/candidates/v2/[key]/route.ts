@@ -17,7 +17,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ key: string
   if (key.startsWith("net_") && member.org.slug !== TT_ORG_SLUG)
     return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const detail = await unifiedCandidateDetail(member.org.id, key);
-  if (!detail) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  return NextResponse.json(detail);
+  try {
+    const detail = await unifiedCandidateDetail(member.org.id, key);
+    if (!detail) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return NextResponse.json(detail);
+  } catch (error) {
+    if (error instanceof Error && error.message === "pool_contact_unavailable")
+      return NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
+    throw error;
+  }
 }

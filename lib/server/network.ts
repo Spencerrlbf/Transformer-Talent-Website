@@ -1,3 +1,5 @@
+import { transitionSupport } from './person-transition/context';
+import { personWriteMode } from './person/intake';
 // Network matches: the internal-only surface over the nightly pool matcher.
 // match_verdicts (pool candidate × org role, scorecard verdicts as v2) is
 // aggregated person-first: one entry per pool person with all their matched
@@ -6,7 +8,10 @@
 // "send" path is the only bridge to a client-visible surface: it creates a
 // normal website_applications row marked source=transformer_talent, which
 // renders in the job's pipeline as an applicant with the Via-TT badge.
-import { sbRest, sbInsert } from "./supabase";
+import { sbRest, sbInsert, sbRpc } from "./supabase";
+import { publishedPoolContacts, type ResolvedPoolContact } from "./person/contacts";
+import { publishedPoolProfiles } from "./person/profile-view";
+import { TT_ORG_ID } from "./person/normalize";
 import { clientSafeVerdict, TAG_LABEL, type ClientTag } from "./client-reason";
 
 export const TT_ORG_SLUG = "transformer-talent";
@@ -92,14 +97,62 @@ function emailScore(r: EmailRow): number {
   return (goodOk ? 0 : 10) + (r.email_type === "personal" ? 0 : 2) + (r.is_primary ? 0 : 1);
 }
 
-/** candidateId -> usable emails, best first. knownEmail (candidates.email) leads. */
+export type RecruiterDecisions = { email?: string | null; phone?: string | null };
+/** The recruiter's explicit contact decisions for unpublished people
+ * (person_recruiter_primary): a present kind = decided; value null = an explicit
+ * clear (`suppressed`); an absent kind = no decision or automatic selection, the
+ * ranking applies. A failed lookup is never "no decision": with `requireComplete` it
+ * is a failed read; without it every requested person reads as cleared, so a lookup
+ * failure can only hide an address, never revive one. */
+export async function recruiterContactDecisions(
+  candidateIds: string[],
+  options: { requireComplete?: boolean } = {}
+): Promise<Map<string, RecruiterDecisions>> {
+  const out = new Map<string, RecruiterDecisions>();
+  for (let i = 0; i < candidateIds.length; i += 100) {
+    const chunk = candidateIds.slice(i, i + 100);
+    const res = await sbRest(`person_recruiter_primary?candidate_id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=candidate_id,kind,chosen_value,suppressed`);
+    if (!res.ok) {
+      if (options.requireComplete) throw Error("pool_contact_unavailable");
+      for (const id of chunk) out.set(id, { email: null, phone: null });
+      continue;
+    }
+    for (const r of (await res.json()) as { candidate_id: string; kind: string; chosen_value: string | null; suppressed: boolean | null }[]) {
+      if (r.kind !== "email" && r.kind !== "phone") continue;
+      const chosen = str(r.chosen_value);
+      // NULL without the flag is the historical "automatic" row: no decision to apply.
+      if (chosen === null && !r.suppressed) continue;
+      out.set(r.candidate_id, { ...(out.get(r.candidate_id) ?? {}), [r.kind]: chosen });
+    }
+  }
+  return out;
+}
+
+/** An unpublished person's phone under the recruiter's decision: cleared → none,
+ * chosen → that value, otherwise the overlay and then the scalar. Every surface that
+ * shows or sends an unpublished phone (Network list, net_ drawer, Send, linked reads)
+ * resolves it here; a failed decision lookup reads as cleared (see above). */
+export function poolPhone(decision: RecruiterDecisions | undefined, overlay: unknown, scalar: unknown): string | null {
+  if (decision && "phone" in decision) return decision.phone === null ? null : str(overlay) ?? decision.phone ?? null;
+  return str(overlay) ?? str(scalar);
+}
+
+/** candidateId -> usable emails, best first. knownEmail (candidates.email) leads.
+ * For an unpublished person the recruiter's explicit decision comes first: a clear
+ * yields no emails at all (neither the scalar nor the verification history may
+ * revive it); a chosen address leads. Every surface that shows or sends a pool
+ * person's email (drawer, list, linked reads, Send) ranks through here. */
 export async function poolEmails(
   candidateIds: string[],
-  knownEmails: Map<string, string | null>
+  knownEmails: Map<string, string | null>,
+  published?: Map<string, ResolvedPoolContact>,
+  options: { requireComplete?: boolean; decisions?: Map<string, RecruiterDecisions> } = {}
 ): Promise<Map<string, RankedEmail[]>> {
+  const normalized = published ?? await publishedPoolContacts(candidateIds);
+  const legacyIds = candidateIds.filter(id => !normalized.has(id));
   const rows: EmailRow[] = [];
-  for (let i = 0; i < candidateIds.length; i += 100) {
-    const chunk = candidateIds.slice(i, i + 100).map((x) => `"${x}"`).join(",");
+  for (let i = 0; i < legacyIds.length; i += 100) {
+    const chunk = legacyIds.slice(i, i + 100).map((x) => `"${x}"`).join(",");
     const [a, b] = await Promise.all([
       sbRest(
         `candidate_emails?candidate_id=in.(${chunk})&select=candidate_id,email:email_address,email_type,is_primary,quality,result`
@@ -108,6 +161,7 @@ export async function poolEmails(
         `candidate_emails_v2?candidate_id=in.(${chunk})&select=candidate_id,email:email_normalized,email_type,is_primary,quality,result`
       ),
     ]);
+    if (options.requireComplete && (!a.ok || !b.ok)) throw Error("pool_contact_unavailable");
     if (a.ok) rows.push(...((await a.json()) as EmailRow[]));
     if (b.ok) rows.push(...((await b.json()) as EmailRow[]));
   }
@@ -121,16 +175,19 @@ export async function poolEmails(
     byCand.set(r.candidate_id, list);
   }
 
+  const decisions = options.decisions ?? (legacyIds.length ? await recruiterContactDecisions(legacyIds, options) : new Map<string, RecruiterDecisions>());
   const out = new Map<string, RankedEmail[]>();
-  for (const id of candidateIds) {
+  for (const id of legacyIds) {
+    const decision = decisions.get(id);
+    if (decision && "email" in decision && decision.email === null) continue; // explicit clear
     const seenEmails = new Set<string>();
     const ranked: RankedEmail[] = [];
-    const known = str(knownEmails.get(id) ?? null);
+    const known = str(knownEmails.get(id) ?? null) ?? decision?.email ?? null;
     if (known) {
       seenEmails.add(known.toLowerCase());
       ranked.push({ email: known, verified: true });
     }
-    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y))) {
+    for (const r of (byCand.get(id) || []).sort((x, y) => emailScore(x) - emailScore(y) || Buffer.compare(Buffer.from(str(x.email)!.toLowerCase()), Buffer.from(str(y.email)!.toLowerCase())) || Buffer.compare(Buffer.from(str(x.email)!), Buffer.from(str(y.email)!)))) {
       const e = str(r.email)!;
       if (seenEmails.has(e.toLowerCase())) continue;
       seenEmails.add(e.toLowerCase());
@@ -138,6 +195,7 @@ export async function poolEmails(
     }
     if (ranked.length) out.set(id, ranked);
   }
+  for (const [id, value] of normalized) out.set(id, value.emails);
   return out;
 }
 
@@ -257,6 +315,7 @@ const TAG_OF: Record<"contact" | "message", ClientTag> = { contact: "strong", me
  *  quick read. A failed page is an error, never an empty list: the tab
  *  shows "Couldn't load" with a way to try again. */
 export async function listNetworkMatches(orgId: string, opts: NetworkListOptions = {}): Promise<NetworkList> {
+  if (orgId !== TT_ORG_ID) throw Error("person_pool_tenant");
   const perPage = Math.min(200, Math.max(10, opts.perPage ?? 50));
   const page = Math.max(1, opts.page ?? 1);
   const body = {
@@ -297,7 +356,11 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
     const res = await sbRest(`candidates?id=in.(${chunk.map((x) => `"${x}"`).join(",")})&select=${POOL_COLS}`);
     for (const r of (res.ok ? await res.json() : []) as PoolRow[]) pool.set(r.id, r);
   }
-  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])));
+  const published = await publishedPoolProfiles(ids);
+  for (const [id, snapshot] of published) pool.set(id, snapshot.profile as PoolRow);
+  const legacyIds = ids.filter((id) => !published.has(id));
+  const decisions = legacyIds.length ? await recruiterContactDecisions(legacyIds) : new Map<string, RecruiterDecisions>();
+  const emailMap = await poolEmails(ids, new Map(ids.map((id) => [id, pool.get(id)?.contact?.email ?? pool.get(id)?.email ?? null])), published, { decisions });
 
   const people: NetworkPerson[] = [];
   for (const r of rows) {
@@ -332,7 +395,7 @@ export async function listNetworkMatches(orgId: string, opts: NetworkListOptions
       linkedinUrl: str(p.linkedin_url),
       email: emails[0]?.email ?? null,
       emails,
-      phone: str(p.contact?.phone) ?? str(p.phone),
+      phone: published.has(r.candidate_id) ? published.get(r.candidate_id)!.contact.phone ?? null : poolPhone(decisions.get(r.candidate_id), p.contact?.phone, p.phone),
       years: p.calculated_experience_years ?? p.total_experience_years ?? null,
       latestMatchAt: r.latest_match_at,
       matches,
@@ -355,6 +418,7 @@ export async function sendNetworkCandidate(
   candidateId: string,
   jobId: string
 ): Promise<{ ok: true; applicationId: string } | { ok: false; error: string }> {
+  if (orgId !== TT_ORG_ID) return { ok: false, error: "candidate_not_found" };
   const roleRes = await sbRest(
     `org_roles?organization_id=eq.${orgId}&external_id=eq.${encodeURIComponent(jobId)}` +
       `&select=id,title,linked_org_role&limit=1`
@@ -378,29 +442,39 @@ export async function sendNetworkCandidate(
     target = { orgId: linked.orgId, jobId: linked.jobId, title: client.title, roleUuid: client.id };
   }
 
+  // Into TT's own pipeline with support on, the checked Send writes the row (it waits while draining/held).
+  const checkedSend = target.orgId === TT_ORG_ID && transitionSupport();
+
   const candRes = await sbRest(`candidates?id=eq.${candidateId}&select=${POOL_COLS}&limit=1`);
-  const [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
+  let [cand] = (candRes.ok ? await candRes.json() : []) as PoolRow[];
   if (!cand) return { ok: false, error: "candidate_not_found" };
-  const bestEmail =
-    (
-      await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]))
-    ).get(candidateId)?.[0]?.email ?? null;
+  const published = await publishedPoolProfiles([candidateId]);
+  const canonical = published.get(candidateId);
+  if (canonical) cand = canonical.profile as PoolRow;
+  let bestEmail: string | null, bestPhone: string | null;
+  try {
+    const decisions = published.has(candidateId) ? new Map<string, RecruiterDecisions>() : await recruiterContactDecisions([candidateId], { requireComplete: checkedSend });
+    bestEmail = (await poolEmails([candidateId], new Map([[candidateId, cand.contact?.email ?? cand.email]]), published, { requireComplete: checkedSend, decisions })).get(candidateId)?.[0]?.email ?? null;
+    bestPhone = published.has(candidateId) ? published.get(candidateId)!.contact.phone ?? null : poolPhone(decisions.get(candidateId), cand.contact?.phone, cand.phone);
+  } catch { return { ok: false, error: "temporarily_unavailable" }; }
 
   // One send per (person, target job) — pipelines never grow duplicates.
-  const dupRes = await sbRest(
-    `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
-      `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
-  );
-  if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
-    return { ok: false, error: "already_sent" };
+  // The checked Send decides this under the person's writer lock.
+  if (!checkedSend) {
+    const dupRes = await sbRest(
+      `website_applications?organization_id=eq.${target.orgId}&candidate_id=eq.${candidateId}` +
+        `&role_ids=cs.{"${target.jobId}"}&select=id&limit=1`
+    );
+    if (dupRes.ok && ((await dupRes.json()) as unknown[]).length > 0)
+      return { ok: false, error: "already_sent" };
+  }
 
-  // Richest stored profile: the newest raw Harvest full_profile from the
-  // enrichment ledger — powers the drawer (photo, experience, education).
-  const enrRes = await sbRest(
+  // Published compatibility profile; raw Harvest remains the legacy fallback.
+  const enrRes = canonical ? null : await sbRest(
     `candidate_enrichments?candidate_id=eq.${candidateId}&operation=eq.full_profile` +
       `&raw_payload=not.is.null&select=raw_payload&order=created_at.desc&limit=1`
   );
-  const [enr] = (enrRes.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
+  const [enr] = (enrRes?.ok ? await enrRes.json() : []) as { raw_payload: Record<string, unknown> | null }[];
 
   // Their verdict for the MATCHED role rides along in the apply-flow
   // screening shape, so the pipeline's fit tag + review render exactly like
@@ -420,9 +494,7 @@ export async function sendNetworkCandidate(
   const crossOrg = target.orgId !== orgId;
   const carried = crossOrg ? clientSafeVerdict(v?.verdict) : v?.verdict ?? null;
 
-  const inserted = await sbInsert<{ id: string }>(
-    "website_applications",
-    {
+  const row = {
       organization_id: target.orgId,
       name: cand.full_name || "Candidate",
       email: bestEmail || "",
@@ -438,15 +510,28 @@ export async function sendNetworkCandidate(
         current_company: str(cand.current_company),
         location: str(cand.location),
       },
-      harvest_profile: enr?.raw_payload ?? null,
+      harvest_profile: canonical?.harvest ?? enr?.raw_payload ?? null,
       screening: carried ? [{ ...carried, job_id: target.jobId }] : null,
       contact:
-        bestEmail || str(cand.contact?.phone) || str(cand.phone)
-          ? { email: bestEmail, phone: str(cand.contact?.phone) ?? str(cand.phone) }
+        canonical || bestEmail || bestPhone
+          ? { email: bestEmail, phone: bestPhone }
           : null,
-    },
-    true
-  ).catch((e) => {
+  };
+  if (checkedSend) {
+    type SendResult = { status?: string; applicationId?: string };
+    const r: SendResult = await sbRpc<SendResult>("person_network_send", { p_row: row, p_mode: personWriteMode() }).catch((e): SendResult => {
+      const message = (e as Error).message ?? "";
+      console.error("checked network send failed");
+      // A refused row is a real failure, not a reason to retry.
+      return { status: /network_send_(input|profile|actual)/.test(message) ? "refused" : "unavailable" };
+    });
+    if (r.status === "sent" && r.applicationId) return { ok: true, applicationId: r.applicationId };
+    if (r.status === "already_sent") return { ok: false, error: "already_sent" };
+    if (r.status === "candidate_not_found") return { ok: false, error: "candidate_not_found" };
+    if (r.status === "refused") return { ok: false, error: "insert_failed" };
+    return { ok: false, error: "temporarily_unavailable" };
+  }
+  const inserted = await sbInsert<{ id: string }>("website_applications", row, true).catch((e) => {
     console.error("network send insert failed", e);
     return null;
   });

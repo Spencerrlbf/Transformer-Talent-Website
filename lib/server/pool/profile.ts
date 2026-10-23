@@ -220,10 +220,10 @@ export function poolSourceHash(c: PoolCandidate): string {
 }
 
 /** The signals for one person, by code, from the stored data and the lists. */
-export function poolSignals(c: PoolCandidate): PersonSignals {
+export function poolSignals(c: PoolCandidate, now?: Date): PersonSignals {
   const rows = poolExperiences(c);
   const education = poolEducation(c);
-  const facts = computeFacts(rows, [], poolSkills(c), education);
+  const facts = computeFacts(rows, [], poolSkills(c), education, now);
   const currentTitle = facts.currentTitle || str(c.current_title);
   const companies = [facts.currentCompany, str(c.current_company), ...rows.map((r) => r.company_name)];
   const schools = education.map((e) => e.schoolName);

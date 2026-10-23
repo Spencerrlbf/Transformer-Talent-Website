@@ -76,6 +76,8 @@ type Detail = {
   } | null;
   noReply?: { markedAt: string; checkBackAt: string | null; jobId: string | null } | null;
   pipeline: PipelineEntry[];
+  /** Suggested roles judged contact or worth a message: Fit tab, "Also a match". */
+  alsoMatches?: PipelineEntry[];
   /** Where the Profile tab's history comes from and when it was fetched. */
   profileSource?: string | null;
   experience: {
@@ -462,6 +464,7 @@ export default function CandidateDrawer({
   const [editingContact, setEditingContact] = useState(false);
   // Mirrors editingContact for async work that resolves later (resume upload).
   const editingRef = useRef(false);
+  const pendingContactEdit = useRef<{ key: string; body: string; id: string } | null>(null);
   useEffect(() => {
     editingRef.current = editingContact;
   }, [editingContact]);
@@ -549,6 +552,8 @@ export default function CandidateDrawer({
     setTab(initialTab || "profile");
     setEditingContact(false);
     setContactErr("");
+    setSaving(false);
+    pendingContactEdit.current = null;
     setOpenJob(null);
     setEmailOpen(false);
     setMarking(false);
@@ -806,7 +811,7 @@ export default function CandidateDrawer({
       resumeUrl: string | null;
       resumeName: string | null;
       /** What the upload filled off the resume, if anything. */
-      filled?: { phone?: string | null; otherEmails?: string[] } | null;
+      filled?: { email?: string | null; phone?: string | null; otherEmails?: string[] } | null;
     };
     // Merge only the fields the fill can touch into the drawer's own view
     // of the person (which already folds sourced + application halves) —
@@ -822,6 +827,7 @@ export default function CandidateDrawer({
             contact: r.filled
               ? {
                   ...d.contact,
+                  email: r.filled.email !== undefined ? r.filled.email : d.contact.email,
                   phone: d.contact.phone || r.filled.phone || null,
                   otherEmails: r.filled.otherEmails ?? d.contact.otherEmails,
                 }
@@ -830,6 +836,7 @@ export default function CandidateDrawer({
         : d
     );
     if (r.filled && !editingRef.current) {
+      if (r.filled.email !== undefined) setCEmail(r.filled.email || "");
       if (r.filled.phone) setCPhone((v) => v || r.filled!.phone || "");
       if (r.filled.otherEmails) setCOther(r.filled.otherEmails.join(", "));
     }
@@ -840,22 +847,33 @@ export default function CandidateDrawer({
   }): Promise<boolean> => {
     setSaving(true);
     setContactErr("");
+    const body = JSON.stringify(payload);
+    if (pendingContactEdit.current?.body !== body || pendingContactEdit.current?.key !== candKey)
+      pendingContactEdit.current = { key: candKey, body, id: crypto.randomUUID() };
+    const request = pendingContactEdit.current!;
     const res = await fetch(`/api/dashboard/candidates/v2/${candKey}/contact`, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": request.id },
+      body,
     }).catch(() => null);
+    if (keyRef.current !== request.key || pendingContactEdit.current?.id !== request.id) return false;
     setSaving(false);
     if (!res || !res.ok) {
       const err = res ? ((await res.json()) as { error?: string }).error : null;
+      if (keyRef.current !== request.key || pendingContactEdit.current?.id !== request.id) return false;
       setContactErr(
         err === "invalid_email" ? "One of those emails doesn't look right."
         : err === "invalid_phone" ? "That phone number doesn't look right."
+        : err === "email_unusable" ? "That email is marked unusable. Choose another address."
+        : err === "phone_unusable" ? "That phone number is marked unusable. Choose another number."
+        : err === "contact_review_required" ? "This profile needs a data review before contact details can be changed."
         : "Couldn't save — try again."
       );
       return false;
     }
     const { contact } = (await res.json()) as { contact: Detail["contact"] };
+    if (keyRef.current !== request.key || pendingContactEdit.current?.id !== request.id) return false;
+    pendingContactEdit.current = null;
     setDetail((d) => (d ? { ...d, contact } : d));
     setCEmail(contact.email || "");
     setCPhone(contact.phone || "");
@@ -1385,6 +1403,25 @@ export default function CandidateDrawer({
                       <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} decision={p.jobId === roleContext ? decision : undefined} companies={companies} />
                     </section>
                   ))}
+                  {(detail.alsoMatches?.length ?? 0) > 0 && (
+                    <>
+                      <div className="cv2d-also">
+                        Also a match · {detail.alsoMatches!.length} {detail.alsoMatches!.length === 1 ? "role" : "roles"}
+                      </div>
+                      {detail.alsoMatches!.map((p) => (
+                        <section className="cv2d-fit-role" key={`also-${p.jobId}`}>
+                          <div className="cv2d-fit-title">
+                            {p.title} <em>#{p.jobId}</em>
+                            <span className="cv2d-fit-via">suggested</span>
+                            <button type="button" className="cv2d-rolebtn cv2d-fit-job" title="View this job" onClick={() => setOpenJob(p.jobId)}>
+                              View job
+                            </button>
+                          </div>
+                          <VerdictCard view={p.verdict!} feedback={feedbackFor(p)} review={reviewFor(p)} companies={companies} />
+                        </section>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
 
@@ -1396,6 +1433,9 @@ export default function CandidateDrawer({
                       <p className="cv2d-about">{detail.about}</p>
                     </>
                   )}
+                  <div className="cv2d-prof-wrap">
+                  <div className="cv2d-prof">
+                  <div className="cv2d-prof-main">
                   <h4 className="cv2d-sec">Experience</h4>
                   {detail.profileSource && <p className="cv2d-dim">{detail.profileSource}</p>}
                   {detail.experience.length === 0 && (
@@ -1429,10 +1469,13 @@ export default function CandidateDrawer({
                       </div>
                     </div>
                   ))}
+                  </div>
 
+                  {(detail.education.length > 0 || detail.skills.length > 0) && (
+                  <aside className="cv2d-prof-side">
                   {detail.education.length > 0 && (
                     <>
-                      <h4 className="cv2d-sec" style={{ marginTop: 26 }}>
+                      <h4 className="cv2d-sec">
                         Education
                       </h4>
                       {detail.education.map((e, i) => (
@@ -1459,7 +1502,7 @@ export default function CandidateDrawer({
 
                   {detail.skills.length > 0 && (
                     <>
-                      <h4 className="cv2d-sec" style={{ marginTop: 26 }}>
+                      <h4 className={detail.education.length > 0 ? "cv2d-sec cv2d-sec-gap" : "cv2d-sec"}>
                         Skills
                       </h4>
                       <div className="cv2d-skills">
@@ -1470,6 +1513,10 @@ export default function CandidateDrawer({
                       </div>
                     </>
                   )}
+                  </aside>
+                  )}
+                  </div>
+                  </div>
                 </>
               )}
 

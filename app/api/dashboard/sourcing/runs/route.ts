@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
     const roleRes = await sbRest(
       `org_roles?organization_id=eq.${member.org.id}&external_id=eq.${encodeURIComponent(jobId)}&select=id&limit=1`
     );
-    const [role] = roleRes.ok ? await roleRes.json() : [];
-    if (!role) return NextResponse.json({ runs: [] });
+    if (!roleRes.ok) return NextResponse.json({ error: "job_read_failed" }, { status: 502 });
+    const [role] = await roleRes.json();
+    if (!role) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
     roleFilter = `&org_role_id=eq.${role.id}`;
   }
   const res = await sbRest(

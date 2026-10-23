@@ -154,7 +154,7 @@ type Row = { contact: Contact | null; email?: string | null; linkedin_username?:
 /** The other half of a person's record: an applicant's sourced row (or a
  *  sourced person's application) in the same org, matched the way the
  *  candidate detail merges them — by LinkedIn username. */
-async function linkedRow(key: string, row: Row): Promise<Row | null> {
+async function linkedRow(key: string, row: Row, strict = false): Promise<Row | null> {
   const u = row.linkedin_username;
   const org = row.organization_id;
   if (!u || !org) return null;
@@ -162,7 +162,7 @@ async function linkedRow(key: string, row: Row): Promise<Row | null> {
     ? `sourced_candidates?organization_id=eq.${org}&linkedin_username=eq.${encodeURIComponent(u)}&select=contact&limit=1`
     : `website_applications?organization_id=eq.${org}&linkedin_username=eq.${encodeURIComponent(u)}&select=contact,email&order=created_at.desc&limit=1`;
   const res = await sbRest(path).catch(() => null);
-  if (!res || !res.ok) return null;
+  if (!res || !res.ok) { if (strict) throw Error('application_contact_read'); return null; }
   const [r] = (await res.json()) as Row[];
   return r || null;
 }
@@ -177,8 +177,11 @@ async function linkedRow(key: string, row: Row): Promise<Row | null> {
 export async function fillExtractedContact(
   key: string,
   found: { phone?: string | null; email?: string | null; emails?: string[] },
-  orgId?: string | null
+  orgId?: string | null,
+  options?: { strict?: boolean },
 ): Promise<{ phone?: string | null; otherEmails?: string[] } | null> {
+  const strict = options?.strict === true;
+  if (strict && !orgId) throw Error('application_contact_scope');
   const phone = normalizePhone(found.phone);
   const emails = [...(found.emails || []), ...(found.email ? [found.email] : [])]
     .map((e) => e.trim())
@@ -194,10 +197,10 @@ export async function fillExtractedContact(
   const cols = isSrc ? "contact,linkedin_username,organization_id" : "contact,email,linkedin_username,organization_id";
 
   const res = await sbRest(`${table}?id=eq.${id}${scope}&select=${cols}`);
-  if (!res.ok) return null;
+  if (!res.ok) { if (strict) throw Error('application_contact_read'); return null; }
   const [row] = (await res.json()) as Row[];
-  if (!row) return null;
-  const other = await linkedRow(key, row);
+  if (!row || (strict && row.organization_id !== orgId)) { if (strict) throw Error('application_contact_scope'); return null; }
+  const other = await linkedRow(key, row, strict);
 
   const current: Contact = { ...(row.contact || {}) };
   // The primary the dashboard shows: the application's typed/primary email
@@ -232,13 +235,16 @@ export async function fillExtractedContact(
 
   // Conditional write: when filling the phone, only touch a row whose phone
   // is still empty — a concurrent recruiter save wins.
-  const guard = change.phone ? `&or=(contact.is.null,contact->>phone.is.null,contact->>phone.eq.)` : "";
+  const guard = strict
+    ? row.contact == null ? '&contact=is.null' : `&contact=eq.${encodeURIComponent(JSON.stringify(row.contact))}`
+    : change.phone ? `&or=(contact.is.null,contact->>phone.is.null,contact->>phone.eq.)` : "";
   const put = await sbRest(`${table}?id=eq.${id}${scope}${guard}`, {
     method: "PATCH",
     body: JSON.stringify({ contact: current }),
     prefer: "return=representation",
   });
-  if (!put.ok) return null;
+  if (!put.ok) { if (strict) throw Error('application_contact_write'); return null; }
   const rows = (await put.json()) as unknown[];
+  if (strict && (!Array.isArray(rows) || rows.length !== 1)) throw Error('application_contact_changed');
   return rows.length ? change : null;
 }

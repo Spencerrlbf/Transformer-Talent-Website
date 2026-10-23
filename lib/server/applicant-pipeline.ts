@@ -1,9 +1,13 @@
+import { notifyAcceptedApplication } from './person-transition/application-notify';
+import { transitionSupport } from './person-transition/context';
+import { runApplicationWork, applicationProcessing, startApplicationEffects, renewApplicationWork, stageApplicationResult } from './person-transition/application';
 // The applicant enrichment pipeline, shared by /api/apply (applications) and
 // /api/referral (referred people). Runs AFTER the HTTP response via after():
 // resume parsing (when there is one), Harvest enrichment, candidate-pool
 // promotion, spine records, screening, and the Airtable mirrors. One pipeline
 // for every way a person enters the system.
 import { sbRest } from "./supabase";
+import { processPersonDerivatives } from './person/derivatives';
 import {
   harvestProfile,
   parseProfile,
@@ -16,7 +20,7 @@ import {
   linkedinUsername,
 } from "./applicants";
 import { getRoles } from "@/lib/roles";
-import { passesHardGates, passesProfileGates, screenRolesWithCache } from "./screening";
+import { passesHardGates, passesProfileGates, screenRolesWithCache, type RoleVerdict } from "./screening";
 import { loadOrgRoles, matchOrgRolesForApplicant, type BoardRole } from "./org-board";
 import { llamaParsePdf } from "./llamaparse";
 import { extractEmails, extractPhone, fillExtractedContact, normalizePhone, pdfText } from "./contact-extract";
@@ -35,6 +39,9 @@ import { attachVerdictToMatch } from "./verdict-store";
 import { getOrgId } from "./spine";
 import { takeReview } from "./review-budget";
 import { leadRecipients, sendLeadNotification } from "./lead-notify";
+import { personWriteMode } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
+import { cachedApplicationHarvest, storeApplicationHarvest, recordApplicationParser, applicationIntakeReceipt, applicationResumeContacts } from "./person/application-sources";
 
 export type ApplicantPipelineInput = {
   submissionId: string;
@@ -87,7 +94,27 @@ function nameFromProfile(
   return [first, last].filter(Boolean).join(" ") || fallback;
 }
 
-export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<void> {
+export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<"processed" | "queued" | "failed"> {
+  if (transitionSupport()) {
+    const outcome = await runApplicationWork(p, runApplicantPipelineInternal);
+    await notifyAcceptedApplication(p);
+    return outcome;
+  }
+  try {
+    return await runApplicantPipelineInternal(p);
+  } catch {
+    // Includes failures before enrichment starts (organization/roles/receipt).
+    // The already-saved application remains durably available to the queue.
+    const org = p.boardOrg?.id ?? p.orgId ?? TT_ORG_ID;
+    const status = process.env.PERSON_WRITE_MODE && process.env.PERSON_WRITE_MODE !== "legacy" ? "queued" : "received";
+    await sbRest(`website_applications?id=eq.${p.submissionId}&organization_id=eq.${org}`, {
+      method: "PATCH", body: JSON.stringify({ status }), prefer: "return=minimal",
+    }).catch(() => {});
+    console.error("applicant pipeline setup failed", "application_retry_required");
+    return "failed";
+  }
+}
+async function runApplicantPipelineInternal(p: ApplicantPipelineInput): Promise<"processed" | "queued" | "failed"> {
   const {
     submissionId, email, linkedin, visa, preferredLocations,
     roleIds, speculative, resumeBuf, resumeSafeName, resumePath, boardOrg, orgId,
@@ -97,8 +124,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   // Whose applicant this is: a client company's board or page, or the site's
   // own (Transformer Talent). Decided on the organization, not the surface.
   const ttOrgId = await getOrgId();
-  const tenantOrgId: string | null =
-    boardOrg?.id ?? (orgId && ttOrgId && orgId !== ttOrgId ? orgId : null);
+  const effectiveOrgId = boardOrg?.id ?? orgId ?? ttOrgId;
+  if (!effectiveOrgId || !ttOrgId) throw Error("application_organization_unavailable");
+  const tenantOrgId = effectiveOrgId === ttOrgId ? null : effectiveOrgId;
+  const personMode = personWriteMode();
+  const normalizedIntake = !tenantOrgId && personMode !== "legacy";
 
   const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
   const roles = boardRoles ?? (await getRoles());
@@ -147,19 +177,22 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   // about it now, and the nightly queue reviews it once there is room.
   const budgetOrg = tenantOrgId ?? orgId;
   if (!p.fromQueue && budgetOrg && !(await takeReview(budgetOrg))) {
-    await sbRest(`website_applications?id=eq.${submissionId}`, {
+    await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
       method: "PATCH",
       body: JSON.stringify({ status: "queued" }),
       prefer: "return=minimal",
     }).catch(() => {});
     await notifyArrival();
-    return;
+    return "queued";
   }
 
-  // Resume text (when a resume exists).
-  let resumeText: string | null = null;
+  // Admission receipts fix the inputs for every retry, before any PDF/API call.
+  const intakeReceipt = normalizedIntake ? await applicationIntakeReceipt(effectiveOrgId, submissionId) : null;
+  await startApplicationEffects();
+  await renewApplicationWork();
+  let resumeText: string | null = intakeReceipt?.application_snapshot.resume_text ?? null;
   let resumeParser: "llamaparse" | "pdf-parse" | null = null;
-  if (resumeBuf) {
+  if (resumeBuf && !intakeReceipt) {
     resumeText = await llamaParsePdf(resumeBuf, resumeSafeName);
     if (resumeText) {
       resumeParser = "llamaparse";
@@ -167,8 +200,8 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       resumeText = (await pdfText(resumeBuf)) || null;
       if (resumeText) resumeParser = "pdf-parse";
     }
-    if (resumeText) {
-      await sbRest(`website_applications?id=eq.${submissionId}`, {
+    if (resumeText && !normalizedIntake && !applicationProcessing()) {
+      await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({ resume_text: resumeText }),
         prefer: "return=minimal",
@@ -177,30 +210,44 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
   }
 
   let matches: { jobId: string; title: string; salary: string }[] = [];
+  let pipelineFailed = false;
   let screenedSummary: string | undefined;
   let applicationFit: string | undefined;
   try {
+    await renewApplicationWork();
     const username = linkedinUsername(linkedin);
     let harvest: unknown | null = null;
     let harvestCache: "hit" | "miss" = "miss";
     const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-    const prior = await sbRest(
-      `website_applications?linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
-    );
-    if (prior.ok) {
-      const rows = await prior.json();
-      if (rows.length) {
-        harvest = rows[0].harvest_profile;
-        harvestCache = "hit";
+    let harvestLedgerId: string | null = null;
+    if (intakeReceipt) {
+      harvestLedgerId = intakeReceipt.harvest_ledger_id;
+      harvest = intakeReceipt.application_snapshot.harvest_profile;
+      if (harvestLedgerId && !harvest) throw Error("person_intake_receipt_source_missing");
+      harvestCache = "hit";
+    } else if (normalizedIntake) {
+      const cached = await cachedApplicationHarvest(effectiveOrgId, username || "", since);
+      if (cached) { harvest = cached.raw_payload; harvestLedgerId = cached.id; harvestCache = "hit"; }
+      else {
+        harvest = await harvestProfile(linkedin);
+        if (harvest) harvestLedgerId = await storeApplicationHarvest(effectiveOrgId, username || "", harvest);
       }
+    } else {
+      const prior = await sbRest(
+        `website_applications?organization_id=eq.${effectiveOrgId}&linkedin_username=eq.${encodeURIComponent(username || "")}&harvest_profile=not.is.null&created_at=gte.${since}&select=harvest_profile&order=created_at.desc&limit=1`
+      );
+      if (!prior.ok) throw Error("application_cache_read_failed");
+      const rows = await prior.json();
+      if (rows.length) { harvest = rows[0].harvest_profile; harvestCache = "hit"; }
+      if (!harvest) harvest = await harvestProfile(linkedin);
     }
-    if (!harvest) harvest = await harvestProfile(linkedin);
-    const parsed = await parseProfile(resumeText || "", harvest);
+    await renewApplicationWork();
+    let parsed = intakeReceipt ? intakeReceipt.application_snapshot.parsed_profile : await parseProfile(resumeText || "", harvest);
 
     // Referrals arrive with no name — take it from the profile.
     if (!name) {
       name = nameFromProfile(harvest as Record<string, unknown> | null, username || email);
-      await sbRest(`website_applications?id=eq.${submissionId}`, {
+      if (!applicationProcessing()) await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
         prefer: "return=minimal",
@@ -208,7 +255,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     }
 
     // Full uncapped skill list from Harvest — richer than the parsed top 12.
-    const harvestSkills = (
+    let harvestSkills = (
       ((harvest as Record<string, unknown> | null)?.skills as { name?: string }[] | undefined) || []
     )
       .map((s) => s?.name || "")
@@ -217,12 +264,17 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     // no pool enrichment, experiences or embeddings, no TT Airtable. They
     // are judged under the company's own person key; the ledger keeps only
     // the spend, under the company.
-    const { candidateId, vector } = tenantOrgId
+    await renewApplicationWork();
+    const promotion = tenantOrgId
       ? {
           candidateId: await tenantPersonId(tenantOrgId, username, submissionId),
           vector: username ? await applicantVector(parsed, resumeText) : null,
         }
       : await promoteToCandidatePool({
+          organizationId: effectiveOrgId,
+          applicationId: submissionId,
+          harvestLedgerId,
+          resumeContacts: applicationResumeContacts(parsed, resumeText, email),
           name,
           email,
           linkedinUrl: linkedin,
@@ -230,9 +282,19 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
           parsed,
           allSkills: harvestSkills,
         });
+    const { candidateId, vector } = promotion;
+    // A concurrent first attempt may have committed after our initial lookup.
+    // Use the transaction's winning snapshot for every downstream write/call.
+    if (normalizedIntake && "applicationSnapshot" in promotion && promotion.applicationSnapshot) {
+      parsed = promotion.applicationSnapshot.parsed_profile;
+      resumeText = promotion.applicationSnapshot.resume_text;
+      harvest = promotion.applicationSnapshot.harvest_profile;
+      harvestSkills = (((harvest as Record<string, unknown> | null)?.skills as {name?:string}[] | undefined) || []).map(s=>s?.name||"").filter(Boolean);
+    }
 
+    await renewApplicationWork();
     // V2 spine: spend ledger, per-position experiences, multi-vector embeddings.
-    if (harvest) {
+    if (harvest && !normalizedIntake) {
       await recordEnrichment(
         tenantOrgId
           ? { orgId: tenantOrgId, candidateId: null, linkedinUsername: username, provider: "harvest", operation: "full_profile", cacheStatus: harvestCache, costCredits: harvestCache === "miss" ? 1 : 0 }
@@ -249,7 +311,9 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       );
     }
     if (resumeParser) {
-      await recordEnrichment({
+      if (!tenantOrgId && applicationProcessing()) {
+        await recordApplicationParser(effectiveOrgId, username || "", resumeParser);
+      } else await recordEnrichment({
         ...(tenantOrgId ? { orgId: tenantOrgId, candidateId: null } : { candidateId }),
         linkedinUsername: username,
         provider: resumeParser,
@@ -257,17 +321,25 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         cacheStatus: "miss",
       });
     }
+    await renewApplicationWork();
     if (candidateId && !tenantOrgId) {
-      await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
-      await syncCandidateEmbeddings(candidateId, {
+      if (normalizedIntake) {
+        // Transition intake enqueues the job under its own authority. The old
+        // consumer cannot share that application work; defer until independent
+        // derivative admission is available.
+        if(personWriteMode() === 'live' && !transitionSupport()) await processPersonDerivatives({organizationId:orgId!,candidateId}).catch(()=>console.error('person_derivative_retry_required'));
+      } else {
+       await syncExperiences(candidateId, harvest as Record<string, unknown> | null);
+       await syncCandidateEmbeddings(candidateId, {
         linkedin_profile: linkedinProfileText(harvest as Record<string, unknown> | null),
         resume: resumeText || undefined,
         summary: parsed?.profile_summary || undefined,
-      });
+       });
+      }
     }
 
     let matchedIds: string[] = [];
-    let screening: unknown = null;
+    let screening: RoleVerdict[] | null = null;
     if (vector) {
       const skillTerms = harvestSkills.length ? harvestSkills : parsed?.top_skills || [];
       const expRows = harvestToExperiences(harvest as Record<string, unknown> | null);
@@ -277,6 +349,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       const careerYears = computeFacts(expRows, [], [], eduList).careerYears;
       // Suggestions never leave the board's company: tenant boards search
       // only that org's roles; the site searches its own.
+      await renewApplicationWork();
       const roleMatches = boardOrg
         ? await matchOrgRolesForApplicant(vector, boardOrg.id)
         : await matchRolesForApplicant(vector, skillTerms, orgId);
@@ -325,6 +398,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       ]
         .filter(Boolean)
         .join("\n\n");
+      await renewApplicationWork();
       const results = await screenRolesWithCache({
         candidateId,
         evidence,
@@ -366,6 +440,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       // The verdict the recruiter reads: the roles they applied to, plus the
       // best two matches. Stored beside the scorecard on the same verdict row;
       // best effort, never fails the application.
+      await renewApplicationWork();
       try {
         const storeOrg = orgId || (await getOrgId());
         const wantIds = [...new Set([...roleIds, ...ranked.map((m) => m.job_id)])].slice(0, 3);
@@ -403,21 +478,41 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
         .map((r) => ({ jobId: r.jobId, title: r.title, salary: r.salary }));
     }
 
-    await sbRest(`website_applications?id=eq.${submissionId}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        harvest_profile: harvest,
-        parsed_profile: parsed,
-        candidate_id: candidateId,
-        matched_role_ids: matchedIds,
-        screening,
-        status: "processed",
-      }),
-      prefer: "return=minimal",
-    }).catch(() => {});
+    async function finalizeApplication() {
+      if (applicationProcessing()) {
+        const found = tenantOrgId && resumeText ? applicationResumeContacts(parsed, resumeText, email) : {};
+        const emails = [...(found.emails || []), ...(found.email ? [found.email] : [])]
+          .map(e => e.trim()).filter(e => e.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).slice(0, 200);
+        // Cached verdicts also carry facts/origin metadata; persist the declared
+        // review result shape, without promoting cache metadata into this API.
+        const resultScreening = screening?.map(v => ({ job_id: v.job_id, qualified: v.qualified,
+          fit_score: v.fit_score, answers: v.answers.map(({question, answer, evidence}) => ({question, answer, evidence})), cached: v.cached,
+          ...(v.inferred_signals ? { inferred_signals: v.inferred_signals.map(({signal, basis, probe}) => ({signal, basis, probe})) } : {}),
+          ...(v.scorecard ? { scorecard: v.scorecard } : {}) })) ?? null;
+        stageApplicationResult({ version: 1, matched_role_ids: matchedIds, screening: resultScreening,
+          ...(tenantOrgId ? { name, harvest_profile: harvest, parsed_profile: parsed, resume_text: resumeText,
+            resume_contacts: { phone: normalizePhone(found.phone), emails } } : {}) });
+        return;
+      }
+      const finalized = await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          harvest_profile: harvest,
+          parsed_profile: parsed,
+          ...(normalizedIntake ? { resume_text: resumeText } : {}),
+          candidate_id: candidateId,
+          matched_role_ids: matchedIds,
+          screening,
+          status: "processed",
+        }),
+        prefer: "return=minimal",
+      });
+      if (!finalized.ok && normalizedIntake) throw Error("person_intake_finalize_failed");
+    }
+    if (!applicationProcessing()) await finalizeApplication();
 
-    // Contact details off the resume — written AFTER the profile above so
-    // the drawer never shows a phone before the LinkedIn history is there.
+    // Legacy callers retain profile-before-contact ordering. Claimed work stages
+    // its extraction proposal for the atomic result/contact/completion operation.
     // The model's read is authoritative
     // when it was consulted: a null phone means the resume shows none, and
     // the primary email back means there is no second address — the regex
@@ -425,18 +520,11 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     // regex only decides when the model wasn't asked at all (no key, parse
     // failure), plus one narrow backstop: a phone in the contact block the
     // model missed. Fills gaps only — never overwrites a typed value.
-    if (resumeText) {
-      const foundPhone = parsed
-        ? normalizePhone(parsed.phone) || extractPhone(resumeText.slice(0, 1500))
-        : extractPhone(resumeText);
-      const modelEmail = (parsed?.email || "").trim();
-      const found = parsed
-        ? { phone: foundPhone, email: modelEmail && modelEmail.toLowerCase() !== email.toLowerCase() ? modelEmail : null }
-        : { phone: foundPhone, emails: extractEmails(resumeText, email) };
+    if (resumeText && !applicationProcessing()) {
+      await renewApplicationWork();
+      const found = applicationResumeContacts(parsed, resumeText, email);
       if (found.phone || found.email || (found.emails && found.emails.length)) {
-        await fillExtractedContact(`app_${submissionId}`, found).catch((err) =>
-          console.error("contact fill failed", err)
-        );
+        await fillExtractedContact(`app_${submissionId}`, found).catch(() => console.error("contact fill failed", "application_contact_retry"));
       }
     }
 
@@ -444,7 +532,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     // Future interest travels with the person, not just the application —
     // the pool record carries the date and what to come back with. (Only
     // TT's own applicants have a pool record.)
-    if (p.followUpAt && candidateId && !tenantOrgId) {
+    if (p.followUpAt && candidateId && !tenantOrgId && !applicationProcessing()) {
       await sbRest(`candidates?id=eq.${candidateId}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -461,6 +549,9 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       }).catch(() => {});
     }
 
+    await renewApplicationWork();
+    if (applicationProcessing()) await finalizeApplication();
+
     // TT's own Airtable: TT's own applicants only.
     if (!tenantOrgId) {
       await mirrorToAirtable({
@@ -473,10 +564,12 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
       });
     }
   } catch (err) {
-    console.error("applicant pipeline failed", err);
-    await sbRest(`website_applications?id=eq.${submissionId}`, {
+    if (applicationProcessing()) throw Error('application_processing_failed');
+    pipelineFailed = true;
+    console.error("applicant pipeline failed", normalizedIntake ? "person_intake_retry_required" : err);
+    await sbRest(`website_applications?id=eq.${submissionId}&organization_id=eq.${effectiveOrgId}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: "received" }),
+      body: JSON.stringify({ status: normalizedIntake ? "queued" : "received" }),
       prefer: "return=minimal",
     }).catch(() => {});
     // Enrichment fell over (Harvest / model outage): the deterministic
@@ -489,6 +582,7 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
     }
   }
 
+  await renewApplicationWork();
   // Review row for EVERY entry of TT's own — even when enrichment failed
   // above. A client company's applicants never reach TT's Airtable.
   if (!tenantOrgId) await mirrorApplicationToAirtable({
@@ -517,4 +611,5 @@ export async function runApplicantPipeline(p: ApplicantPipelineInput): Promise<v
 
   // The queue already told them when the application arrived.
   if (!p.fromQueue) await notifyArrival();
+  return pipelineFailed ? "failed" : "processed";
 }

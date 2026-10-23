@@ -72,6 +72,8 @@ function monthNum(m: unknown): number | null {
 }
 
 interface HarvestExperience {
+  /** Only trusted for the explicitly marked canonical website snapshot. */
+  is_current?: boolean;
   position?: string;
   title?: string;
   companyName?: string;
@@ -112,7 +114,8 @@ export function harvestToExperiences(harvest: Record<string, unknown> | null) {
       start_year: e.startDate?.year ?? null,
       end_month: monthNum(e.endDate?.month),
       end_year: e.endDate?.year ?? null,
-      is_current: /present/i.test(e.endDate?.text || "") || (!e.endDate?.year && i === 0),
+      is_current: harvest?.profileStorageVersion === "tt-published-1" && typeof e.is_current === "boolean"
+        ? e.is_current : /present/i.test(e.endDate?.text || "") || (!e.endDate?.year && i === 0),
       duration_text: e.duration || null,
       description: (e.description || "").slice(0, 8000) || null,
       skills,
@@ -125,7 +128,7 @@ export function harvestToExperiences(harvest: Record<string, unknown> | null) {
 // ---------- The candidates row from a Harvest profile ----------
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const cleanText = (s: unknown): string | null =>
+export const cleanText = (s: unknown): string | null =>
   typeof s === "string" ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim() || null : null;
 
 /** A "position" that is a membership or side role, not the job: a council

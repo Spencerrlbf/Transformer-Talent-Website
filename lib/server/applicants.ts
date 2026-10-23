@@ -1,5 +1,9 @@
 import { sbRest, sbRpc } from "./supabase";
 import { embed } from "./matcher";
+import { personWriteMode, saveApplicationPerson, applicationMatchingText } from "./person/intake";
+import { TT_ORG_ID } from "./person/normalize";
+import { applicationProcessing, bindTenantApplicationPerson } from "./person-transition/application";
+import { transitionSupport } from "./person-transition/context";
 
 // ---------- Harvest enrichment (LinkedIn full profile; costs credits — one
 // call per applicant, and failure never blocks the application) ----------
@@ -58,6 +62,7 @@ export async function parseProfile(
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(90_000),
     body: JSON.stringify({
       model: "gpt-4o-mini",
       temperature: 0,
@@ -121,7 +126,11 @@ export async function parseProfile(
 
 export function linkedinUsername(url: string): string | null {
   const m = url.toLowerCase().match(/\/in\/([^/?#]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  try {
+    const username = m ? decodeURIComponent(m[1]).trim().toLowerCase() : '';
+    return /^[\p{L}\p{N}\p{M}._-]{1,200}$/u.test(username) ? username : null;
+  }
+  catch { return null; }
 }
 
 async function patchCandidate(id: string, payload: Record<string, unknown>) {
@@ -150,13 +159,7 @@ export async function applicantVector(
   parsed: ParsedProfile | null,
   resumeText: string | null
 ): Promise<number[] | null> {
-  const summaryText =
-    parsed?.profile_summary ||
-    [parsed?.current_title, parsed?.current_company && `at ${parsed.current_company}`]
-      .filter(Boolean)
-      .join(" ") ||
-    resumeText?.slice(0, 2000) ||
-    "";
+  const summaryText = applicationMatchingText(parsed, resumeText);
   return summaryText ? await embed(summaryText).catch(() => null) : null;
 }
 
@@ -170,6 +173,8 @@ export async function tenantPersonId(
   username: string | null,
   submissionId: string
 ): Promise<string> {
+  if (applicationProcessing()) return bindTenantApplicationPerson(orgId, username, submissionId);
+  if (transitionSupport()) throw Error("transition_admission");
   if (!username) return submissionId;
   const res = await sbRest(
     `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(username)}` +
@@ -180,18 +185,35 @@ export async function tenantPersonId(
 }
 
 export async function promoteToCandidatePool(args: {
+  organizationId: string;
+  applicationId: string;
+  harvestLedgerId?: string | null;
+  resumeContacts?: {phone?:string|null;email?:string|null;emails?:string[]};
   name: string;
   email: string;
   linkedinUrl: string | null;
   resumeText: string | null;
   parsed: ParsedProfile | null;
   allSkills?: string[]; // full uncapped skill list (Harvest), preferred over parsed top 12
-}): Promise<{ candidateId: string | null; vector: number[] | null }> {
+}): Promise<{ candidateId: string | null; vector: number[] | null; applicationSnapshot?: import("./person/intake").ApplicationSnapshot }> {
+  if (args.organizationId !== TT_ORG_ID) throw Error("person_intake_tenant");
   const { name, email, linkedinUrl, resumeText, parsed, allSkills } = args;
   const username = linkedinUrl ? linkedinUsername(linkedinUrl) : null;
   if (!username) return { candidateId: null, vector: null };
 
   const vector = await applicantVector(parsed, resumeText);
+  const mode = personWriteMode();
+  if (mode !== "legacy") {
+    const result = await saveApplicationPerson({
+      organizationId: args.organizationId, applicationId: args.applicationId,
+      linkedinUsername: username, name, parsed, resumeText, matchingVector: vector,
+      harvestLedgerId: args.harvestLedgerId, resumeContacts: args.resumeContacts, mode,
+    });
+    const canonical = result.applicationSnapshot;
+    const canonicalVector = applicationMatchingText(parsed, resumeText) === applicationMatchingText(canonical.parsed_profile, canonical.resume_text)
+      ? vector : await applicantVector(canonical.parsed_profile, canonical.resume_text);
+    return { candidateId: result.candidateId, vector: canonicalVector, applicationSnapshot: canonical };
+  }
 
   const fields: Record<string, unknown> = {
     source: "website_applicant",

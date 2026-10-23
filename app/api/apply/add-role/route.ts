@@ -1,3 +1,4 @@
+import { applicationEditsChecked, checkedApplicationEdit } from '@/lib/server/person-transition/acceptance';
 import { NextRequest, NextResponse } from "next/server";
 import { allow } from "@/lib/server/ratelimit";
 import { sbRest } from "@/lib/server/supabase";
@@ -65,15 +66,21 @@ export async function POST(req: NextRequest) {
   const role = roles.find((r) => r.jobId === jobId);
   if (!role) return NextResponse.json({ error: "Role not found." }, { status: 404 });
 
-  const patch = await sbRest(`website_applications?id=eq.${applicationId}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      role_ids: [...roleIds, jobId],
-      role_titles: [...(app.role_titles || []), `${role.title} (#${jobId})`],
-    }),
-    prefer: "return=minimal",
-  });
-  if (!patch.ok) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+  const nextRoles = { role_ids: [...roleIds, jobId], role_titles: [...(app.role_titles || []), `${role.title} (#${jobId})`] };
+  if (applicationEditsChecked(ttOrgId)) {
+    const r = await checkedApplicationEdit(applicationId, "roles", nextRoles).catch(() => null);
+    if (!r) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+    if (!r.ok) return r.error === "not_found"
+      ? NextResponse.json({ error: "Application not found." }, { status: 404 })
+      : NextResponse.json({ error: "temporarily_unavailable" }, { status: 503 });
+  } else {
+    const patch = await sbRest(`website_applications?id=eq.${applicationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(nextRoles),
+      prefer: "return=minimal",
+    });
+    if (!patch.ok) return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+  }
   await updateAirtableApplicationRoles(applicationId, [
     ...(app.role_titles || []),
     `${role.title} (#${jobId})`,
