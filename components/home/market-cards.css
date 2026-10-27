@@ -1,0 +1,48 @@
+/* Market cards: the cold start demo (components/home/MarketCards.tsx).
+   Lives inside .il-demo. Three cards in a row, one drawing each, drawn in
+   once on scroll via Reveal.tsx: the wrapper gets data-reveal="pending" on
+   mount (strokes held at zero) and data-visible="true" when on screen (the
+   draw runs). With no JavaScript neither attribute exists and the drawings
+   are complete. Reduced motion: complete, no animation. */
+
+.il-mc { padding: 32px; }
+.il-mc-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.il-mc-card {
+  --il-mc-delay: 0ms;
+  display: flex; flex-direction: column; gap: 14px;
+  background: var(--il-s950); border: 1px solid var(--il-l5); border-radius: 10px;
+  padding: 20px 20px 18px;
+}
+.il-mc-card:nth-child(2) { --il-mc-delay: 150ms; }
+.il-mc-card:nth-child(3) { --il-mc-delay: 300ms; }
+.il-mc-svg { display: block; width: 100%; height: auto; }
+.il-mc-title { font-family: var(--il-mono); font-size: 12px; line-height: 18px; letter-spacing: 0.03em; color: var(--il-t2); }
+
+/* strokes */
+.il-mc-svg :where(path, line, circle) { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.il-mc-green { stroke: var(--il-green); transition: stroke 0.2s ease-out; }
+.il-mc-hair { stroke: var(--il-l10); }
+.il-mc-deep { stroke: var(--il-deep); }
+.il-mc-dim { stroke: var(--il-t3); }
+.il-mc-svg .il-mc-dot { fill: var(--il-t3); stroke: none; }
+.il-mc-card:hover .il-mc-green { stroke: var(--il-green2); }
+
+/* draw-in: complete by default, held at zero once JavaScript mounts, then drawn when on screen */
+.il-mc-draw { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.il-mc-fade { opacity: 1; }
+.il-mc[data-reveal="pending"] .il-mc-draw { stroke-dashoffset: 1; }
+.il-mc[data-reveal="pending"] .il-mc-fade { opacity: 0; }
+.il-mc[data-visible="true"] .il-mc-draw { animation: il-mc-draw 900ms ease-out var(--il-mc-delay) forwards; }
+.il-mc[data-visible="true"] .il-mc-fade { animation: il-mc-fade 450ms ease-out calc(var(--il-mc-delay) + 600ms) forwards; }
+@keyframes il-mc-draw { to { stroke-dashoffset: 0; } }
+@keyframes il-mc-fade { to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .il-mc[data-reveal] .il-mc-draw, .il-mc[data-visible] .il-mc-draw { animation: none; stroke-dashoffset: 0; }
+  .il-mc[data-reveal] .il-mc-fade, .il-mc[data-visible] .il-mc-fade { animation: none; opacity: 1; }
+}
+
+@media (max-width: 860px) {
+  .il-mc { padding: 20px; }
+  .il-mc-row { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,37 @@
+/* Open now: three role cards under the stop token quotes. Tokens come from
+   .il-home (app/(home)/home.css); every class is prefixed il-open. */
+
+.il-open { margin-top: 32px; }
+.il-open-label {
+  font-family: var(--il-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.03em;
+  color: var(--il-t3); margin-bottom: 12px;
+}
+.il-open-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.il-open-card {
+  display: flex; flex-direction: column; gap: 8px; height: 100%; box-sizing: border-box;
+  padding: 20px 22px 18px;
+  background: var(--il-s950); border: 1px solid var(--il-l5); border-radius: 10px;
+  color: var(--il-t1); transition: border-color 0.15s;
+}
+.il-open-card:hover { border-color: var(--il-l10); }
+.il-open-title { font-size: 16px; line-height: 22px; font-weight: 500; color: var(--il-t1); }
+.il-open-meta {
+  font-family: var(--il-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.03em;
+  color: var(--il-t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.il-open-desc {
+  font-size: 14px; line-height: 20px; color: var(--il-t2);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.il-open-view {
+  margin-top: auto; padding-top: 8px; align-self: flex-start;
+  font-family: var(--il-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.03em;
+  color: var(--il-green);
+}
+
+@media (max-width: 860px) {
+  .il-open-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-open-card { transition: none; }
+}

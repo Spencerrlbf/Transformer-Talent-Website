@@ -1,0 +1,29 @@
+/* Stream stage demo: the coverage ticker, three measuring tiles and the
+   time-to-first-profile curve, stacked in one dark stage. */
+.il-stream {
+  display: grid; gap: 24px;
+  background: var(--il-s1000); border: 1px solid var(--il-l5); border-radius: 7px;
+  padding: 24px; color: var(--il-t1);
+}
+/* inside the page's demo slot the slot already draws the stage, so do not frame it twice */
+.il-demo > .il-stream { border: 0; border-radius: 0; background: transparent; }
+.il-stream-part { padding-top: 24px; border-top: 1px solid var(--il-l5); }
+
+.il-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.il-tile { display: grid; gap: 10px; align-content: start; }
+.il-tile-label { font-family: var(--il-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.03em; color: var(--il-t3); }
+.il-tile-value { font-family: var(--il-mono); font-size: 28px; line-height: 32px; letter-spacing: -0.01em; color: var(--il-t1); }
+.il-tile-value b { font-weight: 400; }
+.il-tile-unit { font-size: 12px; letter-spacing: 0.03em; color: var(--il-t2); margin-left: 8px; }
+.il-tile-measuring {
+  display: inline-block; color: var(--il-t2);
+  border-bottom: 1px dashed var(--il-t3); padding-bottom: 2px;
+}
+.il-tiles-note { margin-top: 16px; font-family: var(--il-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.03em; color: var(--il-t3); }
+
+@media (max-width: 860px) {
+  .il-stream { padding: 20px; gap: 20px; }
+  .il-stream-part { padding-top: 20px; }
+  .il-tiles { grid-template-columns: 1fr; gap: 16px; }
+  .il-tile-value { font-size: 24px; line-height: 28px; }
+}

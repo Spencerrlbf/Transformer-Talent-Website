@@ -1,0 +1,40 @@
+/* Coverage ticker: the roles we place, as a CSS-only marquee. Two copies of
+   the list sit side by side in one track; moving the track by half its own
+   width is exactly one list, so the loop has no seam. */
+.il-ticker { display: grid; gap: 10px; }
+.il-ticker-label {
+  font-family: var(--il-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.03em;
+  color: var(--il-t3);
+}
+.il-ticker-mask {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.il-ticker-track {
+  display: flex; width: max-content;
+  animation: il-ticker 40s linear infinite;
+  will-change: transform;
+}
+.il-ticker-list { display: flex; flex: none; margin: 0; padding: 0; list-style: none; }
+.il-ticker-list li {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  font-family: var(--il-mono); font-size: 12px; line-height: 20px; letter-spacing: 0.03em;
+  color: var(--il-t2);
+}
+/* the separator: a dim dot after every item, so the seam between the two copies reads like any other gap */
+.il-ticker-list li::after {
+  content: ""; display: inline-block; width: 3px; height: 3px; border-radius: 50%;
+  background: var(--il-t3); margin: 0 18px;
+}
+@keyframes il-ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-ticker-track { animation: none; transform: none; }
+  .il-ticker-mask {
+    -webkit-mask-image: linear-gradient(90deg, #000 84%, transparent);
+    mask-image: linear-gradient(90deg, #000 84%, transparent);
+  }
+}

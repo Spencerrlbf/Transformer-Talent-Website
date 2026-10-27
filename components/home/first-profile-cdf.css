@@ -1,0 +1,12 @@
+/* Time to first profile, the cumulative curve. The SVG carries only lines;
+   every word is HTML around it so it stays 12px at every width. */
+.il-cdf-wrap { position: relative; }
+.il-cdf { display: block; width: 100%; height: auto; }
+.il-cdf-axis { display: block; font-family: var(--il-mono); font-size: 12px; letter-spacing: 0.03em; color: var(--il-t3); }
+.il-cdf-axis-y { margin-bottom: 8px; }
+.il-cdf-axis-x { margin-top: 8px; text-align: right; }
+.il-cdf-measuring { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -140%); font-family: var(--il-mono); font-size: 12px; letter-spacing: 0.03em; color: var(--il-t2); }
+.il-cdf .il-cdf-hair { stroke: var(--il-l10); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.il-cdf .il-cdf-dash { stroke-dasharray: 4 6; }
+.il-cdf .il-cdf-curve { fill: none; stroke: var(--il-green); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.il-cdf .il-cdf-tick { stroke: var(--il-green2); stroke-width: 1; vector-effect: non-scaling-stroke; }

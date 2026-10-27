@@ -3,16 +3,24 @@ import Link from "next/link";
 import { Inter, DM_Mono } from "next/font/google";
 import StageSection, { DemoSlot } from "@/components/home/Section";
 import RequestTimeline from "@/components/home/RequestTimeline";
+import MarketCards from "@/components/home/MarketCards";
+import StreamPanel from "@/components/home/StreamPanel";
+import OpenNow from "@/components/home/OpenNow";
 import { PLACEMENTS } from "@/data/placements";
-import { CTA, FOOTER, HERO, LABELS, NAV, OPEN_NOW_DEMO, PROOF, QUOTES, STAGES } from "@/lib/home/copy";
+import { CTA, FOOTER, HERO, LABELS, NAV, PROOF, QUOTES, STAGES } from "@/lib/home/copy";
 import "./home.css";
 
 // The inference-layer homepage: one request through the serving stack, with
 // the search as the content of each stage. Plan: Recruitment-Matching/mocks/
-// inference-layer/plan-v2.md (stage wording per Spencer, 2026-10-23). This
-// hero carries the static request timeline (build step 3); the stage
-// sections still show a pending panel in their demo slots. Every string is in lib/home/copy.ts, every number in
-// lib/home/placeholders.ts.
+// inference-layer/plan-v2.md (stage wording per Spencer, 2026-10-23). The
+// hero carries the static request timeline (build step 3); the static demos
+// of step 4 sit in the cold start, stream and stop token stages, and the
+// other stages still show a pending panel in their demo slots. Every string
+// is in lib/home/copy.ts, every number in lib/home/placeholders.ts.
+
+// Open now reads the board through getRoles(), which may fetch live data when
+// configured; re-render the page at most once an hour.
+export const revalidate = 3600;
 
 const ilSans = Inter({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-il-sans" });
 const ilMono = DM_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-il-mono" });
@@ -32,6 +40,22 @@ function Pill({ label, href, primary }: { label: string; href: string; primary?:
 }
 
 const STOP = STAGES[STAGES.length - 1];
+
+// The demo for a stage, by stage id. Stages without one fall back to the
+// pending panel inside StageSection. The demos render in a plain .il-demo
+// frame rather than DemoSlot: DemoSlot marks its wrapper role="img", which
+// would hide the demos' real text and links from assistive tech, and every
+// SVG already names itself through Diagram.
+function demoFor(id: string): React.ReactNode {
+  switch (id) {
+    case "cold-start":
+      return <div className="il-demo"><MarketCards /></div>;
+    case "stream":
+      return <div className="il-demo"><StreamPanel /></div>;
+    default:
+      return undefined;
+  }
+}
 
 export default function Home() {
   return (
@@ -84,7 +108,9 @@ export default function Home() {
           </div>
         </section>
 
-        {STAGES.slice(0, -1).map((stage) => <StageSection key={stage.id} stage={stage} />)}
+        {STAGES.slice(0, -1).map((stage) => (
+          <StageSection key={stage.id} stage={stage}>{demoFor(stage.id)}</StageSection>
+        ))}
 
         <StageSection stage={STOP}>
           <div className="il-quotes">
@@ -95,7 +121,7 @@ export default function Home() {
               </figure>
             ))}
           </div>
-          <DemoSlot description={OPEN_NOW_DEMO} buildStep={4} />
+          <OpenNow />
         </StageSection>
       </main>
 

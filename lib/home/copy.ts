@@ -161,6 +161,37 @@ export const STAGES: Stage[] = [
 
 export const OPEN_NOW_DEMO = "Open now: three roles from the board.";
 
+// Step 4 demos. Strings only; the drawings and tiles live in components/home.
+export const DEMO_COLD_START = {
+  cards: [
+    { id: "mapped", title: "The market, mapped before you call", desc: "A stack of slabs with the top slab lit: the market read before a role opens." },
+    { id: "conversation", title: "Engineers in conversation", desc: "Two-way arrows between an engineer and a brief: people already talking to us." },
+    { id: "prefix", title: "Shared prefix per company", desc: "A small tree: market, then your company, then role one and role two." },
+  ],
+};
+
+export const DEMO_STREAM = {
+  tickerLabel: "Roles we place",
+  tiles: [
+    { id: "p50", label: "time to first profile, median", unit: "hours" },
+    { id: "p90", label: "time to first profile, p90", unit: "hours" },
+    { id: "reads", label: "first answers that were a market read", unit: "share of roles" },
+  ],
+  measuring: "measuring",
+  measuringNote: "Reported from closed roles once enough have closed.",
+  chartTitle: "Time to first profile across closed roles",
+  chartDesc: "A cumulative curve of hours from brief received to first profile shared, with the median and p90 marked. Empty until enough roles have closed.",
+  axisX: "hours from brief received",
+  axisY: "share of closed roles",
+};
+
+export const DEMO_OPEN_NOW = {
+  heading: "Open now",
+  view: "View role",
+  cardAria: "Three open roles from the board",
+};
+
+
 export const COVERAGE = [
   "Inference", "Training infra", "Distributed systems", "Applied ML", "Platform",
   "Data", "Backend", "Founding engineer", "Staff", "Engineering manager",
