@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: ours
-          ? "Too many referrals today. Email spencer@transformertalent.com directly."
+          ? "Too many referrals today. Email hello@transformertalent.com directly."
           : "Too many referrals from you today. Please try again tomorrow.",
       },
       { status: 429 }

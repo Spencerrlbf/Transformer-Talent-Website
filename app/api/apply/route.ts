@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
       {
         error: boardOrg
           ? "Too many applications from you today. Please try again tomorrow."
-          : "Too many applications today. Email spencer@transformertalent.com directly.",
+          : "Too many applications today. Email hello@transformertalent.com directly.",
       },
       { status: 429 }
     );

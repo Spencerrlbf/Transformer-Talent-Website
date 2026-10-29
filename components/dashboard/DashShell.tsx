@@ -134,7 +134,7 @@ export default function DashShell({ children }: { children: ReactNode }) {
           <p className="dash-muted">
             {session.user.email} isn&apos;t linked to a company yet. If you were
             expecting access, contact{" "}
-            <a href="mailto:spencer@transformertalent.com">spencer@transformertalent.com</a>.
+            <a href="mailto:hello@transformertalent.com">hello@transformertalent.com</a>.
           </p>
           <button
             className="dash-btn"

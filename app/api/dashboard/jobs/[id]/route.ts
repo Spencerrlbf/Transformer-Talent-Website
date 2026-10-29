@@ -130,7 +130,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // Notify Spencer on the false -> true transition only.
         after(async () => {
           await sendEmail({
-            to: "spencer@transformertalent.com",
+            to: "hello@transformertalent.com",
             // The company name and job title are the client's own text.
             subject: plainLine(`${member.org.name} asked for help: ${job.title} (#${job.external_id})`),
             html: `<p style="margin:0 0 14px;"><b>${escapeHtml(member.org.name)}</b> switched on sourcing help for

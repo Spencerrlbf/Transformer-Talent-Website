@@ -10,7 +10,7 @@
 import { escapeHtml, linkedinHref, plainLine } from "./html";
 
 const FROM_NOTIFICATIONS = "Transformer Talent <notifications@mail.transformertalent.com>";
-const REPLY_TO = "spencer@transformertalent.com";
+const REPLY_TO = "hello@transformertalent.com";
 
 // Minimal branded shell: white card, black wordmark, no images — renders
 // identically everywhere and never trips image-blocking.

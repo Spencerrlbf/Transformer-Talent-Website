@@ -107,8 +107,8 @@ export default function AboutPage() {
             <Link className="ab-cta-btn" href="/talent">
               SEE POTENTIAL MATCHES →
             </Link>
-            <a className="ab-cta-cold" href="mailto:spencer@transformertalent.com">
-              spencer@transformertalent.com
+            <a className="ab-cta-cold" href="mailto:hello@transformertalent.com">
+              hello@transformertalent.com
             </a>
           </div>
         </div>
