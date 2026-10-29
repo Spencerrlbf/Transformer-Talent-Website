@@ -319,7 +319,7 @@ export default function SearchBuilder({
                 balance, or contact us to top up.
               </p>
               <div className="dash-src-bannerbtns">
-                <a className="dash-src-warnbtn solid" href="mailto:spencer@transformertalent.com?subject=Credit%20top-up">
+                <a className="dash-src-warnbtn solid" href="mailto:hello@transformertalent.com?subject=Credit%20top-up">
                   Request more credits
                 </a>
                 <button type="button" className="dash-src-warnbtn" onClick={() => setPreview({ kind: "idle" })}>

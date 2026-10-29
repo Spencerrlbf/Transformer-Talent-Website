@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   if (!(await verifyTurnstile(body.captcha))) {
     return NextResponse.json(
-      { error: "We couldn't verify your browser. Please try again, or email spencer@transformertalent.com directly." },
+      { error: "We couldn't verify your browser. Please try again, or email hello@transformertalent.com directly." },
       { status: 403 }
     );
   }
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   // Layered limits guarding the paid extraction/matching pipeline.
   if (!(await allow(`jd:email:${email}`, 3, 24))) {
     return NextResponse.json(
-      { error: "You've reached today's limit — email spencer@transformertalent.com for more searches." },
+      { error: "You've reached today's limit — email hello@transformertalent.com for more searches." },
       { status: 429 }
     );
   }
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   }
   if (!(await allow("jd:global", 40, 24))) {
     return NextResponse.json(
-      { error: "We're at capacity today — email spencer@transformertalent.com and we'll run your search personally." },
+      { error: "We're at capacity today — email hello@transformertalent.com and we'll run your search personally." },
       { status: 429 }
     );
   }

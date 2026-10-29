@@ -36,7 +36,7 @@ const ORG_LD = {
   "@type": "Organization",
   name: "Transformer Talent",
   url: "https://transformertalent.com",
-  email: "spencer@transformertalent.com",
+  email: "hello@transformertalent.com",
   description:
     "AI/ML and software engineering search firm placing engineers with VC-backed startups.",
   areaServed: "US",
@@ -75,8 +75,8 @@ export default function RootLayout({
         <footer>
           <div className="wrap">
             <span>© 2026 TRANSFORMER TALENT — “TALENT IS ALL YOU NEED”</span>
-            <a href="mailto:spencer@transformertalent.com">
-              spencer@transformertalent.com
+            <a href="mailto:hello@transformertalent.com">
+              hello@transformertalent.com
             </a>
           </div>
         </footer>

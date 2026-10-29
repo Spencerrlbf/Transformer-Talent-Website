@@ -132,7 +132,7 @@ export default function TalentMatcher() {
             : "Profiles are anonymized. Introductions, full profiles, and comp expectations take one conversation."}
         </p>
         <a
-          href="mailto:spencer@transformertalent.com?subject=Intro%20request%20-%20matched%20candidates"
+          href="mailto:hello@transformertalent.com?subject=Intro%20request%20-%20matched%20candidates"
           className="board-btn tal-cta"
         >
           GET INTRODUCTIONS →
