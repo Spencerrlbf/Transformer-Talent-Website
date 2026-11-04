@@ -1,0 +1,113 @@
+name: Pause export
+
+# One-off export of a production database into the owner's Backblaze B2 bucket
+# while the project is paused. Manual only, never scheduled. Reads only.
+# Modes: probe (sizes, counts, schema-only dump, bucket round trip),
+# dump (full custom-format dump streamed to the bucket), verify (re-hash the
+# stored dump and read its table of contents), parquet (whole tables as
+# Parquet, written straight to the bucket), parquet_verify (count rows back).
+# The repository and these logs are public: scripts print schema and table
+# names, counts, bytes and hashes only; never a row, a URL or a key.
+# GitHub dispatches only workflows whose file is on the default branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which database: person (the website) or comms (the directory)"
+        type: choice
+        options: [person, comms]
+        default: person
+      mode:
+        description: "probe | dump | verify | parquet | parquet_verify"
+        type: choice
+        options: [probe, dump, verify, parquet, parquet_verify]
+        default: probe
+      prefix:
+        description: "Folder in the bucket for this export"
+        type: string
+        default: "pause-2026-11"
+      schemas:
+        description: "Schemas to export as Parquet / count exactly (comma list)"
+        type: string
+        default: "public"
+      tables:
+        description: "Optional schema.table list to restrict the Parquet export to"
+        type: string
+        default: ""
+
+concurrency:
+  group: person-export
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      B2_BUCKET: transformer-talent-backup
+      EXPORT_PREFIX: ${{ inputs.prefix }}
+      EXPORT_TARGET: ${{ inputs.target }}
+      EXPORT_SCHEMAS: ${{ inputs.schemas }}
+      EXPORT_TABLES: ${{ inputs.tables }}
+      COUNT_SCHEMAS: ${{ inputs.schemas }}
+      RCLONE_CONFIG_B2_TYPE: b2
+      RCLONE_CONFIG_B2_ACCOUNT: ${{ secrets.B2_KEY_ID }}
+      RCLONE_CONFIG_B2_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the PostgreSQL 17 client, rclone and duckdb
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsS -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17 rclone jq >/dev/null
+          python3 -m pip install --quiet duckdb || python3 -m pip install --quiet --break-system-packages duckdb
+          pg_dump --version; rclone version | head -1; python3 -c "import duckdb; print('duckdb', duckdb.__version__)"
+      - name: Pick the database for the target (masked, never printed)
+        env:
+          PERSON_RAW: ${{ secrets.PERSON_PUBLISH_DATABASE_URL }}
+          COMMS_RAW: ${{ secrets.COMMS_DATABASE_URL }}
+        run: |
+          RAW="$PERSON_RAW"; [ "$EXPORT_TARGET" = "comms" ] && RAW="$COMMS_RAW"
+          [ -n "$RAW" ] || { echo "no database secret for target $EXPORT_TARGET"; exit 1; }
+          CLEAN=$(RAW="$RAW" python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
+          u = urlsplit(os.environ["RAW"]); q = parse_qs(u.query)
+          keep = {"sslmode": q["sslmode"][0]} if "sslmode" in q else {}
+          print(urlunsplit((u.scheme, u.netloc, u.path, urlencode(keep), "")), end="")
+          PY
+          )
+          echo "::add-mask::$CLEAN"
+          echo "PGURL=$CLEAN" >> "$GITHUB_ENV"
+          python3 - "$CLEAN" <<'PY'
+          import sys; from urllib.parse import urlsplit
+          u = urlsplit(sys.argv[1]); h = u.hostname or ""
+          print({"port": u.port, "pooler": "pooler" in h, "host_suffix": ".".join(h.split(".")[-3:])})
+          PY
+      - name: Probe
+        if: ${{ inputs.mode == 'probe' }}
+        run: scripts/person-export/probe.sh
+      - name: Dump
+        if: ${{ inputs.mode == 'dump' }}
+        run: scripts/person-export/dump.sh
+      - name: Verify the stored dump
+        if: ${{ inputs.mode == 'verify' }}
+        run: scripts/person-export/verify.sh
+      - name: Find the bucket's S3 endpoint (host only)
+        if: ${{ inputs.mode == 'parquet' || inputs.mode == 'parquet_verify' }}
+        run: |
+          HOST=$(curl -fsS -u "${RCLONE_CONFIG_B2_ACCOUNT}:${RCLONE_CONFIG_B2_KEY}" https://api.backblazeb2.com/b2api/v2/b2_authorize_account | jq -r .s3ApiUrl | sed 's#https://##')
+          echo "B2_S3_HOST=$HOST" >> "$GITHUB_ENV"; echo "s3 host: $HOST"
+      - name: Parquet export
+        if: ${{ inputs.mode == 'parquet' }}
+        run: |
+          set +e; python3 scripts/person-export/parquet.py; rc=$?; set -e
+          rclone copyto "$RUNNER_TEMP/parquet-manifest.json" "b2:${B2_BUCKET}/${EXPORT_PREFIX}/${EXPORT_TARGET}/parquet-manifest.json"
+          rclone size "b2:${B2_BUCKET}/${EXPORT_PREFIX}/${EXPORT_TARGET}/parquet"
+          exit $rc
+      - name: Parquet verify
+        if: ${{ inputs.mode == 'parquet_verify' }}
+        run: python3 scripts/person-export/parquet-verify.py
