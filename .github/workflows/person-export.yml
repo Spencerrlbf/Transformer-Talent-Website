@@ -72,13 +72,17 @@ jobs:
         run: |
           RAW="$PERSON_RAW"; [ "$EXPORT_TARGET" = "comms" ] && RAW="$COMMS_RAW"
           [ -n "$RAW" ] || { echo "no database secret for target $EXPORT_TARGET"; exit 1; }
-          CLEAN=$(RAW="$RAW" python3 - <<'PY'
+          SUPABASE_CA="$RUNNER_TEMP/supabase-ca.crt"
+          curl -fsS --retry 6 --retry-all-errors --retry-delay 5 -o "$SUPABASE_CA" https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt
+          grep -q 'BEGIN CERTIFICATE' "$SUPABASE_CA" || { echo "Supabase CA download is not a certificate"; exit 1; }
+          echo "Supabase CA: $(openssl x509 -in "$SUPABASE_CA" -noout -subject -enddate | tr '\n' ' ')"
+          CLEAN=$(RAW="$RAW" SUPABASE_CA="$SUPABASE_CA" python3 - <<'PY'
           import os
           from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
           u = urlsplit(os.environ["RAW"]); q = parse_qs(u.query)
           keep = {"sslmode": q["sslmode"][0]} if "sslmode" in q else {}
           if keep.get("sslmode", "").startswith("verify"):
-              keep["sslrootcert"] = "system"  # strict checking against the OS trust store
+              keep["sslrootcert"] = os.environ["SUPABASE_CA"]  # Supabase signs with its own authority
           print(urlunsplit((u.scheme, u.netloc, u.path, urlencode(keep), "")), end="")
           PY
           )
