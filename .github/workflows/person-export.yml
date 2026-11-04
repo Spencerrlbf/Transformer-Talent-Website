@@ -77,6 +77,8 @@ jobs:
           from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
           u = urlsplit(os.environ["RAW"]); q = parse_qs(u.query)
           keep = {"sslmode": q["sslmode"][0]} if "sslmode" in q else {}
+          if keep.get("sslmode", "").startswith("verify"):
+              keep["sslrootcert"] = "system"  # strict checking against the OS trust store
           print(urlunsplit((u.scheme, u.netloc, u.path, urlencode(keep), "")), end="")
           PY
           )
