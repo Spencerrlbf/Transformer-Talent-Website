@@ -16,10 +16,12 @@ bad = 0
 for key, info in sorted(manifest["tables"].items()):
     if "error" in info:
         print(f"{key} skipped (export failed)"); bad += 1; continue
-    local = os.path.join(work, "t.parquet")
-    subprocess.run(["rclone", "copyto", "--retries", "5", f"{dest}/parquet/{info['object']}", local], check=True)
-    n = con.execute("SELECT count(*) FROM read_parquet($p)", {"p": local}).fetchone()[0]
-    size = os.path.getsize(local); os.remove(local)
+    n = 0; size = 0
+    for obj in info.get("parts", [info["object"]]):
+        local = os.path.join(work, "t.parquet")
+        subprocess.run(["rclone", "copyto", "--retries", "5", f"{dest}/parquet/{obj}", local], check=True)
+        n += con.execute("SELECT count(*) FROM read_parquet($p)", {"p": local}).fetchone()[0]
+        size += os.path.getsize(local); os.remove(local)
     ok = n == info["rows"] and size == info["bytes"]
     l = live.get(key)
     print(f"{key} parquet={n} manifest={info['rows']} bytes_match={size == info['bytes']} live_at_probe={l if l is not None else 'n/a'} {'OK' if ok else 'MISMATCH'}")
