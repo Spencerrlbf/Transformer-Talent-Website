@@ -32,6 +32,12 @@ PG_EXCLUDES=(
   --exclude-schema=pgtle
 )
 
+# The runner image ships an older PostgreSQL client whose wrapper wins on PATH;
+# use the 17 binaries directly so pg_dump matches the 17.6 server.
+[ -d /usr/lib/postgresql/17/bin ] && export PATH="/usr/lib/postgresql/17/bin:$PATH"
+# Silence rclone's "config file not found" notice (we configure it by env).
+mkdir -p "$HOME/.config/rclone" && touch "$HOME/.config/rclone/rclone.conf"
+
 # Per-statement bound for the probe/verify reads; the dump itself runs unbounded.
 export PGOPTIONS='-c statement_timeout=900000'
 export PGCONNECT_TIMEOUT=30
