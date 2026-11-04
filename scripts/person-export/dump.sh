@@ -3,6 +3,10 @@
 # Nothing is written to disk on the runner except the hash and the manifest.
 source "$(dirname "$0")/common.sh"
 OUT="$DEST/full.dump"
+# Fail fast on an unsupported rclone flag or a refused upload before the long dump.
+echo "preflight $(date -u +%FT%TZ)" | rclone rcat --retries 3 --b2-chunk-size 200M "$DEST/preflight.txt"
+rclone deletefile "$DEST/preflight.txt"
+echo "rclone preflight ok ($(rclone version | head -1))"
 started=$(date -u +%FT%TZ)
 fifo="$WORK/sha.fifo"; rm -f "$fifo"; mkfifo "$fifo"
 sha256sum < "$fifo" | cut -d' ' -f1 > "$WORK/full.dump.sha256" & shapid=$!
@@ -10,7 +14,7 @@ sha256sum < "$fifo" | cut -d' ' -f1 > "$WORK/full.dump.sha256" & shapid=$!
 set +e
 pg_dump "$PGURL" --format=custom --compress=zstd:6 "${PG_EXCLUDES[@]}" 2> "$WORK/dump.err" \
   | tee "$fifo" \
-  | rclone rcat --retries 3 --b2-chunk-size 200M --b2-upload-concurrency 4 "$OUT"
+  | rclone rcat --retries 3 --b2-chunk-size 200M "$OUT"
 rcs=("${PIPESTATUS[@]}")
 set -e
 wait "$shapid"
