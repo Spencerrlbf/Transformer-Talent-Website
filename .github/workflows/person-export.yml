@@ -5,7 +5,7 @@ name: Pause export
 # Modes: probe (sizes, counts, schema-only dump, bucket round trip),
 # dump (full custom-format dump streamed to the bucket), verify (re-hash the
 # stored dump and read its table of contents), parquet (whole tables as
-# Parquet, written straight to the bucket), parquet_verify (count rows back).
+# Parquet, uploaded table by table), parquet_verify (count rows back).
 # The repository and these logs are public: scripts print schema and table
 # names, counts, bytes and hashes only; never a row, a URL or a key.
 # GitHub dispatches only workflows whose file is on the default branch.
@@ -96,18 +96,16 @@ jobs:
       - name: Verify the stored dump
         if: ${{ inputs.mode == 'verify' }}
         run: scripts/person-export/verify.sh
-      - name: Find the bucket's S3 endpoint (host only)
-        if: ${{ inputs.mode == 'parquet' || inputs.mode == 'parquet_verify' }}
-        run: |
-          HOST=$(curl -fsS -u "${RCLONE_CONFIG_B2_ACCOUNT}:${RCLONE_CONFIG_B2_KEY}" https://api.backblazeb2.com/b2api/v2/b2_authorize_account | jq -r .s3ApiUrl | sed 's#https://##')
-          echo "B2_S3_HOST=$HOST" >> "$GITHUB_ENV"; echo "s3 host: $HOST"
       - name: Parquet export
         if: ${{ inputs.mode == 'parquet' }}
         run: |
+          mkdir -p "$HOME/.config/rclone" && touch "$HOME/.config/rclone/rclone.conf"
           set +e; python3 scripts/person-export/parquet.py; rc=$?; set -e
           rclone copyto "$RUNNER_TEMP/parquet-manifest.json" "b2:${B2_BUCKET}/${EXPORT_PREFIX}/${EXPORT_TARGET}/parquet-manifest.json"
           rclone size "b2:${B2_BUCKET}/${EXPORT_PREFIX}/${EXPORT_TARGET}/parquet"
           exit $rc
       - name: Parquet verify
         if: ${{ inputs.mode == 'parquet_verify' }}
-        run: python3 scripts/person-export/parquet-verify.py
+        run: |
+          mkdir -p "$HOME/.config/rclone" && touch "$HOME/.config/rclone/rclone.conf"
+          python3 scripts/person-export/parquet-verify.py
