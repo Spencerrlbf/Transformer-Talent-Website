@@ -22,7 +22,8 @@ function clean(s: unknown, max: number): string {
     .slice(0, max);
 }
 
-const saved = NextResponse.json({ ok: true });
+// A fresh response each time: a Response body can be sent only once.
+const saved = () => NextResponse.json({ ok: true });
 const failed = () =>
   NextResponse.json({ error: "Something went wrong saving your application. Please try again." }, { status: 502 });
 
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  if (clean(form.get("website"), 50)) return saved; // honeypot
+  if (clean(form.get("website"), 50)) return saved(); // honeypot
   if (!(await verifyTurnstile(form.get("cf-turnstile-response")))) {
     return NextResponse.json(
       { error: "We couldn't verify your browser. Please refresh the page and try again." },
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
         where created_at >= now() - interval '14 days' and (email = $1 or linkedin_username = $2) limit 1`,
       [email, username]
     );
-    if (dup.rowCount) return saved;
+    if (dup.rowCount) return saved();
     // Per-person limits over 24 hours: this address, this connection.
     const limits = await db.query(
       `select count(*) filter (where email = $1) as by_email,
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest) {
   const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const text = await pdfText(bytes);
+  if (!text) console.error("application resume text empty", bytes.length);
   const source = ["speculative", note ? `note: ${note}` : null].filter(Boolean).join("; ");
 
   const client = await db.connect().catch((e) => {
@@ -126,5 +128,5 @@ export async function POST(req: NextRequest) {
   } finally {
     client.release();
   }
-  return saved;
+  return saved();
 }
