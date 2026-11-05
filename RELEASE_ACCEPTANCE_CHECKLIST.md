@@ -33,3 +33,24 @@ Nothing here is a production change; production was read only throughout.
 | 22 | Manifest refreshed with reproducible commits | done | RELEASE_MANIFEST.md October 14 section: application unchanged since `68a77db`; tooling/migration commits `5ea8fae`, `e98407c`, `9c3b83b`, `4b9e004`, `97c7cc6`, `6fe22b3`; manifest 64 versions; preview `i75j28kgb` (`62d0f4b`) | — |
 
 Remaining owner decisions are listed at the end of `RELEASE_APPROVAL_PACKAGE.md` (section 7).
+
+## Production release, 2026-10-15 → 2026-10-23 (ledger section 17)
+
+Every production change below was approved by Spencer in chat before it ran ("agree, both" for the package;
+"now", "go publication", "go catch-up", "approve both" twice, "go audit", "go live"). Status: **done**,
+**owner** (decision only the owner can take).
+
+| # | Step | Status | Evidence | Duration / service impact |
+|---|---|---|---|---|
+| P0 | Storage export verified; installer dry run | done | 56/56 objects verified (`pl/production-storage-export-2026-10-15`); dry run "65 to apply" | read-only |
+| P1 | Schema install, label, identity | done | 65 versions in one sitting (history 96 → 161), label `kmuihequfurvjxpnugxf`, PG = REST identity | minutes; app in legacy mode, no behaviour change |
+| P2 | Application and workers configured, deployed | done | Vercel production `PERSON_*` (legacy, support on), GitHub variables/secrets; deployment `e7a2ba7` from the clean worktree; schedules review-queue/refresh-queue/sync-candidates paused | public pages 200 throughout |
+| P3 | Held window: catch-up, finalizer, anchors | done | `release-catchup-20261015`: 25,748 processed at 4.3 people/s (GitHub runner), 19,764 verified, 5,984 review; reconcile finalizer `review_required`; anchors 431,053 (the 5,984 review people unanchored) | 19:37 → 05:01 UTC with a 3 h 40 min dead gap after the Mac rebooted; recruiter edits paused, applications accepted |
+| P4 | Publication | done | `release-publish-20261016`: 436,552 processed in 9 h at 14.4 people/s; 413,960 projected, 7,237 unchanged, 10,067 review_skipped (open identity conflicts, decision B5), 5,288 audit_blocked (= unanchored review people), 0 held/unmigrated/drift, 3 email collisions; growth 25.8–28.7 KB/person, 38 → 50.7 GB (ceiling 58); change queue flat at 5,970 (speed-up B) | app usable throughout; one 3-minute vacuum between windows |
+| P5 | Post-publication catch-up and declared cutoff | done | first run stopped on a plan flip in `person_reconcile_page` (57014) → forward `20261016230000` (index in the latest-check order; installer `applied=1`, history 162); `release-catchup-post2-20261016` `source_scan_complete` 5,984 (all review), finalizer `review_required`; **declared cutoff 2026-10-19T16:20:11Z** | two held windows (21:39–22:04 UTC Oct 16, 14:47–16:20 UTC Oct 19) |
+| P6 | Final audit | done | `release-audit-20261019`, 9 runner passes, 437,037 recorded: 349,269 verified (79.9 %), 65,008 pending `directory_snapshot_not_admitted`, 22,760 review (6,560 historical_owner_unavailable, 5,984 anchor_required, 5,793 source_owner_unknown, 4,416 document_identity_missing, 7 source_reconstruction_failed), 0 boundary_moved | 18:14 UTC Oct 19 → 02:40 UTC Oct 22 (13 h lost to a Mac reboot); app usable throughout |
+| P7 | Audit finalizer | done | gated statement measured 137 s vs the 8 s live-writer bound → forward `20261022010000` (`audit_finalize` maintenance step, held window, same checks and gates; history 163); `audit_finalized` `review_required` in 2 min 37 s: unverified 87,768, stale 0, directory_stale 0, lookup_stale 0, source_date_holds 2, open_identity_conflicts 5,962, external_stable false | two held windows 20:08–20:11 and 20:12–20:15 UTC Oct 22 (first attempt: client-side timeout, fixed) |
+| P8 | Live mode and merge | done | Vercel + GitHub `PERSON_WRITE_MODE=live`; redeploy `8muwnt6bo` Ready, aliased; schedules re-enabled; PR #87 merged 01:19 UTC Oct 23, PR #2 merged 01:29 UTC → main `fd76389`; Vercel build of main `1jqn32wjh` Ready, aliased; home/roles/apply/dashboard 200 | no downtime |
+| O1 | Review disposition: 22,760 review people, 5,962 open identity conflicts over 10,067 people, 2 source date holds | owner | package §7 decisions 2 and 4; the pending 65,008 clear as the nightly directory sync re-admits moved records | — |
+| O2 | Production database password rotation (exposed in chat on October 15) and deletion of the operator env file | owner | Spencer rotates in the Supabase dashboard; the operator file is then deleted | — |
+| O3 | `package.json` `packageManager` line; Mac reboots at ~20:20–23:46 ET on Oct 6, 8, 15, 19, 20 | owner | package §7 item 5; the reboots killed three local drivers (each resumed without data effect) | — |

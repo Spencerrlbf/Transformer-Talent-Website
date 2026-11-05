@@ -1986,3 +1986,13 @@ boundary moved between its audit and the finalization), `source_date_holds` 2, `
 `open_identity_conflicts` 5,962, `external_stable` false (the directory moved during the 2.5-day scan, as
 decision 2 anticipates). Controller reopened, revision 23. Recruiter edits were paused for about 6 minutes in
 total across the two windows.
+
+**October 23, 01:15–01:32 UTC: live mode and merge (Spencer "go live").** Vercel production `PERSON_WRITE_MODE`
+replaced with `live` (sensitive), GitHub variable `live`; `vercel redeploy` of `e7a2ba7` → `8muwnt6bo` Ready in
+2 min, aliased to www; home/roles/apply/dashboard 200 (`/login` and `/sign-in` are not routes). Schedules
+review-queue, refresh-queue, sync-candidates enabled. PR #87 merged into `feat/person-00-storage-unification`
+(01:19 UTC); PR #2 was still a draft (merge refused), marked ready, merged into `main` (01:29 UTC, `fd76389`);
+Vercel built main → `1jqn32wjh` Ready and aliased (01:31 UTC), pages 200. The commits after the deployed
+build touched only scripts, migrations, workflows and documents. Production end state: 437,037 candidates,
+163 history versions, 51.9 GB, change queue 5,970, controller armed/open revision 23. Acceptance table:
+RELEASE_ACCEPTANCE_CHECKLIST.md, "Production release".
