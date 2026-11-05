@@ -19,3 +19,11 @@ Order: `probe` (sizes, exact counts, schema-only dump, bucket round trip),
 `dump`, `verify`, `parquet`, `parquet_verify`. Secrets: `B2_KEY_ID`,
 `B2_APPLICATION_KEY` (bucket-scoped key), and the existing database URLs.
 Logs are public: names of schemas and tables, counts, bytes and hashes only.
+
+## files
+
+`mode=files` copies the Supabase Storage buckets (resumes, photos, assets) to
+`<prefix>/<target>/storage/<bucket>/<path>` and writes `storage-manifest.json`
+(bucket, name, bytes, sha256 per file). The database dump holds only the file
+list, not the bytes. Needs the project's Storage URL and service key; for a
+target without those secrets the step lists count and size and exits 2.
