@@ -1,4 +1,3 @@
-import rolesSnapshot from "@/data/roles.json";
 
 export interface CompanyProfile {
   blurb: string;
@@ -60,42 +59,19 @@ export function tableRole(r: Role): Role {
   };
 }
 
-export async function getRoleBySlug(slug: string): Promise<Role | undefined> {
-  const roles = await getRoles();
-  const exact = roles.find((r) => roleSlug(r) === slug);
-  if (exact) return exact;
-  // A retitled role keeps its job id, and every slug ends in "-<id>", so an old
-  // link still finds the role (the page then redirects to the current slug).
-  const id = slug.match(/-(\d+)$/)?.[1];
-  return id ? roles.find((r) => r.jobId === id) : undefined;
+export async function getRoleBySlug(_slug: string): Promise<Role | undefined> {
+  return undefined; // no roles are listed while the project is paused
 }
 
 const NOTION_VERSION = "2022-06-28";
 
 // Roles Spencer has delisted — excluded regardless of data source.
-const DELISTED = new Set(["1", "48", "58"]);
 
 // Roles come live from the Notion jobs table when NOTION_TOKEN and
 // NOTION_DATABASE_ID are configured (revalidated hourly); otherwise from the
 // committed snapshot in data/roles.json (refreshed at import time).
 export async function getRoles(): Promise<Role[]> {
-  const token = process.env.NOTION_TOKEN;
-  const dbId = process.env.NOTION_DATABASE_ID;
-  if (token && dbId) {
-    try {
-      const live = await fetchNotionRoles(token, dbId);
-      // Anonymized company profiles live only in the snapshot; carry them over.
-      const extras = new Map(
-        (rolesSnapshot as Role[]).map((r) => [r.jobId, { company: r.company, jd: r.jd }])
-      );
-      return live
-        .filter((r) => !DELISTED.has(r.jobId))
-        .map((r) => ({ ...r, ...(extras.get(r.jobId) || {}) }));
-    } catch (err) {
-      console.error("notion roles fetch failed; using snapshot", err);
-    }
-  }
-  return (rolesSnapshot as Role[]).filter((r) => !DELISTED.has(r.jobId));
+  return []; // no roles are listed while the project is paused
 }
 
 interface NotionPage {

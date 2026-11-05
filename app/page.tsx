@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PLACEMENTS } from "@/data/placements";
-import { getRoles } from "@/lib/roles";
 import marketData from "@/data/market-index.json";
 import SalaryChart from "@/components/SalaryChart";
 
@@ -11,7 +10,6 @@ export const revalidate = 3600;
 // How it works beside the market-index teaser, then the dark JD band. The
 // old terminal-window hero is deliberately dropped.
 export default async function Home() {
-  const roles = await getRoles();
   const searches = (marketData as { roles: number }[]).reduce((s, b) => s + b.roles, 0);
 
   return (
@@ -62,9 +60,6 @@ export default async function Home() {
                 open.
               </p>
               <div className="acts">
-                <Link className="btn cold" href="/roles">
-                  See {roles.length} open roles →
-                </Link>
                 <Link className="mk-textlink" href="/apply?speculative=1">
                   Send a resume
                 </Link>

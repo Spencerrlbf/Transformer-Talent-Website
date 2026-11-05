@@ -1,82 +1,27 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-import { getRoles, parseSalary, tableRole } from "@/lib/roles";
-import RolesTable from "@/components/RolesTable";
-import { jsonForScript } from "@/lib/server/html";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Open Roles",
-  description:
-    "All open AI/ML and software engineering roles we are hiring for at VC-backed startups across the US.",
+  description: "Transformer Talent is not taking new searches at the moment. Send a resume and we will keep it on file.",
 };
 
-export const revalidate = 3600;
-
-const POSTED = "2026-08-14";
-
-export default async function RolesPage() {
-  const roles = await getRoles();
-
-  const jobPostingLd = roles.slice(0, 100).map((role) => {
-    const band = parseSalary(role.salary);
-    return {
-      "@context": "https://schema.org",
-      "@type": "JobPosting",
-      title: role.title,
-      description: role.description || role.title,
-      datePosted: role.posted || POSTED,
-      employmentType: "FULL_TIME",
-      hiringOrganization: {
-        "@type": "Organization",
-        name: "Confidential — via Transformer Talent",
-        sameAs: "https://transformertalent.com",
-      },
-      jobLocation: (role.locations.length ? role.locations : ["USA"]).map((loc) => ({
-        "@type": "Place",
-        address: { "@type": "PostalAddress", addressLocality: loc, addressCountry: "US" },
-      })),
-      ...(band
-        ? {
-            baseSalary: {
-              "@type": "MonetaryAmount",
-              currency: "USD",
-              value: {
-                "@type": "QuantitativeValue",
-                minValue: band.min,
-                maxValue: band.max,
-                unitText: "YEAR",
-              },
-            },
-          }
-        : {}),
-    };
-  });
-
+export default function RolesPage() {
   return (
     <main className="page">
       <div className="wrap">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonForScript(jobPostingLd) }}
-        />
-        <h1 className="h-page b1">
-          Open <span>roles</span>
-        </h1>
-        <p className="page-intro b2">
-          <b>{roles.length} live roles</b> with VC-backed startups we work with
-          directly. Apply once — we&apos;ll consider you for everything
-          we&apos;re working on, including roles that never get posted.
-        </p>
-        <div className="b3">
-          <RolesTable roles={roles.map(tableRole)} />
+        <div className="b1" style={{ paddingTop: "1.6rem", maxWidth: 640 }}>
+          <h1 className="apply-h">Open roles</h1>
+          <p>
+            We are not running new searches at the moment, so there are no roles listed. If you would like
+            to be considered when that changes, send us your resume and we will keep it on file.
+          </p>
+          <div className="acts">
+            <Link className="btn cold" href="/apply">
+              Send a resume →
+            </Link>
+          </div>
         </div>
-        <p className="page-intro" style={{ marginTop: "2.4rem" }}>
-          No fit above?{" "}
-          <Link href="/apply">
-            Send us your profile anyway
-          </Link>{" "}
-          — many of our placements come from roles that never get posted.
-        </p>
       </div>
     </main>
   );
