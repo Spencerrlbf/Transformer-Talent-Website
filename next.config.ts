@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pdf-parse loads its pdf.js build with a dynamic require; keep it out of
-  // the server bundle so the file is found at runtime.
-  serverExternalPackages: ["pdf-parse"],
+  // The PDF text extractor ships its own pdf.js build; load it from
+  // node_modules at runtime rather than bundling it.
+  serverExternalPackages: ["unpdf"],
 };
 
 export default nextConfig;
