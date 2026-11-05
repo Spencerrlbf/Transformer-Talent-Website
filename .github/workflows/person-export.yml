@@ -5,7 +5,8 @@ name: Pause export
 # Modes: probe (sizes, counts, schema-only dump, bucket round trip),
 # dump (full custom-format dump streamed to the bucket), verify (re-hash the
 # stored dump and read its table of contents), parquet (whole tables as
-# Parquet, uploaded table by table), parquet_verify (count rows back).
+# Parquet, uploaded table by table), parquet_verify (count rows back),
+# files (copy the Storage buckets' files, which a database dump does not hold).
 # The repository and these logs are public: scripts print schema and table
 # names, counts, bytes and hashes only; never a row, a URL or a key.
 # GitHub dispatches only workflows whose file is on the default branch.
@@ -19,9 +20,9 @@ on:
         options: [person, comms]
         default: person
       mode:
-        description: "probe | dump | verify | parquet | parquet_verify"
+        description: "probe | dump | verify | parquet | parquet_verify | files"
         type: choice
-        options: [probe, dump, verify, parquet, parquet_verify]
+        options: [probe, dump, verify, parquet, parquet_verify, files]
         default: probe
       prefix:
         description: "Folder in the bucket for this export"
@@ -115,3 +116,14 @@ jobs:
         run: |
           mkdir -p "$HOME/.config/rclone" && touch "$HOME/.config/rclone/rclone.conf"
           python3 scripts/person-export/parquet-verify.py
+      - name: Storage files
+        if: ${{ inputs.mode == 'files' }}
+        env:
+          # The website project's Storage API; the directory project has no such
+          # secret here, so for target=comms the step reports the count only.
+          STORAGE_URL: ${{ inputs.target == 'person' && secrets.SUPABASE_URL || '' }}
+          STORAGE_KEY: ${{ inputs.target == 'person' && secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}
+        run: |
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          mkdir -p "$HOME/.config/rclone" && touch "$HOME/.config/rclone/rclone.conf"
+          python3 scripts/person-export/files.py
