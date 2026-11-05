@@ -9,8 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "sync-roles": "node scripts/build-worker-lib.mjs && node scripts/sync-org-roles.mjs && node scripts/embed-roles.mjs"
+    "lint": "next lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
@@ -19,7 +18,8 @@
     "pdf-parse": "^1.1.1",
     "pg": "^8.23.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "unpdf": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

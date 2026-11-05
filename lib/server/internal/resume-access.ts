@@ -1,46 +1,64 @@
-import { createHash, timingSafeEqual } from "crypto";
-import { sbRest } from "@/lib/server/supabase";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { applicationsDb } from "@/lib/server/applications-db";
 
 // Spencer's private resume lookup (GET /api/internal/resumes/{id}). One
-// bearer token, read-only, and it deliberately spans every organization, so
-// the token is the whole wall: fail closed when it is unset.
-
+// bearer token, read-only, and it is the whole wall: fail closed when unset.
+// The PDF itself is served by this site from the applications files table
+// through a short-lived signed link, so callers see the same shape as before.
 export const LINK_TTL_SECONDS = 600;
 
+function secret(): string | null {
+  const t = process.env.INTERNAL_RESUMES_TOKEN;
+  return t && t.length >= 32 ? t : null;
+}
+
+function same(a: string, b: string): boolean {
+  const x = createHash("sha256").update(a).digest();
+  const y = createHash("sha256").update(b).digest();
+  return timingSafeEqual(x, y);
+}
+
 export function tokenMatches(authHeader: string | null): boolean {
-  const expected = process.env.INTERNAL_RESUMES_TOKEN;
-  if (!expected || expected.length < 32) return false;
+  const expected = secret();
+  if (!expected) return false;
   const m = /^Bearer\s+(.+)$/i.exec(authHeader || "");
-  if (!m) return false;
-  // Hash both sides so the comparison is constant-time at any length.
-  const a = createHash("sha256").update(m[1].trim()).digest();
-  const b = createHash("sha256").update(expected).digest();
-  return timingSafeEqual(a, b);
+  return !!m && same(m[1].trim(), expected);
 }
 
 export async function applicationResumePath(applicationId: string): Promise<string | null> {
-  const res = await sbRest(
-    `website_applications?id=eq.${applicationId}&select=resume_path&limit=1`
+  const r = await applicationsDb().query(
+    "select path from public.website_application_files where application_id = $1",
+    [applicationId]
   );
-  if (!res.ok) throw new Error(`application lookup failed: ${res.status}`);
-  const rows = (await res.json()) as { resume_path: string | null }[];
-  return rows[0]?.resume_path || null;
+  return (r.rows[0]?.path as string | undefined) || null;
 }
 
-// Same signing call as signResumeUrl (lib/server/applicants.ts), with the
-// short expiry this endpoint promises. Null when the file is missing.
-export async function signShortResumeUrl(resumePath: string): Promise<string | null> {
-  const key = process.env.SUPABASE_STORAGE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const url = process.env.SUPABASE_URL;
-  if (!key || !url) throw new Error("storage not configured");
-  const res = await fetch(`${url}/storage/v1/object/sign/resumes/${resumePath}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, apikey: key, "Content-Type": "application/json" },
-    body: JSON.stringify({ expiresIn: LINK_TTL_SECONDS }),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (res.status === 400 || res.status === 404) return null;
-  if (!res.ok) throw new Error(`sign failed: ${res.status}`);
-  const { signedURL } = (await res.json()) as { signedURL?: string };
-  return signedURL ? `${url}/storage/v1${signedURL}` : null;
+export async function applicationResumeFile(
+  applicationId: string
+): Promise<{ bytes: Buffer; fileName: string; mediaType: string } | null> {
+  const r = await applicationsDb().query(
+    "select bytes, file_name, media_type from public.website_application_files where application_id = $1",
+    [applicationId]
+  );
+  const row = r.rows[0];
+  return row ? { bytes: row.bytes as Buffer, fileName: row.file_name as string, mediaType: row.media_type as string } : null;
+}
+
+function sign(applicationId: string, exp: number): string | null {
+  const s = secret();
+  return s ? createHmac("sha256", s).update(`${applicationId}:${exp}`).digest("hex") : null;
+}
+
+// A link to this site's own file route, valid for LINK_TTL_SECONDS.
+export function signShortResumeUrl(origin: string, applicationId: string): string | null {
+  const exp = Math.floor(Date.now() / 1000) + LINK_TTL_SECONDS;
+  const sig = sign(applicationId, exp);
+  return sig ? `${origin}/api/internal/resumes/${applicationId}/file?exp=${exp}&sig=${sig}` : null;
+}
+
+export function linkValid(applicationId: string, exp: string | null, sig: string | null): boolean {
+  const e = Number(exp);
+  if (!Number.isFinite(e) || e < Math.floor(Date.now() / 1000) || !sig) return false;
+  const want = sign(applicationId, e);
+  return !!want && same(sig, want);
 }

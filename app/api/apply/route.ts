@@ -1,20 +1,19 @@
-import { acceptPublicApplication } from '@/lib/server/person-transition/acceptance';
-import { createHash } from 'node:crypto';
-import { transitionSupport } from '@/lib/server/person-transition/context';
-import { after, NextRequest, NextResponse } from "next/server";
-import { allow } from "@/lib/server/ratelimit";
-import { sbInsert, sbRest } from "@/lib/server/supabase";
-import { linkedinUsername } from "@/lib/server/applicants";
-import { getRoles } from "@/lib/roles";
-import { loadOrgBySlug, loadOrgRoles, type BoardRole } from "@/lib/server/org-board";
-import { getOrgId } from "@/lib/server/spine";
+import { createHash } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { applicationsDb } from "@/lib/server/applications-db";
+import { linkedinUsername } from "@/lib/server/linkedin";
 import { sanitizeLocationOptions } from "@/lib/server/locations";
-import { runApplicantPipeline } from "@/lib/server/applicant-pipeline";
+import { pdfText } from "@/lib/server/resume-text";
 import { verifyTurnstile } from "@/lib/server/turnstile";
 
+// The paused site's apply route. Every application is a speculative one
+// (there is no role list while the project is paused): one row and, when a
+// PDF was attached, one file row. The reply-ops sync reads the row within
+// 15 minutes and puts it on the board; nothing else runs here.
 export const maxDuration = 60;
 
 const MAX_RESUME_BYTES = 8 * 1024 * 1024;
+const ORG_ID = "801865a7-6533-41d2-9c45-e4a90e6ad51a";
 
 function clean(s: unknown, max: number): string {
   return String(s ?? "")
@@ -23,229 +22,111 @@ function clean(s: unknown, max: number): string {
     .slice(0, max);
 }
 
-async function uploadResume(path: string, buf: Buffer): Promise<boolean> {
-  const key = process.env.SUPABASE_STORAGE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const url = process.env.SUPABASE_URL;
-  if (!key || !url) return false;
-  const res = await fetch(`${url}/storage/v1/object/resumes/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      apikey: key,
-      "Content-Type": "application/pdf",
-    },
-    body: new Uint8Array(buf),
-  });
-  if (!res.ok) console.error("resume upload failed", res.status);
-  return res.ok;
-}
+// A fresh response each time: a Response body can be sent only once.
+const saved = () => NextResponse.json({ ok: true });
+const failed = () =>
+  NextResponse.json({ error: "Something went wrong saving your application. Please try again." }, { status: 502 });
 
 export async function POST(req: NextRequest) {
-  const transition = transitionSupport();
   let form: FormData;
   try {
     form = await req.formData();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-
-  if (clean(form.get("website"), 50)) return NextResponse.json({ ok: true });
-
+  if (clean(form.get("website"), 50)) return saved(); // honeypot
   if (!(await verifyTurnstile(form.get("cf-turnstile-response")))) {
     return NextResponse.json(
       { error: "We couldn't verify your browser. Please refresh the page and try again." },
       { status: 403 }
     );
   }
-
-  // Tenant boards post their org slug; absent/own slug = the site's own flow.
-  const boardSlug = clean(form.get("board"), 60);
-  let boardOrg: { id: string; slug: string; name: string } | null = null;
-  if (boardSlug && boardSlug !== "transformer-talent") {
-    boardOrg = await loadOrgBySlug(boardSlug);
-    if (!boardOrg) return NextResponse.json({ error: "Unknown board." }, { status: 400 });
-  }
-
-  // Recruiter pages post their profile id so outreach conversion is
-  // attributable. Everything on a recruiter page is mandatory, resume included.
-  const recruiterId = clean(form.get("recruiter"), 40);
-  if (recruiterId && !/^[0-9a-f-]{36}$/.test(recruiterId)) {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-  }
-
   const name = clean(form.get("name"), 120);
   const email = clean(form.get("email"), 254).toLowerCase();
   const linkedin = clean(form.get("linkedin"), 300);
   const visa = clean(form.get("visa"), 150);
   const note = clean(form.get("note"), 2000);
-  const speculative = clean(form.get("speculative"), 5) === "1";
-  const preferredLocations = sanitizeLocationOptions(
-    form.getAll("preferredLocations").map((v) => clean(v, 30))
-  );
-  const roleIds = speculative
-    ? []
-    : clean(form.get("roleIds"), 500)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .slice(0, 3);
-
+  const preferredLocations = sanitizeLocationOptions(form.getAll("preferredLocations").map((v) => clean(v, 30)));
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please provide your name and a valid email." }, { status: 400 });
   }
-  if (!linkedin || !linkedinUsername(linkedin)) {
-    return NextResponse.json(
-      { error: "Please provide your LinkedIn profile URL (linkedin.com/in/…)." },
-      { status: 400 }
-    );
+  const username = linkedinUsername(linkedin);
+  if (!linkedin || !username) {
+    return NextResponse.json({ error: "Please provide your LinkedIn profile URL (linkedin.com/in/…)." }, { status: 400 });
   }
-
-  // Same person again within 14 days (same org, matched by email OR LinkedIn
-  // username): no duplicate row, no pipeline — their existing application is
-  // already being reviewed against every role. The answer is the same as for
-  // a fresh application: anything else would let a stranger type in someone's
-  // LinkedIn and learn whether they applied to this company.
-  const orgId = boardOrg?.id ?? (await getOrgId());
-  if (transition && !orgId) return NextResponse.json({ error: "Something went wrong saving your application. Please try again." }, { status: 502 });
-  const dupSince = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
-  const dupUsername = linkedinUsername(linkedin) || "";
-  const [dupByEmail, dupByLinkedin] = await Promise.all([
-    sbRest(
-      `website_applications?organization_id=eq.${orgId}&email=eq.${encodeURIComponent(email)}&created_at=gte.${dupSince}&select=id&limit=1`
-    ),
-    sbRest(
-      `website_applications?organization_id=eq.${orgId}&linkedin_username=eq.${encodeURIComponent(dupUsername)}&created_at=gte.${dupSince}&select=id&limit=1`
-    ),
-  ]);
-  const dupRows = [
-    ...(dupByEmail.ok ? ((await dupByEmail.json()) as { id: string }[]) : []),
-    ...(dupByLinkedin.ok ? ((await dupByLinkedin.json()) as { id: string }[]) : []),
-  ];
-  if (dupRows.length > 0) {
-    return NextResponse.json({ ok: true });
-  }
-
-  const ip =
-    req.headers.get("x-real-ip") ||
-    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-    "unknown";
-  // Limits are per person (this address, this connection). There is no
-  // shared cap across companies: every application is kept, and each
-  // company's own daily review allowance decides when it is reviewed
-  // (lib/server/review-budget.ts). A client company's board never names us.
-  if (!(await allow(`apply:email:${email}`, 4, 24)) || !(await allow(`apply:ip:${ip}`, 8, 24))) {
-    return NextResponse.json(
-      {
-        error: boardOrg
-          ? "Too many applications from you today. Please try again tomorrow."
-          : "Too many applications today. Email hello@transformertalent.com directly.",
-      },
-      { status: 429 }
-    );
-  }
-
-  // Resume (optional; required for speculative — it's what we match with —
-  // and always required on recruiter pages)
   const file = form.get("resume");
-  if ((speculative || recruiterId) && !(file instanceof File && file.size > 0)) {
+  if (!(file instanceof File && file.size > 0)) {
     return NextResponse.json({ error: "A resume is required." }, { status: 400 });
   }
-  let resumePath: string | null = null;
-  let resumeSha: string | null = null;
-  let resumeBuf: Buffer | null = null;
-  let resumeSafeName = "resume.pdf";
-  if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf")) {
-      return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
-    }
-    resumeBuf = Buffer.from(await file.arrayBuffer());
-    resumeSafeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-    const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${resumeSafeName}`;
-    const uploaded = await uploadResume(path, resumeBuf).catch(() => false);
-    if (uploaded) {
-      resumePath = path;
-      if (transition) resumeSha = createHash('sha256').update(resumeBuf).digest('hex');
-    } else if (transition) {
-      return NextResponse.json({ error: "We couldn't save your resume. Please try again." }, { status: 502 });
-    }
+  if (file.size > MAX_RESUME_BYTES || (file.type && file.type !== "application/pdf")) {
+    return NextResponse.json({ error: "Resume must be a PDF under 8MB." }, { status: 400 });
   }
+  const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0].trim() || null;
+  const userAgent = clean(req.headers.get("user-agent"), 500) || null;
 
-  // Tenant boards: roles come from that org's org_roles rows, shaped like
-  // site roles so everything downstream is identical.
-  const boardRoles: BoardRole[] | null = boardOrg ? await loadOrgRoles(boardOrg.id) : null;
-  const roles = boardRoles ?? (await getRoles());
-  const applied = roles.filter((r) => roleIds.includes(r.jobId));
-  const roleTitles = applied.map((r) => `${r.title} (#${r.jobId})`);
-
-  // Attribution only when the profile is real, published, and belongs to the
-  // org being applied to — anything else is silently dropped, never a block.
-  let recruiterProfileId: string | null = null;
-  if (recruiterId) {
-    const rres = await sbRest(
-      `recruiter_profiles?id=eq.${recruiterId}&published=is.true&select=id,organization_id`
+  let db;
+  try {
+    db = applicationsDb();
+    // Same person again within 14 days: same answer, no second row.
+    const dup = await db.query(
+      `select 1 from public.website_applications
+        where created_at >= now() - interval '14 days' and (email = $1 or linkedin_username = $2) limit 1`,
+      [email, username]
     );
-    const [rp] = rres.ok
-      ? ((await rres.json()) as { id: string; organization_id: string }[])
-      : [];
-    if (rp && rp.organization_id === orgId) recruiterProfileId = rp.id;
+    if (dup.rowCount) return saved();
+    // Per-person limits over 24 hours: this address, this connection.
+    const limits = await db.query(
+      `select count(*) filter (where email = $1) as by_email,
+              count(*) filter (where $2::inet is not null and ip = $2::inet) as by_ip
+         from public.website_applications where created_at >= now() - interval '24 hours'`,
+      [email, ip]
+    );
+    if (Number(limits.rows[0].by_email) >= 4 || Number(limits.rows[0].by_ip) >= 8) {
+      return NextResponse.json(
+        { error: "Too many applications today. Email hello@transformertalent.com directly." },
+        { status: 429 }
+      );
+    }
+  } catch (e) {
+    console.error("application lookup failed", (e as Error).message);
+    return failed();
   }
 
-  const submission = await acceptPublicApplication(
-    "apply",
-    {
-      organization_id: orgId,
-      recruiter_profile_id: recruiterProfileId,
-      name,
-      email,
-      linkedin_url: linkedin,
-      linkedin_username: linkedinUsername(linkedin),
-      visa_status: visa || null,
-      preferred_locations: preferredLocations,
-      role_ids: applied.map((r) => r.jobId),
-      role_titles: roleTitles,
-      resume_path: resumePath,
-      ...(transition ? { person_resume_sha256: resumeSha, person_processing_version: 1 } : {}),
-      resume_text: null,
-      status: transition ? "queued" : "processing",
-      source: [speculative ? "speculative" : null, note ? `note: ${note}` : null]
-        .filter(Boolean)
-        .join("; ") || null,
-      ip: ip === "unknown" ? null : ip,
-      user_agent: clean(req.headers.get("user-agent"), 500),
-    }
-  ).catch((e) => {
-    console.error("application insert failed", "storage_unavailable");
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const safeName = (file.name || "resume.pdf").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const text = await pdfText(bytes);
+  if (!text) console.error("application resume text empty", bytes.length);
+  const source = ["speculative", note ? `note: ${note}` : null].filter(Boolean).join("; ");
+
+  const client = await db.connect().catch((e) => {
+    console.error("application connect failed", (e as Error).message);
     return null;
   });
-
-  if (!submission) {
-    return NextResponse.json(
-      { error: "Something went wrong saving your application. Please try again." },
-      { status: 502 }
+  if (!client) return failed();
+  try {
+    await client.query("begin");
+    const ins = await client.query(
+      `insert into public.website_applications
+         (organization_id, name, email, linkedin_url, linkedin_username, visa_status, preferred_locations,
+          role_ids, role_titles, resume_path, resume_text, person_resume_sha256, status, source, ip, user_agent)
+       values ($1,$2,$3,$4,$5,$6,$7,'{}','{}',$8,$9,$10,'received',$11,$12::inet,$13)
+       returning id`,
+      [ORG_ID, name, email, linkedin, username, visa || null, preferredLocations, path, text || null, sha256, source, ip, userAgent]
     );
+    await client.query(
+      `insert into public.website_application_files (application_id, path, file_name, media_type, bytes, sha256)
+       values ($1,$2,$3,'application/pdf',$4,$5)`,
+      [ins.rows[0].id, path, safeName, bytes, sha256]
+    );
+    await client.query("commit");
+  } catch (e) {
+    await client.query("rollback").catch(() => undefined);
+    console.error("application insert failed", (e as Error).message);
+    return failed();
+  } finally {
+    client.release();
   }
-
-  // Everything slow (resume parsing, profile enrichment, screening, the
-  // Airtable mirrors) happens AFTER the response — the applicant gets an
-  // instant thank-you; nothing backend-shaped ever reaches them.
-  after(async () => {
-    await runApplicantPipeline({
-      submissionId: submission.id,
-      name,
-      email,
-      linkedin,
-      visa,
-      preferredLocations,
-      roleIds,
-      speculative,
-      resumeBuf,
-      resumeSafeName,
-      resumePath,
-      boardOrg,
-      orgId,
-      applicationType: roleIds.length ? "Applied" : "Speculative",
-    });
-  });
-  // Same body as the duplicate answer above (nothing on the page reads an id).
-  return NextResponse.json({ ok: true });
+  return saved();
 }

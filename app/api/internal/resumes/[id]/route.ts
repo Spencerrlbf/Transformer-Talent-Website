@@ -15,14 +15,12 @@ const noStore = { "Cache-Control": "no-store" };
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!tokenMatches(req.headers.get("authorization")))
     return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: noStore });
-
   const { id } = await ctx.params;
   if (!/^[0-9a-f-]{36}$/i.test(id))
     return NextResponse.json({ error: "not_found" }, { status: 404, headers: noStore });
-
   try {
     const path = await applicationResumePath(id);
-    const url = path ? await signShortResumeUrl(path) : null;
+    const url = path ? signShortResumeUrl(req.nextUrl.origin, id) : null;
     if (!url) return NextResponse.json({ error: "not_found" }, { status: 404, headers: noStore });
     return NextResponse.json(
       { url, expires_in: LINK_TTL_SECONDS, file_name: path!.split("/").pop()?.replace(/^[0-9a-f-]{36}-/i, "") },
